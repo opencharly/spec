@@ -2615,6 +2615,8 @@ type BuilderResolveInput struct {
 type BuildRequest struct {
 	Boxes []string `yaml:"boxes,omitempty" json:"boxes,omitempty"`
 
+	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
+
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
 	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`

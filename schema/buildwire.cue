@@ -90,6 +90,8 @@
 // Invoke (op.Params).
 #BuildRequest: {
 	boxes?: [...string] @go(Boxes) // positional box selection ("" → all enabled)
+	extra_candy_refs?: [...string] @go(ExtraCandyRefs) // extra candy refs to widen the resolve (e.g. an overlay's add_candy set); scanned into resolveBuildEngine
+
 	tag?:              string @go(Tag)             // --tag override (empty → CalVer)
 	dir?:              string @go(Dir)              // project dir the host reconstructs config from
 	include_disabled?: bool   @go(IncludeDisabled)  // --include-disabled
