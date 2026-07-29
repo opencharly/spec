@@ -4996,6 +4996,118 @@ type SidecarVolume struct {
 	Path string `yaml:"path,omitempty" json:"path"`
 }
 
+// #BuilderMap — a map of build type (pixi/npm/cargo/aur) → builder image name.
+type BuilderMap map[string]string
+
+// #AggregatedCandyCaps — the output of walking all candies in resolution order. Populated
+// onto #ResolvedBox and consumed wherever code reads BoxConfig.Bootc/BoxConfig.DataImage/the
+// init-system bootc parameter.
+type AggregatedCandyCaps struct {
+	PreserveUser bool `yaml:"preserve_user,omitempty" json:"preserve_user,omitempty"`
+
+	NeedsRootAfterInit bool `yaml:"needs_root_after_init,omitempty" json:"needs_root_after_init,omitempty"`
+
+	InitSystemHint string `yaml:"init_system_hint,omitempty" json:"init_system_hint,omitempty"`
+
+	DataOnly bool `yaml:"data_only,omitempty" json:"data_only,omitempty"`
+
+	OCILabels map[string]string `yaml:"oci_labels,omitempty" json:"oci_labels,omitempty"`
+
+	// provided is the set of capability names declared by some candy in the composition.
+	// Used by CheckRequiredCapabilities to validate `requires_capabilities:` cross-candy
+	// requirements.
+	Provided map[string]bool `yaml:"provided,omitempty" json:"provided,omitempty"`
+}
+
+// #ResolvedBox — a fully resolved box configuration, the wire-clean subset. EXCLUDED here
+// (both stay on the buildkit.ResolvedBox embedding wrapper, as hand `yaml:"-" json:"-"` fields — the
+// gengotypes CANNOT-table's "json:"-" keep-in-Go, drop-from-wire" exception, spike-verified:
+// no CUE construct emits a suppressed-from-marshal field):
+//   - the three host-render-cache VOCABULARY pointers DistroConfig/DistroDef/BuilderConfig
+//     (+ InitSystem/InitDef) — buildkit-owned types spec must never import;
+//   - the four RENDER-cache fields CandyCaps/BakedMetadata/RenderCandyOrder/ActiveInits —
+//     `yaml:"-" json:"-"` on ResolvedBox itself (the SEPARATE ResolvedBoxView wire type carries the
+//     actual wire copies of this same data, via NewSpecResolvedBox/ProjectResolvedBox).
+//
+// Fields that carried NO json tag on the former hand struct (always emitted, no omitempty)
+// are REQUIRED (`!`) here; fields that already carried `,omitempty` are OPTIONAL (`?`).
+type ResolvedBox struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	// version is the authored per-entity CalVer (the box config `version:`); optional.
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+
+	// effective_version is the content-derived identity emitted as the ai.opencharly.version
+	// label: the dedicated version if set, else the highest candy version across the full
+	// chain. Stable across builds when no candy changed.
+	EffectiveVersion string `yaml:"effective_version,omitempty" json:"effective_version,omitempty"`
+
+	Status string `yaml:"status,omitempty" json:"status,omitempty"`
+
+	Info string `yaml:"info,omitempty" json:"info,omitempty"`
+
+	CheckLevel string `yaml:"check_level,omitempty" json:"check_level,omitempty"`
+
+	Base string `yaml:"base,omitempty" json:"base"`
+
+	// from mirrors BoxConfig.From after resolution. When non-empty (e.g. "builder:pacstrap"),
+	// the generator emits FROM scratch + ADD <staged-rootfs.tar.gz> instead of FROM <base>.
+	From string `yaml:"from,omitempty" json:"from,omitempty"`
+
+	BootstrapBuilderImage string `yaml:"bootstrap_builder_image,omitempty" json:"bootstrap_builder_image,omitempty"`
+
+	Platforms []string `yaml:"platforms,omitempty" json:"platforms"`
+
+	Tag string `yaml:"tag,omitempty" json:"tag"`
+
+	Registry string `yaml:"registry,omitempty" json:"registry"`
+
+	Pkg string `yaml:"pkg,omitempty" json:"pkg"`
+
+	Distro []string `yaml:"distro,omitempty" json:"distro"`
+
+	BuildFormats []string `yaml:"build_formats,omitempty" json:"build_formats"`
+
+	Tags []string `yaml:"tags,omitempty" json:"tags"`
+
+	Candy []string `yaml:"candy,omitempty" json:"candy"`
+
+	// User configuration.
+	User string `yaml:"user,omitempty" json:"user"`
+
+	UID int `yaml:"uid,omitempty" json:"uid"`
+
+	GID int `yaml:"gid,omitempty" json:"gid"`
+
+	Home string `yaml:"home,omitempty" json:"home"`
+
+	// user_adopted is true when the resolved user came from the distro's base_user
+	// declaration rather than being created by the bootstrap.
+	UserAdopted bool `yaml:"user_adopted,omitempty" json:"user_adopted"`
+
+	// Merge configuration — layer merge settings (nil means use CLI defaults).
+	Merge *BoxMerge `yaml:"merge,omitempty" json:"merge,omitempty"`
+
+	// Builder configuration (resolved: image -> base image -> defaults -> {}).
+	Builder BuilderMap `yaml:"builder,omitempty" json:"builder"`
+
+	// Builder capability declaration (image-specific, not inherited).
+	BuilderCapabilities []string `yaml:"builder_capabilities,omitempty" json:"builder_capabilities"`
+
+	Auto bool `yaml:"auto,omitempty" json:"auto"`
+
+	// Container network mode (e.g. "host", "none") — declaration of required/recommended
+	// network mode. Deployment overrides via MergeDeployOntoMetadata.
+	Network string `yaml:"network,omitempty" json:"network"`
+
+	DataImage bool `yaml:"data_image,omitempty" json:"data_image"`
+
+	// Derived fields.
+	IsExternalBase bool `yaml:"is_external_base,omitempty" json:"is_external_base"`
+
+	FullTag string `yaml:"full_tag,omitempty" json:"full_tag"`
+}
+
 // #ResolvedProjectRequest — the `resolved-project` HostBuild request: which project dir to resolve
 // (empty = the host's cwd) and whether to include enabled:false boxes. The reply is #ResolvedProject.
 type ResolvedProjectRequest struct {
