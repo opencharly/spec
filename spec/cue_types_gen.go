@@ -1547,6 +1547,15 @@ type Copy struct {
 	Chown bool `yaml:"chown,omitempty" json:"chown,omitempty"`
 }
 
+// #BuilderConfig is the `builder:` build-vocabulary container — the whole
+// builder map keyed by builder name (charly/charly.yml's `builder:` section).
+// #55 step 3-III: relocated from sdk/buildkit for the import-purity lever (see
+// #DistroConfig). Its methods (ValidBuilderType / BuilderNames) are pure Go
+// METHODS and stay hand-written in spec/builder_config_methods.go.
+type BuilderConfig struct {
+	Builder map[string]*Builder `yaml:"builder,omitempty" json:"builder"`
+}
+
 // #BuildResolveRequest carries the CLI-supplied build inputs (the former
 // BuildRequest fields) the host cannot reconstruct from Dir alone. The host runs
 // NewGenerator (loader) + Generate (render → .build/), the privileged
@@ -4071,6 +4080,19 @@ type FormatRule struct {
 	Field string `yaml:"field,omitempty" json:"field"`
 
 	Rule string `yaml:"rule,omitempty" json:"rule"`
+}
+
+// #DistroConfig is the `distro:` build-vocabulary container — the whole distro
+// map keyed by distro name (charly/charly.yml's `distro:` section). #55 step
+// 3-III: relocated from sdk/buildkit so every charly/plugin file that uses ONLY
+// this value type drops its sdk/buildkit import for spec (the import-purity
+// lever). Its vocabulary-resolution methods (ResolveDistro / ResolveInherits /
+// AllFormatNames / FindFormat / ValidFormat / ExpandPackageInheritance) are pure
+// Go METHODS on the type's own map — CUE cannot express them — and stay
+// hand-written in spec/distro_config_methods.go (mirrors ResolvedDistro's
+// PrimaryFormat in spec/distro_methods.go: a method, not a type).
+type DistroConfig struct {
+	Distro map[string]*ResolvedDistro `yaml:"distro,omitempty" json:"distro"`
 }
 
 // #DistroResolveInput carries one opaque distro body to project.
