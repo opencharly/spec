@@ -127,6 +127,19 @@
 	raw?: bytes @go(Raw,type=RawBody)
 }
 
+// #DistroConfig is the `distro:` build-vocabulary container — the whole distro
+// map keyed by distro name (charly/charly.yml's `distro:` section). #55 step
+// 3-III: relocated from sdk/buildkit so every charly/plugin file that uses ONLY
+// this value type drops its sdk/buildkit import for spec (the import-purity
+// lever). Its vocabulary-resolution methods (ResolveDistro / ResolveInherits /
+// AllFormatNames / FindFormat / ValidFormat / ExpandPackageInheritance) are pure
+// Go METHODS on the type's own map — CUE cannot express them — and stay
+// hand-written in spec/distro_config_methods.go (mirrors ResolvedDistro's
+// PrimaryFormat in spec/distro_methods.go: a method, not a type).
+#DistroConfig: {
+	distro: {[string]: #ResolvedDistro} @go(Distro,type=map[string]*ResolvedDistro)
+}
+
 // #DistroResolveInput carries one opaque distro body to project.
 #DistroResolveInput: {
 	distro!: bytes @go(Distro,type=RawBody)

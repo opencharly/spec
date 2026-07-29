@@ -35,3 +35,12 @@
 	dst:    string & !=""
 	chown?: bool
 }
+
+// #BuilderConfig is the `builder:` build-vocabulary container — the whole
+// builder map keyed by builder name (charly/charly.yml's `builder:` section).
+// #55 step 3-III: relocated from sdk/buildkit for the import-purity lever (see
+// #DistroConfig). Its methods (ValidBuilderType / BuilderNames) are pure Go
+// METHODS and stay hand-written in spec/builder_config_methods.go.
+#BuilderConfig: {
+	builder: {[string]: #Builder} @go(Builder,type=map[string]*Builder)
+}
