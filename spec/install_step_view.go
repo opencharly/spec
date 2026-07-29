@@ -350,7 +350,7 @@ func cacheMountsToView(mounts []CacheMountSpec) []CacheMountView {
 	}
 	out := make([]CacheMountView, 0, len(mounts))
 	for _, m := range mounts {
-		out = append(out, CacheMountView{Dst: m.Dst, Sharing: m.Sharing})
+		out = append(out, CacheMountView(m))
 	}
 	return out
 }
@@ -361,7 +361,7 @@ func cacheMountsFromView(mounts []CacheMountView) []CacheMountSpec {
 	}
 	out := make([]CacheMountSpec, 0, len(mounts))
 	for _, m := range mounts {
-		out = append(out, CacheMountSpec{Dst: m.Dst, Sharing: m.Sharing})
+		out = append(out, CacheMountSpec(m))
 	}
 	return out
 }
@@ -372,7 +372,7 @@ func artifactsToView(arts []ArtifactRef) []ArtifactView {
 	}
 	out := make([]ArtifactView, 0, len(arts))
 	for _, a := range arts {
-		out = append(out, ArtifactView{ContainerPath: a.ContainerPath, HostPath: a.HostPath, Chown: a.Chown})
+		out = append(out, ArtifactView(a))
 	}
 	return out
 }
@@ -383,7 +383,7 @@ func artifactsFromView(arts []ArtifactView) []ArtifactRef {
 	}
 	out := make([]ArtifactRef, 0, len(arts))
 	for _, a := range arts {
-		out = append(out, ArtifactRef{ContainerPath: a.ContainerPath, HostPath: a.HostPath, Chown: a.Chown})
+		out = append(out, ArtifactRef(a))
 	}
 	return out
 }
