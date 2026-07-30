@@ -5787,27 +5787,6 @@ type DeployFromBoxRequest struct {
 type DeployFromBoxReply struct {
 }
 
-// #DeployConfigSaveRequest is the K4-C narrow seam for saveBundleConfigNodeForm — the
-// `charly bundle import`/`reset` deploy-state WRITE step. command:bundle's show/export/status
-// leaves moved to the plugin outright (deploykit.LoadBundleConfig/ExportAllBox/ParseDeployKey
-// etc. are already sdk-portable, and export's project-load touch reuses the existing
-// HostBuild("resolved-project") seam) — only the SAVE step still needs a seam: its per-entry
-// marshal callback (marshalBundleNode, deploy_nodeform.go) resugars each plan step's internal
-// plugin/plugin_input pair back to the authored `<word>: <input>` sugar via the host-owned
-// pluginPrimaries registry (populated at compiled-in plugin init() + the byte-gated external
-// prescan) — a live, in-process registry a separate-module plugin cannot reach directly.
-// Config carries the marshalled deploykit.BundleConfig as an opaque RawBody envelope (a
-// hand-written sdk/deploykit type with no CUE def, matching the DeployCompileRequest
-// HostContextJSON idiom).
-type DeployConfigSaveRequest struct {
-	ConfigJSON RawBody `yaml:"config,omitempty" json:"config"`
-}
-
-// #DeployConfigSaveReply is the "deploy-config-save" host-builder reply — empty (failure
-// surfaces via the RPC error itself).
-type DeployConfigSaveReply struct {
-}
-
 // #AndroidEntityResolution is the kind="android" payload carried OPAQUELY inside
 // #DeployEntityResolveReply.entity (unit 6a): the resolved kind:android #ResolvedAndroid spec
 // (CUE-sourced at schema/substrate_template.cue, SDD conversion — carried OPAQUELY here anyway,
@@ -5861,7 +5840,7 @@ type EphemeralRegisterReply struct {
 // (schema/substrate_template.cue, schema/vm.cue; SDD conversion), but this seam still carries them
 // as opaque bytes rather than a typed field, because `kind` is DATA the host dispatches on
 // internally (clause-D) and the caller already knows which kind it asked for and decodes
-// accordingly — mirroring the DeployCompileReply / DeployConfigSaveRequest RawBody idiom used
+// accordingly — mirroring the DeployCompileReply RawBody idiom used
 // throughout this file for the same reason. The "local" case's EMPTY reply (no EntityJSON, no
 // error) is itself meaningful — "no kind:local template by that name" — distinct from a genuine
 // host-side load-failure error; the caller (resolveNodeTemplate) tells the two apart.
@@ -6997,10 +6976,10 @@ type ArbiterBracketReleaseReply struct {
 // #PodConfigCleanDeployEntryRequest / Reply: deploykit.CleanDeployEntry(box, instance,
 // marshalDeployNode) — the `charly remove` deploy-entry cleanup (Cutover B unit 2 remove-verb
 // completion). Mirrors #DeployConfigSaveStateRequest's shape ({box!, instance?} → {}, the host
-// owns the entire load+lock+mutate+save internally) — deliberately NOT a reuse of
-// #DeployConfigSaveRequest (the `deploy-config-save` seam), which persists an ALREADY-LOADED,
-// already-mutated whole BundleConfig with no internal load/lock/entry-removal logic (bundle
-// import/reset's use case) — a genuinely different, narrower operation CleanDeployEntry's own
+// owns the entire load+lock+mutate+save internally) — deliberately NOT the plugin-side
+// deploykit.SaveBundleConfig write (bundle import/reset's use case, #55 K4 — no host seam),
+// which persists an ALREADY-LOADED, already-mutated whole BundleConfig with no internal
+// load/lock/entry-removal logic — a genuinely different, narrower operation CleanDeployEntry's own
 // internal file-lock + entry-removal + provides-cleanup + empty-file-delete logic cannot be
 // reduced to.
 type PodConfigCleanDeployEntryRequest struct {
