@@ -193,11 +193,11 @@
 // #DeployPluginsConnectRequest/#DeployPluginsConnectReply — the K1-LOADER RELOCATION witness (Unit
 // D). candy/plugin-bundle now DRIVES loaderkit.LoadUnified ITSELF, plugin-side, over the
 // reverse-channel LoaderExecutor (execLoaderExecutor → the "loader-*" host legs), to resolve the
-// `charly bundle add` deploy tree — the host no longer runs resolveTreeRoot for the walk. This seam
+// `charly bundle add` deploy tree — the host no longer runs a host-side merged-tree read for the walk. This seam
 // is the ONE host-only PREAMBLE the plugin still needs: connect the deployment's out-of-tree plugin
 // candies (loadDeployPlugins — registry-coupled, a core Mechanism) BEFORE ResolveTarget can route to
 // an external substrate, and return the resolved project dir (host os.Getwd — the SAME dir
-// resolveTreeRoot uses) the plugin passes to loaderkit.LoadUnified. The plugin reads root-venue-ssh
+// the host loader uses) the plugin passes to loaderkit.LoadUnified. The plugin reads root-venue-ssh
 // itself from the tree's stamped node.Descent (loaderkit.LoadUnified stamps it), so no host trait
 // call — proving plugin-bundle → loaderkit.LoadUnified end-to-end.
 #DeployPluginsConnectRequest: {
@@ -272,10 +272,10 @@
 	name!: string @go(Name)
 	// tree_json is the merged project+operator deploy tree the command:bundle plugin already
 	// resolved PLUGIN-SIDE (resolveTreeViaLoader, which also connects the deployment's plugins) —
-	// threaded as DATA so the host resolveDelNode consumes it instead of re-loading via the core
-	// resolveTreeRoot (#55 Cone A Unit 3a). Marshalled map[string]spec.Deploy; an absent/empty tree
+	// threaded as DATA so the host resolveDelNode consumes it instead of re-loading the tree
+	// host-side (#55 Cone A Unit 3a). Marshalled map[string]spec.Deploy; an absent/empty tree
 	// falls through to resolveDelNode's non-tree fallbacks (vm-prefix / pod-artifact probe), exactly
-	// as a nil resolveTreeRoot result did before.
+	// as a nil host-tree-read result did before.
 	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 #DeployDelResolveReply: {
@@ -471,7 +471,7 @@
 // deployVMForwards, vmConfiguredBackendPlugin, resolveNodeTemplate's kind:local merge) needs a
 // LoadUnified-coupled lookup a plugin cannot do itself — EITHER (a) its
 // own deploy-tree node by name (the Update-path re-resolve every preresolver does when node==nil,
-// OR a bundle-key cross-reference's From-field hop — today: resolveTreeRoot) or (b) a referenced
+// OR a bundle-key cross-reference's From-field hop — today: the host merged-tree read) or (b) a referenced
 // kind:<word> entity (k8s/android/vm/local) by name, returned as the WHOLE RESOLVED envelope so a
 // caller just reads its fields (Backend, Network.PortForwards, Candy, …) without tracing the
 // resolver's own portability (today: findK8sSpec / findAndroidSpec / a direct uf.VM[name] lookup +
@@ -494,11 +494,11 @@
 	dir?:  string @go(Dir)
 	// tree_json is the merged project+operator deploy tree the invoking plugin resolved PLUGIN-SIDE
 	// (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA for the deploy/bundle-kind node
-	// lookup so the host stops re-loading via the core resolveTreeRoot (#55 Cone A Unit 3b).
+	// lookup so the host stops re-loading the tree with a host-resident deploykit read (#55 Cone A Unit 3b).
 	// Marshalled map[string]spec.Deploy; consulted ONLY for kind ∈ {"","deploy","bundle"} (the
 	// kind:<word> lookups — k8s/android/vm/local — use their own findK8sSpec/etc. host resolvers,
 	// unaffected). An absent tree yields a not-found for the deploy/bundle lookup, matching a nil
-	// resolveTreeRoot result.
+	// host-tree-read result.
 	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 #DeployEntityResolveReply: {
@@ -1471,9 +1471,9 @@
 	data_from?:  string @go(DataFrom)
 	// tree_json is the merged project+operator deploy tree command:update (plugin-pod) resolved
 	// PLUGIN-SIDE (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA so the host
-	// dispatchByDeployTarget consumes it instead of re-loading via the core resolveTreeRoot (#55
+	// dispatchByDeployTarget consumes it instead of re-loading the tree host-side (#55
 	// Cone A Unit 3b). Marshalled map[string]spec.Deploy; an absent tree yields the same
-	// "no charly.yml" error a nil resolveTreeRoot result produced.
+	// "no charly.yml" error a nil host-tree-read result produced.
 	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 
