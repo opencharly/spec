@@ -1,0 +1,213 @@
+package spec
+
+import (
+	"path/filepath"
+	"slices"
+)
+
+// init_config_methods.go — the `init:` build-vocabulary detection / resolution METHODS on the
+// CUE-SOURCED spec.InitConfig type (generated from #InitConfig in schema/init.cue; the struct itself
+// lives in cue_types_gen.go). #55 Cluster-B import-purity: relocated from sdk/buildkit DOWN to spec
+// (the value leaf, alongside the CUE-sourced DistroConfig/BuilderConfig vocabulary) so charly core
+// reads it over its spec+proto-only import surface; sdk/buildkit keeps a thin type-alias for its
+// plugin callers. These are pure Go METHODS CUE cannot express — mirroring spec/distro_config_methods.go
+// beside the generated DistroConfig. Pure over spec.CandyReader / spec.ResolvedInit /
+// spec.AggregatedCandyCaps — no loader/registry coupling (kit.SortStrings replaced by the stdlib
+// slices.Sort, since spec cannot import sdk/kit).
+
+// DetectCandyInit returns which init system names a candy triggers,
+// based on its candy manifest fields and file patterns.
+func (ic *InitConfig) DetectCandyInit(ly *CandyYAML, candyPath string) []string {
+	if ic == nil {
+		return nil
+	}
+	var result []string
+	for initName, def := range ic.Init {
+		if detectsInit(def, ly, candyPath) {
+			result = append(result, initName)
+		}
+	}
+	slices.Sort(result)
+	return result
+}
+
+// detectsInit checks if a candy matches an init system's detection criteria.
+// Schema-driven: iterates the unified service: list + per-entry init routing
+// (IsPackaged → ServiceSchema.SupportsPackaged; custom exec → ServiceSchema.ServiceTemplate).
+func detectsInit(def *ResolvedInit, ly *CandyYAML, candyPath string) bool {
+	if ly == nil {
+		return false
+	}
+	// candy_field: [service] gates schema-driven detection.
+	participatesInSchema := slices.Contains(def.CandyFields, "service")
+	if participatesInSchema {
+		for i := range ly.Service {
+			entry := &ly.Service[i]
+			if entry.IsPackaged() {
+				if def.ServiceSchema != nil && def.ServiceSchema.SupportsPackaged {
+					return true
+				}
+			} else {
+				if def.ServiceSchema != nil && def.ServiceSchema.ServiceTemplate != "" {
+					return true
+				}
+			}
+		}
+	}
+
+	// candy_file: glob the candy dir (file_copy model — systemd *.service units).
+	for _, pattern := range def.CandyFiles {
+		matches, _ := filepath.Glob(filepath.Join(candyPath, pattern))
+		if len(matches) > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// ResolveInitSystem determines the active init system for an image.
+// Priority: explicit override → auto-detect from candies.
+// Returns ("", nil) if no init system is needed.
+//
+// Candy capability requirements (RequiresCapabilities) are checked
+// against the aggregated candy caps for the composition; init systems
+// whose requirements aren't met are filtered out. The aggregated caps
+// are also consulted for the bootc-prefer-systemd heuristic via
+// PreserveUser (the canonical signal that this is a bootc-flavored
+// composition).
+func (ic *InitConfig) ResolveInitSystem(layers map[string]CandyReader, candyOrder []string, explicit string) (string, *ResolvedInit) {
+	if ic == nil {
+		return "", nil
+	}
+
+	// Explicit override
+	if explicit != "" {
+		if def, ok := ic.Init[explicit]; ok {
+			return explicit, def
+		}
+	}
+
+	caps, _ := AggregateCandyCapabilities(layers, candyOrder)
+	if caps == nil {
+		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
+	}
+
+	// Auto-detect: find the init system that candies trigger
+	initHits := make(map[string]bool)
+	for _, candyName := range candyOrder {
+		layer, ok := layers[candyName]
+		if !ok {
+			continue
+		}
+		for initName := range ic.Init {
+			if layer.HasInit(initName) {
+				initHits[initName] = true
+			}
+		}
+		// port_relay triggers the init system with a relay_template
+		if len(layer.RelayPorts()) > 0 {
+			for initName, def := range ic.Init {
+				if def.RelayTemplate != "" {
+					initHits[initName] = true
+				}
+			}
+		}
+	}
+
+	// Filter by capability requirements
+	for initName := range initHits {
+		def := ic.Init[initName]
+		if !initDefRequirementsMet(def, caps) {
+			delete(initHits, initName)
+		}
+	}
+
+	// For bootc-flavored compositions (preserve_user) prefer systemd over supervisord
+	if caps.PreserveUser && initHits["systemd"] {
+		return "systemd", ic.Init["systemd"]
+	}
+
+	// For container images, prefer supervisord
+	if initHits["supervisord"] {
+		return "supervisord", ic.Init["supervisord"]
+	}
+
+	// Return first remaining init system
+	for initName := range initHits {
+		return initName, ic.Init[initName]
+	}
+
+	return "", nil
+}
+
+// ActiveInit returns all init systems that are active for the given image.
+// An image can have multiple active inits (e.g., supervisord + systemd on
+// bootc-flavored compositions).
+func (ic *InitConfig) ActiveInit(layers map[string]CandyReader, candyOrder []string) map[string]*ResolvedInit {
+	if ic == nil {
+		return nil
+	}
+
+	caps, _ := AggregateCandyCapabilities(layers, candyOrder)
+	if caps == nil {
+		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
+	}
+
+	result := make(map[string]*ResolvedInit)
+	for _, candyName := range candyOrder {
+		layer, ok := layers[candyName]
+		if !ok {
+			continue
+		}
+		for initName, def := range ic.Init {
+			if !layer.HasInit(initName) {
+				continue
+			}
+			if !initDefRequirementsMet(def, caps) {
+				continue
+			}
+			result[initName] = def
+		}
+		// port_relay triggers init systems with relay_template
+		if len(layer.RelayPorts()) > 0 {
+			for initName, def := range ic.Init {
+				if def.RelayTemplate != "" && initDefRequirementsMet(def, caps) {
+					result[initName] = def
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// initDefRequirementsMet reports whether the init definition's
+// RequiresCapabilities are all present in the aggregated caps.
+func initDefRequirementsMet(def *ResolvedInit, caps *AggregatedCandyCaps) bool {
+	if def == nil || len(def.RequiresCapability) == 0 {
+		return true
+	}
+	if caps == nil || caps.Provided == nil {
+		return false
+	}
+	for _, req := range def.RequiresCapability {
+		if !caps.Provided[req] {
+			return false
+		}
+	}
+	return true
+}
+
+// InitNames returns a sorted list of all init system names.
+func (ic *InitConfig) InitNames() []string {
+	if ic == nil {
+		return nil
+	}
+	names := make([]string, 0, len(ic.Init))
+	for name := range ic.Init {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
