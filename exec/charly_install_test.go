@@ -44,7 +44,7 @@ func (e *bootstrapDeployExecutor) PutFile(_ context.Context, localPath, remotePa
 	return nil
 }
 
-// TestHostCharlyIsNewer covers the single CalVer arbiter shared by EnsureCharlyInVenue (walk-time,
+// TestHostCharlyIsNewer covers the single CalVer arbiter shared by EnsureCharlyInDeployVenue (walk-time,
 // generic) + EnsureCharlyInGuest (vm PrepareVenue, host-surface) — moved here from charly core with
 // the delivery logic (R3): the venue's PATH charly is kept when at least as new; only an absent/older
 // one is overwritten, and an unprovable host version never clobbers.
