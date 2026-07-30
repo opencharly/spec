@@ -1027,6 +1027,13 @@
 	volume_flag?: [...string] @go(VolumeFlag)
 	bind?: [...string] @go(Bind)
 	no_autodetect?:   bool @go(NoAutoDetect)
+	// node is the per-host deploy overlay entry the command:pod plugin ALREADY resolved
+	// plugin-side (deploykit.ResolveLifecycleDeployNodeViaSeam over the shared pod-config-load-bundle
+	// seam) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
+	// *spec.Deploy instead of re-reading the per-host config itself (the config-READ is a plugin
+	// loading capability, not a host M — #55 K4 seam-completion). Absent only for an in-flight
+	// mixed build; the host requires it.
+	node?: #Deploy @go(Node, type=*Deploy)
 }
 
 // #PodStartReply is the "pod-start" host-builder reply — empty; the start prints its own
@@ -1041,6 +1048,8 @@
 	box!:      string @go(Box)
 	instance?: string @go(Instance)
 	unmount?:  bool   @go(Unmount)
+	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
+	node?: #Deploy @go(Node, type=*Deploy)
 }
 
 // #PodStopReply is the "pod-stop" host-builder reply — empty, mirroring #PodStartReply.
@@ -1055,6 +1064,8 @@
 	follow?:   bool   @go(Follow)
 	instance?: string @go(Instance)
 	sidecar?:  string @go(Sidecar)
+	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
+	node?: #Deploy @go(Node, type=*Deploy)
 }
 
 // #PodLogsReply is the "pod-logs" host-builder reply — empty, mirroring #PodStartReply.
@@ -1092,6 +1103,8 @@
 	volume_flag?: [...string] @go(VolumeFlag)
 	bind?: [...string] @go(Bind)
 	no_autodetect?:   bool @go(NoAutoDetect)
+	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
+	node?: #Deploy @go(Node, type=*Deploy)
 }
 
 // #PodShellReply is the "pod-shell" host-builder reply — empty, mirroring #PodStartReply.
@@ -1108,6 +1121,8 @@
 	box!:      string      @go(Box)
 	instance?: string      @go(Instance)
 	argv!:     [...string] @go(Argv)
+	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
+	node?: #Deploy @go(Node, type=*Deploy)
 }
 
 // #PodServiceReply is the "pod-service" host-builder reply — empty, mirroring #PodStartReply.
@@ -1124,6 +1139,8 @@
 	command?:  string @go(Command)
 	instance?: string @go(Instance)
 	sidecar?:  string @go(Sidecar)
+	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
+	node?: #Deploy @go(Node, type=*Deploy)
 }
 
 // #PodCmdReply is the "pod-cmd" host-builder reply. It carries the container command's exit_code so
