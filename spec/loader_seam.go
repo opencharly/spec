@@ -253,6 +253,20 @@ type ProjectLoader interface {
 	// deploy map; the host supplies the registry-resolve callbacks (the validation LOGIC stays in
 	// loaderkit).
 	ValidatePreemptible(uf *UnifiedFile, resolveResource func(json.RawMessage) (*ResolvedResource, error), resolveVm func(json.RawMessage) (*ResolvedVm, error)) error
+	// ScanCandyFromLocal runs the candy-scan fetch fix-point (remote-ref collect, fetch, per-entity
+	// version arbitration, host-completion + finalize) over a local candy set, driving the host-coupled
+	// legs through the caller-supplied ScanSeams closures — so charly core reaches the scan MECHANISM
+	// through this compiled-in seam instead of importing loaderkit (#55 C3b-ii). The scan LOGIC stays in
+	// the ONE copy in sdk/loaderkit (candy/plugin-build reaches it directly, being a plugin).
+	ScanCandyFromLocal(localScanned map[string]ScannedCandy, initCfg *InitConfig, seams ScanSeams) (map[string]CandyReader, error)
+	// RunDiscover walks the flat generic discover: scan-spec list, parsing each discovered manifest via
+	// the host-supplied WalkSeams — the discover half of the loader mechanism, reached via the seam so
+	// charly core never imports loaderkit for it.
+	RunDiscover(rootDir string, specs []ScanSpec, seams WalkSeams) ([]DiscoveredManifest, error)
+	// FinalizeScannedCandies is the scan pipeline's finalize choke point (host-completion + bare-string
+	// the refs + wrap into the FINAL CandyReader). It is deploykit-coupled and stays in loaderkit; the
+	// host reaches it through this seam — the dominant shared choke point across charly's scan call sites.
+	FinalizeScannedCandies(scanned map[string]ScannedCandy, initCfg *InitConfig) map[string]CandyReader
 }
 
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every
