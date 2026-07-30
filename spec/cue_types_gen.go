@@ -5569,6 +5569,14 @@ type DeployMembersReply struct {
 // it stays host-side; the plugin's `charly bundle del` calls this FIRST.
 type DeployDelResolveRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
+
+	// tree_json is the merged project+operator deploy tree the command:bundle plugin already
+	// resolved PLUGIN-SIDE (resolveTreeViaLoader, which also connects the deployment's plugins) —
+	// threaded as DATA so the host resolveDelNode consumes it instead of re-loading via the core
+	// resolveTreeRoot (#55 Cone A Unit 3a). Marshalled map[string]spec.Deploy; an absent/empty tree
+	// falls through to resolveDelNode's non-tree fallbacks (vm-prefix / pod-artifact probe), exactly
+	// as a nil resolveTreeRoot result did before.
+	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
 }
 
 type DeployDelResolveReply struct {
@@ -6837,28 +6845,6 @@ type PodConfigLoadDeployRequest struct {
 
 type PodConfigLoadDeployReply struct {
 	ConfigJSON RawBody `yaml:"config_json,omitempty" json:"config_json,omitempty"`
-}
-
-// #PodConfigProjectVolumeRequest / Reply: resolves the deploy's PROJECT-declared `volume:`
-// override — the entity as AUTHORED in the project's own charly.yml (e.g. a disposable check
-// bed's `volume: [{name: enc-data, type: encrypted}]`), which the per-host overlay
-// (#PodConfigLoadDeployRequest, ~/.config/charly/charly.yml) never carries on its own. Genuinely
-// loader-coupled (LoadUnified is a core Mechanism a plugin cannot import): the host resolves the
-// SAME merged project+operator tree `charly bundle add` walks (resolveTreeRoot — the per-host
-// overlay wins over the project declaration only when it actually carries an override for this
-// key, matching MergeDeployConfigs' existing precedence) and returns ONLY the resolved entry's
-// Volume field, scoped to one deploy key. Setup (config_setup.go) calls this as the LAST fallback
-// in its deployVolumes resolution chain (CLI flag > env > per-host overlay > project declaration)
-// and persists a hit into the overlay exactly as a --volume flag would, so the declaration takes
-// effect on every subsequent read without re-resolving the project each time.
-type PodConfigProjectVolumeRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-}
-
-type PodConfigProjectVolumeReply struct {
-	VolumeJSON RawBody `yaml:"volume_json,omitempty" json:"volume_json,omitempty"`
 }
 
 // #PodConfigSaveBundleRequest / Reply: saveBundleConfigNodeForm(dc) — persists a (plugin-mutated)
