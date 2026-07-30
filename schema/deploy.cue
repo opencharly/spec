@@ -623,10 +623,10 @@
 
 // #SaveDeployStateInput holds the deployment parameters SaveDeployState persists to charly.yml
 // (promoted from sdk/deploykit — #55 import-purity, Cone V value-vocabulary; the SaveDeployState
-// FUNCTION stays in deploykit). Every field is a spec/stdlib type. Marshalled to JSON by the
-// deploy candies (plugin-deploy-pod/resolve.go) and carried in #DeployConfigSaveStateRequest.InputJSON
-// to the host "deploy-config-save-state" builder, which unmarshals into the SAME type — so the wire
-// is internally consistent regardless of tag convention (ephemeral in-operation, never persisted as-is).
+// FUNCTION stays in deploykit). Every field is a spec/stdlib type. The deploy candies
+// (plugin-deploy-pod, plugin-bundle) pass it DIRECTLY to deploykit.SaveDeployState plugin-side
+// (#55 K4 — no host seam carries it across the wire anymore; the fields are ephemeral
+// in-operation, never persisted as-is — the node-form marshal writes only the resulting entry).
 #SaveDeployStateInput: {
 	ports?: [...string] @go(Ports)
 	// set_ports gates whether Ports is written to charly.yml at all: `charly config <name>` (no

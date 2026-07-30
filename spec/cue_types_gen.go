@@ -4051,10 +4051,10 @@ type OCIEmitStepParams struct {
 
 // #SaveDeployStateInput holds the deployment parameters SaveDeployState persists to charly.yml
 // (promoted from sdk/deploykit — #55 import-purity, Cone V value-vocabulary; the SaveDeployState
-// FUNCTION stays in deploykit). Every field is a spec/stdlib type. Marshalled to JSON by the
-// deploy candies (plugin-deploy-pod/resolve.go) and carried in #DeployConfigSaveStateRequest.InputJSON
-// to the host "deploy-config-save-state" builder, which unmarshals into the SAME type — so the wire
-// is internally consistent regardless of tag convention (ephemeral in-operation, never persisted as-is).
+// FUNCTION stays in deploykit). Every field is a spec/stdlib type. The deploy candies
+// (plugin-deploy-pod, plugin-bundle) pass it DIRECTLY to deploykit.SaveDeployState plugin-side
+// (#55 K4 — no host seam carries it across the wire anymore; the fields are ephemeral
+// in-operation, never persisted as-is — the node-form marshal writes only the resulting entry).
 type SaveDeployStateInput struct {
 	Ports []string `yaml:"ports,omitempty" json:"ports,omitempty"`
 
@@ -6926,26 +6926,6 @@ type PodConfigTunnelResolveReply struct {
 	TunnelJSON RawBody `yaml:"tunnel_json,omitempty" json:"tunnel_json,omitempty"`
 }
 
-// #DeployConfigSaveStateRequest / Reply: deploykit.SaveDeployState(box,instance,input,
-// marshalDeployNode) — the terminal per-deploy persist. input_json is the marshalled
-// deploykit.SaveDeployStateInput (a hand-written sdk/deploykit type with no CUE def — the
-// RawBody idiom, matching #PodConfigWriteRequest.pod_config_json). Renamed substrate-neutral
-// (S3b, Q2): the seam started pod-only (candy/plugin-deploy-pod's config_setup.go/resolve.go)
-// but candy/plugin-bundle's generic Add/Update apply body (deploy_target.go's
-// persistDeployState) is now a THIRD caller across every substrate (pod/vm/local/k8s/android),
-// so the "pod-config-*" family naming no longer fit — the underlying "deploy-config-save-state"
-// host-builder kind renamed to match (was "pod-config-save-deploy-state").
-type DeployConfigSaveStateRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
-	InputJSON RawBody `yaml:"input_json,omitempty" json:"input_json"`
-}
-
-type DeployConfigSaveStateReply struct {
-}
-
 // #ArbiterBracketAcquireRequest / Reply — the K4-exit HostBuild seam for the acquire half of the
 // Q1 resource-arbiter bracket (FLOOR-SLIM-proper Unit-8; the former core-resident
 // charly/arbiter_bracket.go's arbiterBracketedStart, deleted — command:bundle's
@@ -6975,9 +6955,9 @@ type ArbiterBracketReleaseReply struct {
 
 // #PodConfigCleanDeployEntryRequest / Reply: deploykit.CleanDeployEntry(box, instance,
 // marshalDeployNode) — the `charly remove` deploy-entry cleanup (Cutover B unit 2 remove-verb
-// completion). Mirrors #DeployConfigSaveStateRequest's shape ({box!, instance?} → {}, the host
-// owns the entire load+lock+mutate+save internally) — deliberately NOT the plugin-side
-// deploykit.SaveBundleConfig write (bundle import/reset's use case, #55 K4 — no host seam),
+// completion). Follows the {box!, instance?} → {} host-owns-load+lock+mutate+save shape —
+// deliberately NOT the plugin-side deploykit.SaveDeployState/SaveBundleConfig write (bundle
+// import/reset + deploy-state persist, #55 K4 — no host seam),
 // which persists an ALREADY-LOADED, already-mutated whole BundleConfig with no internal
 // load/lock/entry-removal logic — a genuinely different, narrower operation CleanDeployEntry's own
 // internal file-lock + entry-removal + provides-cleanup + empty-file-delete logic cannot be

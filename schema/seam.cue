@@ -1329,21 +1329,10 @@
 	tunnel_json?: bytes @go(TunnelJSON, type=RawBody) // marshalled *TunnelConfig; absent ⇒ nil
 }
 
-// #DeployConfigSaveStateRequest / Reply: deploykit.SaveDeployState(box,instance,input,
-// marshalDeployNode) — the terminal per-deploy persist. input_json is the marshalled
-// deploykit.SaveDeployStateInput (a hand-written sdk/deploykit type with no CUE def — the
-// RawBody idiom, matching #PodConfigWriteRequest.pod_config_json). Renamed substrate-neutral
-// (S3b, Q2): the seam started pod-only (candy/plugin-deploy-pod's config_setup.go/resolve.go)
-// but candy/plugin-bundle's generic Add/Update apply body (deploy_target.go's
-// persistDeployState) is now a THIRD caller across every substrate (pod/vm/local/k8s/android),
-// so the "pod-config-*" family naming no longer fit — the underlying "deploy-config-save-state"
-// host-builder kind renamed to match (was "pod-config-save-deploy-state").
-#DeployConfigSaveStateRequest: {
-	box!:        string @go(Box)
-	instance?:   string @go(Instance)
-	input_json!: bytes  @go(InputJSON, type=RawBody)
-}
-#DeployConfigSaveStateReply: {}
+// (The terminal per-deploy persist WRITE seam — its request/reply wire types — was DELETED in
+// #55 K4: candy/plugin-bundle AND candy/plugin-deploy-pod now call deploykit.SaveDeployState
+// directly, plugin-side, with their own loader-backed reader + loader-threaded Primaries, so no
+// host seam carries the SaveDeployStateInput across the wire anymore.)
 
 // #ArbiterBracketAcquireRequest / Reply — the K4-exit HostBuild seam for the acquire half of the
 // Q1 resource-arbiter bracket (FLOOR-SLIM-proper Unit-8; the former core-resident
@@ -1369,9 +1358,9 @@
 
 // #PodConfigCleanDeployEntryRequest / Reply: deploykit.CleanDeployEntry(box, instance,
 // marshalDeployNode) — the `charly remove` deploy-entry cleanup (Cutover B unit 2 remove-verb
-// completion). Mirrors #DeployConfigSaveStateRequest's shape ({box!, instance?} → {}, the host
-// owns the entire load+lock+mutate+save internally) — deliberately NOT the plugin-side
-// deploykit.SaveBundleConfig write (bundle import/reset's use case, #55 K4 — no host seam),
+// completion). Follows the {box!, instance?} → {} host-owns-load+lock+mutate+save shape —
+// deliberately NOT the plugin-side deploykit.SaveDeployState/SaveBundleConfig write (bundle
+// import/reset + deploy-state persist, #55 K4 — no host seam),
 // which persists an ALREADY-LOADED, already-mutated whole BundleConfig with no internal
 // load/lock/entry-removal logic — a genuinely different, narrower operation CleanDeployEntry's own
 // internal file-lock + entry-removal + provides-cleanup + empty-file-delete logic cannot be
