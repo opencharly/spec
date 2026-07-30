@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -11,8 +12,10 @@ import (
 // (ImportEntry/ImportList) and the `discover:` field (DiscoverConfig/ScanSpec), plus the canonical
 // manifest-filename constant they default to. These are pure DATA carriers (custom YAML shapes, no
 // mechanism), so they live in the types-only spec module where charly core, sdk/kit, sdk/loaderkit,
-// and every loader-consuming plugin share ONE copy. The AnchorScanSpecs path-anchoring FUNCTION is
-// mechanism (filepath) and stays in sdk/kit, retargeted onto spec.ScanSpec.
+// and every loader-consuming plugin share ONE copy. The AnchorScanSpecs path-anchoring FUNCTION lives
+// here too (#55 C3b) — its only non-loaderkit caller was MergeUnified, which itself relocated into
+// this spec module, so it can no longer live in sdk/kit (spec cannot import sdk/kit); sdk/kit keeps a
+// forwarder (var AnchorScanSpecs = spec.AnchorScanSpecs) for its remaining walk.go caller.
 
 // UnifiedFileName is the ONE box/candy manifest filename. Canonical loader DATA; ScanSpec below
 // defaults to it. (sdk/kit keeps the sibling layout constants DefaultBoxDir/DefaultCandyDir.)
@@ -134,4 +137,25 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 		s.Manifest = UnifiedFileName
 	}
 	return nil
+}
+
+// AnchorScanSpecs returns a copy of `specs` with every relative Path
+// resolved to an absolute path against `srcDir`. Absolute paths are
+// kept verbatim. Empty srcDir leaves specs unchanged so the
+// root-file merge (called with rootDir == workspace) is a no-op.
+// Path-anchoring MECHANISM (filepath) over spec.ScanSpec, relocated from
+// sdk/kit (#55 C3b) so MergeUnified — which itself moved into this spec
+// module — can call it without a spec→sdk import inversion.
+func AnchorScanSpecs(specs []ScanSpec, srcDir string) []ScanSpec {
+	if srcDir == "" || len(specs) == 0 {
+		return specs
+	}
+	out := make([]ScanSpec, len(specs))
+	for i, s := range specs {
+		out[i] = s
+		if s.Path != "" && !filepath.IsAbs(s.Path) {
+			out[i].Path = filepath.Join(srcDir, s.Path)
+		}
+	}
+	return out
 }
