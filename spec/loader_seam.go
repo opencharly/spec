@@ -189,6 +189,55 @@ type CandyScanner interface {
 	ScanRemoteCandy(repoDir, repoPath string, wantRefs map[string]bool, parseManifest func(path string) (*Candy, error)) (map[string]ScannedCandy, error)
 }
 
+// LoaderExecutor is the typed host-leg contract for the registry-/host-coupled loader steps the
+// kind-blind LoadUnified orchestration cannot do itself: the bootstrap-phase plugin invocation, the
+// registry-coupled import/discover walk, the materialize kind-decode + merge, and the two
+// registry-resolving validators. Promoted here from sdk/loaderkit (#55 loader-keystone) so charly
+// core can hold the host LoaderExecutor implementation while importing ONLY the dedicated spec
+// module — the interface's method signatures already reference only spec types (Threaded /
+// LoadedProject / UnifiedFile), so promoting it is a relocation, not an invention. Because the
+// methods are TYPED, a compiled-in placement pays no envelope tax; only a true out-of-module plugin
+// marshals (the existing LoadedProject / UnifiedFile envelopes). loaderkit.LoadSeamsFromExecutor
+// consumes this to build its internal LoadSeams.
+type LoaderExecutor interface {
+	// LoaderThreaded returns the CURRENT registry-derived snapshot (recognized kinds / deploy
+	// substrates / DeployTraits / ExternalDeploySubstrates / …). Called FRESH at each DATA-seam
+	// invocation — NEVER cached at seam-build time — because the walk's connect-declared-kind pass
+	// mutates the registry BETWEEN seam construction and the post-walk validators.
+	LoaderThreaded() Threaded
+	// RunBootstrapPhase invokes every registered bootstrap-phase plugin on the raw root bytes,
+	// returning the (possibly transformed) bytes.
+	RunBootstrapPhase(data []byte) []byte
+	// WalkProject runs the kind-blind import/discover/namespace walk (the registered ProjectWalker,
+	// reached via the host's WalkSeams) → the generic LoadedProject envelope. The host #NodeDoc CUE
+	// gate (WalkSeams.GateDoc) runs INSIDE this walk.
+	WalkProject(dir string, rootData []byte) (LoadedProject, error)
+	// MaterializeLoadedProject replays the host's per-document/per-namespace MATERIALIZE + root-wins
+	// MERGE over the walk envelope (registry kind-decode via the registered Materializer).
+	MaterializeLoadedProject(lp *LoadedProject, merged *UnifiedFile, byID map[int64]*UnifiedFile) error
+	// ValidateAndroidDevices enforces the kind:android box⊻adb XOR — resolves android templates via
+	// the provider registry (host-coupled), so a leg, not a pure loaderkit move.
+	ValidateAndroidDevices(uf *UnifiedFile) error
+	// ValidatePreemptible validates preemptible / requires_exclusive / requires_shared across the
+	// deploy map, including the resource-vocabulary cross-check (resolves the resource plugin kind +
+	// vm/resource entities via the registry) — host-coupled, so a leg.
+	ValidatePreemptible(uf *UnifiedFile) error
+}
+
+// ProjectLoader is the swappable whole-project LOAD-ENTRY seam (#55 loader-keystone) — the terminal
+// loader endpoint every command reaches to load a project's charly.yml. The loader plugin candy
+// implements it (candy/plugin-loader, delegating to loaderkit.LoadUnified over
+// loaderkit.LoadSeamsFromExecutor), and the host resolves the registered loader provider to it and
+// drives LoadUnified THROUGH it — so charly core imports ONLY the dedicated spec module, never the
+// loaderkit mechanism, to load its own config. The host supplies the registry-/host-coupled legs as
+// a LoaderExecutor; the plugin owns the kind-blind orchestration. Typed (no wire envelope), the
+// LOAD-ENTRY sibling of DocParser/ProjectWalker/CandyScanner/Materializer above — the compiled-in
+// placement (the loader MUST always resolve; it is the config front-end) calls it directly, resolved
+// at init() before the first load so there is no bootstrap cycle.
+type ProjectLoader interface {
+	LoadUnified(dir string, exec LoaderExecutor) (*UnifiedFile, bool, error)
+}
+
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every
 // cache-miss download through a RefsDownloader; the DEFAULT (candy/plugin-refs, delegating to
 // kit.DownloadRepo) fetches via git, and an alternative refs plugin can serve a different backend
