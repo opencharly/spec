@@ -4032,6 +4032,93 @@ type DeployReplyRecord struct {
 	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 }
 
+// #OCIEmitStepParams is the plain-Go param struct the pod-overlay candy marshals into a
+// HostBuild("step-emit", #StepEmitRequest{Word:"oci-emit-step", Payload:<#OCIEmitStepParams>})
+// per install step (promoted from sdk/deploykit — #55 import-purity, Cone V value-vocabulary).
+// Dir is the project dir the host "oci-emit-step" emitter uses to look up the cached overlay
+// buildEngineContext (a live *Generator/DistroDef/BuilderConfig/Box cannot cross the wire);
+// StepView is the step's wire form (StepToView) and PlanView the step's plan wire form — the
+// host reconstructs both (StepFromView/PlanFromView) then calls ociEmitStep, returning the
+// rendered Containerfile fragment. StepView/PlanView are required (always set by the caller);
+// Dir is optional (empty for the non-overlay per-step emit path).
+type OCIEmitStepParams struct {
+	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+
+	StepView InstallStepView `yaml:"step_view,omitempty" json:"step_view"`
+
+	PlanView InstallPlanView `yaml:"plan_view,omitempty" json:"plan_view"`
+}
+
+// #SaveDeployStateInput holds the deployment parameters SaveDeployState persists to charly.yml
+// (promoted from sdk/deploykit — #55 import-purity, Cone V value-vocabulary; the SaveDeployState
+// FUNCTION stays in deploykit). Every field is a spec/stdlib type. Marshalled to JSON by the
+// deploy candies (plugin-deploy-pod/resolve.go) and carried in #DeployConfigSaveStateRequest.InputJSON
+// to the host "deploy-config-save-state" builder, which unmarshals into the SAME type — so the wire
+// is internally consistent regardless of tag convention (ephemeral in-operation, never persisted as-is).
+type SaveDeployStateInput struct {
+	Ports []string `yaml:"ports,omitempty" json:"ports,omitempty"`
+
+	// set_ports gates whether Ports is written to charly.yml at all: `charly config <name>` (no
+	// --port flags) and `charly update <name>` must not silently overwrite operator port overrides
+	// with image-label defaults.
+	SetPorts bool `yaml:"set_ports,omitempty" json:"set_ports,omitempty"`
+
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+
+	CleanEnv bool `yaml:"clean_env,omitempty" json:"clean_env,omitempty"`
+
+	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`
+
+	Network string `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Security *Security `yaml:"security,omitempty" json:"security,omitempty"`
+
+	Volume []DeployVolume `yaml:"volume,omitempty" json:"volume,omitempty"`
+
+	Sidecar map[string]RawBody `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
+
+	Tunnel *TunnelYAML `yaml:"tunnel,omitempty" json:"tunnel,omitempty"`
+
+	// secret_names lists env var names declared as secret_accepts / secret_requires on the image;
+	// saveDeployState defensively strips any matching KEY=VAL entries from both the input Env and
+	// the existing persisted entry before writing.
+	SecretNames []string `yaml:"secret_names,omitempty" json:"secret_names,omitempty"`
+
+	// Disposable + Lifecycle classification (see /charly-internals:disposable).
+	SetDisposable bool `yaml:"set_disposable,omitempty" json:"set_disposable,omitempty"`
+
+	Disposable bool `yaml:"disposable,omitempty" json:"disposable,omitempty"`
+
+	SetLifecycle bool `yaml:"set_lifecycle,omitempty" json:"set_lifecycle,omitempty"`
+
+	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
+
+	// Box + Target — the schema-required fields per the require-image cutover. Written when non-empty
+	// AND when the existing entry doesn't already have a value (don't clobber operator-authored refs).
+	Box string `yaml:"box,omitempty" json:"box,omitempty"`
+
+	Target string `yaml:"target,omitempty" json:"target,omitempty"`
+
+	// resolved_image is the concrete overlay image ref produced by a pod deploy's add_candy: overlay
+	// build, persisted by PrepareVenue so config/start deploy EXACTLY that overlay.
+	ResolvedImage string `yaml:"resolved_image,omitempty" json:"resolved_image,omitempty"`
+
+	// vm_state + vm_cross_ref — the vm substrate's persisted runtime state + the kind:vm cross-ref,
+	// shipped by the externalized vm plugin's PrepareVenue reply as the generic State patch.
+	VmState *VmDeployState `yaml:"vm_state,omitempty" json:"vm_state,omitempty"`
+
+	VmCrossRef string `yaml:"vm_cross_ref,omitempty" json:"vm_cross_ref,omitempty"`
+
+	// Resource-arbitration axis: the holder-side Preemptible block + the claimant-side
+	// requires_exclusive / requires_shared token lists. Persisted so a deploy/bed MEMBER round-trips
+	// its arbiter role through the per-host overlay. Written when non-empty.
+	Preemptible *PreemptibleConfig `yaml:"preemptible,omitempty" json:"preemptible,omitempty"`
+
+	RequiresExclusive []string `yaml:"requires_exclusive,omitempty" json:"requires_exclusive,omitempty"`
+
+	RequiresShared []string `yaml:"requires_shared,omitempty" json:"requires_shared,omitempty"`
+}
+
 type Distro struct {
 	Inherits string `yaml:"inherits,omitempty" json:"inherits,omitempty"`
 

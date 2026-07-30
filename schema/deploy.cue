@@ -605,3 +605,72 @@
 	env?:               #StrMap
 	mcp_endpoint?:      string @go(MCPEndpoint,type=*string)
 }
+
+// #OCIEmitStepParams is the plain-Go param struct the pod-overlay candy marshals into a
+// HostBuild("step-emit", #StepEmitRequest{Word:"oci-emit-step", Payload:<#OCIEmitStepParams>})
+// per install step (promoted from sdk/deploykit — #55 import-purity, Cone V value-vocabulary).
+// Dir is the project dir the host "oci-emit-step" emitter uses to look up the cached overlay
+// buildEngineContext (a live *Generator/DistroDef/BuilderConfig/Box cannot cross the wire);
+// StepView is the step's wire form (StepToView) and PlanView the step's plan wire form — the
+// host reconstructs both (StepFromView/PlanFromView) then calls ociEmitStep, returning the
+// rendered Containerfile fragment. StepView/PlanView are required (always set by the caller);
+// Dir is optional (empty for the non-overlay per-step emit path).
+#OCIEmitStepParams: {
+	dir?:       string           @go(Dir)
+	step_view!: #InstallStepView @go(StepView)
+	plan_view!: #InstallPlanView @go(PlanView)
+}
+
+// #SaveDeployStateInput holds the deployment parameters SaveDeployState persists to charly.yml
+// (promoted from sdk/deploykit — #55 import-purity, Cone V value-vocabulary; the SaveDeployState
+// FUNCTION stays in deploykit). Every field is a spec/stdlib type. Marshalled to JSON by the
+// deploy candies (plugin-deploy-pod/resolve.go) and carried in #DeployConfigSaveStateRequest.InputJSON
+// to the host "deploy-config-save-state" builder, which unmarshals into the SAME type — so the wire
+// is internally consistent regardless of tag convention (ephemeral in-operation, never persisted as-is).
+#SaveDeployStateInput: {
+	ports?: [...string] @go(Ports)
+	// set_ports gates whether Ports is written to charly.yml at all: `charly config <name>` (no
+	// --port flags) and `charly update <name>` must not silently overwrite operator port overrides
+	// with image-label defaults.
+	set_ports?: bool @go(SetPorts)
+	env?: {[string]: string} @go(Env)
+	clean_env?: bool   @go(CleanEnv) // true = replace env map; false = merge (upsert by key)
+	env_file?:  string @go(EnvFile)
+	network?:   string @go(Network)
+	security?:  #Security @go(Security,optional=nillable)
+	volume?: [...#DeployVolume] @go(Volume)
+	sidecar?: {[string]: bytes} @go(Sidecar,type=map[string]RawBody)
+	tunnel?: #Tunnel @go(Tunnel,type=*TunnelYAML)
+
+	// secret_names lists env var names declared as secret_accepts / secret_requires on the image;
+	// saveDeployState defensively strips any matching KEY=VAL entries from both the input Env and
+	// the existing persisted entry before writing.
+	secret_names?: [...string] @go(SecretNames)
+
+	// Disposable + Lifecycle classification (see /charly-internals:disposable).
+	set_disposable?: bool   @go(SetDisposable)
+	disposable?:     bool   @go(Disposable)
+	set_lifecycle?:  bool   @go(SetLifecycle)
+	lifecycle?:      string @go(Lifecycle)
+
+	// Box + Target — the schema-required fields per the require-image cutover. Written when non-empty
+	// AND when the existing entry doesn't already have a value (don't clobber operator-authored refs).
+	box?:    string @go(Box)
+	target?: string @go(Target)
+
+	// resolved_image is the concrete overlay image ref produced by a pod deploy's add_candy: overlay
+	// build, persisted by PrepareVenue so config/start deploy EXACTLY that overlay.
+	resolved_image?: string @go(ResolvedImage)
+
+	// vm_state + vm_cross_ref — the vm substrate's persisted runtime state + the kind:vm cross-ref,
+	// shipped by the externalized vm plugin's PrepareVenue reply as the generic State patch.
+	vm_state?:     #VmDeployState @go(VmState,type=*VmDeployState)
+	vm_cross_ref?: string         @go(VmCrossRef)
+
+	// Resource-arbitration axis: the holder-side Preemptible block + the claimant-side
+	// requires_exclusive / requires_shared token lists. Persisted so a deploy/bed MEMBER round-trips
+	// its arbiter role through the per-host overlay. Written when non-empty.
+	preemptible?: #Preemptible @go(Preemptible,type=*PreemptibleConfig)
+	requires_exclusive?: [...string] @go(RequiresExclusive)
+	requires_shared?: [...string] @go(RequiresShared)
+}
