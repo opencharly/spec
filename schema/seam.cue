@@ -862,8 +862,8 @@
 	image?:       string @go(Image)      // pod bed box ref ("" for vm/local/group)
 	has_add_candy?: bool @go(HasAddCandy) // node.AddCandy is non-empty (a pod's add_candy: overlay
 	// bed) — bed_run.go skips --tag at the config/start steps for such a bed: the FRESH artifact to
-	// verify is the overlay deploy-add just built + persisted (resolved via
-	// resolveDeployResolvedImage, the overlay-plans ctx-seed fix's companion bug), not the base
+	// verify is the overlay deploy-add just built + persisted (resolved via plugin-deploy-pod's
+	// resolveDeployRefLocal resolved_image overlay preference), not the base
 	// image's own --tag build ref.
 	vm_template?: string @go(VMTemplate) // node.From for a vm bed (the ENTITY — `charly vm build` builds off it)
 	bed_domain?:  string @go(BedDomain)  // per-deploy live domain identity (`charly vm create/destroy/start … --domain <this>`, post-P33)
@@ -1250,20 +1250,6 @@
 }
 #PodConfigEnsureImageReply: {
 	meta_json!: bytes @go(MetaJSON, type=RawBody) // marshalled *spec.BoxMetadata
-}
-
-// #PodConfigResolveRefRequest: resolveDeployBoxName/resolveDeployResolvedImage/
-// resolveShellImageRef bundle — reads the per-host charly.yml overlay + local podman image
-// labels (loader + podman-store coupled).
-#PodConfigResolveRefRequest: {
-	box!:          string @go(Box)
-	instance?:     string @go(Instance)
-	tag?:          string @go(Tag)
-	explicit_ref?: string @go(ExplicitRef)
-}
-#PodConfigResolveRefReply: {
-	deploy_box_name!: string @go(DeployBoxName)
-	image_ref!:       string @go(ImageRef)
 }
 
 // #PodConfigLoadDeployRequest / Reply: deploykit.LoadDeployConfigForRead(caller) — the

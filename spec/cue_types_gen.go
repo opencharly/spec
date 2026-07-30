@@ -6351,8 +6351,8 @@ type CheckBedReply struct {
 	HasAddCandy bool `yaml:"has_add_candy,omitempty" json:"has_add_candy,omitempty"`
 
 	// bed) — bed_run.go skips --tag at the config/start steps for such a bed: the FRESH artifact to
-	// verify is the overlay deploy-add just built + persisted (resolved via
-	// resolveDeployResolvedImage, the overlay-plans ctx-seed fix's companion bug), not the base
+	// verify is the overlay deploy-add just built + persisted (resolved via plugin-deploy-pod's
+	// resolveDeployRefLocal resolved_image overlay preference), not the base
 	// image's own --tag build ref.
 	VMTemplate string `yaml:"vm_template,omitempty" json:"vm_template,omitempty"`
 
@@ -6822,25 +6822,6 @@ type PodConfigEnsureImageRequest struct {
 
 type PodConfigEnsureImageReply struct {
 	MetaJSON RawBody `yaml:"meta_json,omitempty" json:"meta_json"`
-}
-
-// #PodConfigResolveRefRequest: resolveDeployBoxName/resolveDeployResolvedImage/
-// resolveShellImageRef bundle — reads the per-host charly.yml overlay + local podman image
-// labels (loader + podman-store coupled).
-type PodConfigResolveRefRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
-	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
-
-	ExplicitRef string `yaml:"explicit_ref,omitempty" json:"explicit_ref,omitempty"`
-}
-
-type PodConfigResolveRefReply struct {
-	DeployBoxName string `yaml:"deploy_box_name,omitempty" json:"deploy_box_name"`
-
-	ImageRef string `yaml:"image_ref,omitempty" json:"image_ref"`
 }
 
 // #PodConfigLoadDeployRequest / Reply: deploykit.LoadDeployConfigForRead(caller) — the
