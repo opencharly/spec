@@ -5856,6 +5856,15 @@ type DeployEntityResolveRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
 	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+
+	// tree_json is the merged project+operator deploy tree the invoking plugin resolved PLUGIN-SIDE
+	// (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA for the deploy/bundle-kind node
+	// lookup so the host stops re-loading via the core resolveTreeRoot (#55 Cone A Unit 3b).
+	// Marshalled map[string]spec.Deploy; consulted ONLY for kind ∈ {"","deploy","bundle"} (the
+	// kind:<word> lookups — k8s/android/vm/local — use their own findK8sSpec/etc. host resolvers,
+	// unaffected). An absent tree yields a not-found for the deploy/bundle lookup, matching a nil
+	// resolveTreeRoot result.
+	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
 }
 
 type DeployEntityResolveReply struct {
@@ -7047,9 +7056,8 @@ type PodConfigListSidecarsReply struct {
 
 // #PodUpdateRequest carries the `charly update` command flags (the former UpdateCmd's
 // authored fields). Forwarded to HostBuild("pod-update"), which runs the existing
-// dispatchByDeployTarget orchestration VERBATIM — resolveTreeRoot/loadDeployPlugins/
-// ResolveTarget are core Mechanisms (the project loader + provider registry) a plugin
-// cannot import or hold.
+// dispatchByDeployTarget orchestration — loadDeployPlugins/ResolveTarget are core
+// Mechanisms (the provider registry) a plugin cannot import or hold.
 type PodUpdateRequest struct {
 	Box string `yaml:"box,omitempty" json:"box"`
 
@@ -7064,6 +7072,13 @@ type PodUpdateRequest struct {
 	ForceSeed bool `yaml:"force_seed,omitempty" json:"force_seed,omitempty"`
 
 	DataFrom string `yaml:"data_from,omitempty" json:"data_from,omitempty"`
+
+	// tree_json is the merged project+operator deploy tree command:update (plugin-pod) resolved
+	// PLUGIN-SIDE (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA so the host
+	// dispatchByDeployTarget consumes it instead of re-loading via the core resolveTreeRoot (#55
+	// Cone A Unit 3b). Marshalled map[string]spec.Deploy; an absent tree yields the same
+	// "no charly.yml" error a nil resolveTreeRoot result produced.
+	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
 }
 
 // #PodUpdateReply is the "pod-update" host-builder reply — empty, mirroring #PodStartReply.

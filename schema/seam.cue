@@ -492,6 +492,14 @@
 	kind!: string @go(Kind) // "" | "deploy" | "bundle" for a deploy-tree node lookup (node.From carries a cross-ref hop); "k8s"|"android"|"vm"|"local" for a kind:<word> entity lookup (the WHOLE resolved envelope)
 	name!: string @go(Name)
 	dir?:  string @go(Dir)
+	// tree_json is the merged project+operator deploy tree the invoking plugin resolved PLUGIN-SIDE
+	// (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA for the deploy/bundle-kind node
+	// lookup so the host stops re-loading via the core resolveTreeRoot (#55 Cone A Unit 3b).
+	// Marshalled map[string]spec.Deploy; consulted ONLY for kind ∈ {"","deploy","bundle"} (the
+	// kind:<word> lookups — k8s/android/vm/local — use their own findK8sSpec/etc. host resolvers,
+	// unaffected). An absent tree yields a not-found for the deploy/bundle lookup, matching a nil
+	// resolveTreeRoot result.
+	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 #DeployEntityResolveReply: {
 	node?:   #Deploy @go(Node, type=*Deploy)          // populated when kind=="" (deploy-tree lookup)
@@ -1451,9 +1459,8 @@
 
 // #PodUpdateRequest carries the `charly update` command flags (the former UpdateCmd's
 // authored fields). Forwarded to HostBuild("pod-update"), which runs the existing
-// dispatchByDeployTarget orchestration VERBATIM — resolveTreeRoot/loadDeployPlugins/
-// ResolveTarget are core Mechanisms (the project loader + provider registry) a plugin
-// cannot import or hold.
+// dispatchByDeployTarget orchestration — loadDeployPlugins/ResolveTarget are core
+// Mechanisms (the provider registry) a plugin cannot import or hold.
 #PodUpdateRequest: {
 	box!:        string @go(Box)
 	tag?:        string @go(Tag)
@@ -1462,6 +1469,12 @@
 	seed?:       bool   @go(Seed)
 	force_seed?: bool   @go(ForceSeed)
 	data_from?:  string @go(DataFrom)
+	// tree_json is the merged project+operator deploy tree command:update (plugin-pod) resolved
+	// PLUGIN-SIDE (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA so the host
+	// dispatchByDeployTarget consumes it instead of re-loading via the core resolveTreeRoot (#55
+	// Cone A Unit 3b). Marshalled map[string]spec.Deploy; an absent tree yields the same
+	// "no charly.yml" error a nil resolveTreeRoot result produced.
+	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 
 // #PodUpdateReply is the "pod-update" host-builder reply — empty, mirroring #PodStartReply.
