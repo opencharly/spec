@@ -109,6 +109,43 @@ func SortedNestedKeys(children map[string]*BundleNode) []string {
 	return out
 }
 
+// HostRooted reports whether node's stamped descent trait is host-rooted — the substrate's own
+// ROOT executor runs directly on the host (a local/SSH-shell venue, not a container/VM venue).
+// Reads the wire-stamped node.Descent directly (every node a LoadUnified'd project produces is
+// Descent-stamped by StampDescent), so it needs no registry access. Promoted from sdk/deploykit's
+// former private host-rooted predicate (#55 U4) so DeployNestedLocalChildren + the bed-session
+// apply path (PersistBedDeployOverrides) share ONE predicate over the spec value type; deploykit
+// callers repoint to spec.HostRooted directly.
+func HostRooted(node *BundleNode) bool {
+	return node != nil && node.Descent != nil && node.Descent.HostRooted
+}
+
+// DeployNestedLocalChildren deploys a parent venue's nested target:local children via the
+// dotted-path dispatch — each host-rooted (local/SSH-shell) child applies its candies in place.
+// Promoted from sdk/deploykit (#55 U4), now that HostRooted is a spec predicate; deploykit keeps a
+// re-export forwarder so its charly callers compile unchanged.
+//
+// plugin-deploy-vm's PostApply brings up nested target:pod children as in-guest quadlets, but it
+// SKIPS target:local children — they carry no image, they apply candies in place. Without this
+// loop a nested local child never deploys, and a deploy-scope check against it either fails or
+// (worse) silently checks nothing.
+//
+// Both sites that own a VM venue call it: the isVM bed ROOT and bringUpMembers' VM-member branch.
+// They differ only in how a child deploy is executed (the root wraps it in a recorded step(); a
+// member shells out directly), so that is the injected apply func.
+func DeployNestedLocalChildren(parent string, children map[string]*BundleNode, apply func(childKey, dotted string) error) error {
+	for _, childKey := range SortedNestedKeys(children) {
+		child := children[childKey]
+		if child == nil || !HostRooted(child) { // local (host-rooted shell venue) only
+			continue // container/vm children handled in-guest by plugin-deploy-vm's PostApply
+		}
+		if err := apply(childKey, parent+"."+childKey); err != nil {
+			return fmt.Errorf("deploy nested local child %s.%s: %w", parent, childKey, err)
+		}
+	}
+	return nil
+}
+
 // BedCheckLiveRefs returns the ordered `charly check live` targets for a bed: the substrate
 // itself first, then each nested child as a sorted dotted path. A `target: android` child shares
 // the parent pod's venue (Descent.Venue == "parent") and has no own image — its app-presence
