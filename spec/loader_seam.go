@@ -236,6 +236,23 @@ type LoaderExecutor interface {
 // at init() before the first load so there is no bootstrap cycle.
 type ProjectLoader interface {
 	LoadUnified(dir string, exec LoaderExecutor) (*UnifiedFile, bool, error)
+	// MaterializeLoadedProject replays the whole-project per-document/per-namespace MATERIALIZE +
+	// root-wins MERGE over a walk envelope, driving loaderkit's kind-blind orchestration with the
+	// host-supplied per-node seams — so charly core reaches materialize WITHOUT importing loaderkit
+	// (#55 2b C3). The host's own LoadUnified path AND the loader-materialize HostBuild seam (serving a
+	// plugin-side loader) both route through here.
+	MaterializeLoadedProject(lp *LoadedProject, merged *UnifiedFile, byID map[int64]*UnifiedFile, seams MaterializeProjectSeams) error
+	// MarshalMaterialized marshals a materialized UnifiedFile into the wire envelope the
+	// loader-materialize HostBuild seam returns to a plugin-side loader (it captures the nested
+	// plugin-kind maps loaderkit-internally, so the host reaches it through this seam).
+	MarshalMaterialized(uf *UnifiedFile) ([]byte, error)
+	// ValidateAndroidDevices enforces the kind:android box⊻adb XOR; the host supplies the
+	// registry-resolve callback (the validation LOGIC stays in loaderkit).
+	ValidateAndroidDevices(uf *UnifiedFile, resolveAndroid func(json.RawMessage) (*ResolvedAndroid, error)) error
+	// ValidatePreemptible validates preemptible / requires_exclusive / requires_shared across the
+	// deploy map; the host supplies the registry-resolve callbacks (the validation LOGIC stays in
+	// loaderkit).
+	ValidatePreemptible(uf *UnifiedFile, resolveResource func(json.RawMessage) (*ResolvedResource, error), resolveVm func(json.RawMessage) (*ResolvedVm, error)) error
 }
 
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every
