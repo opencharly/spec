@@ -2510,6 +2510,38 @@ type RenderSeamReply struct {
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
+// #InlineBuilderParams carries the inputs to the host resolveInlineBuilderSeam for the
+// "inline-builder" render-seam method (RenderSeamInlineBuilder). It rides INSIDE the opaque
+// #RenderSeamRequest.params bytes (marshalled by candy/plugin-build's render, decoded by the
+// host builder). BDef is #Builder, Ctx is #BuildStageContext — both existing CUE defs, so
+// gengotypes generates typed pointers (*Builder / *BuildStageContext).
+type InlineBuilderParams struct {
+	Dir string `yaml:"dir,omitempty" json:"dir"`
+
+	BoxName string `yaml:"box_name,omitempty" json:"box_name"`
+
+	CandyName string `yaml:"candy_name,omitempty" json:"candy_name"`
+
+	BuilderName string `yaml:"builder_name,omitempty" json:"builder_name"`
+
+	BDef *Builder `yaml:"b_def,omitempty" json:"b_def,omitempty"`
+
+	Ctx *BuildStageContext `yaml:"ctx,omitempty" json:"ctx,omitempty"`
+}
+
+// #InlineBuilderResult carries the resolved inline fragment back to the render.
+type InlineBuilderResult struct {
+	Fragment string `yaml:"fragment,omitempty" json:"fragment,omitempty"`
+}
+
+// #EnsureBuildersParams carries the builder words the host must scan+connect for the
+// "ensure-builders" render-seam method (RenderSeamEnsureBuilders).
+type EnsureBuildersParams struct {
+	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+
+	Words []string `yaml:"words,omitempty" json:"words,omitempty"`
+}
+
 // #BuildEnv is the build-context descriptor the host puts in op.Env for an
 // OpEmit Invoke at image-generation time: the image's distro tags + name, so
 // a plugin can tailor its emitted Containerfile fragment per distro/arch.
@@ -4579,7 +4611,7 @@ type InitServiceSchema struct {
 // kind (RDD-caught live: it appeared in the generated KindValueDefs map). The
 // charly-name alias `KeyValue = EnvKV` (spec/charly_names.go) preserves the
 // exported Go type name every real consumer (deploykit.MapToKeyValueSlice,
-// deploykit.SortedEnvList, charly/service_render.go) already uses.
+// spec.SortedEnvList, charly/service_render.go) already uses.
 type EnvKV struct {
 	Key string `yaml:"key,omitempty" json:"key"`
 

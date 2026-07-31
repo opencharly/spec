@@ -141,3 +141,29 @@
 	result?: bytes @go(Result)
 	error?:  string @go(Error)
 }
+
+// #InlineBuilderParams carries the inputs to the host resolveInlineBuilderSeam for the
+// "inline-builder" render-seam method (RenderSeamInlineBuilder). It rides INSIDE the opaque
+// #RenderSeamRequest.params bytes (marshalled by candy/plugin-build's render, decoded by the
+// host builder). BDef is #Builder, Ctx is #BuildStageContext — both existing CUE defs, so
+// gengotypes generates typed pointers (*Builder / *BuildStageContext).
+#InlineBuilderParams: {
+	dir!:          string             @go(Dir)
+	box_name!:     string             @go(BoxName)
+	candy_name!:   string             @go(CandyName)
+	builder_name!: string             @go(BuilderName)
+	b_def?:        #Builder           @go(BDef,optional=nillable)
+	ctx?:          #BuildStageContext @go(Ctx,optional=nillable)
+}
+
+// #InlineBuilderResult carries the resolved inline fragment back to the render.
+#InlineBuilderResult: {
+	fragment?: string @go(Fragment)
+}
+
+// #EnsureBuildersParams carries the builder words the host must scan+connect for the
+// "ensure-builders" render-seam method (RenderSeamEnsureBuilders).
+#EnsureBuildersParams: {
+	dir?: string @go(Dir)
+	words?: [...string] @go(Words)
+}
