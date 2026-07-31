@@ -11,16 +11,33 @@
 // already imports spec). Every OTHER field generates faithfully as a plain struct (the
 // gengotypes CAN table: plain scalar/slice/map/pointer-to-generated-def fields all generate).
 //
-// #BuilderMap and #AggregatedCandyCaps are pure data with zero buildkit-specific typing, so
-// they are CUE-sourced here too (rather than staying hand-written in buildkit) — moved out of
-// buildkit per the same rule, aliased back as `type BuilderMap = spec.BuilderMap` /
-// `type AggregatedCandyCaps = spec.AggregatedCandyCaps` for buildkit's existing bare
-// references. Their METHODS (BuilderFor/HasBuilder/AllBuilder, SupportsTag/SupportsBuild) are
-// NOT generated — gengotypes has no construct for behavior — and stay hand-written in
-// spec/resolved_box_methods.go alongside the generated types (the Op.Kind()-style exception).
+// #BuilderMap, #AggregatedCandyCaps, and #DistroBuilderCandidate are pure data with zero
+// buildkit-specific typing, so they are CUE-sourced here too (rather than staying hand-written
+// in buildkit) — moved out of buildkit per the same rule, aliased back as
+// `type BuilderMap = spec.BuilderMap` / `type AggregatedCandyCaps = spec.AggregatedCandyCaps`
+// for buildkit's existing bare references. Their METHODS (BuilderFor/HasBuilder/AllBuilder,
+// SupportsTag/SupportsBuild) are NOT generated — gengotypes has no construct for behavior — and
+// stay hand-written in spec/resolved_box_methods.go alongside the generated types (the
+// Op.Kind()-style exception). The builder-map value-primitive FUNCTIONS
+// (EffectiveBuilderForBox/ResolveEffectiveBuilder/distroBuilderMap/PickDistroBuilder) are
+// likewise hand-written behavior in spec/spec/builder_resolve.go.
 
 // #BuilderMap — a map of build type (pixi/npm/cargo/aur) → builder image name.
 #BuilderMap: {[string]: string}
+
+// #DistroBuilderCandidate is one named entity's Distro tags + Builder map — the generic shape
+// PickDistroBuilder consumes (R3: the shared abstraction behind the "distro-keyed builder default"
+// lookup). Pure data (string/[]string/#BuilderMap) with zero buildkit-specific typing, so it is
+// CUE-sourced here alongside #BuilderMap per the same rule — moved out of buildkit (the
+// builder-map value-primitive cluster: EffectiveBuilderForBox/ResolveEffectiveBuilder/
+// distroBuilderMap/PickDistroBuilder + this candidate type relocated to spec/spec as pure-value
+// CONTRACT computation, plan Rule 2 + step 3). The lookup FUNCTIONS themselves are BEHAVIOR
+// (hand-written Go, not CUE-generated) and live in spec/spec/builder_resolve.go.
+#DistroBuilderCandidate: {
+	name!:    string @go(Name)
+	distro!:  [...string] @go(Distro)
+	builder!: #BuilderMap @go(Builder, type=BuilderMap)
+}
 
 // #AggregatedCandyCaps — the output of walking all candies in resolution order. Populated
 // onto #ResolvedBox and consumed wherever code reads BoxConfig.Bootc/BoxConfig.DataImage/the

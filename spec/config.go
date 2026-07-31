@@ -16,10 +16,13 @@ import (
 // signature touches a buildkit type (e.g. *buildkit.ResolvedBox) cannot be defined here — spec is
 // the bottom of the sdk dependency graph and must never import buildkit or deploykit (both import
 // spec; the reverse is a cycle). Those methods are FREE FUNCTIONS in sdk/buildkit (ResolveBox,
-// ResolveAllBox, resolveEffectiveBuilder, distroBuilderMap, resolveNamespacedBases,
-// pullNamespacedBox, …) and sdk/deploykit (BoxCandyChain / BoxDirectCandies — their real
-// dependency, ResolveCandyOrder, lives in deploykit, not buildkit) taking *Config as their first
-// parameter instead of a receiver.
+// ResolveAllBox, resolveNamespacedBases, pullNamespacedBox, …) and sdk/deploykit (BoxCandyChain /
+// BoxDirectCandies — their real dependency, ResolveCandyOrder, lives in deploykit, not buildkit)
+// taking *Config as their first parameter instead of a receiver. The builder-map VALUE-PRIMITIVE
+// cluster (ResolveEffectiveBuilder/EffectiveBuilderForBox/distroBuilderMap/PickDistroBuilder +
+// the DistroBuilderCandidate type) is pure value over spec types, so it lives HERE as spec free
+// functions (builder_resolve.go) — buildkit's ResolveBox/ResolveAllBox call spec.ResolveEffectiveBuilder
+// for the builder-map leg.
 
 // BoxMap is the generic image map type — name → opaque marshaled BoxConfig. A plain alias of
 // map[string]json.RawMessage, so it round-trips byte-identically with charly's own (still
@@ -102,8 +105,9 @@ func (c *Config) SetBox(name string, b BoxConfig) {
 
 // AllBoxNames returns every image name (enabled or not), sorted — the raw-map view BoxNames
 // filters. Used by the map-killing accessors where the enabled filter is applied separately.
-// Exported: called cross-package from sdk/buildkit's distroBuilderMap and from several charly
-// consumers (host_build_feature.go, resolved_project_host.go, refs.go).
+// Exported: called cross-package from several charly consumers (host_build_feature.go,
+// resolved_project_host.go, refs.go) and in-package by spec's own distroBuilderMap
+// (builder_resolve.go).
 func (c *Config) AllBoxNames() []string { return BoxNamesOf(c.Box) }
 
 // EachBox iterates every image as (name, decoded BoxConfig) in sorted name order — the

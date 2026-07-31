@@ -5195,6 +5195,22 @@ type SidecarVolume struct {
 // #BuilderMap — a map of build type (pixi/npm/cargo/aur) → builder image name.
 type BuilderMap map[string]string
 
+// #DistroBuilderCandidate is one named entity's Distro tags + Builder map — the generic shape
+// PickDistroBuilder consumes (R3: the shared abstraction behind the "distro-keyed builder default"
+// lookup). Pure data (string/[]string/#BuilderMap) with zero buildkit-specific typing, so it is
+// CUE-sourced here alongside #BuilderMap per the same rule — moved out of buildkit (the
+// builder-map value-primitive cluster: EffectiveBuilderForBox/ResolveEffectiveBuilder/
+// distroBuilderMap/PickDistroBuilder + this candidate type relocated to spec/spec as pure-value
+// CONTRACT computation, plan Rule 2 + step 3). The lookup FUNCTIONS themselves are BEHAVIOR
+// (hand-written Go, not CUE-generated) and live in spec/spec/builder_resolve.go.
+type DistroBuilderCandidate struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Distro []string `yaml:"distro,omitempty" json:"distro"`
+
+	Builder BuilderMap `yaml:"builder,omitempty" json:"builder"`
+}
+
 // #AggregatedCandyCaps — the output of walking all candies in resolution order. Populated
 // onto #ResolvedBox and consumed wherever code reads BoxConfig.Bootc/BoxConfig.DataImage/the
 // init-system bootc parameter.
