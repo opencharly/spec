@@ -5327,6 +5327,17 @@ type ResolvedProjectRequest struct {
 	// resolved-project envelope" (RCA'd K1-alpha regression, check-addcandy-pod/check-stepkind-
 	// emit-pod).
 	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
+
+	// boxes — the resolved-box set the PLUGIN-SIDE build-engine resolve (candy/plugin-build's
+	// resolveBuildEngine) pushes to the host's `buildengine-prep` leg so the host's render-seam-floor
+	// Generator cache stores wire-clean *spec.ResolvedBox WITHOUT the host re-resolving via
+	// deploykit.ResolveAllSpecBoxes — the plugin already resolved them (buildkit.ResolveAllBox, the
+	// SAME primitive ResolveAllSpecBoxes wraps). Pointer map for parity with the host Generator.Boxes
+	// field (map[string]*spec.ResolvedBox); the render-seam floor's 2 consumers read only Name/Tags
+	// off these. Empty for the other buildengine-* legs that don't touch box-resolve data (and for
+	// the loadRenderGen defensive cache-miss fallback, which is provably unreachable in production).
+	// #55 coneB2 Class B — sheds the deploykit import from charly/generate.go.
+	Boxes map[string]*ResolvedBox `yaml:"boxes,omitempty" json:"boxes,omitempty"`
 }
 
 type Resource struct {
