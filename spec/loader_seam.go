@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"context"
 	"encoding/json"
 
 	"gopkg.in/yaml.v3"
@@ -236,6 +237,20 @@ type LoaderExecutor interface {
 // at init() before the first load so there is no bootstrap cycle.
 type ProjectLoader interface {
 	LoadUnified(dir string, exec LoaderExecutor) (*UnifiedFile, bool, error)
+	// ResolveMergedDeployTree returns the top-level Bundle (deploy-node) map — the merged project
+	// charly.yml + per-host operator overlay, ready for dotted-path traversal — the host-side
+	// merged-tree read the check host seams (deployNodePluginContext + check_venue_resolve) need.
+	// It is the merged-tree sibling of LoadUnified: LoadUnified returns the PROJECT-only tree
+	// (loadmodel.go Bundle has no overlay field), so a caller that needs the per-host operator
+	// overlay merged in routes through THIS seam instead. The merge LOGIC (the loaderkit
+	// project+overlay projection+merge) stays in the ONE copy in sdk/loaderkit
+	// (loaderkit.ResolveMergedTreeViaExecutor); the host reaches it through this compiled-in seam
+	// instead of importing loaderkit directly (#55 coneA Q2(1) — charly core's check_cmd.go sheds
+	// its loaderkit import). The in-proc executor is threaded on ctx via sdk.ContextWithExecutor
+	// (the SAME in-proc reverse-channel path ExecutorForInvoke uses for Invoke) so the seam
+	// signature stays spec-typed — the plugin-side impl retrieves it via sdk.ExecutorFromContext.
+	// Compiled-in only (the loader is bootstrap-critical), no wire envelope.
+	ResolveMergedDeployTree(ctx context.Context, dir string) (map[string]BundleNode, error)
 	// MaterializeLoadedProject replays the whole-project per-document/per-namespace MATERIALIZE +
 	// root-wins MERGE over a walk envelope, driving loaderkit's kind-blind orchestration with the
 	// host-supplied per-node seams — so charly core reaches materialize WITHOUT importing loaderkit
