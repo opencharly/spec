@@ -3,8 +3,9 @@ package spec
 // quadlet_names.go — the pure quadlet/systemd FILENAME + service-name helpers (kind-blind
 // string formatting over ContainerName/PodName/SidecarContainerName), RELOCATED from sdk/kit
 // (#55 value extraction). The on-disk quadlet path helpers + host existence probes
-// (QuadletDir / SystemdUserDir / QuadletExists[Instance]) STAY in sdk/kit; sdk/kit re-exports
-// these pure names so existing kit.QuadletFilename / kit.ServiceName… call sites are untouched.
+// (QuadletDir / SystemdUserDir / QuadletExists[Instance]) ALSO relocated to spec/spec
+// (quadlet_paths.go, #55 coneD import-purity); sdk/kit re-exports both so existing
+// kit.QuadletFilename / kit.QuadletDir / kit.ServiceName… call sites are untouched.
 
 // ServiceName returns the systemd service name for an image.
 func ServiceName(boxName string) string {
