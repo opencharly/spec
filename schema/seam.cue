@@ -1027,8 +1027,8 @@
 	bind?: [...string] @go(Bind)
 	no_autodetect?:   bool @go(NoAutoDetect)
 	// node is the per-host deploy overlay entry the command:pod plugin ALREADY resolved
-	// plugin-side (deploykit.ResolveLifecycleDeployNodeViaSeam over the shared pod-config-load-bundle
-	// seam) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
+	// plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free plugin-side
+	// overlay read) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
 	// *spec.Deploy instead of re-reading the per-host config itself (the config-READ is a plugin
 	// loading capability, not a host M — #55 K4 seam-completion). Absent only for an in-flight
 	// mixed build; the host requires it.
@@ -1272,12 +1272,6 @@
 	config_json!: bytes @go(ConfigJSON, type=RawBody)
 }
 #PodConfigSaveBundleReply: {}
-
-// #PodConfigLoadBundleReply: deploykit.LoadBundleConfig() — the whole-project Bundle map (no
-// per-deploy-key focus), used by updateAllDeployedQuadlets's cross-deploy loop.
-#PodConfigLoadBundleReply: {
-	config_json?: bytes @go(ConfigJSON, type=RawBody)
-}
 
 // #PodConfigMigrateSecretsRequest / Reply: MigratePlaintextEnvSecret(dc, meta, box, instance) —
 // the one-time plaintext-env → credential-store migration (file backup + DefaultCredentialStore
