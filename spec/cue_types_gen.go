@@ -6634,8 +6634,8 @@ type PodStartRequest struct {
 	NoAutoDetect bool `yaml:"no_autodetect,omitempty" json:"no_autodetect,omitempty"`
 
 	// node is the per-host deploy overlay entry the command:pod plugin ALREADY resolved
-	// plugin-side (deploykit.ResolveLifecycleDeployNodeViaSeam over the shared pod-config-load-bundle
-	// seam) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
+	// plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free plugin-side
+	// overlay read) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
 	// *spec.Deploy instead of re-reading the per-host config itself (the config-READ is a plugin
 	// loading capability, not a host M — #55 K4 seam-completion). Absent only for an in-flight
 	// mixed build; the host requires it.
@@ -6926,12 +6926,6 @@ type PodConfigSaveBundleRequest struct {
 }
 
 type PodConfigSaveBundleReply struct {
-}
-
-// #PodConfigLoadBundleReply: deploykit.LoadBundleConfig() — the whole-project Bundle map (no
-// per-deploy-key focus), used by updateAllDeployedQuadlets's cross-deploy loop.
-type PodConfigLoadBundleReply struct {
-	ConfigJSON RawBody `yaml:"config_json,omitempty" json:"config_json,omitempty"`
 }
 
 // #PodConfigMigrateSecretsRequest / Reply: MigratePlaintextEnvSecret(dc, meta, box, instance) —
