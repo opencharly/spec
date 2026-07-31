@@ -3364,6 +3364,74 @@ type CheckEnv struct {
 	DialTimeoutNs int64 `yaml:"dial_timeout_ns,omitempty" json:"dial_timeout_ns,omitempty"`
 }
 
+// #VerifyChecksRequest is the command:check OpVerifyChecks envelope (#55 CHECK-ENGINE cone,
+// Unit 2): the host threads a live venue executor — flattened to #VenueDescriptor, since a live
+// executor cannot cross the wire, and re-materialized PLUGIN-SIDE via kit.VenueFromDescriptor (the
+// SAME mechanism candy/plugin-bundle's resolveRootExecutor uses) — over the in-proc reverse channel
+// and asks the COMPILED-IN command:check to DRIVE a deploy-scope check pass PLUGIN-SIDE. This sheds
+// charly core's checkrun.go + planrun_adapter.go sdk/kit imports (the in-proc kit.Runner
+// construction moved plugin-side). TWO mutually-exclusive drive shapes, one per host caller:
+//   - ops  → the deploy-lifecycle Test path (unified_targets.go runUnifiedTargetChecks): raw
+//     deploy-scope Op checks driven via kit.Runner.Run (no plan gating).
+//   - plan → the `target: local` --verify path (check_cmd.go runLocalDeployScopePlan): a
+//     host-ASSEMBLED plan (kind:local template + deploy node + per-host overlay — the deploy/K4
+//     named-exit assembly STAYS core) driven via kit.RunPlan (verify-only/context/keyword gating).
+//     The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:} host-vars + the
+//     cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY does this
+//     for check-live (verb_resolver.go / members.go), so those never cross the wire.
+//
+// The reply reuses the SANCTIONED sdk/kit []StepResult wire (the deploy-Test path wraps each
+// verdict as a StepResult) — CONSUMED, not modified, so no new gengotypes exception. All plain
+// fields (ops/plan/venue are spec envelope types) → gengotypes-faithful, no @go(-).
+type VerifyChecksRequest struct {
+	Ops []Op `yaml:"ops,omitempty" json:"ops,omitempty"`
+
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	Box string `yaml:"box,omitempty" json:"box,omitempty"`
+
+	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
+
+	VerifyOnly bool `yaml:"verify_only,omitempty" json:"verify_only,omitempty"`
+
+	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+
+	Venue VenueDescriptor `yaml:"venue,omitempty" json:"venue,omitempty"`
+}
+
+// #VenueDescriptor is the SELF-CONTAINED, serializable description of a
+// deploy venue's executor that a substrate LIFECYCLE plugin's
+// OpPrepareVenue / OpTeardownExecutor returns (F6). K1-unblock W3 Unit B added the
+// "container" kind (engine/container_name) so a plugin-constructed
+// deploykit.ContainerChain venue — a single-hop *NestedExecutor{Parent:ShellExecutor{},
+// Jump:{Kind:JumpPodmanExec|JumpDockerExec}}, the MOST COMMON check-runner venue — round-trips
+// through kit.DescriptorFromExecutor/VenueFromDescriptor exactly like "shell"/"ssh" already do.
+// This does NOT generalize to arbitrary N-hop composition (a genuinely multi-hop NestedExecutor
+// still degrades to the zero descriptor, unchanged) — it closes the one enumerable, well-known
+// single-hop shape ContainerChain always produces.
+type VenueDescriptor struct {
+	Kind string `yaml:"kind,omitempty" json:"kind"`
+
+	User string `yaml:"user,omitempty" json:"user,omitempty"`
+
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	Port int `yaml:"port,omitempty" json:"port,omitempty"`
+
+	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
+
+	ConnectTimeout int `yaml:"connect_timeout,omitempty" json:"connect_timeout,omitempty"`
+
+	// engine/container_name are set ONLY for kind "container": the container engine
+	// ("podman"/"docker", selecting JumpPodmanExec vs JumpDockerExec) and the target container
+	// name ContainerChain jumps into.
+	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+
+	ContainerName string `yaml:"container_name,omitempty" json:"container_name,omitempty"`
+}
+
 // #RetentionRequest is the verb:retention request. dir is the project directory
 // (os.Getwd()) — always present, never empty. keep=0 means "use the resolved
 // defaults"; invalidate (non-empty) runs ONLY the targeted image-tag invalidation.
@@ -3902,37 +3970,6 @@ type DeployVenue struct {
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 
 	Substrate RawBody `yaml:"substrate,omitempty" json:"substrate,omitempty"`
-}
-
-// #VenueDescriptor is the SELF-CONTAINED, serializable description of a
-// deploy venue's executor that a substrate LIFECYCLE plugin's
-// OpPrepareVenue / OpTeardownExecutor returns (F6). K1-unblock W3 Unit B added the
-// "container" kind (engine/container_name) so a plugin-constructed
-// deploykit.ContainerChain venue — a single-hop *NestedExecutor{Parent:ShellExecutor{},
-// Jump:{Kind:JumpPodmanExec|JumpDockerExec}}, the MOST COMMON check-runner venue — round-trips
-// through kit.DescriptorFromExecutor/VenueFromDescriptor exactly like "shell"/"ssh" already do.
-// This does NOT generalize to arbitrary N-hop composition (a genuinely multi-hop NestedExecutor
-// still degrades to the zero descriptor, unchanged) — it closes the one enumerable, well-known
-// single-hop shape ContainerChain always produces.
-type VenueDescriptor struct {
-	Kind string `yaml:"kind,omitempty" json:"kind"`
-
-	User string `yaml:"user,omitempty" json:"user,omitempty"`
-
-	Host string `yaml:"host,omitempty" json:"host,omitempty"`
-
-	Port int `yaml:"port,omitempty" json:"port,omitempty"`
-
-	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
-
-	ConnectTimeout int `yaml:"connect_timeout,omitempty" json:"connect_timeout,omitempty"`
-
-	// engine/container_name are set ONLY for kind "container": the container engine
-	// ("podman"/"docker", selecting JumpPodmanExec vs JumpDockerExec) and the target container
-	// name ContainerChain jumps into.
-	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
-
-	ContainerName string `yaml:"container_name,omitempty" json:"container_name,omitempty"`
 }
 
 // #Diagnostic is one finding from a plugin kind's deep OpValidate check (F7/C8).

@@ -71,3 +71,32 @@
 	venue_kind?:      string   @go(VenueKind)  // r.Exec.Kind()
 	dial_timeout_ns?: int      @go(DialTimeoutNs, type=int64)
 }
+
+// #VerifyChecksRequest is the command:check OpVerifyChecks envelope (#55 CHECK-ENGINE cone,
+// Unit 2): the host threads a live venue executor — flattened to #VenueDescriptor, since a live
+// executor cannot cross the wire, and re-materialized PLUGIN-SIDE via kit.VenueFromDescriptor (the
+// SAME mechanism candy/plugin-bundle's resolveRootExecutor uses) — over the in-proc reverse channel
+// and asks the COMPILED-IN command:check to DRIVE a deploy-scope check pass PLUGIN-SIDE. This sheds
+// charly core's checkrun.go + planrun_adapter.go sdk/kit imports (the in-proc kit.Runner
+// construction moved plugin-side). TWO mutually-exclusive drive shapes, one per host caller:
+//   - ops  → the deploy-lifecycle Test path (unified_targets.go runUnifiedTargetChecks): raw
+//     deploy-scope Op checks driven via kit.Runner.Run (no plan gating).
+//   - plan → the `target: local` --verify path (check_cmd.go runLocalDeployScopePlan): a
+//     host-ASSEMBLED plan (kind:local template + deploy node + per-host overlay — the deploy/K4
+//     named-exit assembly STAYS core) driven via kit.RunPlan (verify-only/context/keyword gating).
+//     The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:} host-vars + the
+//     cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY does this
+//     for check-live (verb_resolver.go / members.go), so those never cross the wire.
+// The reply reuses the SANCTIONED sdk/kit []StepResult wire (the deploy-Test path wraps each
+// verdict as a StepResult) — CONSUMED, not modified, so no new gengotypes exception. All plain
+// fields (ops/plan/venue are spec envelope types) → gengotypes-faithful, no @go(-).
+#VerifyChecksRequest: {
+	ops?:         [...#Op]          @go(Ops)
+	plan?:        [...#Step]        @go(Plan)
+	mode?:        string            @go(Mode) // "live" | "box"
+	box?:         string            @go(Box)
+	instance?:    string            @go(Instance)
+	verify_only?: bool              @go(VerifyOnly)
+	dir?:         string            @go(Dir)
+	venue?:       #VenueDescriptor  @go(Venue)
+}
