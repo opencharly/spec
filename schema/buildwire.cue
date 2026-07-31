@@ -201,10 +201,11 @@
 // build:ensure. It reaches the host for the two things it genuinely cannot do
 // itself: resolving a user-authored image identifier against the project's
 // charly.yml (the "box-ref-resolve" HostBuild seam, wrapping ResolveBox /
-// FindBoxByLeaf — loader-cone, still core) and resolving an @github.com/...
-// remote ref to its cached registry ref ("remote-image-resolve", wrapping
-// ResolveRemoteImage — also loader-cone). The build fallback itself reaches
-// the EXISTING build:box word in-process (no new seam).
+// FindBoxByLeaf — loader-cone, still core) and cloning/caching an @github.com/...
+// remote ref's source ("remote-image-resolve", wrapping EnsureRepoDownloaded —
+// also loader-cone; the registry pull ref is now computed plugin-side, K1 loader
+// wave — the former host-side box-RESOLVE shed from charly core). The build
+// fallback itself reaches the EXISTING build:box word in-process (no new seam).
 
 // #BoxRefResolveRequest / #BoxRefResolveReply — the "box-ref-resolve" HostBuild
 // seam: resolve a short-name or full-ref image identifier against charly.yml.
@@ -230,15 +231,17 @@
 }
 
 // #RemoteImageResolveRequest / #RemoteImageResolveReply — the
-// "remote-image-resolve" HostBuild seam: resolve an @github.com/org/repo/box
-// ref to its registry pull ref + cached source dir (wraps ResolveRemoteImage).
+// "remote-image-resolve" HostBuild seam: clone/cache an @github.com/org/repo/box
+// ref's source + return the cached dir + short box name. The host does ONLY the git
+// clone/cache (EnsureRepoDownloaded, K1/B floor); the calling plugin resolves the
+// registry pull ref itself via the K1 loader reverse legs (K1 loader wave — sheds
+// deploykit.ResolveSpecBox from charly core; the former image_ref field is GONE).
 #RemoteImageResolveRequest: {
 	ref!: string @go(Ref)
 	tag?: string @go(Tag)
 }
 
 #RemoteImageResolveReply: {
-	image_ref?: string @go(ImageRef)
 	cache_dir?: string @go(CacheDir)
 	box_name?:  string @go(BoxName)
 	error?:     string @go(Error)

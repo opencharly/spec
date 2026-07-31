@@ -3049,8 +3049,11 @@ type BoxRefResolveReply struct {
 }
 
 // #RemoteImageResolveRequest / #RemoteImageResolveReply — the
-// "remote-image-resolve" HostBuild seam: resolve an @github.com/org/repo/box
-// ref to its registry pull ref + cached source dir (wraps ResolveRemoteImage).
+// "remote-image-resolve" HostBuild seam: clone/cache an @github.com/org/repo/box
+// ref's source + return the cached dir + short box name. The host does ONLY the git
+// clone/cache (EnsureRepoDownloaded, K1/B floor); the calling plugin resolves the
+// registry pull ref itself via the K1 loader reverse legs (K1 loader wave — sheds
+// deploykit.ResolveSpecBox from charly core; the former image_ref field is GONE).
 type RemoteImageResolveRequest struct {
 	Ref string `yaml:"ref,omitempty" json:"ref"`
 
@@ -3058,8 +3061,6 @@ type RemoteImageResolveRequest struct {
 }
 
 type RemoteImageResolveReply struct {
-	ImageRef string `yaml:"image_ref,omitempty" json:"image_ref,omitempty"`
-
 	CacheDir string `yaml:"cache_dir,omitempty" json:"cache_dir,omitempty"`
 
 	BoxName string `yaml:"box_name,omitempty" json:"box_name,omitempty"`
