@@ -276,7 +276,8 @@ type ProjectLoader interface {
 // CandyScanner above: a typed interface a compiled-in plugin implements alongside its provider, so
 // the host calls it in-proc with no wire envelope. Relocated from sdk/kit (FLOOR-SLIM axis-A
 // mechanical batch) — the interface contract itself is kind-blind and registry-decoupled; the
-// concrete git-fetch implementation (kit.DefaultDownloader, wrapping kit.DownloadRepo) stays in kit.
+// default git-fetch backend (kit.DefaultDownloader) stays in kit, wrapping the spec/refs.DownloadRepo
+// git primitive (relocated to the spec/refs fabric slice, re-exported by kit for existing callers).
 type RefsDownloader interface {
 	// Download fetches repoPath@version into the local repo cache and returns the cache path.
 	// Called only on a cache MISS (the host checks IsRepoCached first).
