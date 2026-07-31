@@ -945,15 +945,15 @@
 // anywhere needing a builder plugin outside the calling project's own candy closure, the one
 // edge S2's Pass-1 project-scan can't cover), so neither needs a new HostBuild kind.
 //
-// HostContextJSON is the marshalled deploykit.HostContext (MachineVenue/Distro/Glibc/
-// BuilderImage + the preresolved BuilderContext map) — a hand-written sdk/deploykit type
-// with no CUE def, so it rides as an opaque RawBody envelope (the VmJSON/PodConfigJSON
-// idiom; the plugin unmarshals into deploykit.HostContext, which it imports via
-// github.com/opencharly/sdk/deploykit) — ALWAYS host-computed for every shape (detectHostContext's
-// MachineVenue probe + preresolveActiveInitInto's LoadUnified-coupled init lookup; only the
-// box/candy SELECTION moved). Tag is the image CalVer pin (for the plan Version field when
-// set). Dir is the project dir the plugin threads into its HostBuild("resolved-project") call
-// (empty → plugin cwd).
+// HostContextJSON is the marshalled spec.HostContext — the 4 host-computed WIRE scalars
+// (MachineVenue/Distro/GlibcVersion/BuilderImage) — a hand-written spec type with no CUE def
+// (the gengotypes spike cannot express its json:"-" in-process fields), so it rides as an opaque
+// RawBody envelope (the VmJSON/PodConfigJSON idiom; the plugin unmarshals into spec.HostContext,
+// which sdk/deploykit re-exports as deploykit.HostContext). ONLY the 4 scalars cross: the plugin
+// populates the json:"-" BuilderContext (preresolveBuilderContexts over the reverse channel) +
+// ActiveInit (off the resolved-project envelope's rp.Init) IN-PROCESS after the decode — never on
+// the wire. Tag is the image CalVer pin (for the plan Version field when set). Dir is the project
+// dir the plugin threads into its HostBuild("resolved-project") call (empty → plugin cwd).
 #DeployCompileRequest: {
 	dir!:          string           @go(Dir)
 	box_view?:     #ResolvedBoxView @go(BoxView)
