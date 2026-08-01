@@ -37,7 +37,7 @@ var checkLevelRank = map[string]int{
 	CheckLevelNone:    0,
 	CheckLevelBuild:   1,
 	CheckLevelNoAgent: 2,
-	CheckLevelAgent:  3,
+	CheckLevelAgent:   3,
 }
 
 // ResolveCheckLevel normalizes an authored check_level to a canonical rung, applying the

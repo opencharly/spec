@@ -2,7 +2,7 @@
 // ReportStepResultsCount + ClassifyStepFailures — relocated to a spec fabric slice (#55
 // CHECK-ENGINE cone Option A) so charly core's deploy-verify path (check_cmd.go's
 // checkLocalDeployScope) reaches them importing zero kit. The reporters operate on
-// []spec.StepResult (the spec wire type, checkresult_wire.go) + spec.Status; the INFRA-failure
+// []spec.StepResult (the CUE-sourced spec wire type, checkresult.cue) + spec.Status; the INFRA-failure
 // discriminator IsContainerInfraResult lives in spec/exec (a host primitive over podman exit
 // strings), so this slice is its own package to import spec/exec WITHOUT forcing spec/spec to
 // import spec/exec (which would cycle: spec/exec already imports spec/spec). sdk/kit re-exports

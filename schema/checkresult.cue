@@ -87,9 +87,9 @@
 //     The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:} host-vars + the
 //     cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY does this
 //     for check-live (verb_resolver.go / members.go), so those never cross the wire.
-// The reply reuses the SANCTIONED sdk/kit []StepResult wire (the deploy-Test path wraps each
-// verdict as a StepResult) — CONSUMED, not modified, so no new gengotypes exception. All plain
-// fields (ops/plan/venue are spec envelope types) → gengotypes-faithful, no @go(-).
+// The reply is []#StepResult (CUE-sourced in this file) — the deploy-Test path wraps each
+// verdict as a StepResult; CONSUMED, not modified. All plain fields (ops/plan/venue are spec
+// envelope types; StepResult.Result is #CheckResult by value) → gengotypes-faithful, no @go(-).
 #VerifyChecksRequest: {
 	ops?:         [...#Op]          @go(Ops)
 	plan?:        [...#Step]        @go(Plan)
@@ -99,4 +99,53 @@
 	verify_only?: bool              @go(VerifyOnly)
 	dir?:         string            @go(Dir)
 	venue?:       #VenueDescriptor  @go(Venue)
+}
+
+// #StepResult is one plan step's outcome — the step's identity (keyword/text/origin/step_id) plus
+// the CheckResult of running it; the result reporters consume a []StepResult. CUE-sourced (SDD):
+// a plain carrier — every field is a string or the CUE-sourced #CheckResult by value, with NO
+// json:"-" and NO disjunction, so gengotypes generates it faithfully (byte-identical JSON to the
+// former hand-written spec.StepResult). The P12 gengotypes exception (cited at
+// sdk/kit/checkrun_seam.go + schema/seam.cue) covers ONLY kit.CheckResult's engine-internal
+// `DeadlineExceeded bool json:"-"` — a field that exists in memory but is excluded from
+// marshaling — which lives on the kit-internal ENGINE wrapper (struct { spec.CheckResult;
+// DeadlineExceeded bool json:"-" }), NOT on this wire type: StepResult.Result is spec.CheckResult
+// (the CUE-sourced base, no json:"-"), so the wire form carries only spec.CheckResult fields and
+// the kit wrapper adds DeadlineExceeded in memory only, dropped at the StepResult boundary.
+#StepResult: {
+	keyword!: string      @go(Keyword)
+	text!:    string      @go(Text)
+	origin?:  string      @go(Origin)
+	step_id!: string      @go(StepID)
+	result!:  #CheckResult @go(Result)
+}
+
+// #CheckRunReply is the host-resolved result of a check-run. Steps is the per-step verdict list the
+// plugin formats (FormatStepResults*) and tallies into an exit code. Image is the resolved image ref
+// for the "Image: <ref>" header line. NoSteps signals the image declared no plan (the plugin prints
+// "No plan steps defined for this image." and exits 0) — distinct from an empty Steps that ran zero
+// scored steps. Header is the pre-formatted, kind-specific banner line the host builds from data
+// only the host holds (container name, ssh user/host/port, member count), so the plugin stays
+// kind-blind: it prints Header, then the formatted Steps. Passthrough carries the one non-plan-run
+// live path — a nested pod-in-VM leaf whose check the host delegates to the guest over SSH,
+// forwarded verbatim; nil for every plan-run mode. Score is the "score"-mode reply (the AI-harness
+// SCORING result, #CheckRunResults), nil for the box/live/feature plan-run modes that carry their
+// verdicts in Steps. CUE-sourced (SDD): plain carrier, no json:"-".
+#CheckRunReply: {
+	steps?:        [...#StepResult] @go(Steps)
+	image?:        string           @go(Image)
+	no_steps?:     bool             @go(NoSteps)
+	header?:       string           @go(Header)
+	passthrough?: #StepPass         @go(Passthrough,optional=nillable)
+	score?:        #CheckRunResults  @go(Score,optional=nillable)
+}
+
+// #StepPass is the verbatim stdout/stderr/exit-code of a host-delegated guest sub-invocation (the
+// nested pod-in-VM check-live delegation, runVm's guestNestedCheckCmd path). The plugin writes
+// Stdout/Stderr and returns ExitCode unchanged, so a guest-run check reports byte-identically to a
+// direct one. CUE-sourced (SDD): plain carrier, no json:"-".
+#StepPass: {
+	stdout?:    string @go(Stdout)
+	stderr?:    string @go(Stderr)
+	exit_code?: int    @go(ExitCode, type=int)
 }

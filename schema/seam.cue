@@ -632,19 +632,22 @@
 // `format` is deliberately NOT a field — the plugin formats the returned Steps itself.
 // run-bed + iterate are NOT seam modes: the plugin drives them over HostBuild("cli").
 //
-// The REPLY is NOT a CUE wire type: it is kit.CheckRunReply (sdk/kit/checkrun_seam.go),
-// which carries []kit.StepResult verbatim so the plugin reuses the kit formatters
-// (FormatStepResults*) with byte-parity across every --format. A live `cue exp
-// gengotypes` spike (P12) proved kit.CheckResult AS A WHOLE is genuinely inexpressible in
-// CUE — its engine-internal `DeadlineExceeded bool json:"-"` field has no gengotypes
-// construct — but confirmed the REST of the type (Op/Verb/Status/Message/Elapsed/
-// Attempts/TotalElapsed/CapturedValue) generates faithfully. FLOOR-SLIM Unit 4 acted on
-// that finding: #CheckResult (checkresult.cue) is the CUE-sourced base (→ spec.CheckResult),
-// and kit.CheckResult is now `struct { spec.CheckResult; DeadlineExceeded bool
-// json:"-" }` — an EMBEDDING wrapper, not a hand-duplicated type. So StepResult's JSON
-// output still rides kit's Go marshal (embedding flattens transparently), but the
-// exception the wire mandate's spike-proven path authorizes is now narrowed to EXACTLY
-// the one field that forced it, not the whole type.
+// The REPLY is CUE-sourced: #CheckRunReply / #StepResult / #StepPass (checkresult.cue) —
+// generated to spec.CheckRunReply / spec.StepResult / spec.StepPass, byte-identical JSON to
+// the former hand-written kit types. sdk/kit aliases each (kit.CheckRunReply = spec.CheckRunReply
+// etc., sdk/kit/checkrun_seam.go) so the plugin reuses the kit formatters (FormatStepResults*)
+// with byte-parity across every --format. A live `cue exp gengotypes` spike (P12) proved
+// kit.CheckResult AS A WHOLE is genuinely inexpressible in CUE — its engine-internal
+// `DeadlineExceeded bool json:"-"` field has no gengotypes construct — but confirmed the REST
+// of the type (Op/Verb/Status/Message/Elapsed/Attempts/TotalElapsed/CapturedValue) generates
+// faithfully. FLOOR-SLIM Unit 4 acted on that finding: #CheckResult (checkresult.cue) is the
+// CUE-sourced base (→ spec.CheckResult), and kit.CheckResult is now `struct { spec.CheckResult;
+// DeadlineExceeded bool json:"-" }` — an EMBEDDING wrapper, not a hand-duplicated type. The SDD
+// sweep in THIS cutover extended CUE-sourcing to the reply envelope too: StepResult /
+// CheckRunReply / StepPass are plain carriers (no json:"-"), so gengotypes expresses them
+// faithfully — the `optional=nillable` marker emits the Passthrough / Score pointers. The
+// exception the wire mandate's spike-proven path authorizes is now narrowed to EXACTLY the one
+// kit.CheckResult field that forced it, not the whole type nor the reply envelope.
 //
 // P12 Wave-2: the "score" mode adds Plan — a substituted, nonce-carrying scoring plan
 // candy/plugin-check's pluginRunCheckLive walks (NOT the OCI-baked plan the "live" mode

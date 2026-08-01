@@ -3438,9 +3438,9 @@ type CheckEnv struct {
 //     cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY does this
 //     for check-live (verb_resolver.go / members.go), so those never cross the wire.
 //
-// The reply reuses the SANCTIONED sdk/kit []StepResult wire (the deploy-Test path wraps each
-// verdict as a StepResult) — CONSUMED, not modified, so no new gengotypes exception. All plain
-// fields (ops/plan/venue are spec envelope types) → gengotypes-faithful, no @go(-).
+// The reply is []#StepResult (CUE-sourced in this file) — the deploy-Test path wraps each
+// verdict as a StepResult; CONSUMED, not modified. All plain fields (ops/plan/venue are spec
+// envelope types; StepResult.Result is #CheckResult by value) → gengotypes-faithful, no @go(-).
 type VerifyChecksRequest struct {
 	Ops []Op `yaml:"ops,omitempty" json:"ops,omitempty"`
 
@@ -3488,6 +3488,119 @@ type VenueDescriptor struct {
 	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
 
 	ContainerName string `yaml:"container_name,omitempty" json:"container_name,omitempty"`
+}
+
+// #StepResult is one plan step's outcome — the step's identity (keyword/text/origin/step_id) plus
+// the CheckResult of running it; the result reporters consume a []StepResult. CUE-sourced (SDD):
+// a plain carrier — every field is a string or the CUE-sourced #CheckResult by value, with NO
+// json:"-" and NO disjunction, so gengotypes generates it faithfully (byte-identical JSON to the
+// former hand-written spec.StepResult). The P12 gengotypes exception (cited at
+// sdk/kit/checkrun_seam.go + schema/seam.cue) covers ONLY kit.CheckResult's engine-internal
+// `DeadlineExceeded bool json:"-"` — a field that exists in memory but is excluded from
+// marshaling — which lives on the kit-internal ENGINE wrapper (struct { spec.CheckResult;
+// DeadlineExceeded bool json:"-" }), NOT on this wire type: StepResult.Result is spec.CheckResult
+// (the CUE-sourced base, no json:"-"), so the wire form carries only spec.CheckResult fields and
+// the kit wrapper adds DeadlineExceeded in memory only, dropped at the StepResult boundary.
+type StepResult struct {
+	Keyword string `yaml:"keyword,omitempty" json:"keyword"`
+
+	Text string `yaml:"text,omitempty" json:"text"`
+
+	Origin string `yaml:"origin,omitempty" json:"origin,omitempty"`
+
+	StepID string `yaml:"step_id,omitempty" json:"step_id"`
+
+	Result CheckResult `yaml:"result,omitempty" json:"result"`
+}
+
+// #CheckRunReply is the host-resolved result of a check-run. Steps is the per-step verdict list the
+// plugin formats (FormatStepResults*) and tallies into an exit code. Image is the resolved image ref
+// for the "Image: <ref>" header line. NoSteps signals the image declared no plan (the plugin prints
+// "No plan steps defined for this image." and exits 0) — distinct from an empty Steps that ran zero
+// scored steps. Header is the pre-formatted, kind-specific banner line the host builds from data
+// only the host holds (container name, ssh user/host/port, member count), so the plugin stays
+// kind-blind: it prints Header, then the formatted Steps. Passthrough carries the one non-plan-run
+// live path — a nested pod-in-VM leaf whose check the host delegates to the guest over SSH,
+// forwarded verbatim; nil for every plan-run mode. Score is the "score"-mode reply (the AI-harness
+// SCORING result, #CheckRunResults), nil for the box/live/feature plan-run modes that carry their
+// verdicts in Steps. CUE-sourced (SDD): plain carrier, no json:"-".
+type CheckRunReply struct {
+	Steps []StepResult `yaml:"steps,omitempty" json:"steps,omitempty"`
+
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+
+	NoSteps bool `yaml:"no_steps,omitempty" json:"no_steps,omitempty"`
+
+	Header string `yaml:"header,omitempty" json:"header,omitempty"`
+
+	Passthrough *StepPass `yaml:"passthrough,omitempty" json:"passthrough,omitempty"`
+
+	Score *CheckRunResults `yaml:"score,omitempty" json:"score,omitempty"`
+}
+
+// #StepPass is the verbatim stdout/stderr/exit-code of a host-delegated guest sub-invocation (the
+// nested pod-in-VM check-live delegation, runVm's guestNestedCheckCmd path). The plugin writes
+// Stdout/Stderr and returns ExitCode unchanged, so a guest-run check reports byte-identically to a
+// direct one. CUE-sourced (SDD): plain carrier, no json:"-".
+type StepPass struct {
+	Stdout string `yaml:"stdout,omitempty" json:"stdout,omitempty"`
+
+	Stderr string `yaml:"stderr,omitempty" json:"stderr,omitempty"`
+
+	ExitCode int `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
+}
+
+// #CheckRunResults / #StepScore / #ScoreSummary — the AI-harness SCORING result model
+// (originally P12 Wave-2; the mode's walk moved plugin-side in K1-unblock wave arm 3).
+// pluginRunCheckLive returns a *CheckRunResults (the scored check:/agent-check: verdicts, keyed
+// by step id for plateau tracking); it doubles as the `charly check box --format yaml` payload
+// the harness scorer parses (ParseCharlyTestOutput). These are plain structs — the gengotypes
+// workhorse — CUE-sourced so the "score"-mode reply's Score field and the plugin scorer that
+// produces AND consumes it import ONE definition (SDD; no alias). Every
+// field mirrors the former hand-written Go tag set: required (!) fields carry no json-omitempty
+// (json wire byte-identical for the seam reply); optional (?) fields carry it. The retag pass
+// adds ,omitempty to every YAML tag uniformly — inert here since ID/Status are always set and a
+// zero Summary block only elides on an empty (0-step) result ParseCharlyTestOutput tolerates.
+type CheckRunResults struct {
+	Box string `yaml:"box,omitempty" json:"box,omitempty"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	Step []StepScore `yaml:"step,omitempty" json:"step,omitempty"`
+
+	Summary ScoreSummary `yaml:"summary,omitempty" json:"summary"`
+}
+
+// #StepScore — the scorer's verdict for one check:/agent-check: step, keyed by step id.
+type StepScore struct {
+	ID string `yaml:"id,omitempty" json:"id"`
+
+	Origin string `yaml:"origin,omitempty" json:"origin,omitempty"`
+
+	Text string `yaml:"text,omitempty" json:"text,omitempty"`
+
+	Tag []string `yaml:"tag,omitempty" json:"tag,omitempty"`
+
+	Keyword string `yaml:"keyword,omitempty" json:"keyword,omitempty"`
+
+	Verb string `yaml:"verb,omitempty" json:"verb,omitempty"`
+
+	Status string `yaml:"status,omitempty" json:"status"`
+
+	SkippedReason string `yaml:"skipped_reason,omitempty" json:"skipped_reason,omitempty"`
+}
+
+// #ScoreSummary — the pass/fail/skip tally block (the former hand-written TestRunSummary). The
+// counts are Go `int` (type=int override — the former hand type; CUE `int` defaults to int64),
+// so every existing ++/compare call site compiles unchanged.
+type ScoreSummary struct {
+	Total int `yaml:"total,omitempty" json:"total"`
+
+	Pass int `yaml:"pass,omitempty" json:"pass"`
+
+	Fail int `yaml:"fail,omitempty" json:"fail"`
+
+	Skip int `yaml:"skip,omitempty" json:"skip"`
 }
 
 // #RetentionRequest is the verb:retention request. dir is the project directory
@@ -6181,19 +6294,22 @@ type PodLogsOpts struct {
 // `format` is deliberately NOT a field — the plugin formats the returned Steps itself.
 // run-bed + iterate are NOT seam modes: the plugin drives them over HostBuild("cli").
 //
-// The REPLY is NOT a CUE wire type: it is kit.CheckRunReply (sdk/kit/checkrun_seam.go),
-// which carries []kit.StepResult verbatim so the plugin reuses the kit formatters
-// (FormatStepResults*) with byte-parity across every --format. A live `cue exp
-// gengotypes` spike (P12) proved kit.CheckResult AS A WHOLE is genuinely inexpressible in
-// CUE — its engine-internal `DeadlineExceeded bool json:"-"` field has no gengotypes
-// construct — but confirmed the REST of the type (Op/Verb/Status/Message/Elapsed/
-// Attempts/TotalElapsed/CapturedValue) generates faithfully. FLOOR-SLIM Unit 4 acted on
-// that finding: #CheckResult (checkresult.cue) is the CUE-sourced base (→ spec.CheckResult),
-// and kit.CheckResult is now `struct { spec.CheckResult; DeadlineExceeded bool
-// json:"-" }` — an EMBEDDING wrapper, not a hand-duplicated type. So StepResult's JSON
-// output still rides kit's Go marshal (embedding flattens transparently), but the
-// exception the wire mandate's spike-proven path authorizes is now narrowed to EXACTLY
-// the one field that forced it, not the whole type.
+// The REPLY is CUE-sourced: #CheckRunReply / #StepResult / #StepPass (checkresult.cue) —
+// generated to spec.CheckRunReply / spec.StepResult / spec.StepPass, byte-identical JSON to
+// the former hand-written kit types. sdk/kit aliases each (kit.CheckRunReply = spec.CheckRunReply
+// etc., sdk/kit/checkrun_seam.go) so the plugin reuses the kit formatters (FormatStepResults*)
+// with byte-parity across every --format. A live `cue exp gengotypes` spike (P12) proved
+// kit.CheckResult AS A WHOLE is genuinely inexpressible in CUE — its engine-internal
+// `DeadlineExceeded bool json:"-"` field has no gengotypes construct — but confirmed the REST
+// of the type (Op/Verb/Status/Message/Elapsed/Attempts/TotalElapsed/CapturedValue) generates
+// faithfully. FLOOR-SLIM Unit 4 acted on that finding: #CheckResult (checkresult.cue) is the
+// CUE-sourced base (→ spec.CheckResult), and kit.CheckResult is now `struct { spec.CheckResult;
+// DeadlineExceeded bool json:"-" }` — an EMBEDDING wrapper, not a hand-duplicated type. The SDD
+// sweep in THIS cutover extended CUE-sourcing to the reply envelope too: StepResult /
+// CheckRunReply / StepPass are plain carriers (no json:"-"), so gengotypes expresses them
+// faithfully — the `optional=nillable` marker emits the Passthrough / Score pointers. The
+// exception the wire mandate's spike-proven path authorizes is now narrowed to EXACTLY the one
+// kit.CheckResult field that forced it, not the whole type nor the reply envelope.
 //
 // P12 Wave-2: the "score" mode adds Plan — a substituted, nonce-carrying scoring plan
 // candy/plugin-check's pluginRunCheckLive walks (NOT the OCI-baked plan the "live" mode
@@ -6225,59 +6341,6 @@ type CheckRunRequest struct {
 	NoAgent bool `yaml:"no_agent,omitempty" json:"no_agent,omitempty"`
 
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-}
-
-// #CheckRunResults / #StepScore / #ScoreSummary — the AI-harness SCORING result model
-// (originally P12 Wave-2; the mode's walk moved plugin-side in K1-unblock wave arm 3).
-// pluginRunCheckLive returns a *CheckRunResults (the scored check:/agent-check: verdicts, keyed
-// by step id for plateau tracking); it doubles as the `charly check box --format yaml` payload
-// the harness scorer parses (ParseCharlyTestOutput). These are plain structs — the gengotypes
-// workhorse — CUE-sourced so the "score"-mode reply's Score field and the plugin scorer that
-// produces AND consumes it import ONE definition (SDD; no alias). Every
-// field mirrors the former hand-written Go tag set: required (!) fields carry no json-omitempty
-// (json wire byte-identical for the seam reply); optional (?) fields carry it. The retag pass
-// adds ,omitempty to every YAML tag uniformly — inert here since ID/Status are always set and a
-// zero Summary block only elides on an empty (0-step) result ParseCharlyTestOutput tolerates.
-type CheckRunResults struct {
-	Box string `yaml:"box,omitempty" json:"box,omitempty"`
-
-	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
-
-	Step []StepScore `yaml:"step,omitempty" json:"step,omitempty"`
-
-	Summary ScoreSummary `yaml:"summary,omitempty" json:"summary"`
-}
-
-// #StepScore — the scorer's verdict for one check:/agent-check: step, keyed by step id.
-type StepScore struct {
-	ID string `yaml:"id,omitempty" json:"id"`
-
-	Origin string `yaml:"origin,omitempty" json:"origin,omitempty"`
-
-	Text string `yaml:"text,omitempty" json:"text,omitempty"`
-
-	Tag []string `yaml:"tag,omitempty" json:"tag,omitempty"`
-
-	Keyword string `yaml:"keyword,omitempty" json:"keyword,omitempty"`
-
-	Verb string `yaml:"verb,omitempty" json:"verb,omitempty"`
-
-	Status string `yaml:"status,omitempty" json:"status"`
-
-	SkippedReason string `yaml:"skipped_reason,omitempty" json:"skipped_reason,omitempty"`
-}
-
-// #ScoreSummary — the pass/fail/skip tally block (the former hand-written TestRunSummary). The
-// counts are Go `int` (type=int override — the former hand type; CUE `int` defaults to int64),
-// so every existing ++/compare call site compiles unchanged.
-type ScoreSummary struct {
-	Total int `yaml:"total,omitempty" json:"total"`
-
-	Pass int `yaml:"pass,omitempty" json:"pass"`
-
-	Fail int `yaml:"fail,omitempty" json:"fail"`
-
-	Skip int `yaml:"skip,omitempty" json:"skip"`
 }
 
 // #CheckVenueResolveRequest asks plugin-check to CLASSIFY a check target's venue — the kind-decode
