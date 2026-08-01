@@ -5397,29 +5397,29 @@ type ConfigResolveRequest struct {
 // VmJSON is the resolved vm value envelope (uf.VM[entity] via resolveVmViaPlugin,
 // #Vm-defaulted host-side), ResourcesJSON the resolved resource map
 // (uf.resolveResources() — drives GPU auto-allocation) — both opaque JSON of a
-// hand-written runtime type with no CUE def. Claimant + ClaimantNode carry the
-// exclusive-resource claimant (lookupVMClaimant) the handler acquires a preempt
-// lease for. VmBackend/BuildEngine/RunEngine are the runtime-settings fields
-// (ResolveRuntime) the create/build pipeline reads; VmBackend also feeds the
-// plugin-side backend resolve (candy/plugin-vm/vm_backend_resolve.go, F6
-// vm-lifecycle move, coneB-vmlifecycle — the resolved Backend value itself no
-// longer crosses the wire; the plugin computes it from VmBackend + its own
-// "deploy-entity-resolve" call). VmState is the entity's persisted
-// deploy-ledger runtime state (instance-id, ssh_port, disk path) — the READ
-// half of the ledger dep (loadDeployConfigForRead → LookupKey "vm:<entity>")
-// so the plugin reuses the persisted auto-port + regenerates the seed ISO
-// without holding the deploy-config lock. VmEntities is the project's
-// declared kind:vm entity NAMES (the keys of uf.VM) — the enumeration
-// `charly vm import` needs to detect name conflicts. Fields absent for an
+// hand-written runtime type with no CUE def. BundleJSON is the PROJECT deploy tree
+// (uf.Bundle) as opaque JSON — the plugin merges it with the per-host overlay ITSELF
+// via deploykit.MergedDeployTree + spec.FindVMClaimant (placement-invariant, #55
+// coneC-dsh β2 config-RESOLVE shed: the host no longer calls deploykit; the Claimant
+// computation moved plugin-side, so Claimant/ClaimantNode are no longer wire fields).
+// VmBackend/BuildEngine/RunEngine are the runtime-settings fields (ResolveRuntime) the
+// create/build pipeline reads; VmBackend also feeds the plugin-side backend resolve
+// (candy/plugin-vm/vm_backend_resolve.go, F6 vm-lifecycle move, coneB-vmlifecycle — the
+// resolved Backend value itself no longer crosses the wire; the plugin computes it from
+// VmBackend + its own "deploy-entity-resolve" call). VmState is the entity's persisted
+// deploy-ledger runtime state (instance-id, ssh_port, disk path) — the host reads it
+// spec-only via LoadUnified(perHostConfigDir) (#55 coneC-dsh β2 — no deploykit; consumed by
+// plugin-vm + plugin-kube + plugin-deploy-vm, so it stays a wire field) so the plugin reuses
+// the persisted auto-port + regenerates the seed ISO without holding the deploy-config lock.
+// VmEntities is the project's declared kind:vm entity NAMES (the keys of uf.VM) — the
+// enumeration `charly vm import` needs to detect name conflicts. Fields absent for an
 // entity that does not need them stay zero.
 type ConfigResolveReply struct {
 	VmJSON RawBody `yaml:"vm_json,omitempty" json:"vm_json,omitempty"`
 
 	ResourcesJSON RawBody `yaml:"resources_json,omitempty" json:"resources_json,omitempty"`
 
-	Claimant string `yaml:"claimant,omitempty" json:"claimant,omitempty"`
-
-	ClaimantNode *Deploy `yaml:"claimant_node,omitempty" json:"claimant_node,omitempty"`
+	BundleJSON RawBody `yaml:"bundle_json,omitempty" json:"bundle_json,omitempty"`
 
 	VmBackend string `yaml:"vm_backend,omitempty" json:"vm_backend,omitempty"`
 
