@@ -11,8 +11,10 @@ package spec
 // sdk/schema/arbiter.cue → generated into cue_types_gen.go.
 //
 // K1-unblock wave 1 retired the ExecutorService.HostArbiter reverse RPC entirely: its last 2
-// actions (gather/resources) now read the generic HostBuild("resolved-project") envelope instead
-// (candy/plugin-preempt/arbiter.go), the same seam every other resolved-project consumer uses —
+// actions (gather/resources) now read the generic resolved-project envelope instead
+// (candy/plugin-preempt/arbiter.go, fetched via InvokeProvider("build","project", OpResolve) — the
+// former HostBuild("resolved-project") seam is DELETED — the same envelope every other
+// resolved-project consumer uses) —
 // so ArbiterSeamGather/ArbiterSeamResources and the #ArbiterGatherReply/#ArbiterResourcesReply
 // wire types they tagged are DELETED (not merely unused), along with charly/arbiter_host.go.
 

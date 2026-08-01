@@ -64,7 +64,7 @@
 // kind (RDD-caught live: it appeared in the generated KindValueDefs map). The
 // charly-name alias `KeyValue = EnvKV` (spec/charly_names.go) preserves the
 // exported Go type name every real consumer (deploykit.MapToKeyValueSlice,
-// deploykit.SortedEnvList, charly/service_render.go) already uses.
+// spec.SortedEnvList, charly/service_render.go) already uses.
 #EnvKV: {
 	key!:   string @go(Key)
 	value!: string @go(Value)
@@ -166,6 +166,21 @@
 
 	// Raw is the opaque init body — threaded to the service-render leg (leg 1).
 	raw?: bytes @go(Raw,type=RawBody)
+}
+
+// #InitConfig is the `init:` build-vocabulary container — the whole init map
+// keyed by init-system name (charly/charly.yml's `init:` section). #55 Cluster-B:
+// CUE-sourced (completing #72, which CUE-sourced its siblings #DistroConfig /
+// #Builder but left InitConfig hand-written) so every charly/plugin file that
+// uses ONLY this value type reaches it over spec+proto — the import-purity
+// lever. Its detection / resolution methods (DetectCandyInit / ResolveInitSystem
+// / ActiveInit / InitNames) are pure Go METHODS CUE cannot express and stay
+// hand-written in spec/init_config_methods.go (mirrors #DistroConfig's methods
+// in spec/distro_config_methods.go: a method, not a type). This is NOT a wire
+// type — it is never marshaled across the host↔plugin boundary; it mirrors the
+// authored `init:` config surface, so SDD CUE-sources it exactly as #DistroConfig.
+#InitConfig: {
+	init: {[string]: #ResolvedInit} @go(Init,type=map[string]*ResolvedInit)
 }
 
 // #InitResolveInput is candy/plugin-init's OpResolve config-leg input: the

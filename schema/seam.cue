@@ -3,9 +3,10 @@
 // handlers but cannot LoadUnified, hold the deploy ledger, or run the VM-disk
 // build engine — those are core Mechanisms a plugin (a separate module importing
 // only sdk) reaches over the in-proc reverse channel: config → HostBuild(
-// "config-resolve"), ledger writes → HostBuild("config-persist"), VM-disk build →
-// HostBuild("vm-build"). Each action noun is CLASS-GENERIC (never a substrate
-// word — the F11 uniform-API gate); pod (P11) + bundle (P13) reuse the same seams.
+// "config-resolve"); the ledger write (candy/plugin-vm/vm_host_persist.go) and the
+// VM-disk build (candy/plugin-vm/vm_build_resolve.go) moved plugin-side — the former
+// config-persist / vm-build HostBuilds are DELETED. Each action noun is CLASS-GENERIC
+// (never a substrate word — the F11 uniform-API gate); pod (P11) + bundle (P13) reuse the same seams.
 //
 // Package-less; concatenated into the spec compilation unit. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire types, single-sourced here so
@@ -32,26 +33,27 @@
 // VmJSON is the resolved vm value envelope (uf.VM[entity] via resolveVmViaPlugin,
 // #Vm-defaulted host-side), ResourcesJSON the resolved resource map
 // (uf.resolveResources() — drives GPU auto-allocation) — both opaque JSON of a
-// hand-written runtime type with no CUE def. Claimant + ClaimantNode carry the
-// exclusive-resource claimant (lookupVMClaimant) the handler acquires a preempt
-// lease for. VmBackend/BuildEngine/RunEngine are the runtime-settings fields
-// (ResolveRuntime) the create/build pipeline reads; VmBackend also feeds the
-// plugin-side backend resolve (candy/plugin-vm/vm_backend_resolve.go, F6
-// vm-lifecycle move, coneB-vmlifecycle — the resolved Backend value itself no
-// longer crosses the wire; the plugin computes it from VmBackend + its own
-// "deploy-entity-resolve" call). VmState is the entity's persisted
-// deploy-ledger runtime state (instance-id, ssh_port, disk path) — the READ
-// half of the ledger dep (loadDeployConfigForRead → LookupKey "vm:<entity>")
-// so the plugin reuses the persisted auto-port + regenerates the seed ISO
-// without holding the deploy-config lock. VmEntities is the project's
-// declared kind:vm entity NAMES (the keys of uf.VM) — the enumeration
-// `charly vm import` needs to detect name conflicts. Fields absent for an
+// hand-written runtime type with no CUE def. BundleJSON is the PROJECT deploy tree
+// (uf.Bundle) as opaque JSON — the plugin merges it with the per-host overlay ITSELF
+// via deploykit.MergedDeployTree + spec.FindVMClaimant (placement-invariant, #55
+// coneC-dsh β2 config-RESOLVE shed: the host no longer calls deploykit; the Claimant
+// computation moved plugin-side, so Claimant/ClaimantNode are no longer wire fields).
+// VmBackend/BuildEngine/RunEngine are the runtime-settings fields (ResolveRuntime) the
+// create/build pipeline reads; VmBackend also feeds the plugin-side backend resolve
+// (candy/plugin-vm/vm_backend_resolve.go, F6 vm-lifecycle move, coneB-vmlifecycle — the
+// resolved Backend value itself no longer crosses the wire; the plugin computes it from
+// VmBackend + its own "deploy-entity-resolve" call). VmState is the entity's persisted
+// deploy-ledger runtime state (instance-id, ssh_port, disk path) — the host reads it
+// spec-only via LoadUnified(perHostConfigDir) (#55 coneC-dsh β2 — no deploykit; consumed by
+// plugin-vm + plugin-kube + plugin-deploy-vm, so it stays a wire field) so the plugin reuses
+// the persisted auto-port + regenerates the seed ISO without holding the deploy-config lock.
+// VmEntities is the project's declared kind:vm entity NAMES (the keys of uf.VM) — the
+// enumeration `charly vm import` needs to detect name conflicts. Fields absent for an
 // entity that does not need them stay zero.
 #ConfigResolveReply: {
 	vm_json?:        bytes  @go(VmJSON, type=RawBody)
 	resources_json?: bytes  @go(ResourcesJSON, type=RawBody)
-	claimant?:       string @go(Claimant)
-	claimant_node?:  #Deploy @go(ClaimantNode, optional=nillable)
+	bundle_json?:    bytes  @go(BundleJSON, type=RawBody)
 	vm_backend?:     string @go(VmBackend)
 	build_engine?:   string @go(BuildEngine)
 	run_engine?:     string @go(RunEngine)
@@ -117,32 +119,14 @@
 	gpu_vendors?: {[string]: string} @go(GpuVendors)
 }
 
-// #ConfigPersistRequest is the WRITE twin of config-resolve: a command plugin
-// asks the host to persist (or remove) an entity's deploy-ledger entry. The host
-// owns the ledger + its blocking acquireDeployConfigLock (a core Mechanism — the
-// plugin is a separate module and MUST NOT hold a process-shared file lock across
-// the boundary), so the plugin resolves its intent into this envelope and the
-// host applies it under the lock. Key is the full deploy key ("vm:<name>"); Remove
-// deletes the entry (destroy), else Entity + VmState are saved (create
-// persist-auto-port). The action noun "config-persist" is class-generic (F11).
-#ConfigPersistRequest: {
-	key!:      string @go(Key)
-	entity?:   string @go(Entity)
-	vm_state?: #VmDeployState @go(VmState, type=*VmDeployState)
-	remove?:   bool @go(Remove)
-}
-
-// #ConfigPersistReply is the config-persist host-builder reply — empty; the host
-// signals failure via its error return (surfaced to the plugin over the channel).
-#ConfigPersistReply: {}
-
 // #VmBuildRequest carries the `charly vm build` command flags (the former
-// VmBuildCmd fields). The host resolves the kind:vm entity + the build vocabulary
-// + the per-source-kind image refs into a #VmBuildReply envelope (the "vm-build"
-// host-builder is PREP+RESOLVE only, P8b-rest); the plugin's `charly vm build`
-// command runs the actual privileged-container / qemu-img / bootc-install / cloud-init
-// disk-build ENGINE itself, exactly as candy/plugin-build's podman DRIVE runs behind
-// HostBuild("build-prep") (P8b) — the same inversion, applied to the VM disk-build engine.
+// VmBuildCmd fields). candy/plugin-vm/vm_build_resolve.go resolves the kind:vm
+// entity + the build vocabulary + the per-source-kind image refs into a #VmBuildReply
+// envelope PLUGIN-SIDE (the former "vm-build" host-builder is DELETED — PREP+RESOLVE
+// moved into the plugin, P8b-rest); the plugin's `charly vm build` command then runs
+// the actual privileged-container / qemu-img / bootc-install / cloud-init disk-build
+// ENGINE itself, exactly as candy/plugin-build's podman DRIVE runs behind
+// HostBuild("buildengine-prep") (P8b) — the same inversion, applied to the VM disk-build engine.
 // force skips the cloud_image content-freshness check, forcing a base-disk rebuild even when
 // unchanged (P8b-rest: `--force` predates command:vm's P10 externalization but was dropped from
 // this seam then — restored here since BuildCloudImage's force parameter is load-bearing).
@@ -157,8 +141,9 @@
 	force?:     bool   @go(Force)
 }
 
-// #VmBuildReply is the "vm-build" host-builder reply (P8b-rest): everything the
-// plugin needs to run the disk-build engine without importing the loader. VmJSON is
+// #VmBuildReply is the resolveVmBuild reply (P8b-rest — the former "vm-build"
+// host-builder is DELETED; candy/plugin-vm/vm_build_resolve.go resolves it plugin-side):
+// everything the plugin needs to run the disk-build engine without importing the loader. VmJSON is
 // the resolved+validated kind:vm entity (the #Vm-shaped value resolveVmViaPlugin
 // already produces — opaque bytes, the SAME convention #ConfigResolveReply.vm_json
 // uses for a #Vm-shaped payload) so the plugin decodes it into its own spec.Vm rather
@@ -193,11 +178,11 @@
 // #DeployPluginsConnectRequest/#DeployPluginsConnectReply — the K1-LOADER RELOCATION witness (Unit
 // D). candy/plugin-bundle now DRIVES loaderkit.LoadUnified ITSELF, plugin-side, over the
 // reverse-channel LoaderExecutor (execLoaderExecutor → the "loader-*" host legs), to resolve the
-// `charly bundle add` deploy tree — the host no longer runs resolveTreeRoot for the walk. This seam
+// `charly bundle add` deploy tree — the host no longer runs a host-side merged-tree read for the walk. This seam
 // is the ONE host-only PREAMBLE the plugin still needs: connect the deployment's out-of-tree plugin
 // candies (loadDeployPlugins — registry-coupled, a core Mechanism) BEFORE ResolveTarget can route to
 // an external substrate, and return the resolved project dir (host os.Getwd — the SAME dir
-// resolveTreeRoot uses) the plugin passes to loaderkit.LoadUnified. The plugin reads root-venue-ssh
+// the host loader uses) the plugin passes to loaderkit.LoadUnified. The plugin reads root-venue-ssh
 // itself from the tree's stamped node.Descent (loaderkit.LoadUnified stamps it), so no host trait
 // call — proving plugin-bundle → loaderkit.LoadUnified end-to-end.
 #DeployPluginsConnectRequest: {
@@ -270,6 +255,13 @@
 // it stays host-side; the plugin's `charly bundle del` calls this FIRST.
 #DeployDelResolveRequest: {
 	name!: string @go(Name)
+	// tree_json is the merged project+operator deploy tree the command:bundle plugin already
+	// resolved PLUGIN-SIDE (resolveTreeViaLoader, which also connects the deployment's plugins) —
+	// threaded as DATA so the host resolveDelNode consumes it instead of re-loading the tree
+	// host-side (#55 Cone A Unit 3a). Marshalled map[string]spec.Deploy; an absent/empty tree
+	// falls through to resolveDelNode's non-tree fallbacks (vm-prefix / pod-artifact probe), exactly
+	// as a nil host-tree-read result did before.
+	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 #DeployDelResolveReply: {
 	node?: #Deploy @go(Node, type=*Deploy)
@@ -277,9 +269,9 @@
 }
 
 // #DeployNodeDelDispatchRequest/#DeployNodeDelDispatchReply — the `charly bundle del` terminal
-// step: ResolveTarget + target.Del, honoring the teardown gates (the prior "deploy-del"
-// host-builder's tail, unchanged; the live ReverseRunner is still never carried on the wire — a
-// programmatic teardown needing a specific runner is resolved host-side during dispatch).
+// step: ResolveTarget + target.Del, honoring the teardown gates (the live ReverseRunner is still
+// never carried on the wire — a programmatic teardown needing a specific runner is resolved
+// host-side during dispatch).
 #DeployNodeDelDispatchRequest: {
 	name!:              string @go(Name)
 	node?:              #Deploy @go(Node, type=*Deploy)
@@ -332,62 +324,6 @@
 }
 #DeployResolveTargetAddReply: {}
 
-// #DeployAddRequest carries the `charly bundle add` command flags (the former
-// BundleAddCmd's authored fields). The command:bundle plugin (P13) owns the CLI
-// GRAMMAR but cannot drive the deploy KERNEL — the loader, the InstallPlan
-// compiler, ResolveTarget → externalDeployTarget, and the live-executor
-// composition (which threads host objects that cannot cross the process boundary)
-// are core Mechanisms. So the plugin's `charly bundle add` command is THIN — it
-// forwards these flags to HostBuild("deploy-add"), and the host runs the existing
-// add orchestration VERBATIM (Run → dispatchNode → compile → ResolveTarget → Add),
-// exactly as the box-build engine stayed core behind HostBuild("image") in P8 and
-// the VM-disk engine behind HostBuild("vm-build") in P10. The two per-node internal
-// fields (vmEntity, builderImageOverride) are NOT carried — the host derives them
-// during dispatch.
-#DeployAddRequest: {
-	name!:               string @go(Name)
-	ref?:                string @go(Ref)
-	add_candy?: [...string] @go(AddCandy)
-	tag?:                string @go(Tag)
-	dry_run?:            bool   @go(DryRun)
-	node_only?:          bool   @go(NodeOnly)
-	format?:             string @go(Format)
-	pull?:               bool   @go(Pull)
-	verify?:             bool   @go(Verify)
-	with_services?:      bool   @go(WithServices)
-	allow_repo_changes?: bool   @go(AllowRepoChanges)
-	allow_root_tasks?:   bool   @go(AllowRootTasks)
-	skip_incompatible?:  bool   @go(SkipIncompatible)
-	builder_image?:      string @go(BuilderImage)
-	assume_yes?:         bool   @go(AssumeYes)
-	disposable?:         bool   @go(Disposable)
-	lifecycle?:          string @go(Lifecycle)
-}
-
-// #DeployAddReply is the "deploy-add" host-builder reply — empty; the add prints its
-// own progress + dry-run output to the shared stdio (the compiled-in plugin's
-// HostBuild runs in charly's own process) and signals failure via the error return.
-#DeployAddReply: {}
-
-// #DeployDelRequest carries the `charly bundle del` command flags. The plugin's
-// `charly bundle del` forwards these to HostBuild("deploy-del"); the host runs the
-// existing del orchestration VERBATIM (resolveDelNode → ResolveTarget → Del,
-// replaying the recorded ReverseOps). The live ReverseRunner is NOT carried — a
-// programmatic teardown that needs a specific runner (the vm guest-SSH reverse
-// runner) is a host-side path, resolved during dispatch, never authored on the CLI.
-#DeployDelRequest: {
-	name!:              string @go(Name)
-	assume_yes?:        bool   @go(AssumeYes)
-	keep_repo_changes?: bool   @go(KeepRepoChanges)
-	keep_services?:     bool   @go(KeepServices)
-	keep_image?:        bool   @go(KeepImage)
-	dry_run?:           bool   @go(DryRun)
-}
-
-// #DeployDelReply is the "deploy-del" host-builder reply — empty (prints host-side,
-// errors via the return).
-#DeployDelReply: {}
-
 // #DeployFromBoxRequest carries the `charly bundle from-box` command flags (the
 // former BundleFromBoxCmd) — a SOURCE-LESS deploy driven entirely by an image's
 // baked OCI labels. The plugin forwards these to HostBuild("deploy-from-box"); the
@@ -407,25 +343,9 @@
 // host-side, errors via the return).
 #DeployFromBoxReply: {}
 
-// #DeployConfigSaveRequest is the K4-C narrow seam for saveBundleConfigNodeForm — the
-// `charly bundle import`/`reset` deploy-state WRITE step. command:bundle's show/export/status
-// leaves moved to the plugin outright (deploykit.LoadBundleConfig/ExportAllBox/ParseDeployKey
-// etc. are already sdk-portable, and export's project-load touch reuses the existing
-// HostBuild("resolved-project") seam) — only the SAVE step still needs a seam: its per-entry
-// marshal callback (marshalBundleNode, deploy_nodeform.go) resugars each plan step's internal
-// plugin/plugin_input pair back to the authored `<word>: <input>` sugar via the host-owned
-// pluginPrimaries registry (populated at compiled-in plugin init() + the byte-gated external
-// prescan) — a live, in-process registry a separate-module plugin cannot reach directly.
-// Config carries the marshalled deploykit.BundleConfig as an opaque RawBody envelope (a
-// hand-written sdk/deploykit type with no CUE def, matching the DeployCompileRequest
-// HostContextJSON idiom).
-#DeployConfigSaveRequest: {
-	config!: bytes @go(ConfigJSON, type=RawBody)
-}
-
-// #DeployConfigSaveReply is the "deploy-config-save" host-builder reply — empty (failure
-// surfaces via the RPC error itself).
-#DeployConfigSaveReply: {}
+// (The `charly bundle import`/`reset` deploy-state WRITE host seam was DELETED in #55 K4 —
+// command:bundle now performs the SAVE plugin-side via deploykit.SaveBundleConfig with its own
+// loader-backed reader + loader-threaded Primaries, so no host seam remains for it.)
 
 // #AndroidEntityResolution is the kind="android" payload carried OPAQUELY inside
 // #DeployEntityResolveReply.entity (unit 6a): the resolved kind:android #ResolvedAndroid spec
@@ -464,7 +384,7 @@
 // deployVMForwards, vmConfiguredBackendPlugin, resolveNodeTemplate's kind:local merge) needs a
 // LoadUnified-coupled lookup a plugin cannot do itself — EITHER (a) its
 // own deploy-tree node by name (the Update-path re-resolve every preresolver does when node==nil,
-// OR a bundle-key cross-reference's From-field hop — today: resolveTreeRoot) or (b) a referenced
+// OR a bundle-key cross-reference's From-field hop — today: the host merged-tree read) or (b) a referenced
 // kind:<word> entity (k8s/android/vm/local) by name, returned as the WHOLE RESOLVED envelope so a
 // caller just reads its fields (Backend, Network.PortForwards, Candy, …) without tracing the
 // resolver's own portability (today: findK8sSpec / findAndroidSpec / a direct uf.VM[name] lookup +
@@ -477,7 +397,7 @@
 // (schema/substrate_template.cue, schema/vm.cue; SDD conversion), but this seam still carries them
 // as opaque bytes rather than a typed field, because `kind` is DATA the host dispatches on
 // internally (clause-D) and the caller already knows which kind it asked for and decodes
-// accordingly — mirroring the DeployCompileReply / DeployConfigSaveRequest RawBody idiom used
+// accordingly — mirroring the DeployCompileReply RawBody idiom used
 // throughout this file for the same reason. The "local" case's EMPTY reply (no EntityJSON, no
 // error) is itself meaningful — "no kind:local template by that name" — distinct from a genuine
 // host-side load-failure error; the caller (resolveNodeTemplate) tells the two apart.
@@ -485,6 +405,14 @@
 	kind!: string @go(Kind) // "" | "deploy" | "bundle" for a deploy-tree node lookup (node.From carries a cross-ref hop); "k8s"|"android"|"vm"|"local" for a kind:<word> entity lookup (the WHOLE resolved envelope)
 	name!: string @go(Name)
 	dir?:  string @go(Dir)
+	// tree_json is the merged project+operator deploy tree the invoking plugin resolved PLUGIN-SIDE
+	// (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA for the deploy/bundle-kind node
+	// lookup so the host stops re-loading the tree with a host-resident deploykit read (#55 Cone A Unit 3b).
+	// Marshalled map[string]spec.Deploy; consulted ONLY for kind ∈ {"","deploy","bundle"} (the
+	// kind:<word> lookups — k8s/android/vm/local — use their own findK8sSpec/etc. host resolvers,
+	// unaffected). An absent tree yields a not-found for the deploy/bundle lookup, matching a nil
+	// host-tree-read result.
+	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 #DeployEntityResolveReply: {
 	node?:   #Deploy @go(Node, type=*Deploy)          // populated when kind=="" (deploy-tree lookup)
@@ -689,8 +617,9 @@
 // venue→executor construction, the OCI-label plan extraction, and the plan-walk's verb
 // dispatch through the provider registry. So the plugin resolves its intent into this
 // envelope and the host builds the venue + runs the kit-Runner through the in-core
-// registry VerbResolver, exactly as command:vm forwards `vm build` to
-// HostBuild("vm-build"). The action noun "check-run" is class-generic (F11).
+// registry VerbResolver, exactly as command:vm resolves `vm build` plugin-side
+// (candy/plugin-vm/vm_build_resolve.go — the former HostBuild("vm-build") is DELETED). The action
+// noun "check-run" is class-generic (F11).
 //
 // Mode selects the run shape (discriminated union): "box" — a pure-box run against a
 // disposable container built from Image (RunModeBox, build-scope steps only, the CheckBoxCmd
@@ -703,19 +632,22 @@
 // `format` is deliberately NOT a field — the plugin formats the returned Steps itself.
 // run-bed + iterate are NOT seam modes: the plugin drives them over HostBuild("cli").
 //
-// The REPLY is NOT a CUE wire type: it is kit.CheckRunReply (sdk/kit/checkrun_seam.go),
-// which carries []kit.StepResult verbatim so the plugin reuses the kit formatters
-// (FormatStepResults*) with byte-parity across every --format. A live `cue exp
-// gengotypes` spike (P12) proved kit.CheckResult AS A WHOLE is genuinely inexpressible in
-// CUE — its engine-internal `DeadlineExceeded bool json:"-"` field has no gengotypes
-// construct — but confirmed the REST of the type (Op/Verb/Status/Message/Elapsed/
-// Attempts/TotalElapsed/CapturedValue) generates faithfully. FLOOR-SLIM Unit 4 acted on
-// that finding: #CheckResult (checkresult.cue) is the CUE-sourced base (→ spec.CheckResult),
-// and kit.CheckResult is now `struct { spec.CheckResult; DeadlineExceeded bool
-// json:"-" }` — an EMBEDDING wrapper, not a hand-duplicated type. So StepResult's JSON
-// output still rides kit's Go marshal (embedding flattens transparently), but the
-// exception the wire mandate's spike-proven path authorizes is now narrowed to EXACTLY
-// the one field that forced it, not the whole type.
+// The REPLY is CUE-sourced: #CheckRunReply / #StepResult / #StepPass (checkresult.cue) —
+// generated to spec.CheckRunReply / spec.StepResult / spec.StepPass, byte-identical JSON to
+// the former hand-written kit types. sdk/kit aliases each (kit.CheckRunReply = spec.CheckRunReply
+// etc., sdk/kit/checkrun_seam.go) so the plugin reuses the kit formatters (FormatStepResults*)
+// with byte-parity across every --format. A live `cue exp gengotypes` spike (P12) proved
+// kit.CheckResult AS A WHOLE is genuinely inexpressible in CUE — its engine-internal
+// `DeadlineExceeded bool json:"-"` field has no gengotypes construct — but confirmed the REST
+// of the type (Op/Verb/Status/Message/Elapsed/Attempts/TotalElapsed/CapturedValue) generates
+// faithfully. FLOOR-SLIM Unit 4 acted on that finding: #CheckResult (checkresult.cue) is the
+// CUE-sourced base (→ spec.CheckResult), and kit.CheckResult is now `struct { spec.CheckResult;
+// DeadlineExceeded bool json:"-" }` — an EMBEDDING wrapper, not a hand-duplicated type. The SDD
+// sweep in THIS cutover extended CUE-sourcing to the reply envelope too: StepResult /
+// CheckRunReply / StepPass are plain carriers (no json:"-"), so gengotypes expresses them
+// faithfully — the `optional=nillable` marker emits the Passthrough / Score pointers. The
+// exception the wire mandate's spike-proven path authorizes is now narrowed to EXACTLY the one
+// kit.CheckResult field that forced it, not the whole type nor the reply envelope.
 //
 // P12 Wave-2: the "score" mode adds Plan — a substituted, nonce-carrying scoring plan
 // candy/plugin-check's pluginRunCheckLive walks (NOT the OCI-baked plan the "live" mode
@@ -784,7 +716,8 @@
 // of an in-core classifier duplicate, then re-materialize the returned generic #VenueDescriptor via
 // kit.VenueFromDescriptor (single-hop) — or, for a nested target the flat descriptor cannot express,
 // rebuild the N-hop chain host-side via the kind-blind deploykit.ResolveDeployChain. plugin-check
-// reaches the merged deploy tree via its OWN HostBuild("resolved-project"), so this seam carries
+// reaches the merged deploy tree via its OWN InvokeProvider("build","project", OpResolve)
+// peer-dispatch (the former HostBuild("resolved-project") seam is DELETED), so this seam carries
 // only name+instance. Class-generic action noun (F11).
 #CheckVenueResolveRequest: {
 	name!:     string @go(Name)
@@ -859,11 +792,21 @@
 	is_local?:    bool   @go(IsLocal)
 	is_group?:    bool   @go(IsGroup)
 	is_external?: bool   @go(IsExternal) // in-place external (bundle-del teardown)
+	// node_json is the bed ROOT BundleNode (spec.Deploy) serialized — including its nested
+	// Members peer map (each member's full BundleNode, with stamped Descent) — so the plugin
+	// bed runner can call deploykit.PersistBedDeployOverrides PLUGIN-SIDE for the bed root AND
+	// each member (#55 coneC-dsh β1 — the bed-root + member persist relocate off the host seam;
+	// the host-side persistBedDeployOverrides wrapper + its deploykit import shed). The plugin
+	// supplies its own loader-threaded marshalNode + reader (deployMarshalNode/deployConfigReader
+	// pattern); externalInPlace for the root is IsExternal above, for a member it is derivable from
+	// the member's stamped Descent (Venue parent/none → in-place). Empty for a VM root (the host
+	// seam's !isVM guard — a VM bed runs no `charly config`, so no root persist).
+	node_json?: bytes @go(NodeJSON, type=RawBody)
 	image?:       string @go(Image)      // pod bed box ref ("" for vm/local/group)
 	has_add_candy?: bool @go(HasAddCandy) // node.AddCandy is non-empty (a pod's add_candy: overlay
 	// bed) — bed_run.go skips --tag at the config/start steps for such a bed: the FRESH artifact to
-	// verify is the overlay deploy-add just built + persisted (resolved via
-	// resolveDeployResolvedImage, the overlay-plans ctx-seed fix's companion bug), not the base
+	// verify is the overlay bundle-add just built + persisted (resolved via plugin-deploy-pod's
+	// resolveDeployRefLocal resolved_image overlay preference), not the base
 	// image's own --tag build ref.
 	vm_template?: string @go(VMTemplate) // node.From for a vm bed (the ENTITY — `charly vm build` builds off it)
 	bed_domain?:  string @go(BedDomain)  // per-deploy live domain identity (`charly vm create/destroy/start … --domain <this>`, post-P33)
@@ -905,8 +848,9 @@
 // #DeployCompileRequest is the per-node COMPILE seam (K4-B / K4 unit B): the host asks the
 // command:bundle plugin's OpCompile handler to compile, in one of THREE selection SHAPES (a
 // discriminated set, not three Ops — R3). The plugin fetches the resolved-project envelope
-// itself via HostBuild("resolved-project") (the established seam — it does NOT receive the
-// whole project in the request), loops deploykit.BuildDeployPlan over the resolved order, and
+// itself via InvokeProvider("build","project", OpResolve) peer-dispatch (the former
+// HostBuild("resolved-project") seam is DELETED — it does NOT receive the whole project in the
+// request), loops deploykit.BuildDeployPlan over the resolved order, and
 // returns []InstallPlanView. The host re-materializes []*InstallPlan from the views via
 // deploykit.PlanFromView.
 //
@@ -946,15 +890,15 @@
 // anywhere needing a builder plugin outside the calling project's own candy closure, the one
 // edge S2's Pass-1 project-scan can't cover), so neither needs a new HostBuild kind.
 //
-// HostContextJSON is the marshalled deploykit.HostContext (MachineVenue/Distro/Glibc/
-// BuilderImage + the preresolved BuilderContext map) — a hand-written sdk/deploykit type
-// with no CUE def, so it rides as an opaque RawBody envelope (the VmJSON/PodConfigJSON
-// idiom; the plugin unmarshals into deploykit.HostContext, which it imports via
-// github.com/opencharly/sdk/deploykit) — ALWAYS host-computed for every shape (detectHostContext's
-// MachineVenue probe + preresolveActiveInitInto's LoadUnified-coupled init lookup; only the
-// box/candy SELECTION moved). Tag is the image CalVer pin (for the plan Version field when
-// set). Dir is the project dir the plugin threads into its HostBuild("resolved-project") call
-// (empty → plugin cwd).
+// HostContextJSON is the marshalled spec.HostContext — the 4 host-computed WIRE scalars
+// (MachineVenue/Distro/GlibcVersion/BuilderImage) — a hand-written spec type with no CUE def
+// (the gengotypes spike cannot express its json:"-" in-process fields), so it rides as an opaque
+// RawBody envelope (the VmJSON/PodConfigJSON idiom; the plugin unmarshals into spec.HostContext,
+// which sdk/deploykit re-exports as deploykit.HostContext). ONLY the 4 scalars cross: the plugin
+// populates the json:"-" BuilderContext (preresolveBuilderContexts over the reverse channel) +
+// ActiveInit (off the resolved-project envelope's rp.Init) IN-PROCESS after the decode — never on
+// the wire. Tag is the image CalVer pin (for the plan Version field when set). Dir is the project
+// dir the plugin threads into its InvokeProvider("build","project") call (empty → plugin cwd).
 #DeployCompileRequest: {
 	dir!:          string           @go(Dir)
 	box_view?:     #ResolvedBoxView @go(BoxView)
@@ -963,7 +907,7 @@
 	tag?:          string           @go(Tag)
 	// The add_candy:/--add-candy ref(s) (if any) this compile call's own candy set was widened
 	// with host-side (scanCandiesForRef's synthetic-augmented scan, for a REMOTE ref) — threaded
-	// into the plugin's OWN HostBuild("resolved-project") re-fetch (as its extra_candy_refs) so
+	// into the plugin's OWN InvokeProvider("build","project") re-fetch (as its extra_candy_refs) so
 	// the envelope's candy map ALSO carries them (RCA'd K1-alpha regression: the two scans were
 	// independent, so a remote add-candy resolved host-side never reached the envelope).
 	extra_candy_refs?: [...string] @go(ExtraCandyRefs)
@@ -984,7 +928,7 @@
 	vm_entity?: string @go(VmEntity)
 	// box_ref selects the BOX-REF shape above (K4 unit B box-half): the box's own name (never a
 	// remote ref — compileRefSelection already rejects a remote image ref before this request is
-	// built). The plugin's own HostBuild("resolved-project") re-fetch is asked to include_disabled
+	// built). The plugin's own InvokeProvider("build","project") re-fetch is asked to include_disabled
 	// so an explicitly-named `enabled: false` box still resolves (mirrors the OLD host
 	// ResolveBox(cfg, ref.Name, …) call, which never checked IsEnabled at all — enabled-filtering
 	// is a ResolveAllBox/listing concern, not a by-name-resolve one; zero disabled boxes exist
@@ -1015,7 +959,7 @@
 // drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms), so
 // `charly start`'s command is THIN — it forwards these flags to HostBuild("pod-start"), and the
 // host runs the existing startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add`
-// stayed core behind HostBuild("deploy-add").
+// stayed core behind HostBuild("resolve-target-add").
 #PodStartRequest: {
 	box!:            string @go(Box)
 	tag?:             string @go(Tag)
@@ -1028,8 +972,8 @@
 	bind?: [...string] @go(Bind)
 	no_autodetect?:   bool @go(NoAutoDetect)
 	// node is the per-host deploy overlay entry the command:pod plugin ALREADY resolved
-	// plugin-side (deploykit.ResolveLifecycleDeployNodeViaSeam over the shared pod-config-load-bundle
-	// seam) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
+	// plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free plugin-side
+	// overlay read) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
 	// *spec.Deploy instead of re-reading the per-host config itself (the config-READ is a plugin
 	// loading capability, not a host M — #55 K4 seam-completion). Absent only for an in-flight
 	// mixed build; the host requires it.
@@ -1252,20 +1196,6 @@
 	meta_json!: bytes @go(MetaJSON, type=RawBody) // marshalled *spec.BoxMetadata
 }
 
-// #PodConfigResolveRefRequest: resolveDeployBoxName/resolveDeployResolvedImage/
-// resolveShellImageRef bundle — reads the per-host charly.yml overlay + local podman image
-// labels (loader + podman-store coupled).
-#PodConfigResolveRefRequest: {
-	box!:          string @go(Box)
-	instance?:     string @go(Instance)
-	tag?:          string @go(Tag)
-	explicit_ref?: string @go(ExplicitRef)
-}
-#PodConfigResolveRefReply: {
-	deploy_box_name!: string @go(DeployBoxName)
-	image_ref!:       string @go(ImageRef)
-}
-
 // #PodConfigLoadDeployRequest / Reply: deploykit.LoadDeployConfigForRead(caller) — the
 // per-host charly.yml Bundle map. Genuinely loader-coupled: deploykit.SaveBundleConfig/
 // LoadDeployConfigForRead resolve through the package-var DeployStateHost seam, which is
@@ -1280,25 +1210,6 @@
 	config_json?: bytes @go(ConfigJSON, type=RawBody) // marshalled *deploykit.BundleConfig; absent ⇒ nil
 }
 
-// #PodConfigProjectVolumeRequest / Reply: resolves the deploy's PROJECT-declared `volume:`
-// override — the entity as AUTHORED in the project's own charly.yml (e.g. a disposable check
-// bed's `volume: [{name: enc-data, type: encrypted}]`), which the per-host overlay
-// (#PodConfigLoadDeployRequest, ~/.config/charly/charly.yml) never carries on its own. Genuinely
-// loader-coupled (LoadUnified is a core Mechanism a plugin cannot import): the host resolves the
-// SAME merged project+operator tree `charly bundle add` walks (resolveTreeRoot — the per-host
-// overlay wins over the project declaration only when it actually carries an override for this
-// key, matching MergeDeployConfigs' existing precedence) and returns ONLY the resolved entry's
-// Volume field, scoped to one deploy key. Setup (config_setup.go) calls this as the LAST fallback
-// in its deployVolumes resolution chain (CLI flag > env > per-host overlay > project declaration)
-// and persists a hit into the overlay exactly as a --volume flag would, so the declaration takes
-// effect on every subsequent read without re-resolving the project each time.
-#PodConfigProjectVolumeRequest: {
-	box!:      string @go(Box)
-	instance?: string @go(Instance)
-}
-#PodConfigProjectVolumeReply: {
-	volume_json?: bytes @go(VolumeJSON, type=RawBody) // marshalled []spec.DeployVolume; absent ⇒ none declared
-}
 
 // #PodConfigSaveBundleRequest / Reply: saveBundleConfigNodeForm(dc) — persists a (plugin-mutated)
 // *deploykit.BundleConfig back through the SAME loader-coupled seam.
@@ -1306,12 +1217,6 @@
 	config_json!: bytes @go(ConfigJSON, type=RawBody)
 }
 #PodConfigSaveBundleReply: {}
-
-// #PodConfigLoadBundleReply: deploykit.LoadBundleConfig() — the whole-project Bundle map (no
-// per-deploy-key focus), used by updateAllDeployedQuadlets's cross-deploy loop.
-#PodConfigLoadBundleReply: {
-	config_json?: bytes @go(ConfigJSON, type=RawBody)
-}
 
 // #PodConfigMigrateSecretsRequest / Reply: MigratePlaintextEnvSecret(dc, meta, box, instance) —
 // the one-time plaintext-env → credential-store migration (file backup + DefaultCredentialStore
@@ -1363,21 +1268,10 @@
 	tunnel_json?: bytes @go(TunnelJSON, type=RawBody) // marshalled *TunnelConfig; absent ⇒ nil
 }
 
-// #DeployConfigSaveStateRequest / Reply: deploykit.SaveDeployState(box,instance,input,
-// marshalDeployNode) — the terminal per-deploy persist. input_json is the marshalled
-// deploykit.SaveDeployStateInput (a hand-written sdk/deploykit type with no CUE def — the
-// RawBody idiom, matching #PodConfigWriteRequest.pod_config_json). Renamed substrate-neutral
-// (S3b, Q2): the seam started pod-only (candy/plugin-deploy-pod's config_setup.go/resolve.go)
-// but candy/plugin-bundle's generic Add/Update apply body (deploy_target.go's
-// persistDeployState) is now a THIRD caller across every substrate (pod/vm/local/k8s/android),
-// so the "pod-config-*" family naming no longer fit — the underlying "deploy-config-save-state"
-// host-builder kind renamed to match (was "pod-config-save-deploy-state").
-#DeployConfigSaveStateRequest: {
-	box!:        string @go(Box)
-	instance?:   string @go(Instance)
-	input_json!: bytes  @go(InputJSON, type=RawBody)
-}
-#DeployConfigSaveStateReply: {}
+// (The terminal per-deploy persist WRITE seam — its request/reply wire types — was DELETED in
+// #55 K4: candy/plugin-bundle AND candy/plugin-deploy-pod now call deploykit.SaveDeployState
+// directly, plugin-side, with their own loader-backed reader + loader-threaded Primaries, so no
+// host seam carries the SaveDeployStateInput across the wire anymore.)
 
 // #ArbiterBracketAcquireRequest / Reply — the K4-exit HostBuild seam for the acquire half of the
 // Q1 resource-arbiter bracket (FLOOR-SLIM-proper Unit-8; the former core-resident
@@ -1403,11 +1297,11 @@
 
 // #PodConfigCleanDeployEntryRequest / Reply: deploykit.CleanDeployEntry(box, instance,
 // marshalDeployNode) — the `charly remove` deploy-entry cleanup (Cutover B unit 2 remove-verb
-// completion). Mirrors #DeployConfigSaveStateRequest's shape ({box!, instance?} → {}, the host
-// owns the entire load+lock+mutate+save internally) — deliberately NOT a reuse of
-// #DeployConfigSaveRequest (the `deploy-config-save` seam), which persists an ALREADY-LOADED,
-// already-mutated whole BundleConfig with no internal load/lock/entry-removal logic (bundle
-// import/reset's use case) — a genuinely different, narrower operation CleanDeployEntry's own
+// completion). Follows the {box!, instance?} → {} host-owns-load+lock+mutate+save shape —
+// deliberately NOT the plugin-side deploykit.SaveDeployState/SaveBundleConfig write (bundle
+// import/reset + deploy-state persist, #55 K4 — no host seam),
+// which persists an ALREADY-LOADED, already-mutated whole BundleConfig with no internal
+// load/lock/entry-removal logic — a genuinely different, narrower operation CleanDeployEntry's own
 // internal file-lock + entry-removal + provides-cleanup + empty-file-delete logic cannot be
 // reduced to.
 #PodConfigCleanDeployEntryRequest: {
@@ -1477,9 +1371,8 @@
 
 // #PodUpdateRequest carries the `charly update` command flags (the former UpdateCmd's
 // authored fields). Forwarded to HostBuild("pod-update"), which runs the existing
-// dispatchByDeployTarget orchestration VERBATIM — resolveTreeRoot/loadDeployPlugins/
-// ResolveTarget are core Mechanisms (the project loader + provider registry) a plugin
-// cannot import or hold.
+// dispatchByDeployTarget orchestration — loadDeployPlugins/ResolveTarget are core
+// Mechanisms (the provider registry) a plugin cannot import or hold.
 #PodUpdateRequest: {
 	box!:        string @go(Box)
 	tag?:        string @go(Tag)
@@ -1488,6 +1381,12 @@
 	seed?:       bool   @go(Seed)
 	force_seed?: bool   @go(ForceSeed)
 	data_from?:  string @go(DataFrom)
+	// tree_json is the merged project+operator deploy tree command:update (plugin-pod) resolved
+	// PLUGIN-SIDE (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA so the host
+	// dispatchByDeployTarget consumes it instead of re-loading the tree host-side (#55
+	// Cone A Unit 3b). Marshalled map[string]spec.Deploy; an absent tree yields the same
+	// "no charly.yml" error a nil host-tree-read result produced.
+	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 
 // #PodUpdateReply is the "pod-update" host-builder reply — empty, mirroring #PodStartReply.
@@ -1745,46 +1644,11 @@
 	root_data?: bytes  @go(RootData)
 }
 
-// #DeployCandySecretsRequest/#DeployCandySecretsReply — the "deploy-candy-secrets" HostBuild
-// seam (Cone A shape 3): the genuine floor-M half of the former core-resident prepareCandySecrets
-// — scanning the project for the candies backing a compiled plan set (ScanAllCandyWithConfig, a
-// K1/K4 loader-migration-inventory mechanism a plugin cannot run itself) and resolving their
-// secret_requires:/secret_accepts: env against the credential store (itself already a core→plugin
-// adapter to verb:credential). candy/plugin-bundle's handleDeployApply calls this ONCE, BEFORE the
-// substrate dispatch, then injects the returned secret_env into its OWN in-proc plans via the
-// already-portable deploykit.InjectSecretsIntoPlans — no plan mutation crosses the wire.
-// register_hints is the set of distinct candy Artifact().Register values present in the resolved
-// candy set (e.g. "kubeconfig") — computed here (same candy scan) so handleDeployApply can decide,
-// AFTER the substrate dispatch + artifact retrieval, which handler (if any) to InvokeProvider —
-// data-driven, never a per-candy-name special case.
-#DeployCandySecretsRequest: {
-	dir!:        string @go(Dir)
-	plans_json!: bytes  @go(PlansJSON, type=RawBody)
-}
-#DeployCandySecretsReply: {
-	secret_env?:     {[string]: string} @go(SecretEnv)
-	register_hints?: [...string] @go(RegisterHints)
-}
-
-// #DeployArtifactsRetrieveRequest/#DeployArtifactsRetrieveReply — the "deploy-artifacts-retrieve"
-// HostBuild seam (Cone A shape 3): the genuine floor-M half of the former core-resident
-// retrieveArtifactsAndK3s — re-scanning the project for the deploy's candies (same
-// ScanAllCandyWithConfig coupling as the secrets seam above) and pulling back each one's declared
-// `artifacts:` via deploykit.RetrieveCandyArtifacts over the deploy's OWN venue executor
-// (re-materialized from venue_json — the SAME kit.VenueFromDescriptor conversion every other
-// venue-consuming seam uses). Runs AFTER the substrate dispatch succeeds (the venue must already
-// exist). The register-hint-driven k3s-post-provision DISPATCH itself is NOT here — that decision
-// + the verb:kube InvokeProvider call happen plugin-side in handleDeployApply, using the
-// register_hints the sibling #DeployCandySecretsReply already returned (one candy scan feeds both).
-#DeployArtifactsRetrieveRequest: {
-	dir!:          string             @go(Dir)
-	plans_json!:   bytes              @go(PlansJSON, type=RawBody)
-	artifact_key!: string             @go(ArtifactKey)
-	deploy_name!:  string             @go(DeployName)
-	artifact_env?: {[string]: string} @go(ArtifactEnv)
-	venue_json?:   bytes              @go(VenueJSON, type=RawBody)
-}
-#DeployArtifactsRetrieveReply: {}
+// (The "deploy-candy-secrets" + "deploy-artifacts-retrieve" HostBuild seams — their request/reply
+// wire types — were DELETED in #55 K4: command:bundle's add path resolves candy secrets +
+// retrieves artifacts PLUGIN-SIDE (candy/plugin-bundle/secrets_artifacts.go) from the candy set it
+// already holds in the resolved-project envelope + the shared verb:credential CredentialAccess +
+// deploykit.RetrieveCandyArtifacts over a host ShellExecutor, so no host seam carries them.)
 
 // #BoxFetchResolveRequest/#BoxFetchResolveReply — the "box-fetch-resolve" HostBuild seam behind
 // candy/plugin-authoring's command:fetch/command:refresh (K3 build-tail tail, coneB-buildremnant):

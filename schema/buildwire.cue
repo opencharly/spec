@@ -201,10 +201,11 @@
 // build:ensure. It reaches the host for the two things it genuinely cannot do
 // itself: resolving a user-authored image identifier against the project's
 // charly.yml (the "box-ref-resolve" HostBuild seam, wrapping ResolveBox /
-// FindBoxByLeaf — loader-cone, still core) and resolving an @github.com/...
-// remote ref to its cached registry ref ("remote-image-resolve", wrapping
-// ResolveRemoteImage — also loader-cone). The build fallback itself reaches
-// the EXISTING build:box word in-process (no new seam).
+// FindBoxByLeaf — loader-cone, still core) and cloning/caching an @github.com/...
+// remote ref's source ("remote-image-resolve", wrapping EnsureRepoDownloaded —
+// also loader-cone; the registry pull ref is now computed plugin-side, K1 loader
+// wave — the former host-side box-RESOLVE shed from charly core). The build
+// fallback itself reaches the EXISTING build:box word in-process (no new seam).
 
 // #BoxRefResolveRequest / #BoxRefResolveReply — the "box-ref-resolve" HostBuild
 // seam: resolve a short-name or full-ref image identifier against charly.yml.
@@ -230,15 +231,17 @@
 }
 
 // #RemoteImageResolveRequest / #RemoteImageResolveReply — the
-// "remote-image-resolve" HostBuild seam: resolve an @github.com/org/repo/box
-// ref to its registry pull ref + cached source dir (wraps ResolveRemoteImage).
+// "remote-image-resolve" HostBuild seam: clone/cache an @github.com/org/repo/box
+// ref's source + return the cached dir + short box name. The host does ONLY the git
+// clone/cache (EnsureRepoDownloaded, K1/B floor); the calling plugin resolves the
+// registry pull ref itself via the K1 loader reverse legs (K1 loader wave — sheds
+// deploykit.ResolveSpecBox from charly core; the former image_ref field is GONE).
 #RemoteImageResolveRequest: {
 	ref!: string @go(Ref)
 	tag?: string @go(Tag)
 }
 
 #RemoteImageResolveReply: {
-	image_ref?: string @go(ImageRef)
 	cache_dir?: string @go(CacheDir)
 	box_name?:  string @go(BoxName)
 	error?:     string @go(Error)
@@ -281,4 +284,46 @@
 	cache_dir!: string   @go(CacheDir)
 	repo_path!: string   @go(RepoPath)
 	refs?: [...string]   @go(Refs)
+}
+
+// #NamespaceScanEntry / #NamespaceScanReply — the `buildengine-namespaced` host-leg reply (K1
+// loader-cone fabric-tail, #55): the host recurses the project's import-namespace tree ONCE and
+// emits a FLAT list of per-namespace scan inputs. The plugin (candy/plugin-build's
+// FillNamespacedBoxes seam) iterates the list and runs the candy-scan fetch fix-point
+// (loaderkit.ScanCandyFromLocal) + deploykit.RawCandyPair + deploykit.FillNamespaceBoxViews
+// plugin-side — the deploykit calls left core when charly/resolved_project_host.go was deleted
+// (the file's own L26-32 named exit). This leg is the LAST core↔plugin cut that keeps the
+// namespaced-box resolve off sdk/deploykit in charly core (deploykit 2→1).
+//
+// Per entry the host sends ONLY what the plugin cannot derive itself:
+//   - child: the namespace-qualified box path ("fedora" or "ns1.ns2") — the plugin descends the
+//     root uf.Namespaces tree by this path to recover the namespace's *spec.Config for
+//     FillNamespaceBoxViews (sub is NOT serializable cleanly — Config is hand-written with a
+//     recursive Namespaces map — so it stays plugin-derived, never crosses the wire).
+//   - scanned: the namespace's PRE-fix-point spec.ScannedCandy map (from projectCandiesScanned,
+//     reading subUF.Candy in-memory — the R1 fix; never a re-load).
+//   - downloads: the namespace-scoped INITIAL RemoteDownload set (from CollectRemoteRefsOpts over
+//     the namespace's own cfg + localScanned raw refs) — the ONE cfg-coupled step. The plugin's
+//     ScanSeams.CollectRemoteRefs returns this verbatim; EnsureRepo/ScanRemote still round-trip to
+//     the cfg-agnostic host legs (buildengine-ensure-repo / buildengine-scan-remote) for the
+//     transitive fetch.
+// initCfg / calver / dir come from the plugin's own resolve context (the seam closure params) and
+// are deliberately NOT duplicated here.
+//
+// SDD: the scanned/downloads fields reference the HAND-WRITTEN spec.ScannedCandy / spec.RemoteDownload
+// pipeline-state types via @go(,type=…) overrides (the RDD-proven gengotypes spike for this file:
+// @go(Scanned,type=map[string]ScannedCandy) emits `Scanned map[string]ScannedCandy` referencing the
+// hand-written type, NO duplicate generated type). The inline CUE shapes are structural placeholders
+// for the override only — they are never generated as named Go types (conflict count 0, spiked). The
+// existing buildengine-scan-local / buildengine-collect-remote-refs legs already marshal these same
+// hand-written types over the wire; #NamespaceScanReply is the CUE-sourced envelope that carries them.
+#NamespaceScanEntry: {
+	child!:     string @go(Child)
+	scanned?:   {[string]: {model?: #CandyModel, view?: #CandyView, refs?: {...}}} @go(Scanned,type=map[string]ScannedCandy)
+	downloads?: [...{repo_path: string, version: string, refs: [...string]}] @go(Downloads,type=[]RemoteDownload)
+}
+
+// #NamespaceScanReply is the flat list the host returns; the plugin folds each entry into rp.
+#NamespaceScanReply: {
+	entries?: [...#NamespaceScanEntry] @go(Entries)
 }
