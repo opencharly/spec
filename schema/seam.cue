@@ -858,6 +858,16 @@
 	is_local?:    bool   @go(IsLocal)
 	is_group?:    bool   @go(IsGroup)
 	is_external?: bool   @go(IsExternal) // in-place external (bundle-del teardown)
+	// node_json is the bed ROOT BundleNode (spec.Deploy) serialized — including its nested
+	// Members peer map (each member's full BundleNode, with stamped Descent) — so the plugin
+	// bed runner can call deploykit.PersistBedDeployOverrides PLUGIN-SIDE for the bed root AND
+	// each member (#55 coneC-dsh β1 — the bed-root + member persist relocate off the host seam;
+	// the host-side persistBedDeployOverrides wrapper + its deploykit import shed). The plugin
+	// supplies its own loader-threaded marshalNode + reader (deployMarshalNode/deployConfigReader
+	// pattern); externalInPlace for the root is IsExternal above, for a member it is derivable from
+	// the member's stamped Descent (Venue parent/none → in-place). Empty for a VM root (the host
+	// seam's !isVM guard — a VM bed runs no `charly config`, so no root persist).
+	node_json?: bytes @go(NodeJSON, type=RawBody)
 	image?:       string @go(Image)      // pod bed box ref ("" for vm/local/group)
 	has_add_candy?: bool @go(HasAddCandy) // node.AddCandy is non-empty (a pod's add_candy: overlay
 	// bed) — bed_run.go skips --tag at the config/start steps for such a bed: the FRESH artifact to

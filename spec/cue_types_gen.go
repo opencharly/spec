@@ -6454,6 +6454,17 @@ type CheckBedReply struct {
 
 	IsExternal bool `yaml:"is_external,omitempty" json:"is_external,omitempty"`
 
+	// node_json is the bed ROOT BundleNode (spec.Deploy) serialized — including its nested
+	// Members peer map (each member's full BundleNode, with stamped Descent) — so the plugin
+	// bed runner can call deploykit.PersistBedDeployOverrides PLUGIN-SIDE for the bed root AND
+	// each member (#55 coneC-dsh β1 — the bed-root + member persist relocate off the host seam;
+	// the host-side persistBedDeployOverrides wrapper + its deploykit import shed). The plugin
+	// supplies its own loader-threaded marshalNode + reader (deployMarshalNode/deployConfigReader
+	// pattern); externalInPlace for the root is IsExternal above, for a member it is derivable from
+	// the member's stamped Descent (Venue parent/none → in-place). Empty for a VM root (the host
+	// seam's !isVM guard — a VM bed runs no `charly config`, so no root persist).
+	NodeJSON RawBody `yaml:"node_json,omitempty" json:"node_json,omitempty"`
+
 	Image string `yaml:"image,omitempty" json:"image,omitempty"`
 
 	HasAddCandy bool `yaml:"has_add_candy,omitempty" json:"has_add_candy,omitempty"`
