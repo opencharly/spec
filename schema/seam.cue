@@ -3,9 +3,10 @@
 // handlers but cannot LoadUnified, hold the deploy ledger, or run the VM-disk
 // build engine — those are core Mechanisms a plugin (a separate module importing
 // only sdk) reaches over the in-proc reverse channel: config → HostBuild(
-// "config-resolve"), ledger writes → HostBuild("config-persist"), VM-disk build →
-// HostBuild("vm-build"). Each action noun is CLASS-GENERIC (never a substrate
-// word — the F11 uniform-API gate); pod (P11) + bundle (P13) reuse the same seams.
+// "config-resolve"); the ledger write (candy/plugin-vm/vm_host_persist.go) and the
+// VM-disk build (candy/plugin-vm/vm_build_resolve.go) moved plugin-side — the former
+// config-persist / vm-build HostBuilds are DELETED. Each action noun is CLASS-GENERIC
+// (never a substrate word — the F11 uniform-API gate); pod (P11) + bundle (P13) reuse the same seams.
 //
 // Package-less; concatenated into the spec compilation unit. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire types, single-sourced here so
@@ -118,32 +119,14 @@
 	gpu_vendors?: {[string]: string} @go(GpuVendors)
 }
 
-// #ConfigPersistRequest is the WRITE twin of config-resolve: a command plugin
-// asks the host to persist (or remove) an entity's deploy-ledger entry. The host
-// owns the ledger + its blocking acquireDeployConfigLock (a core Mechanism — the
-// plugin is a separate module and MUST NOT hold a process-shared file lock across
-// the boundary), so the plugin resolves its intent into this envelope and the
-// host applies it under the lock. Key is the full deploy key ("vm:<name>"); Remove
-// deletes the entry (destroy), else Entity + VmState are saved (create
-// persist-auto-port). The action noun "config-persist" is class-generic (F11).
-#ConfigPersistRequest: {
-	key!:      string @go(Key)
-	entity?:   string @go(Entity)
-	vm_state?: #VmDeployState @go(VmState, type=*VmDeployState)
-	remove?:   bool @go(Remove)
-}
-
-// #ConfigPersistReply is the config-persist host-builder reply — empty; the host
-// signals failure via its error return (surfaced to the plugin over the channel).
-#ConfigPersistReply: {}
-
 // #VmBuildRequest carries the `charly vm build` command flags (the former
-// VmBuildCmd fields). The host resolves the kind:vm entity + the build vocabulary
-// + the per-source-kind image refs into a #VmBuildReply envelope (the "vm-build"
-// host-builder is PREP+RESOLVE only, P8b-rest); the plugin's `charly vm build`
-// command runs the actual privileged-container / qemu-img / bootc-install / cloud-init
-// disk-build ENGINE itself, exactly as candy/plugin-build's podman DRIVE runs behind
-// HostBuild("build-prep") (P8b) — the same inversion, applied to the VM disk-build engine.
+// VmBuildCmd fields). candy/plugin-vm/vm_build_resolve.go resolves the kind:vm
+// entity + the build vocabulary + the per-source-kind image refs into a #VmBuildReply
+// envelope PLUGIN-SIDE (the former "vm-build" host-builder is DELETED — PREP+RESOLVE
+// moved into the plugin, P8b-rest); the plugin's `charly vm build` command then runs
+// the actual privileged-container / qemu-img / bootc-install / cloud-init disk-build
+// ENGINE itself, exactly as candy/plugin-build's podman DRIVE runs behind
+// HostBuild("buildengine-prep") (P8b) — the same inversion, applied to the VM disk-build engine.
 // force skips the cloud_image content-freshness check, forcing a base-disk rebuild even when
 // unchanged (P8b-rest: `--force` predates command:vm's P10 externalization but was dropped from
 // this seam then — restored here since BuildCloudImage's force parameter is load-bearing).
@@ -158,8 +141,9 @@
 	force?:     bool   @go(Force)
 }
 
-// #VmBuildReply is the "vm-build" host-builder reply (P8b-rest): everything the
-// plugin needs to run the disk-build engine without importing the loader. VmJSON is
+// #VmBuildReply is the resolveVmBuild reply (P8b-rest — the former "vm-build"
+// host-builder is DELETED; candy/plugin-vm/vm_build_resolve.go resolves it plugin-side):
+// everything the plugin needs to run the disk-build engine without importing the loader. VmJSON is
 // the resolved+validated kind:vm entity (the #Vm-shaped value resolveVmViaPlugin
 // already produces — opaque bytes, the SAME convention #ConfigResolveReply.vm_json
 // uses for a #Vm-shaped payload) so the plugin decodes it into its own spec.Vm rather
@@ -285,9 +269,9 @@
 }
 
 // #DeployNodeDelDispatchRequest/#DeployNodeDelDispatchReply — the `charly bundle del` terminal
-// step: ResolveTarget + target.Del, honoring the teardown gates (the prior "deploy-del"
-// host-builder's tail, unchanged; the live ReverseRunner is still never carried on the wire — a
-// programmatic teardown needing a specific runner is resolved host-side during dispatch).
+// step: ResolveTarget + target.Del, honoring the teardown gates (the live ReverseRunner is still
+// never carried on the wire — a programmatic teardown needing a specific runner is resolved
+// host-side during dispatch).
 #DeployNodeDelDispatchRequest: {
 	name!:              string @go(Name)
 	node?:              #Deploy @go(Node, type=*Deploy)
@@ -339,62 +323,6 @@
 	builder_image?:      string @go(BuilderImage)
 }
 #DeployResolveTargetAddReply: {}
-
-// #DeployAddRequest carries the `charly bundle add` command flags (the former
-// BundleAddCmd's authored fields). The command:bundle plugin (P13) owns the CLI
-// GRAMMAR but cannot drive the deploy KERNEL — the loader, the InstallPlan
-// compiler, ResolveTarget → externalDeployTarget, and the live-executor
-// composition (which threads host objects that cannot cross the process boundary)
-// are core Mechanisms. So the plugin's `charly bundle add` command is THIN — it
-// forwards these flags to HostBuild("deploy-add"), and the host runs the existing
-// add orchestration VERBATIM (Run → dispatchNode → compile → ResolveTarget → Add),
-// exactly as the box-build engine stayed core behind HostBuild("image") in P8 and
-// the VM-disk engine behind HostBuild("vm-build") in P10. The two per-node internal
-// fields (vmEntity, builderImageOverride) are NOT carried — the host derives them
-// during dispatch.
-#DeployAddRequest: {
-	name!:               string @go(Name)
-	ref?:                string @go(Ref)
-	add_candy?: [...string] @go(AddCandy)
-	tag?:                string @go(Tag)
-	dry_run?:            bool   @go(DryRun)
-	node_only?:          bool   @go(NodeOnly)
-	format?:             string @go(Format)
-	pull?:               bool   @go(Pull)
-	verify?:             bool   @go(Verify)
-	with_services?:      bool   @go(WithServices)
-	allow_repo_changes?: bool   @go(AllowRepoChanges)
-	allow_root_tasks?:   bool   @go(AllowRootTasks)
-	skip_incompatible?:  bool   @go(SkipIncompatible)
-	builder_image?:      string @go(BuilderImage)
-	assume_yes?:         bool   @go(AssumeYes)
-	disposable?:         bool   @go(Disposable)
-	lifecycle?:          string @go(Lifecycle)
-}
-
-// #DeployAddReply is the "deploy-add" host-builder reply — empty; the add prints its
-// own progress + dry-run output to the shared stdio (the compiled-in plugin's
-// HostBuild runs in charly's own process) and signals failure via the error return.
-#DeployAddReply: {}
-
-// #DeployDelRequest carries the `charly bundle del` command flags. The plugin's
-// `charly bundle del` forwards these to HostBuild("deploy-del"); the host runs the
-// existing del orchestration VERBATIM (resolveDelNode → ResolveTarget → Del,
-// replaying the recorded ReverseOps). The live ReverseRunner is NOT carried — a
-// programmatic teardown that needs a specific runner (the vm guest-SSH reverse
-// runner) is a host-side path, resolved during dispatch, never authored on the CLI.
-#DeployDelRequest: {
-	name!:              string @go(Name)
-	assume_yes?:        bool   @go(AssumeYes)
-	keep_repo_changes?: bool   @go(KeepRepoChanges)
-	keep_services?:     bool   @go(KeepServices)
-	keep_image?:        bool   @go(KeepImage)
-	dry_run?:           bool   @go(DryRun)
-}
-
-// #DeployDelReply is the "deploy-del" host-builder reply — empty (prints host-side,
-// errors via the return).
-#DeployDelReply: {}
 
 // #DeployFromBoxRequest carries the `charly bundle from-box` command flags (the
 // former BundleFromBoxCmd) — a SOURCE-LESS deploy driven entirely by an image's
@@ -689,8 +617,9 @@
 // venue→executor construction, the OCI-label plan extraction, and the plan-walk's verb
 // dispatch through the provider registry. So the plugin resolves its intent into this
 // envelope and the host builds the venue + runs the kit-Runner through the in-core
-// registry VerbResolver, exactly as command:vm forwards `vm build` to
-// HostBuild("vm-build"). The action noun "check-run" is class-generic (F11).
+// registry VerbResolver, exactly as command:vm resolves `vm build` plugin-side
+// (candy/plugin-vm/vm_build_resolve.go — the former HostBuild("vm-build") is DELETED). The action
+// noun "check-run" is class-generic (F11).
 //
 // Mode selects the run shape (discriminated union): "box" — a pure-box run against a
 // disposable container built from Image (RunModeBox, build-scope steps only, the CheckBoxCmd
@@ -784,7 +713,8 @@
 // of an in-core classifier duplicate, then re-materialize the returned generic #VenueDescriptor via
 // kit.VenueFromDescriptor (single-hop) — or, for a nested target the flat descriptor cannot express,
 // rebuild the N-hop chain host-side via the kind-blind deploykit.ResolveDeployChain. plugin-check
-// reaches the merged deploy tree via its OWN HostBuild("resolved-project"), so this seam carries
+// reaches the merged deploy tree via its OWN InvokeProvider("build","project", OpResolve)
+// peer-dispatch (the former HostBuild("resolved-project") seam is DELETED), so this seam carries
 // only name+instance. Class-generic action noun (F11).
 #CheckVenueResolveRequest: {
 	name!:     string @go(Name)
@@ -872,7 +802,7 @@
 	image?:       string @go(Image)      // pod bed box ref ("" for vm/local/group)
 	has_add_candy?: bool @go(HasAddCandy) // node.AddCandy is non-empty (a pod's add_candy: overlay
 	// bed) — bed_run.go skips --tag at the config/start steps for such a bed: the FRESH artifact to
-	// verify is the overlay deploy-add just built + persisted (resolved via plugin-deploy-pod's
+	// verify is the overlay bundle-add just built + persisted (resolved via plugin-deploy-pod's
 	// resolveDeployRefLocal resolved_image overlay preference), not the base
 	// image's own --tag build ref.
 	vm_template?: string @go(VMTemplate) // node.From for a vm bed (the ENTITY — `charly vm build` builds off it)
@@ -915,8 +845,9 @@
 // #DeployCompileRequest is the per-node COMPILE seam (K4-B / K4 unit B): the host asks the
 // command:bundle plugin's OpCompile handler to compile, in one of THREE selection SHAPES (a
 // discriminated set, not three Ops — R3). The plugin fetches the resolved-project envelope
-// itself via HostBuild("resolved-project") (the established seam — it does NOT receive the
-// whole project in the request), loops deploykit.BuildDeployPlan over the resolved order, and
+// itself via InvokeProvider("build","project", OpResolve) peer-dispatch (the former
+// HostBuild("resolved-project") seam is DELETED — it does NOT receive the whole project in the
+// request), loops deploykit.BuildDeployPlan over the resolved order, and
 // returns []InstallPlanView. The host re-materializes []*InstallPlan from the views via
 // deploykit.PlanFromView.
 //
@@ -964,7 +895,7 @@
 // populates the json:"-" BuilderContext (preresolveBuilderContexts over the reverse channel) +
 // ActiveInit (off the resolved-project envelope's rp.Init) IN-PROCESS after the decode — never on
 // the wire. Tag is the image CalVer pin (for the plan Version field when set). Dir is the project
-// dir the plugin threads into its HostBuild("resolved-project") call (empty → plugin cwd).
+// dir the plugin threads into its InvokeProvider("build","project") call (empty → plugin cwd).
 #DeployCompileRequest: {
 	dir!:          string           @go(Dir)
 	box_view?:     #ResolvedBoxView @go(BoxView)
@@ -973,7 +904,7 @@
 	tag?:          string           @go(Tag)
 	// The add_candy:/--add-candy ref(s) (if any) this compile call's own candy set was widened
 	// with host-side (scanCandiesForRef's synthetic-augmented scan, for a REMOTE ref) — threaded
-	// into the plugin's OWN HostBuild("resolved-project") re-fetch (as its extra_candy_refs) so
+	// into the plugin's OWN InvokeProvider("build","project") re-fetch (as its extra_candy_refs) so
 	// the envelope's candy map ALSO carries them (RCA'd K1-alpha regression: the two scans were
 	// independent, so a remote add-candy resolved host-side never reached the envelope).
 	extra_candy_refs?: [...string] @go(ExtraCandyRefs)
@@ -994,7 +925,7 @@
 	vm_entity?: string @go(VmEntity)
 	// box_ref selects the BOX-REF shape above (K4 unit B box-half): the box's own name (never a
 	// remote ref — compileRefSelection already rejects a remote image ref before this request is
-	// built). The plugin's own HostBuild("resolved-project") re-fetch is asked to include_disabled
+	// built). The plugin's own InvokeProvider("build","project") re-fetch is asked to include_disabled
 	// so an explicitly-named `enabled: false` box still resolves (mirrors the OLD host
 	// ResolveBox(cfg, ref.Name, …) call, which never checked IsEnabled at all — enabled-filtering
 	// is a ResolveAllBox/listing concern, not a by-name-resolve one; zero disabled boxes exist
@@ -1025,7 +956,7 @@
 // drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms), so
 // `charly start`'s command is THIN — it forwards these flags to HostBuild("pod-start"), and the
 // host runs the existing startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add`
-// stayed core behind HostBuild("deploy-add").
+// stayed core behind HostBuild("resolve-target-add").
 #PodStartRequest: {
 	box!:            string @go(Box)
 	tag?:             string @go(Tag)
@@ -1711,7 +1642,7 @@
 }
 
 // (The "deploy-candy-secrets" + "deploy-artifacts-retrieve" HostBuild seams — their request/reply
-// wire types — were DELETED in #55 K4: command:bundle's deploy-add resolves candy secrets +
+// wire types — were DELETED in #55 K4: command:bundle's add path resolves candy secrets +
 // retrieves artifacts PLUGIN-SIDE (candy/plugin-bundle/secrets_artifacts.go) from the candy set it
 // already holds in the resolved-project envelope + the shared verb:credential CredentialAccess +
 // deploykit.RetrieveCandyArtifacts over a host ShellExecutor, so no host seam carries them.)

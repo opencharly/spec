@@ -5,14 +5,17 @@
 // the privileged builder-bootstrap, or ensure builder images — those stay core
 // Mechanisms (the loader is P6's plugin + a kernel M/B; the runtime Candy graph
 // is core by the P2 decision). The candy reaches them over the in-proc reverse
-// channel: resolve+render → HostBuild("build-prep"), layer merge →
-// HostBuild("merge") (candy/plugin-oci's transitional seam, P14a). Each action
+// channel: resolve+render → HostBuild("buildengine-prep"), layer merge →
+// verb:oci (candy/plugin-oci — no HostBuild seam; the merge wire types
+// #MergeRequest/#MergeReply live in schema/oci.cue). Each action
 // noun is CLASS-GENERIC (never a provider word — the F11 uniform-API gate),
-// mirroring the P10 config-resolve/vm-build seams in seam.cue.
+// mirroring the P10 config-resolve seam in seam.cue (the VM-disk build moved
+// plugin-side to candy/plugin-vm/vm_build_resolve.go — the former vm-build
+// HostBuild is DELETED).
 //
 // This REVERSES the P8 "permanent facade": P8 kept the whole engine host-side
 // behind HostBuild("image"); P8b moves the DRIVE into the candy and leaves the
-// host a pure RESOLVE/RENDER SEAM PROVIDER (build-prep). generate.go /
+// host a pure RESOLVE/RENDER SEAM PROVIDER (buildengine-prep). generate.go /
 // OCITarget / intermediates / layers stay core PINNED BY the loader Mechanism +
 // the P2 runtime-Candy decision — re-judged at P15/P16 after the loader fold.
 //
@@ -29,7 +32,7 @@
 // NewGenerator (loader) + Generate (render → .build/), the privileged
 // builder-bootstrap, and the builder-image ensure host-side, then returns the
 // drive-model. GenerateOnly (the `charly box generate` path) renders + returns
-// the written Containerfile paths WITHOUT bootstrap/ensure/build-prep.
+// the written Containerfile paths WITHOUT bootstrap/ensure/buildengine-prep.
 #BuildResolveRequest: {
 	boxes?: [...string] @go(Boxes)
 	tag?:              string @go(Tag)
@@ -46,7 +49,7 @@
 }
 
 // #BuildResolveBox is one image's drive descriptor: the tag to build and whether
-// merge.auto fires for it (the candy gates the HostBuild("merge") call on this
+// merge.auto fires for it (the candy gates the verb:oci layer-merge call on this
 // bool; the host merge seam resolves the size knobs from config). The rendered
 // Containerfile CONTENT is NO LONGER shipped in the reply (#67 render-DRIVE
 // move): plugin-build renders Containerfiles itself from the resolved-project
@@ -62,7 +65,7 @@
 	merge_max_total_mb?: int  @go(MergeMaxTotalMB)
 	// from/bootstrap_builder_image/distro_def/bootstrap_builder are the privileged-bootstrap
 	// inputs (a `from: builder:<name>` image) the candy needs to run
-	// buildkit.RunPrivileged itself instead of the host doing it in the build-prep seam.
+	// buildkit.RunPrivileged itself instead of the host doing it in the buildengine-prep seam.
 	// bootstrap_builder is the SPECIFIC resolved #Builder for `from`'s builder name (not the
 	// whole per-image builder map) — the minimal slice runPrivilegedBootstrap actually reads.
 	// Both nil/empty for a non-bootstrap image (the common case).
@@ -83,7 +86,7 @@
 // reply-error convention; the RPC itself succeeds).
 // The layer-merge seam types (#MergeRequest / #MergeReply) live in schema/oci.cue
 // (owned by P14a's OCI cutover) — the ONE home (team-lead ruling). The candy's
-// HostBuild("merge") seam + charly/mergeImageRef import spec.MergeRequest/MergeReply
+// verb:oci layer-merge + charly/mergeImageRef import spec.MergeRequest/MergeReply
 // from there; this file defines only the BuildResolve* family.
 
 #BuildResolveReply: {
@@ -102,28 +105,11 @@
 	// caches (BakedMetadata/RenderCandyOrder/InitSystem/InitDef/ActiveInits/Caps
 	// on each ResolvedBoxView + GlobalOrder/ExternalizedBuilders on the project),
 	// so plugin-build renders Containerfiles via deploykit.Generator WITHOUT the
-	// live *Candy/*Config graph (#67 render-DRIVE move). Filled by the build-prep
+	// live *Candy/*Config graph (#67 render-DRIVE move). Filled by the buildengine-prep
 	// seam (render-prep → projectResolvedProject with caches). Empty for the
 	// generate-only path that writes Containerfiles host-side (transitional).
 	resolved_project?: #ResolvedProject @go(ResolvedProject,optional=nillable)
 	error?: string @go(Error)
-}
-
-// #BakePluginsRequest carries the inputs the host-side bake-plugins seam needs: the
-// project dir (to load the live *Candy graph for SourceDir + buildPluginBinary), the box
-// name (for the staging dir), and the candy order (the composition being baked). The host
-// builds + stages each bake_plugin binary + returns the COPY/chmod fragment (#67).
-#BakePluginsRequest: {
-	dir?:        string @go(Dir)
-	box_name!:   string @go(BoxName)
-	candy_order?: [...string] @go(CandyOrder)
-}
-
-// #BakePluginsReply carries the rendered Containerfile fragment (COPY + chmod lines for
-// each bake_plugin binary) + the reply-error convention.
-#BakePluginsReply: {
-	fragment?: string @go(Fragment)
-	error?:    string @go(Error)
 }
 
 // #RenderSeamRequest is the generic host↔plugin render-seam dispatch (#67 render-DRIVE move).

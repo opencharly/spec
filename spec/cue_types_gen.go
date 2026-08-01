@@ -1561,7 +1561,7 @@ type BuilderConfig struct {
 // NewGenerator (loader) + Generate (render → .build/), the privileged
 // builder-bootstrap, and the builder-image ensure host-side, then returns the
 // drive-model. GenerateOnly (the `charly box generate` path) renders + returns
-// the written Containerfile paths WITHOUT bootstrap/ensure/build-prep.
+// the written Containerfile paths WITHOUT bootstrap/ensure/buildengine-prep.
 type BuildResolveRequest struct {
 	Boxes []string `yaml:"boxes,omitempty" json:"boxes,omitempty"`
 
@@ -1589,7 +1589,7 @@ type BuildResolveRequest struct {
 }
 
 // #BuildResolveBox is one image's drive descriptor: the tag to build and whether
-// merge.auto fires for it (the candy gates the HostBuild("merge") call on this
+// merge.auto fires for it (the candy gates the verb:oci layer-merge call on this
 // bool; the host merge seam resolves the size knobs from config). The rendered
 // Containerfile CONTENT is NO LONGER shipped in the reply (#67 render-DRIVE
 // move): plugin-build renders Containerfiles itself from the resolved-project
@@ -1612,7 +1612,7 @@ type BuildResolveBox struct {
 
 	// from/bootstrap_builder_image/distro_def/bootstrap_builder are the privileged-bootstrap
 	// inputs (a `from: builder:<name>` image) the candy needs to run
-	// buildkit.RunPrivileged itself instead of the host doing it in the build-prep seam.
+	// buildkit.RunPrivileged itself instead of the host doing it in the buildengine-prep seam.
 	// bootstrap_builder is the SPECIFIC resolved #Builder for `from`'s builder name (not the
 	// whole per-image builder map) — the minimal slice runPrivilegedBootstrap actually reads.
 	// Both nil/empty for a non-bootstrap image (the common case).
@@ -1776,7 +1776,7 @@ type BuildResolveReply struct {
 	// caches (BakedMetadata/RenderCandyOrder/InitSystem/InitDef/ActiveInits/Caps
 	// on each ResolvedBoxView + GlobalOrder/ExternalizedBuilders on the project),
 	// so plugin-build renders Containerfiles via deploykit.Generator WITHOUT the
-	// live *Candy/*Config graph (#67 render-DRIVE move). Filled by the build-prep
+	// live *Candy/*Config graph (#67 render-DRIVE move). Filled by the buildengine-prep
 	// seam (render-prep → projectResolvedProject with caches). Empty for the
 	// generate-only path that writes Containerfiles host-side (transitional).
 	ResolvedProject *ResolvedProject `yaml:"resolved_project,omitempty" json:"resolved_project,omitempty"`
@@ -2470,26 +2470,6 @@ type BuildTarget struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
 	Auto bool `yaml:"auto,omitempty" json:"auto,omitempty"`
-}
-
-// #BakePluginsRequest carries the inputs the host-side bake-plugins seam needs: the
-// project dir (to load the live *Candy graph for SourceDir + buildPluginBinary), the box
-// name (for the staging dir), and the candy order (the composition being baked). The host
-// builds + stages each bake_plugin binary + returns the COPY/chmod fragment (#67).
-type BakePluginsRequest struct {
-	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-
-	BoxName string `yaml:"box_name,omitempty" json:"box_name"`
-
-	CandyOrder []string `yaml:"candy_order,omitempty" json:"candy_order,omitempty"`
-}
-
-// #BakePluginsReply carries the rendered Containerfile fragment (COPY + chmod lines for
-// each bake_plugin binary) + the reply-error convention.
-type BakePluginsReply struct {
-	Fragment string `yaml:"fragment,omitempty" json:"fragment,omitempty"`
-
-	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
 // #RenderSeamRequest is the generic host↔plugin render-seam dispatch (#67 render-DRIVE move).
@@ -5537,36 +5517,14 @@ type DevicePatternsReply struct {
 	GpuVendors map[string]string `yaml:"gpu_vendors,omitempty" json:"gpu_vendors,omitempty"`
 }
 
-// #ConfigPersistRequest is the WRITE twin of config-resolve: a command plugin
-// asks the host to persist (or remove) an entity's deploy-ledger entry. The host
-// owns the ledger + its blocking acquireDeployConfigLock (a core Mechanism — the
-// plugin is a separate module and MUST NOT hold a process-shared file lock across
-// the boundary), so the plugin resolves its intent into this envelope and the
-// host applies it under the lock. Key is the full deploy key ("vm:<name>"); Remove
-// deletes the entry (destroy), else Entity + VmState are saved (create
-// persist-auto-port). The action noun "config-persist" is class-generic (F11).
-type ConfigPersistRequest struct {
-	Key string `yaml:"key,omitempty" json:"key"`
-
-	Entity string `yaml:"entity,omitempty" json:"entity,omitempty"`
-
-	VmState *VmDeployState `yaml:"vm_state,omitempty" json:"vm_state,omitempty"`
-
-	Remove bool `yaml:"remove,omitempty" json:"remove,omitempty"`
-}
-
-// #ConfigPersistReply is the config-persist host-builder reply — empty; the host
-// signals failure via its error return (surfaced to the plugin over the channel).
-type ConfigPersistReply struct {
-}
-
 // #VmBuildRequest carries the `charly vm build` command flags (the former
-// VmBuildCmd fields). The host resolves the kind:vm entity + the build vocabulary
-// + the per-source-kind image refs into a #VmBuildReply envelope (the "vm-build"
-// host-builder is PREP+RESOLVE only, P8b-rest); the plugin's `charly vm build`
-// command runs the actual privileged-container / qemu-img / bootc-install / cloud-init
-// disk-build ENGINE itself, exactly as candy/plugin-build's podman DRIVE runs behind
-// HostBuild("build-prep") (P8b) — the same inversion, applied to the VM disk-build engine.
+// VmBuildCmd fields). candy/plugin-vm/vm_build_resolve.go resolves the kind:vm
+// entity + the build vocabulary + the per-source-kind image refs into a #VmBuildReply
+// envelope PLUGIN-SIDE (the former "vm-build" host-builder is DELETED — PREP+RESOLVE
+// moved into the plugin, P8b-rest); the plugin's `charly vm build` command then runs
+// the actual privileged-container / qemu-img / bootc-install / cloud-init disk-build
+// ENGINE itself, exactly as candy/plugin-build's podman DRIVE runs behind
+// HostBuild("buildengine-prep") (P8b) — the same inversion, applied to the VM disk-build engine.
 // force skips the cloud_image content-freshness check, forcing a base-disk rebuild even when
 // unchanged (P8b-rest: `--force` predates command:vm's P10 externalization but was dropped from
 // this seam then — restored here since BuildCloudImage's force parameter is load-bearing).
@@ -5588,8 +5546,9 @@ type VmBuildRequest struct {
 	Force bool `yaml:"force,omitempty" json:"force,omitempty"`
 }
 
-// #VmBuildReply is the "vm-build" host-builder reply (P8b-rest): everything the
-// plugin needs to run the disk-build engine without importing the loader. VmJSON is
+// #VmBuildReply is the resolveVmBuild reply (P8b-rest — the former "vm-build"
+// host-builder is DELETED; candy/plugin-vm/vm_build_resolve.go resolves it plugin-side):
+// everything the plugin needs to run the disk-build engine without importing the loader. VmJSON is
 // the resolved+validated kind:vm entity (the #Vm-shaped value resolveVmViaPlugin
 // already produces — opaque bytes, the SAME convention #ConfigResolveReply.vm_json
 // uses for a #Vm-shaped payload) so the plugin decodes it into its own spec.Vm rather
@@ -5743,9 +5702,9 @@ type DeployDelResolveReply struct {
 }
 
 // #DeployNodeDelDispatchRequest/#DeployNodeDelDispatchReply — the `charly bundle del` terminal
-// step: ResolveTarget + target.Del, honoring the teardown gates (the prior "deploy-del"
-// host-builder's tail, unchanged; the live ReverseRunner is still never carried on the wire — a
-// programmatic teardown needing a specific runner is resolved host-side during dispatch).
+// step: ResolveTarget + target.Del, honoring the teardown gates (the live ReverseRunner is still
+// never carried on the wire — a programmatic teardown needing a specific runner is resolved
+// host-side during dispatch).
 type DeployNodeDelDispatchRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
@@ -5822,85 +5781,6 @@ type DeployResolveTargetAddRequest struct {
 }
 
 type DeployResolveTargetAddReply struct {
-}
-
-// #DeployAddRequest carries the `charly bundle add` command flags (the former
-// BundleAddCmd's authored fields). The command:bundle plugin (P13) owns the CLI
-// GRAMMAR but cannot drive the deploy KERNEL — the loader, the InstallPlan
-// compiler, ResolveTarget → externalDeployTarget, and the live-executor
-// composition (which threads host objects that cannot cross the process boundary)
-// are core Mechanisms. So the plugin's `charly bundle add` command is THIN — it
-// forwards these flags to HostBuild("deploy-add"), and the host runs the existing
-// add orchestration VERBATIM (Run → dispatchNode → compile → ResolveTarget → Add),
-// exactly as the box-build engine stayed core behind HostBuild("image") in P8 and
-// the VM-disk engine behind HostBuild("vm-build") in P10. The two per-node internal
-// fields (vmEntity, builderImageOverride) are NOT carried — the host derives them
-// during dispatch.
-type DeployAddRequest struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
-
-	AddCandy []string `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
-
-	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
-
-	DryRun bool `yaml:"dry_run,omitempty" json:"dry_run,omitempty"`
-
-	NodeOnly bool `yaml:"node_only,omitempty" json:"node_only,omitempty"`
-
-	Format string `yaml:"format,omitempty" json:"format,omitempty"`
-
-	Pull bool `yaml:"pull,omitempty" json:"pull,omitempty"`
-
-	Verify bool `yaml:"verify,omitempty" json:"verify,omitempty"`
-
-	WithServices bool `yaml:"with_services,omitempty" json:"with_services,omitempty"`
-
-	AllowRepoChanges bool `yaml:"allow_repo_changes,omitempty" json:"allow_repo_changes,omitempty"`
-
-	AllowRootTasks bool `yaml:"allow_root_tasks,omitempty" json:"allow_root_tasks,omitempty"`
-
-	SkipIncompatible bool `yaml:"skip_incompatible,omitempty" json:"skip_incompatible,omitempty"`
-
-	BuilderImage string `yaml:"builder_image,omitempty" json:"builder_image,omitempty"`
-
-	AssumeYes bool `yaml:"assume_yes,omitempty" json:"assume_yes,omitempty"`
-
-	Disposable bool `yaml:"disposable,omitempty" json:"disposable,omitempty"`
-
-	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
-}
-
-// #DeployAddReply is the "deploy-add" host-builder reply — empty; the add prints its
-// own progress + dry-run output to the shared stdio (the compiled-in plugin's
-// HostBuild runs in charly's own process) and signals failure via the error return.
-type DeployAddReply struct {
-}
-
-// #DeployDelRequest carries the `charly bundle del` command flags. The plugin's
-// `charly bundle del` forwards these to HostBuild("deploy-del"); the host runs the
-// existing del orchestration VERBATIM (resolveDelNode → ResolveTarget → Del,
-// replaying the recorded ReverseOps). The live ReverseRunner is NOT carried — a
-// programmatic teardown that needs a specific runner (the vm guest-SSH reverse
-// runner) is a host-side path, resolved during dispatch, never authored on the CLI.
-type DeployDelRequest struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	AssumeYes bool `yaml:"assume_yes,omitempty" json:"assume_yes,omitempty"`
-
-	KeepRepoChanges bool `yaml:"keep_repo_changes,omitempty" json:"keep_repo_changes,omitempty"`
-
-	KeepServices bool `yaml:"keep_services,omitempty" json:"keep_services,omitempty"`
-
-	KeepImage bool `yaml:"keep_image,omitempty" json:"keep_image,omitempty"`
-
-	DryRun bool `yaml:"dry_run,omitempty" json:"dry_run,omitempty"`
-}
-
-// #DeployDelReply is the "deploy-del" host-builder reply — empty (prints host-side,
-// errors via the return).
-type DeployDelReply struct {
 }
 
 // #DeployFromBoxRequest carries the `charly bundle from-box` command flags (the
@@ -6286,8 +6166,9 @@ type PodLogsOpts struct {
 // venue→executor construction, the OCI-label plan extraction, and the plan-walk's verb
 // dispatch through the provider registry. So the plugin resolves its intent into this
 // envelope and the host builds the venue + runs the kit-Runner through the in-core
-// registry VerbResolver, exactly as command:vm forwards `vm build` to
-// HostBuild("vm-build"). The action noun "check-run" is class-generic (F11).
+// registry VerbResolver, exactly as command:vm resolves `vm build` plugin-side
+// (candy/plugin-vm/vm_build_resolve.go — the former HostBuild("vm-build") is DELETED). The action
+// noun "check-run" is class-generic (F11).
 //
 // Mode selects the run shape (discriminated union): "box" — a pure-box run against a
 // disposable container built from Image (RunModeBox, build-scope steps only, the CheckBoxCmd
@@ -6406,7 +6287,8 @@ type ScoreSummary struct {
 // of an in-core classifier duplicate, then re-materialize the returned generic #VenueDescriptor via
 // kit.VenueFromDescriptor (single-hop) — or, for a nested target the flat descriptor cannot express,
 // rebuild the N-hop chain host-side via the kind-blind deploykit.ResolveDeployChain. plugin-check
-// reaches the merged deploy tree via its OWN HostBuild("resolved-project"), so this seam carries
+// reaches the merged deploy tree via its OWN InvokeProvider("build","project", OpResolve)
+// peer-dispatch (the former HostBuild("resolved-project") seam is DELETED), so this seam carries
 // only name+instance. Class-generic action noun (F11).
 type CheckVenueResolveRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
@@ -6515,7 +6397,7 @@ type CheckBedReply struct {
 	HasAddCandy bool `yaml:"has_add_candy,omitempty" json:"has_add_candy,omitempty"`
 
 	// bed) — bed_run.go skips --tag at the config/start steps for such a bed: the FRESH artifact to
-	// verify is the overlay deploy-add just built + persisted (resolved via plugin-deploy-pod's
+	// verify is the overlay bundle-add just built + persisted (resolved via plugin-deploy-pod's
 	// resolveDeployRefLocal resolved_image overlay preference), not the base
 	// image's own --tag build ref.
 	VMTemplate string `yaml:"vm_template,omitempty" json:"vm_template,omitempty"`
@@ -6574,8 +6456,9 @@ type CheckBedMember struct {
 // #DeployCompileRequest is the per-node COMPILE seam (K4-B / K4 unit B): the host asks the
 // command:bundle plugin's OpCompile handler to compile, in one of THREE selection SHAPES (a
 // discriminated set, not three Ops — R3). The plugin fetches the resolved-project envelope
-// itself via HostBuild("resolved-project") (the established seam — it does NOT receive the
-// whole project in the request), loops deploykit.BuildDeployPlan over the resolved order, and
+// itself via InvokeProvider("build","project", OpResolve) peer-dispatch (the former
+// HostBuild("resolved-project") seam is DELETED — it does NOT receive the whole project in the
+// request), loops deploykit.BuildDeployPlan over the resolved order, and
 // returns []InstallPlanView. The host re-materializes []*InstallPlan from the views via
 // deploykit.PlanFromView.
 //
@@ -6623,7 +6506,7 @@ type CheckBedMember struct {
 // populates the json:"-" BuilderContext (preresolveBuilderContexts over the reverse channel) +
 // ActiveInit (off the resolved-project envelope's rp.Init) IN-PROCESS after the decode — never on
 // the wire. Tag is the image CalVer pin (for the plan Version field when set). Dir is the project
-// dir the plugin threads into its HostBuild("resolved-project") call (empty → plugin cwd).
+// dir the plugin threads into its InvokeProvider("build","project") call (empty → plugin cwd).
 type DeployCompileRequest struct {
 	Dir string `yaml:"dir,omitempty" json:"dir"`
 
@@ -6637,7 +6520,7 @@ type DeployCompileRequest struct {
 
 	// The add_candy:/--add-candy ref(s) (if any) this compile call's own candy set was widened
 	// with host-side (scanCandiesForRef's synthetic-augmented scan, for a REMOTE ref) — threaded
-	// into the plugin's OWN HostBuild("resolved-project") re-fetch (as its extra_candy_refs) so
+	// into the plugin's OWN InvokeProvider("build","project") re-fetch (as its extra_candy_refs) so
 	// the envelope's candy map ALSO carries them (RCA'd K1-alpha regression: the two scans were
 	// independent, so a remote add-candy resolved host-side never reached the envelope).
 	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
@@ -6661,7 +6544,7 @@ type DeployCompileRequest struct {
 
 	// box_ref selects the BOX-REF shape above (K4 unit B box-half): the box's own name (never a
 	// remote ref — compileRefSelection already rejects a remote image ref before this request is
-	// built). The plugin's own HostBuild("resolved-project") re-fetch is asked to include_disabled
+	// built). The plugin's own InvokeProvider("build","project") re-fetch is asked to include_disabled
 	// so an explicitly-named `enabled: false` box still resolves (mirrors the OLD host
 	// ResolveBox(cfg, ref.Name, …) call, which never checked IsEnabled at all — enabled-filtering
 	// is a ResolveAllBox/listing concern, not a by-name-resolve one; zero disabled boxes exist
@@ -6695,7 +6578,7 @@ type DeployCompileReply struct {
 // drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms), so
 // `charly start`'s command is THIN — it forwards these flags to HostBuild("pod-start"), and the
 // host runs the existing startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add`
-// stayed core behind HostBuild("deploy-add").
+// stayed core behind HostBuild("resolve-target-add").
 type PodStartRequest struct {
 	Box string `yaml:"box,omitempty" json:"box"`
 
