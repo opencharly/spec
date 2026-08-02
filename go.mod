@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	cuelang.org/go v0.16.1
+	github.com/alecthomas/kong v1.15.0
 	github.com/emicklei/proto v1.14.3
 	github.com/hashicorp/go-plugin v1.8.0
 	golang.org/x/crypto v0.49.0
