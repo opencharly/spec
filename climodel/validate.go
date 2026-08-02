@@ -1,11 +1,19 @@
 // Package climodel (github.com/opencharly/spec/climodel, #55 import-purity) holds the
-// CLI subcommand authoring struct (the SDK-facing form of the proto CLISubcommand wire
-// type) and the ValidateGenerated CUE-validation helper that checks a generated SDK value
-// against its authoritative CUE definition. It is a fabric slice of the spec contract
-// module — its only heavy dep is cuelang.org/go + the spec/schema + spec/schemaconcat
-// slices (#55 Rule 2) — relocated from the github.com/opencharly/sdk root package. charly
-// core imports this slice INSTEAD of the sdk root; the sdk root keeps a thin re-export
-// during cutover then is deleted.
+// ValidateGenerated CUE-validation helper that checks a generated SDK value against its
+// authoritative CUE definition, and re-exports the CLISubcommand authoring struct (the
+// SDK-facing form of the proto CLISubcommand wire type). It is a fabric slice of the spec
+// contract module — its only heavy dep is cuelang.org/go + the spec/schema +
+// spec/schemaconcat slices (#55 Rule 2) — relocated from the github.com/opencharly/sdk root
+// package. charly core imports this slice INSTEAD of the sdk root; the sdk root keeps a
+// thin re-export during cutover then is deleted.
+//
+// CLISubcommand itself is NOT defined here anymore — it was RELOCATED to spec/capability
+// (#55 import-purity, Rule 2: the plain authoring struct has no cuelang dependency, so it
+// lives in the cuelang-free spec/capability slice rather than this cuelang-bearing slice,
+// keeping cuelang confined to ValidateGenerated). This slice re-exports it
+// (`type CLISubcommand = capability.CLISubcommand`) so its existing consumers (sdk/schema.go's
+// CLISubcommand alias, sdk/kong_reflect.go's KongSubcommands, and this slice's own
+// TestCLISubcommandFields) compile UNCHANGED.
 //
 // CLIModel itself is NOT defined here — it is REPOINTed: the generated #CLIModel already
 // lives in spec/spec/cue_types_gen.go, so charly references spec.CLIModel directly (R3 — no
@@ -23,6 +31,7 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 
+	"github.com/opencharly/spec/capability"
 	"github.com/opencharly/spec/schema"
 	"github.com/opencharly/spec/schemaconcat"
 )
@@ -31,10 +40,13 @@ import (
 // SDK-facing authoring form (a Name+Help pair). The proto wire form is pb.CLISubcommand
 // (in spec/proto); this struct is the authoring shape a plugin constructs in its
 // ProvidedCapability.Subcommands list, which BuildCapabilities marshals into the proto.
-type CLISubcommand struct {
-	Name string
-	Help string
-}
+//
+// Relocated to spec/capability (#55 import-purity, Rule 2: the plain authoring struct has no
+// cuelang dependency, so it lives in the cuelang-free spec/capability slice, keeping cuelang
+// confined to this slice's ValidateGenerated). Re-exported here so existing consumers (sdk/schema.go's
+// CLISubcommand alias, sdk/kong_reflect.go's KongSubcommands, and this slice's own
+// TestCLISubcommandFields) compile UNCHANGED.
+type CLISubcommand = capability.CLISubcommand
 
 var generatedSchema struct {
 	sync.Once
