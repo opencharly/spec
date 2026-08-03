@@ -395,6 +395,43 @@ type ProjectLoader interface {
 	// sub-entity's) assembled body against its closed per-kind def — the step-typo gate for
 	// candies, boxes, pods, deploys, and check beds alike.
 	ValidateNodeFormSteps(path string, data []byte, t Threaded, parser DocParser, cs CueSchema) error
+
+	// -- K1 unit 4: the remote-repo fetch ORCHESTRATION + candy-ref collection mechanism —
+	// EnsureRepoDownloaded (local-override short-circuit, cache-hit check, cache-miss dispatch,
+	// post-fetch schema auto-migration) and CollectRemoteRefsOpts (the base/builder/candy-ref graph
+	// walk). seams carries the host-coupled legs (the resolved RefsDownloader, the registry-touching
+	// migrate-command dispatch, the registry-touching local-template substrate resolve, and the raw
+	// CHARLY_REPO_OVERRIDE env value) — this mechanism never touches the provider registry itself.
+
+	// EnsureRepoDownloaded downloads repoPath@version if not already cached and returns the cache
+	// path, auto-migrating it to the latest schema CalVer via seams.MigrateCache.
+	EnsureRepoDownloaded(repoPath, version string, seams RefsCollectSeams) (string, error)
+	// CollectRemoteRefsOpts collects all unique remote refs reachable from cfg's build/deploy
+	// targets + layers' manifest depends/candy fields, grouped by (repoPath, version).
+	CollectRemoteRefsOpts(cfg *Config, layers map[string]CandyReader, opts ResolveOpts, seams RefsCollectSeams) ([]RemoteDownload, error)
+}
+
+// RefsCollectSeams is the set of host-supplied callbacks EnsureRepoDownloaded/
+// CollectRemoteRefsOpts need for everything registry-coupled — the host builds this value and
+// hands it to the ProjectLoader seam call; the mechanism never touches the provider registry
+// directly (boundary law clause M: the resolve+invoke dispatch stays host-side, reached through
+// these callbacks, exactly like WalkSeams/MaterializeSeams above).
+type RefsCollectSeams struct {
+	// Downloader is the registered remote-repo fetch backend (P7) — the host resolves it once
+	// (requireRefsDownloader()) and passes it in; a cache-miss download dispatches through it.
+	Downloader RefsDownloader
+	// MigrateCache brings a remote-repo cache's PROJECT files up to the head schema via the
+	// compiled-in command:migrate plugin — registry-coupled (resolves ClassCommand "migrate" +
+	// Invoke), so it stays a host-supplied callback.
+	MigrateCache func(path string) error
+	// ResolveLocal projects one opaque `kind:local` template body into a *ResolvedLocal via
+	// candy/plugin-substrate's OpResolve leg — registry-coupled (Invoke), so it stays a
+	// host-supplied callback.
+	ResolveLocal func(body json.RawMessage) (*ResolvedLocal, error)
+	// OverrideEnvValue is the raw CHARLY_REPO_OVERRIDE env value (RDD local-overrides) — the host
+	// reads os.Getenv once; this mechanism never touches the env var NAME (host_build_check_bed.go
+	// also reads/writes it, so the name itself stays a core-resident constant).
+	OverrideEnvValue string
 }
 
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every
