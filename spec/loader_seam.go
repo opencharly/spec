@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"reflect"
 
+	"cuelang.org/go/cue"
 	"gopkg.in/yaml.v3"
 )
 
@@ -45,6 +46,22 @@ type Threaded struct {
 	// the byte-exact predicate is threaded, never approximated. A word absent from the set is
 	// NOT an external deploy substrate (isExternalDeploySubstrate would return false for it).
 	ExternalDeploySubstrates map[string]bool
+}
+
+// CueSchema is the process-wide compiled CUE schema HANDLE the relocated CUE-validate mechanism
+// (K1 unit 2) consults instead of compiling its own — cue.Value instances only interoperate within
+// the cue.Context that built them, so a call that Unifies against Root MUST ingest/build using
+// Ctx, the SAME context Root was compiled with (unlike DecodeEntityViaCUE's self-contained
+// shorthand-decode, which never Unifies against the shared base schema and so safely owns an
+// independent context). The host builds one value from its still-core D-data (the process-wide
+// cueSchemaCtx / sharedCueSchema / cueKindDef — cue_schema.go, unchanged by K1) and passes it to
+// every CUE-validate seam call below; loaderkit never constructs its own.
+type CueSchema struct {
+	Ctx  *cue.Context // the context every ingest/build/Unify call must use.
+	Root cue.Value    // sharedCueSchema — every schema/*.cue file unified into one value.
+	// KindDef resolves a kind name to its compiled entity definition within Root (mirrors
+	// DeployTraits' registry-derived-DATA threading pattern above).
+	KindDef func(kind string) (cue.Value, bool)
 }
 
 // DocParser is the swappable per-document PARSE seam: the loader plugin candy implements it
@@ -246,6 +263,20 @@ type ProjectLoader interface {
 	// bootstrap-critical), no wire envelope — every kind/candy/node-form decode in charly core
 	// routes through this seam instead of importing loaderkit directly.
 	DecodeEntityViaCUE(node *yaml.Node, t reflect.Type, out any, label string) error
+	// ValidateEntityClosedCUE unifies a single entity with #<Kind> (cs.KindDef(kind)) and validates
+	// it WITHOUT requiring concreteness — closedness violations (unknown keys) and type/enum/regex
+	// conflicts, but not missing-required fields (K1 unit 2 relocation).
+	ValidateEntityClosedCUE(cs CueSchema, kind, label string, entity cue.Value) error
+	// CueDocFromYAML ingests one YAML document into a cue.Value (the whole doc), built with cs.Ctx
+	// so the result can Unify against cs.Root's definitions (K1 unit 2 relocation).
+	CueDocFromYAML(cs CueSchema, path string, data []byte) (cue.Value, error)
+	// ValidateNodeDocCUE validates a unified node-form document (raw YAML bytes) by unifying EACH
+	// top-level entity node against #Node — the load-time "validate-before-execute" structural gate
+	// (K1 unit 2 relocation).
+	ValidateNodeDocCUE(cs CueSchema, label string, data []byte) error
+	// ApplyCueDefaults fills schema-declared defaults into an already-RESOLVED entity by unifying
+	// its marshaled form with #<Kind> (cs.KindDef(kind)) and decoding back (K1 unit 2 relocation).
+	ApplyCueDefaults(cs CueSchema, kind string, out any) error
 	// ResolveMergedDeployTree returns the top-level Bundle (deploy-node) map — the merged project
 	// charly.yml + per-host operator overlay, ready for dotted-path traversal — the host-side
 	// merged-tree read the check host seams (deployNodePluginContext + check_venue_resolve) need.
