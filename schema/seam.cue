@@ -347,18 +347,12 @@
 // command:bundle now performs the SAVE plugin-side via deploykit.SaveBundleConfig with its own
 // loader-backed reader + loader-threaded Primaries, so no host seam remains for it.)
 
-// #AndroidEntityResolution is the kind="android" payload carried OPAQUELY inside
-// #DeployEntityResolveReply.entity (unit 6a): the resolved kind:android #ResolvedAndroid spec
-// (CUE-sourced at schema/substrate_template.cue, SDD conversion — carried OPAQUELY here anyway,
-// see the #DeployEntityResolveRequest doc below for why). The google-play credentials are NO
-// LONGER threaded through this seam (deploy-cone cutover 1): candy/plugin-adb resolves them
-// itself via a direct peer InvokeProvider(verb:credential) call — the same peer-to-peer pattern
-// candy/plugin-vm already uses for verb:arbiter/verb:gpu/verb:egress — instead of the host
-// pre-resolving them behind "deploy-entity-resolve". The former "credential STORE touch is
-// core-only" justification was stale: InvokeProvider reaches ANY verb from ANY plugin.
-#AndroidEntityResolution: {
-	spec?: bytes @go(SpecJSON, type=RawBody)
-}
+// (#AndroidEntityResolution — the kind="android" one-off wrapper around #DeployEntityResolveReply.entity
+// — is DELETED, W0: it was the last per-kind asymmetry forcing a Go branch in the host handler. The
+// google-play-credential thread that once justified it moved to a direct peer InvokeProvider(verb:credential)
+// call (deploy-cone cutover 1); once that was gone the wrapper carried zero information a bare
+// #ResolvedAndroid didn't already, so kind="android" now ships `entity` UNWRAPPED, exactly like every
+// other kind:<word> lookup below.)
 
 // #EphemeralRegisterRequest/#EphemeralRegisterReply — the host→command:bundle OpEphemeralRegister
 // leg (FINAL/K5 unit 6a): ephemeral_lifecycle.go's cross-substrate ephemeral-instance registration
@@ -376,47 +370,48 @@
 #EphemeralRegisterReply: {}
 
 // #DeployEntityResolveRequest/#DeployEntityResolveReply — the F6-family GENERIC host-side
-// entity-lookup seam (unit 6a, extended for unit 6b's k3s_post consumer, candy/plugin-vm's own
-// vmConfiguredBackendPlugin (F6 vm-lifecycle move, coneB-vmlifecycle — formerly charly-core's
-// vm_backend_lifecycle.go's vmConfiguredBackend, now plugin-side), and for W4's
-// resolveNodeTemplate — candy/plugin-bundle's kind:local template lookup): a substrate PRERESOLVE
-// body (k8s/vm/android, F6) OR a peer consumer resolving a cross-reference (k3s_post's
-// deployVMForwards, vmConfiguredBackendPlugin, resolveNodeTemplate's kind:local merge) needs a
-// LoadUnified-coupled lookup a plugin cannot do itself — EITHER (a) its
-// own deploy-tree node by name (the Update-path re-resolve every preresolver does when node==nil,
-// OR a bundle-key cross-reference's From-field hop — today: the host merged-tree read) or (b) a referenced
-// kind:<word> entity (k8s/android/vm/local) by name, returned as the WHOLE RESOLVED envelope so a
-// caller just reads its fields (Backend, Network.PortForwards, Candy, …) without tracing the
-// resolver's own portability (today: findK8sSpec / findAndroidSpec / a direct uf.VM[name] lookup +
-// resolveVmViaPlugin / findLocalSpec). ONE discriminated request replaces per-purpose kinds:
-// `kind` is DATA the host body dispatches on internally (clause-D) — never a compiled-in per-KIND
-// HostBuild registration, so a new consumer needs no new wire shape, only a new `case` in the host
-// handler (or reuse of an existing one — "bundle" and "deploy" share ONE case, both a deploy-tree
-// node lookup by name). `entity` carries the kind-specific result OPAQUELY — ResolvedK8s/
-// ResolvedAndroid/the vm entity (ResolvedVm)/ResolvedLocal are ALL CUE-sourced
+// entity-lookup seam (unit 6a, extended for unit 6b's k3s_post consumer, and candy/plugin-vm's own
+// vmConfiguredBackendPlugin — F6 vm-lifecycle move, coneB-vmlifecycle, formerly charly-core's
+// vm_backend_lifecycle.go's vmConfiguredBackend, now plugin-side): a substrate PRERESOLVE body
+// (k8s/vm/android, F6) OR a peer consumer resolving a cross-reference (k3s_post's
+// deployVMForwards, vmConfiguredBackendPlugin) needs a LoadUnified-coupled lookup a plugin cannot
+// do itself — EITHER (a) its own deploy-tree node by name (the Update-path re-resolve every
+// preresolver does when node==nil, OR a bundle-key cross-reference's From-field hop — today: the
+// host merged-tree read) or (b) a referenced kind:<word> entity (k8s/android/vm) by name, returned
+// as the WHOLE RESOLVED envelope so a caller just reads its fields (Backend, Network.PortForwards,
+// Candy, …) without tracing the resolver's own portability. (The kind:local template lookup this
+// seam ALSO used to serve is RETIRED — W4/K4 unit A moved it to the resolved-project envelope's
+// Templates.Local, candy/plugin-bundle/node_resolve.go's lookupLocalTemplate; this seam carries no
+// "local" arm.) ONE discriminated request replaces per-purpose kinds: `kind` is DATA end-to-end
+// (W0) — the host handler routes tree-vs-template by request SHAPE (tree_json set or not), never
+// by inspecting kind's value, and a template lookup reaches the owning substrate provider
+// generically (uf.ProjectTemplates().ByKind(kind) for the raw body, providerRegistry.ResolveKind(kind)
+// for the plugin, {kind:{kind:body}} for the discriminated OpResolve request every substrate word
+// already accepts) — a fifth substrate needs no new `case` in the host handler, only a new word
+// registered by its owning plugin. `entity` carries the kind-specific result OPAQUELY —
+// ResolvedK8s/ResolvedAndroid/the vm entity (ResolvedVm) are ALL CUE-sourced
 // (schema/substrate_template.cue, schema/vm.cue; SDD conversion), but this seam still carries them
-// as opaque bytes rather than a typed field, because `kind` is DATA the host dispatches on
-// internally (clause-D) and the caller already knows which kind it asked for and decodes
-// accordingly — mirroring the DeployCompileReply RawBody idiom used
-// throughout this file for the same reason. The "local" case's EMPTY reply (no EntityJSON, no
-// error) is itself meaningful — "no kind:local template by that name" — distinct from a genuine
-// host-side load-failure error; the caller (resolveNodeTemplate) tells the two apart.
+// as opaque bytes rather than a typed field, because `kind` is DATA the host never branches on and
+// the caller already knows which kind it asked for and decodes accordingly — mirroring the
+// DeployCompileReply RawBody idiom used throughout this file for the same reason. `entity` is the
+// Resolved* envelope's JSON VERBATIM for every kind, unwrapped (W0 deleted the one-off
+// #AndroidEntityResolution asymmetry).
 #DeployEntityResolveRequest: {
-	kind!: string @go(Kind) // "" | "deploy" | "bundle" for a deploy-tree node lookup (node.From carries a cross-ref hop); "k8s"|"android"|"vm"|"local" for a kind:<word> entity lookup (the WHOLE resolved envelope)
+	kind!: string @go(Kind) // "" | "deploy" | "bundle" for a deploy-tree node lookup (node.From carries a cross-ref hop); "k8s"|"android"|"vm" for a kind:<word> entity lookup (the WHOLE resolved envelope)
 	name!: string @go(Name)
 	dir?:  string @go(Dir)
 	// tree_json is the merged project+operator deploy tree the invoking plugin resolved PLUGIN-SIDE
 	// (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA for the deploy/bundle-kind node
 	// lookup so the host stops re-loading the tree with a host-resident deploykit read (#55 Cone A Unit 3b).
-	// Marshalled map[string]spec.Deploy; consulted ONLY for kind ∈ {"","deploy","bundle"} (the
-	// kind:<word> lookups — k8s/android/vm/local — use their own findK8sSpec/etc. host resolvers,
-	// unaffected). An absent tree yields a not-found for the deploy/bundle lookup, matching a nil
+	// Marshalled map[string]spec.Deploy; its PRESENCE (not the kind string) is what routes the host
+	// handler to the tree-node lookup — the kind:<word> template lookups (k8s/android/vm/local) never
+	// set it. An absent tree yields a not-found for the deploy/bundle lookup, matching a nil
 	// host-tree-read result.
 	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 #DeployEntityResolveReply: {
-	node?:   #Deploy @go(Node, type=*Deploy)          // populated when kind=="" (deploy-tree lookup)
-	entity?: bytes   @go(EntityJSON, type=RawBody)     // populated when kind!="" (opaque kind-specific entity)
+	node?:   #Deploy @go(Node, type=*Deploy)          // populated for a tree-node lookup (request carried tree_json)
+	entity?: bytes   @go(EntityJSON, type=RawBody)     // populated for a kind:<word> template lookup (opaque Resolved* envelope JSON)
 }
 
 // #EphemeralTeardownRequest/#EphemeralTeardownReply — the OpEphemeralTeardown leg any
@@ -1683,7 +1678,8 @@
 #RawProject: {
 	version?: string
 	// the bare pod/vm/local/k8s/android template maps (loaderkit.ProjectTemplates — a cheap raw-byte
-	// copy, NO ResolveBox); findK8sSpec / local-template resolvers read this.
+	// copy, NO ResolveBox); the "deploy-entity-resolve" kind:k8s lookup / local-template resolvers
+	// read this.
 	templates?: #ProjectTemplates @go(Templates,optional=nillable)
 	// the folded deploy tree (uf.Bundle verbatim, with stamped Descent traits) — deploy-key→box
 	// resolution, the trait/tree resolvers, and member bring-up read this (the Descent is DATA already
