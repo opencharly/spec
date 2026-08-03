@@ -322,6 +322,33 @@ type ProjectLoader interface {
 	// the refs + wrap into the FINAL CandyReader). It is deploykit-coupled and stays in loaderkit; the
 	// host reaches it through this seam — the dominant shared choke point across charly's scan call sites.
 	FinalizeScannedCandies(scanned map[string]ScannedCandy, initCfg *InitConfig) map[string]CandyReader
+
+	// -- K1 unit 3a: bundle/resource-member kind-decode SUPPORT helpers (node_bundle.go/
+	// node_normalize.go) — pure functions of a discriminator word + the registry-derived Threaded
+	// snapshot (never a live registry query), consumed by the TRUE clause-M dispatch
+	// (provider_kind_invoke.go) and its BuildBundleEntity fallback. DATA-driven via t.DeploySubstrates
+	// / t.DeployTraits (the SAME snapshot loaderThreaded() already fills for the parse), never a
+	// kind-word switch.
+
+	// IsResourceDisc reports whether a discriminator names a deploy-substrate kind (the markers of a
+	// bundle member / bundle-shaped node) — the CUE-derived #ResourceKind vocab, OR a recognized
+	// external deploy substrate word (t.DeploySubstrates).
+	IsResourceDisc(d string, t Threaded) bool
+	// BundleTargetForDisc maps a node discriminator to the BundleNode Target — DATA-driven via
+	// t.DeployTraits: a word with no declared deploy traits is TARGETLESS (e.g. group).
+	BundleTargetForDisc(d string, t Threaded) string
+	// SetBundleCrossRef sets the deploy's cross-ref from a scalar discriminator value — DATA-driven
+	// via t.DeployTraits' ImageBacked trait (image-backed → dn.Image; otherwise → dn.From). A
+	// targetless word (no declared traits) sets neither.
+	SetBundleCrossRef(dn *BundleNode, disc, ref string, t Threaded)
+	// IsStandaloneResourceKind reports whether disc names one of the substrate kinds that are BOTH a
+	// standalone TEMPLATE and a deploy — DATA-driven via t.DeployTraits (same fact
+	// BundleTargetForDisc/SetBundleCrossRef resolve against).
+	IsStandaloneResourceKind(disc string, t Threaded) bool
+	// FoldStandaloneTemplateReply folds a standalone-template kind's echoed reply JSON into acc's
+	// generic PluginKinds[disc][name] map — the C2-substrate TEMPLATE fold arm, GENERIC by
+	// construction (no per-kind-word switch).
+	FoldStandaloneTemplateReply(disc, name string, replyJSON json.RawMessage, acc *MaterializedProject) error
 }
 
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every
