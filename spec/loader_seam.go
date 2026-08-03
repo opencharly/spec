@@ -3,7 +3,9 @@ package spec
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
+	"cuelang.org/go/cue"
 	"gopkg.in/yaml.v3"
 )
 
@@ -44,6 +46,22 @@ type Threaded struct {
 	// the byte-exact predicate is threaded, never approximated. A word absent from the set is
 	// NOT an external deploy substrate (isExternalDeploySubstrate would return false for it).
 	ExternalDeploySubstrates map[string]bool
+}
+
+// CueSchema is the process-wide compiled CUE schema HANDLE the relocated CUE-validate mechanism
+// (K1 unit 2) consults instead of compiling its own — cue.Value instances only interoperate within
+// the cue.Context that built them, so a call that Unifies against Root MUST ingest/build using
+// Ctx, the SAME context Root was compiled with (unlike DecodeEntityViaCUE's self-contained
+// shorthand-decode, which never Unifies against the shared base schema and so safely owns an
+// independent context). The host builds one value from its still-core D-data (the process-wide
+// cueSchemaCtx / sharedCueSchema / cueKindDef — cue_schema.go, unchanged by K1) and passes it to
+// every CUE-validate seam call below; loaderkit never constructs its own.
+type CueSchema struct {
+	Ctx  *cue.Context // the context every ingest/build/Unify call must use.
+	Root cue.Value    // sharedCueSchema — every schema/*.cue file unified into one value.
+	// KindDef resolves a kind name to its compiled entity definition within Root (mirrors
+	// DeployTraits' registry-derived-DATA threading pattern above).
+	KindDef func(kind string) (cue.Value, bool)
 }
 
 // DocParser is the swappable per-document PARSE seam: the loader plugin candy implements it
@@ -237,6 +255,28 @@ type LoaderExecutor interface {
 // at init() before the first load so there is no bootstrap cycle.
 type ProjectLoader interface {
 	LoadUnified(dir string, exec LoaderExecutor) (*UnifiedFile, bool, error)
+	// DecodeEntityViaCUE is the kind-blind per-entity CUE decode mechanism (shorthand normalize +
+	// CUE-ingest + Decode), relocated to loaderkit (K1 unit 1): normalizes node against t's shape
+	// (shorthand expansion, scalar→string coercion), then CUE-decodes the result into out. node must
+	// BE the entity value (a candy body / a single kind entity / an assembled node-form body), not a
+	// kind-keyed wrapper; does not mutate the input node. Compiled-in only (the loader is
+	// bootstrap-critical), no wire envelope — every kind/candy/node-form decode in charly core
+	// routes through this seam instead of importing loaderkit directly.
+	DecodeEntityViaCUE(node *yaml.Node, t reflect.Type, out any, label string) error
+	// ValidateEntityClosedCUE unifies a single entity with #<Kind> (cs.KindDef(kind)) and validates
+	// it WITHOUT requiring concreteness — closedness violations (unknown keys) and type/enum/regex
+	// conflicts, but not missing-required fields (K1 unit 2 relocation).
+	ValidateEntityClosedCUE(cs CueSchema, kind, label string, entity cue.Value) error
+	// CueDocFromYAML ingests one YAML document into a cue.Value (the whole doc), built with cs.Ctx
+	// so the result can Unify against cs.Root's definitions (K1 unit 2 relocation).
+	CueDocFromYAML(cs CueSchema, path string, data []byte) (cue.Value, error)
+	// ValidateNodeDocCUE validates a unified node-form document (raw YAML bytes) by unifying EACH
+	// top-level entity node against #Node — the load-time "validate-before-execute" structural gate
+	// (K1 unit 2 relocation).
+	ValidateNodeDocCUE(cs CueSchema, label string, data []byte) error
+	// ApplyCueDefaults fills schema-declared defaults into an already-RESOLVED entity by unifying
+	// its marshaled form with #<Kind> (cs.KindDef(kind)) and decoding back (K1 unit 2 relocation).
+	ApplyCueDefaults(cs CueSchema, kind string, out any) error
 	// ResolveMergedDeployTree returns the top-level Bundle (deploy-node) map — the merged project
 	// charly.yml + per-host operator overlay, ready for dotted-path traversal — the host-side
 	// merged-tree read the check host seams (deployNodePluginContext + check_venue_resolve) need.
@@ -282,6 +322,116 @@ type ProjectLoader interface {
 	// the refs + wrap into the FINAL CandyReader). It is deploykit-coupled and stays in loaderkit; the
 	// host reaches it through this seam — the dominant shared choke point across charly's scan call sites.
 	FinalizeScannedCandies(scanned map[string]ScannedCandy, initCfg *InitConfig) map[string]CandyReader
+
+	// -- K1 unit 3a: bundle/resource-member kind-decode SUPPORT helpers (node_bundle.go/
+	// node_normalize.go) — pure functions of a discriminator word + the registry-derived Threaded
+	// snapshot (never a live registry query), consumed by the TRUE clause-M dispatch
+	// (provider_kind_invoke.go) and its BuildBundleEntity fallback. DATA-driven via t.DeploySubstrates
+	// / t.DeployTraits (the SAME snapshot loaderThreaded() already fills for the parse), never a
+	// kind-word switch.
+
+	// IsResourceDisc reports whether a discriminator names a deploy-substrate kind (the markers of a
+	// bundle member / bundle-shaped node) — the CUE-derived #ResourceKind vocab, OR a recognized
+	// external deploy substrate word (t.DeploySubstrates).
+	IsResourceDisc(d string, t Threaded) bool
+	// BundleTargetForDisc maps a node discriminator to the BundleNode Target — DATA-driven via
+	// t.DeployTraits: a word with no declared deploy traits is TARGETLESS (e.g. group).
+	BundleTargetForDisc(d string, t Threaded) string
+	// SetBundleCrossRef sets the deploy's cross-ref from a scalar discriminator value — DATA-driven
+	// via t.DeployTraits' ImageBacked trait (image-backed → dn.Image; otherwise → dn.From). A
+	// targetless word (no declared traits) sets neither.
+	SetBundleCrossRef(dn *BundleNode, disc, ref string, t Threaded)
+	// IsStandaloneResourceKind reports whether disc names one of the substrate kinds that are BOTH a
+	// standalone TEMPLATE and a deploy — DATA-driven via t.DeployTraits (same fact
+	// BundleTargetForDisc/SetBundleCrossRef resolve against).
+	IsStandaloneResourceKind(disc string, t Threaded) bool
+	// FoldStandaloneTemplateReply folds a standalone-template kind's echoed reply JSON into acc's
+	// generic PluginKinds[disc][name] map — the C2-substrate TEMPLATE fold arm, GENERIC by
+	// construction (no per-kind-word switch).
+	FoldStandaloneTemplateReply(disc, name string, replyJSON json.RawMessage, acc *MaterializedProject) error
+
+	// -- K1 unit 3b: the entity-body assembly + bundle/resource-member tree-builder mechanism
+	// (node_build.go/node_bundle.go/node_normalize.go) — operates on ParsedNode (the wire-safe
+	// parsed-entity shape), never *genericNode (charly core's host-internal reconstruction, which
+	// stays core solely for the TRUE clause-M dispatch's bootstrap-critical candy/box routing).
+
+	// AssembleEntityBody returns the DOCUMENT-wrapped entity-body mapping to decode: pn's body
+	// value (an empty mapping when the value is null/absent or a scalar cross-ref).
+	AssembleEntityBody(pn ParsedNode) (*yaml.Node, error)
+	// DecodeNodeValue decodes pn's body via the shared CUE entity decoder into out (a *struct) —
+	// the SAME entity-body assembler + CUE decode every candy/kind/node-form decode goes through.
+	DecodeNodeValue(pn ParsedNode, out any) error
+	// EntityBodyJSON returns a node's kind-value mapping as canonical JSON, generically — with NO
+	// concrete-kind Go type.
+	EntityBodyJSON(pn ParsedNode) (json.RawMessage, error)
+	// BuildBundleNode recursively builds a BundleNode from a bundle/resource node.
+	BuildBundleNode(pn ParsedNode, t Threaded) (*BundleNode, error)
+	// BuildResourceMemberChildren decodes pn's RESOURCE-MEMBER entity children into a
+	// name→*BundleNode map via the SAME BuildBundleNode recursion — the SINGLE source of truth for
+	// authored member-tree decode.
+	BuildResourceMemberChildren(pn ParsedNode, t Threaded) (map[string]*BundleNode, error)
+	// BuildBundleNodeInto builds pn into a BundleNode and registers it in acc's Bundle map — the
+	// fallback for a recognized-but-not-yet-connected external deploy substrate word
+	// (MaterializeSeams.BuildBundleEntity's implementation).
+	BuildBundleNodeInto(pn ParsedNode, t Threaded, acc *MaterializedProject) error
+	// IsDeployShape reports whether a substrate node is a DEPLOY (vs a standalone template).
+	IsDeployShape(pn ParsedNode) bool
+	// DecodeStandaloneTemplateJSON canonicalizes pn (a substrate TEMPLATE node) to the JSON the
+	// host threads to the substrate plugin, GENERICALLY — with NO concrete-kind Go type.
+	DecodeStandaloneTemplateJSON(pn ParsedNode, t Threaded) (json.RawMessage, error)
+	// ResourceChildren returns pn's children whose discriminator is itself a resource/bundle kind
+	// (the CUE-derived #ResourceKind vocab).
+	ResourceChildren(pn ParsedNode) []ParsedNode
+
+	// -- K1 unit 3c: the box-validate entity-tree walk (completes the K1 unit 2 deferral) — the
+	// `charly box validate` candy-manifest entry point + its node-form step-typo walk. t/parser are
+	// host-supplied (the registry-derived Threaded snapshot + the resolved DocParser); neither
+	// method queries the registry itself.
+
+	// ValidateCandyManifestCUE validates a candy manifest: the whole-document #NodeDoc structural
+	// gate, then the parsed+desugared entity-tree walk (ValidateNodeFormSteps).
+	ValidateCandyManifestCUE(path string, data []byte, t Threaded, parser DocParser, cs CueSchema) error
+	// ValidateNodeFormSteps parses a node-form document and validates EVERY entity's (and nested
+	// sub-entity's) assembled body against its closed per-kind def — the step-typo gate for
+	// candies, boxes, pods, deploys, and check beds alike.
+	ValidateNodeFormSteps(path string, data []byte, t Threaded, parser DocParser, cs CueSchema) error
+
+	// -- K1 unit 4: the remote-repo fetch ORCHESTRATION + candy-ref collection mechanism —
+	// EnsureRepoDownloaded (local-override short-circuit, cache-hit check, cache-miss dispatch,
+	// post-fetch schema auto-migration) and CollectRemoteRefsOpts (the base/builder/candy-ref graph
+	// walk). seams carries the host-coupled legs (the resolved RefsDownloader, the registry-touching
+	// migrate-command dispatch, the registry-touching local-template substrate resolve, and the raw
+	// CHARLY_REPO_OVERRIDE env value) — this mechanism never touches the provider registry itself.
+
+	// EnsureRepoDownloaded downloads repoPath@version if not already cached and returns the cache
+	// path, auto-migrating it to the latest schema CalVer via seams.MigrateCache.
+	EnsureRepoDownloaded(repoPath, version string, seams RefsCollectSeams) (string, error)
+	// CollectRemoteRefsOpts collects all unique remote refs reachable from cfg's build/deploy
+	// targets + layers' manifest depends/candy fields, grouped by (repoPath, version).
+	CollectRemoteRefsOpts(cfg *Config, layers map[string]CandyReader, opts ResolveOpts, seams RefsCollectSeams) ([]RemoteDownload, error)
+}
+
+// RefsCollectSeams is the set of host-supplied callbacks EnsureRepoDownloaded/
+// CollectRemoteRefsOpts need for everything registry-coupled — the host builds this value and
+// hands it to the ProjectLoader seam call; the mechanism never touches the provider registry
+// directly (boundary law clause M: the resolve+invoke dispatch stays host-side, reached through
+// these callbacks, exactly like WalkSeams/MaterializeSeams above).
+type RefsCollectSeams struct {
+	// Downloader is the registered remote-repo fetch backend (P7) — the host resolves it once
+	// (requireRefsDownloader()) and passes it in; a cache-miss download dispatches through it.
+	Downloader RefsDownloader
+	// MigrateCache brings a remote-repo cache's PROJECT files up to the head schema via the
+	// compiled-in command:migrate plugin — registry-coupled (resolves ClassCommand "migrate" +
+	// Invoke), so it stays a host-supplied callback.
+	MigrateCache func(path string) error
+	// ResolveLocal projects one opaque `kind:local` template body into a *ResolvedLocal via
+	// candy/plugin-substrate's OpResolve leg — registry-coupled (Invoke), so it stays a
+	// host-supplied callback.
+	ResolveLocal func(body json.RawMessage) (*ResolvedLocal, error)
+	// OverrideEnvValue is the raw CHARLY_REPO_OVERRIDE env value (RDD local-overrides) — the host
+	// reads os.Getenv once; this mechanism never touches the env var NAME (host_build_check_bed.go
+	// also reads/writes it, so the name itself stays a core-resident constant).
+	OverrideEnvValue string
 }
 
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every

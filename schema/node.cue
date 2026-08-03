@@ -45,7 +45,8 @@
 // (C2-substrate), and candy (C2-candy) are ALL plugin-served, so the arm-derived KindWords is
 // now EMPTY. #ResourceKind is INDEPENDENT of KindWords: it is the set of kinds that NEST members
 // (so the loader classifies a resource child + nests it), NOT the set with a #Node arm. Their
-// members are pre-decoded host-side (buildResourceMemberChildren) and threaded to the plugin via
+// members are pre-decoded host-side (sdk/loaderkit.BuildResourceMemberChildren, reached through
+// the ProjectLoader seam) and threaded to the plugin via
 // op.Env (F5); the parser gate admits them because resourceKindSet has them. candy is NOT a
 // resource kind (it nests no deploy members — it is the box⊻layer factory).
 #ResourceKind: ("pod" | "vm" | "k8s" | "local" | "android" | "group") @go(-)
