@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/opencharly/spec/spec"
 	"github.com/opencharly/spec/testkit"
@@ -86,7 +87,20 @@ func TestSSHProcessExecutorsPreserveRemoteLaunchAndPipes(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			process, err := tc.start(context.Background(), launch)
+			// Bounded: this subtest drives the real OpenSSH client over a real
+			// TCP loopback connection, unlike every other StartProcess test in
+			// this file (which stay fully local and synchronous). Without a
+			// deadline here, a stalled handshake or a stuck exchange on the
+			// in-process x/crypto/ssh server has nothing to unblock it — the
+			// goroutine parks in startCommandProcess's cmd.Wait() until Go's
+			// own default test-binary panic (10m) finally kills the run. A
+			// bounded context makes exec.CommandContext kill the ssh process
+			// and fail the test promptly instead, mirroring the deadline every
+			// sibling real-subprocess test in this module already carries
+			// (transport.TestGRPCOverRealOpenSSH, TestGRPCOverProcessTransports).
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			process, err := tc.start(ctx, launch)
 			if err != nil {
 				t.Fatal(err)
 			}
