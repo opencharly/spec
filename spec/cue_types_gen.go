@@ -857,6 +857,19 @@ type ArbiterInvokeInput struct {
 	Success bool `yaml:"success,omitempty" json:"success,omitempty"`
 
 	Token string `yaml:"token,omitempty" json:"token,omitempty"`
+
+	// GPU-implied-consumer projection (acquire-shared only, K-wave W3a A2): the claimant node's
+	// GPU-relevant traits, so verb:arbiter can union its OWN implied-consumer token onto tokens
+	// before applying its early-return-on-empty acquire policy — arbiter policy belongs in the
+	// arbiter, not the in-core proxy (the former charly/gpu_imply.go, now
+	// candy/plugin-preempt/gpu_imply.go). is_group/is_pod_member are pre-derived core-side (the
+	// in-core nodeTraits/isPodMember trait resolution — not duplicated plugin-side);
+	// security_devices is the claimant's raw security.devices list.
+	IsGroup bool `yaml:"is_group,omitempty" json:"is_group,omitempty"`
+
+	IsPodMember bool `yaml:"is_pod_member,omitempty" json:"is_pod_member,omitempty"`
+
+	SecurityDevices []string `yaml:"security_devices,omitempty" json:"security_devices,omitempty"`
 }
 
 // #ArbiterInvokeReply is the action-multiplexed reply from verb:arbiter.
