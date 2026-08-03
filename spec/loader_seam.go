@@ -3,6 +3,7 @@ package spec
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
 	"gopkg.in/yaml.v3"
 )
@@ -237,6 +238,14 @@ type LoaderExecutor interface {
 // at init() before the first load so there is no bootstrap cycle.
 type ProjectLoader interface {
 	LoadUnified(dir string, exec LoaderExecutor) (*UnifiedFile, bool, error)
+	// DecodeEntityViaCUE is the kind-blind per-entity CUE decode mechanism (shorthand normalize +
+	// CUE-ingest + Decode), relocated to loaderkit (K1 unit 1): normalizes node against t's shape
+	// (shorthand expansion, scalar→string coercion), then CUE-decodes the result into out. node must
+	// BE the entity value (a candy body / a single kind entity / an assembled node-form body), not a
+	// kind-keyed wrapper; does not mutate the input node. Compiled-in only (the loader is
+	// bootstrap-critical), no wire envelope — every kind/candy/node-form decode in charly core
+	// routes through this seam instead of importing loaderkit directly.
+	DecodeEntityViaCUE(node *yaml.Node, t reflect.Type, out any, label string) error
 	// ResolveMergedDeployTree returns the top-level Bundle (deploy-node) map — the merged project
 	// charly.yml + per-host operator overlay, ready for dotted-path traversal — the host-side
 	// merged-tree read the check host seams (deployNodePluginContext + check_venue_resolve) need.
