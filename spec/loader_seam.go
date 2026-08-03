@@ -349,6 +349,39 @@ type ProjectLoader interface {
 	// generic PluginKinds[disc][name] map — the C2-substrate TEMPLATE fold arm, GENERIC by
 	// construction (no per-kind-word switch).
 	FoldStandaloneTemplateReply(disc, name string, replyJSON json.RawMessage, acc *MaterializedProject) error
+
+	// -- K1 unit 3b: the entity-body assembly + bundle/resource-member tree-builder mechanism
+	// (node_build.go/node_bundle.go/node_normalize.go) — operates on ParsedNode (the wire-safe
+	// parsed-entity shape), never *genericNode (charly core's host-internal reconstruction, which
+	// stays core solely for the TRUE clause-M dispatch's bootstrap-critical candy/box routing).
+
+	// AssembleEntityBody returns the DOCUMENT-wrapped entity-body mapping to decode: pn's body
+	// value (an empty mapping when the value is null/absent or a scalar cross-ref).
+	AssembleEntityBody(pn ParsedNode) (*yaml.Node, error)
+	// DecodeNodeValue decodes pn's body via the shared CUE entity decoder into out (a *struct) —
+	// the SAME entity-body assembler + CUE decode every candy/kind/node-form decode goes through.
+	DecodeNodeValue(pn ParsedNode, out any) error
+	// EntityBodyJSON returns a node's kind-value mapping as canonical JSON, generically — with NO
+	// concrete-kind Go type.
+	EntityBodyJSON(pn ParsedNode) (json.RawMessage, error)
+	// BuildBundleNode recursively builds a BundleNode from a bundle/resource node.
+	BuildBundleNode(pn ParsedNode, t Threaded) (*BundleNode, error)
+	// BuildResourceMemberChildren decodes pn's RESOURCE-MEMBER entity children into a
+	// name→*BundleNode map via the SAME BuildBundleNode recursion — the SINGLE source of truth for
+	// authored member-tree decode.
+	BuildResourceMemberChildren(pn ParsedNode, t Threaded) (map[string]*BundleNode, error)
+	// BuildBundleNodeInto builds pn into a BundleNode and registers it in acc's Bundle map — the
+	// fallback for a recognized-but-not-yet-connected external deploy substrate word
+	// (MaterializeSeams.BuildBundleEntity's implementation).
+	BuildBundleNodeInto(pn ParsedNode, t Threaded, acc *MaterializedProject) error
+	// IsDeployShape reports whether a substrate node is a DEPLOY (vs a standalone template).
+	IsDeployShape(pn ParsedNode) bool
+	// DecodeStandaloneTemplateJSON canonicalizes pn (a substrate TEMPLATE node) to the JSON the
+	// host threads to the substrate plugin, GENERICALLY — with NO concrete-kind Go type.
+	DecodeStandaloneTemplateJSON(pn ParsedNode, t Threaded) (json.RawMessage, error)
+	// ResourceChildren returns pn's children whose discriminator is itself a resource/bundle kind
+	// (the CUE-derived #ResourceKind vocab).
+	ResourceChildren(pn ParsedNode) []ParsedNode
 }
 
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every
