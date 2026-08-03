@@ -382,6 +382,19 @@ type ProjectLoader interface {
 	// ResourceChildren returns pn's children whose discriminator is itself a resource/bundle kind
 	// (the CUE-derived #ResourceKind vocab).
 	ResourceChildren(pn ParsedNode) []ParsedNode
+
+	// -- K1 unit 3c: the box-validate entity-tree walk (completes the K1 unit 2 deferral) — the
+	// `charly box validate` candy-manifest entry point + its node-form step-typo walk. t/parser are
+	// host-supplied (the registry-derived Threaded snapshot + the resolved DocParser); neither
+	// method queries the registry itself.
+
+	// ValidateCandyManifestCUE validates a candy manifest: the whole-document #NodeDoc structural
+	// gate, then the parsed+desugared entity-tree walk (ValidateNodeFormSteps).
+	ValidateCandyManifestCUE(path string, data []byte, t Threaded, parser DocParser, cs CueSchema) error
+	// ValidateNodeFormSteps parses a node-form document and validates EVERY entity's (and nested
+	// sub-entity's) assembled body against its closed per-kind def — the step-typo gate for
+	// candies, boxes, pods, deploys, and check beds alike.
+	ValidateNodeFormSteps(path string, data []byte, t Threaded, parser DocParser, cs CueSchema) error
 }
 
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every
