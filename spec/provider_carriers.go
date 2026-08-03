@@ -1,7 +1,7 @@
 package spec
 
 // provider_carriers.go — the capability-carrier interfaces + StepContract (K4-C relocation from
-// charly/install_plan.go, per the #118 kernelFloor/residueOwner cross-check — this content is
+// charly/install_plan.go, per the #118 kernel/plugin boundary-law classification — this content is
 // tracked plan-residue, not permanent kernel fabric). A provider (compiled-in or out-of-process)
 // OPTIONALLY implements one or more of these to expose plugin-declared capability metadata the
 // host consults generically — never a per-kind switch, always a type-assertion against one of
