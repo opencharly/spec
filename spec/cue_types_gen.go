@@ -5786,6 +5786,13 @@ type DeployResolveTargetAddRequest struct {
 	AssumeYes bool `yaml:"assume_yes,omitempty" json:"assume_yes,omitempty"`
 
 	BuilderImage string `yaml:"builder_image,omitempty" json:"builder_image,omitempty"`
+
+	// dev_local_pkg marks a DISPOSABLE CHECK BED's deploy, the deploy-side twin of `charly box
+	// build --dev-local-pkg`. On a bed, a localpkg candy whose package source cannot be found is
+	// a HARD FAILURE rather than the benign skip a normal deploy takes — a bed exists to prove
+	// the in-development package builds and installs, so silently installing nothing (or an
+	// older release) makes the bed assert something it never tested.
+	DevLocalPkg bool `yaml:"dev_local_pkg,omitempty" json:"dev_local_pkg,omitempty"`
 }
 
 type DeployResolveTargetAddReply struct {

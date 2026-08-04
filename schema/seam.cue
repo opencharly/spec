@@ -293,6 +293,12 @@
 	skip_incompatible?:  bool   @go(SkipIncompatible)
 	assume_yes?:         bool   @go(AssumeYes)
 	builder_image?:      string @go(BuilderImage)
+	// dev_local_pkg marks a DISPOSABLE CHECK BED's deploy, the deploy-side twin of `charly box
+	// build --dev-local-pkg`. On a bed, a localpkg candy whose package source cannot be found is
+	// a HARD FAILURE rather than the benign skip a normal deploy takes — a bed exists to prove
+	// the in-development package builds and installs, so silently installing nothing (or an
+	// older release) makes the bed assert something it never tested.
+	dev_local_pkg?:      bool   @go(DevLocalPkg)
 }
 #DeployResolveTargetAddReply: {}
 

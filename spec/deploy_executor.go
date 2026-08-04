@@ -218,6 +218,15 @@ type EmitOpts struct {
 	Pull                 bool // force re-fetch of remote refs / image pull
 	BuilderImageOverride string
 
+	// DevLocalPkg marks a DISPOSABLE CHECK BED's deploy — the deploy-side twin of `charly box
+	// build --dev-local-pkg`, set by the bed runner and by nothing else. It changes ONE decision:
+	// a localpkg candy whose package source cannot be located becomes a hard failure instead of
+	// the benign "the candy's curl/COPY task installs it instead" skip. A bed exists to prove the
+	// IN-DEVELOPMENT package builds and installs, so a silent skip there makes the bed assert
+	// something it never tested — which is exactly what happened when an uninitialized pkg/fedora
+	// submodule let a bed skip building the rpm and fail only later, at an unrelated live check.
+	DevLocalPkg bool
+
 	// ParentExec is the DeployExecutor of the parent deployment in a
 	// nested tree. Non-nil iff this target is dispatched as a child of
 	// another — BundleAddCmd's tree walker builds the chain root-first

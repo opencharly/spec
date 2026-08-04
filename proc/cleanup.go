@@ -153,7 +153,7 @@ var sweepablePatterns = []string{
 	"charly-secrets-",            // secrets_gpg.go
 	"charly-libvirt-screenshot-", // libvirt_ops.go
 	"charly-cidata-",             // cloud_init_iso.go
-	"charly-aur-",                // deploy_host_helpers.go
+	"charly-aur-",                // no current creator; kept to reap leftovers from older binaries
 	"charly-localpkg-",           // deploykit.BuildLocalPkgOnHost
 	"charly-pkgdep-",             // deploykit.BuildDepPkgsOnHost
 	"charly-priv-",               // privileged_runner.go
@@ -165,10 +165,14 @@ var sweepablePatterns = []string{
 // invocations).
 const sweepSafetyFloor = 5 * time.Minute
 
-// SweepStaleTemps removes /tmp/<prefix>* entries that are (a) NOT held
-// open by any running process AND (b) older than sweepSafetyFloor AND
-// (c) owned by the current user. Best-effort: never errors, never
-// blocks. Called once from main().
+// SweepStaleTemps removes /tmp/<prefix>* entries that are (a) NOT held open by any running process
+// AND (b) NOT flock-held by a live operation (TempIsHeld, temphold.go) AND (c) older than
+// sweepSafetyFloor AND (d) owned by the current user. Best-effort: never errors, never blocks.
+// Called once from main().
+//
+// Guard (b) is the load-bearing one for a long build: (a) and (c) BOTH answer "stale" for a live
+// makepkg stage tree, which is how this sweep deleted two beds' builds out from under them. See
+// temphold.go for the mechanism and the evidence.
 func SweepStaleTemps() {
 	uid := os.Getuid()
 	heldPaths := openedFilesByAnyProcess()
@@ -188,6 +192,16 @@ func SweepStaleTemps() {
 			}
 			if heldPaths[p] {
 				continue // a process has it open
+			}
+			if TempIsHeld(p) {
+				// A live operation holds this temp (temphold.go). Both guards above
+				// answer "stale" for a running build — a stage tree's root mtime is
+				// frozen at creation because the writes land in its subdirectories, and
+				// a build process holds the tree as its CWD, which /proc/<pid>/fd cannot
+				// see. This probe asks about liveness directly, and the kernel drops the
+				// lock when the holder dies, so a killed build's leftovers are still
+				// swept on the next invocation.
+				continue
 			}
 			_ = os.RemoveAll(p)
 		}
