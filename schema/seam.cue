@@ -937,146 +937,123 @@
 	candy_set?: [...string] @go(CandySet)
 }
 
-// #PodStartRequest carries the `charly start` command flags (the former StartCmd's authored
-// fields, DEPLOY-wave CLI-struct port). The command:pod plugin owns the CLI GRAMMAR but cannot
-// drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms), so
-// `charly start`'s command is THIN — it forwards these flags to HostBuild("pod-start"), and the
-// host runs the existing startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add`
-// stayed core behind HostBuild("resolve-target-add").
-#PodStartRequest: {
-	box!:            string @go(Box)
+// #PodLifecycleRequest is the ONE discriminated request every pod-lifecycle HostBuild op
+// (start/stop/shell/logs/service/cmd/update/remove) sends over the single "pod-lifecycle"
+// HostBuild kind (#55 W3 A10b). Converges the seam on the codebase's own established
+// op-discriminated wire idiom — #ArbiterInvokeInput's flat action-multiplexed shape,
+// charly/provider.go's own Operation.Params json.RawMessage envelope — which the former
+// 8-per-verb #PodXRequest family (one CUE type + one HostBuild kind string per verb, each
+// redeclaring box/instance/node) was the last outlier against. op selects which #PodXPayload
+// type `payload` unmarshals into (host_build_pod_lifecycle_dispatch.go's hostBuildPodLifecycle
+// switch); box/instance/node — common to nearly every op — hoisted OUT of the per-op payloads
+// into this shared envelope (R3).
+#PodLifecycleRequest: {
+	op!:       string @go(Op)
+	box!:      string @go(Box)
+	instance?: string @go(Instance)
+	// node is the per-host deploy overlay entry the command:pod / command:cmd plugin ALREADY
+	// resolved plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free
+	// plugin-side overlay read) and threads as DATA — so the host's dispatchLifecycleTarget
+	// operates on the passed *spec.Deploy instead of re-reading the per-host config itself (the
+	// config-READ is a plugin loading capability, not a host M — #55 K4 seam-completion). Six of
+	// the eight ops carry it (start/stop/shell/logs/service/cmd); update threads a whole merged
+	// tree instead (#PodUpdatePayload.tree_json) and remove needs no node at all (it only
+	// releases the arbiter claim) — absent for those two.
+	node?: #Deploy @go(Node, type=*Deploy)
+	// payload is the op-specific #PodXPayload, JSON-marshalled by the calling command plugin and
+	// re-decoded host-side once op is known (mirrors the plugin wire protocol's own
+	// Operation.Params json.RawMessage design — there is no parallel envelope-vs-payload type
+	// system, R3).
+	payload?: bytes @go(Payload, type=RawBody)
+}
+
+// #PodLifecycleReply is the "pod-lifecycle" host-builder reply. exit_code is populated only for
+// op="cmd" — the container command's own exit code, so `charly cmd`'s process exit propagates it
+// (the plugin reconstructs an *sdk.ExitCodeError from it) — it cannot ride the HostBuild ERROR
+// return, which stringifies the typed error; it must ride a reply FIELD, exactly as the former
+// __cmd/CliReply.ExitCode path did. Every other op's reply is empty; op-specific progress prints
+// host-side (the compiled-in plugin's HostBuild runs in charly's own process) and failure signals
+// via the error return.
+#PodLifecycleReply: {
+	exit_code?: int @go(ExitCode,type=int)
+}
+
+// #PodStartPayload — see #PodLifecycleRequest's header; op="start". The former StartCmd's
+// authored fields (DEPLOY-wave CLI-struct port): the command:pod plugin owns the CLI GRAMMAR but
+// cannot drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms),
+// so `charly start`'s command is THIN — it forwards these flags, and the host runs the existing
+// startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add` stayed core behind
+// HostBuild("resolve-target-add").
+#PodStartPayload: {
 	tag?:             string @go(Tag)
 	build?:           bool   @go(Build)
 	env?: [...string] @go(Env)
 	env_file?:        string @go(EnvFile)
-	instance?:        string @go(Instance)
 	port?: [...string] @go(Port)
 	volume_flag?: [...string] @go(VolumeFlag)
 	bind?: [...string] @go(Bind)
 	no_autodetect?:   bool @go(NoAutoDetect)
-	// node is the per-host deploy overlay entry the command:pod plugin ALREADY resolved
-	// plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free plugin-side
-	// overlay read) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
-	// *spec.Deploy instead of re-reading the per-host config itself (the config-READ is a plugin
-	// loading capability, not a host M — #55 K4 seam-completion). Absent only for an in-flight
-	// mixed build; the host requires it.
-	node?: #Deploy @go(Node, type=*Deploy)
 }
 
-// #PodStartReply is the "pod-start" host-builder reply — empty; the start prints its own
-// progress to the shared stdio (the compiled-in plugin's HostBuild runs in charly's own process)
-// and signals failure via the error return.
-#PodStartReply: {}
-
-// #PodStopRequest carries the `charly stop` command flags (the former StopCmd's authored fields).
-// Forwarded to HostBuild("pod-stop"), which runs the existing stopViaLifecycle orchestration
-// VERBATIM.
-#PodStopRequest: {
-	box!:      string @go(Box)
-	instance?: string @go(Instance)
-	unmount?:  bool   @go(Unmount)
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	node?: #Deploy @go(Node, type=*Deploy)
+// #PodStopPayload — see #PodLifecycleRequest's header; op="stop". The former StopCmd's authored
+// fields.
+#PodStopPayload: {
+	unmount?: bool @go(Unmount)
 }
 
-// #PodStopReply is the "pod-stop" host-builder reply — empty, mirroring #PodStartReply.
-#PodStopReply: {}
-
-// #PodLogsRequest carries the `charly logs` command flags (the former LogsCmd's authored
-// fields). Forwarded to HostBuild("pod-logs"), which runs the existing dispatchLifecycleTarget +
-// LifecycleTarget.Logs orchestration VERBATIM (F12 — the host resolves the journalctl/`<engine>
-// logs` stream command, the owning plugin streams it live to the operator's stdio).
-#PodLogsRequest: {
-	box!:      string @go(Box)
-	follow?:   bool   @go(Follow)
-	instance?: string @go(Instance)
-	sidecar?:  string @go(Sidecar)
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	node?: #Deploy @go(Node, type=*Deploy)
+// #PodLogsPayload — see #PodLifecycleRequest's header; op="logs". The former LogsCmd's authored
+// fields (F12 — the host resolves the journalctl/`<engine> logs` stream command, the owning
+// plugin streams it live to the operator's stdio).
+#PodLogsPayload: {
+	follow?:  bool   @go(Follow)
+	sidecar?: string @go(Sidecar)
 }
 
-// #PodLogsReply is the "pod-logs" host-builder reply — empty, mirroring #PodStartReply.
-#PodLogsReply: {}
-
-// #PodRemoveRequest carries the `charly remove` command flags (the former RemoveCmd's authored
-// fields). Forwarded to HostBuild("pod-remove"), which runs the existing remove orchestration
-// VERBATIM (quadlet/companion-service teardown, pre_remove hooks, purge, deploy-entry cleanup —
-// deeply core-type-coupled: BoxMetadata/ExtractMetadata/sidecar resolution/deploykit.
-// CleanDeployEntry — not registry-bound, but not portable either).
-#PodRemoveRequest: {
-	box!:         string @go(Box)
-	instance?:    string @go(Instance)
-	purge?:       bool   @go(Purge)
-	keep_deploy?: bool   @go(KeepDeploy)
+// #PodRemovePayload — see #PodLifecycleRequest's header; op="remove". The former RemoveCmd's
+// authored fields — the host orchestration this ONE op still performs is just the
+// arbiter-release bracket (host_build_pod_lifecycle_dispatch.go's hostBuildPodRemove); the rest
+// of remove's orchestration (quadlet/companion-service teardown, pre_remove hooks, purge,
+// deploy-entry cleanup) runs entirely in candy/plugin-pod now.
+#PodRemovePayload: {
+	purge?:       bool @go(Purge)
+	keep_deploy?: bool @go(KeepDeploy)
 	env?: [...string] @go(Env)
 }
 
-// #PodRemoveReply is the "pod-remove" host-builder reply — empty, mirroring #PodStartReply.
-#PodRemoveReply: {}
-
-// #PodShellRequest carries the `charly shell` command flags (the former ShellCmd's authored
-// fields). Forwarded to HostBuild("pod-shell"), which runs the existing dispatchLifecycleTarget +
-// LifecycleTarget.Attach orchestration VERBATIM (F12 — the host resolves the venue command, the
-// owning plugin runs it over the served venue executor via RunInteractive, stdio host-held).
-#PodShellRequest: {
-	box!:            string @go(Box)
+// #PodShellPayload — see #PodLifecycleRequest's header; op="shell". The former ShellCmd's
+// authored fields (F12 — the host resolves the venue command, the owning plugin runs it over the
+// served venue executor via RunInteractive, stdio host-held).
+#PodShellPayload: {
 	tag?:             string @go(Tag)
 	command?:         string @go(Command)
 	build?:           bool   @go(Build)
 	tty?:             bool   @go(TTY)
 	env?: [...string] @go(Env)
 	env_file?:        string @go(EnvFile)
-	instance?:        string @go(Instance)
 	volume_flag?: [...string] @go(VolumeFlag)
 	bind?: [...string] @go(Bind)
 	no_autodetect?:   bool @go(NoAutoDetect)
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	node?: #Deploy @go(Node, type=*Deploy)
 }
 
-// #PodShellReply is the "pod-shell" host-builder reply — empty, mirroring #PodStartReply.
-#PodShellReply: {}
-
-// #PodServiceRequest carries the FULLY plugin-resolved argv for `charly service
-// start/stop/status/restart` (Cutover B unit 2 completion): the plugin now performs
-// resolveServiceInit/validateServiceName/execInitCommand's argv-building itself (all portable —
-// spec.ResolvedInit is already an sdk alias, buildkit.RenderTemplate is sdk-portable) and sends
-// the FINAL `<engine> exec <container> <tool> <op> [svc]` argv; the host does ONLY the
-// irreducible dispatchLifecycleTarget + LifecycleTarget.Shell step (host_build_pod_lifecycle_dispatch.go's
-// hostBuildPodService), mirroring start/stop/logs/update exactly.
-#PodServiceRequest: {
-	box!:      string      @go(Box)
-	instance?: string      @go(Instance)
-	argv!:     [...string] @go(Argv)
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	node?: #Deploy @go(Node, type=*Deploy)
+// #PodServicePayload — see #PodLifecycleRequest's header; op="service". Carries the FULLY
+// plugin-resolved argv for `charly service start/stop/status/restart` (Cutover B unit 2
+// completion): the plugin now performs resolveServiceInit/validateServiceName/execInitCommand's
+// argv-building itself (all portable — spec.ResolvedInit is already an sdk alias,
+// buildkit.RenderTemplate is sdk-portable) and sends the FINAL `<engine> exec <container> <tool>
+// <op> [svc]` argv; the host does ONLY the irreducible dispatchLifecycleTarget +
+// LifecycleTarget.Shell step.
+#PodServicePayload: {
+	argv!: [...string] @go(Argv)
 }
 
-// #PodServiceReply is the "pod-service" host-builder reply — empty, mirroring #PodStartReply.
-#PodServiceReply: {}
-
-// #PodCmdRequest carries `charly cmd <box> <command>`'s per-invocation fields for the
-// "pod-cmd" host-builder (candy/plugin-cmd drives it): the host does ONLY the irreducible
-// dispatchLifecycleTarget("cmd") + LifecycleTarget.Attach step (host_build_pod_lifecycle_dispatch.go's
-// hostBuildPodCmd), mirroring hostBuildPodShell exactly — the interactive `-i` exec runs over the
-// SAME host-held exec.RunInteractive leg (stdio never crosses the wire). The plugin owns the CLI
-// grammar + the completion notification itself.
-#PodCmdRequest: {
-	box!:      string @go(Box)
-	command?:  string @go(Command)
-	instance?: string @go(Instance)
-	sidecar?:  string @go(Sidecar)
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	node?: #Deploy @go(Node, type=*Deploy)
-}
-
-// #PodCmdReply is the "pod-cmd" host-builder reply. It carries the container command's exit_code so
-// `charly cmd`'s own non-zero exit propagates to the operator's process code (the plugin reconstructs
-// an *sdk.ExitCodeError from it) — the exit code cannot ride the HostBuild ERROR return, which
-// stringifies the typed *sdk.ExitCodeError; it must ride a reply FIELD, exactly as the former
-// __cmd/CliReply.ExitCode path did. A genuine (non-exit-code) failure still propagates as the error.
-#PodCmdReply: {
-	exit_code?: int @go(ExitCode,type=int)
+// #PodCmdPayload — see #PodLifecycleRequest's header; op="cmd". Carries `charly cmd <box>
+// <command>`'s per-invocation fields: the host does ONLY the irreducible
+// dispatchLifecycleTarget("cmd") + LifecycleTarget.Attach step, mirroring op="shell" exactly —
+// the interactive `-i` exec runs over the SAME host-held exec.RunInteractive leg (stdio never
+// crosses the wire). The plugin owns the CLI grammar + the completion notification itself.
+#PodCmdPayload: {
+	command?: string @go(Command)
+	sidecar?: string @go(Sidecar)
 }
 
 // #PodConfigSetupRequest carries the `charly config [setup]` command flags (the former
@@ -1133,7 +1110,7 @@
 }
 
 // #PodConfigSetupReply is the "pod-config-setup" host-builder reply — empty, mirroring
-// #PodStartReply.
+// #PodLifecycleReply's empty-for-every-op-but-cmd shape.
 #PodConfigSetupReply: {}
 
 // #PodConfigStatusRequest/#PodConfigMountRequest/#PodConfigUnmountRequest/#PodConfigPasswdRequest
@@ -1144,9 +1121,10 @@
 // the start/stop path — no host-builder seam left to carry.
 
 // #PodConfigRemoveRequest carries `charly config remove`'s flags (the former
-// BoxConfigRemoveCmd's authored fields — distinct from `charly remove`/#PodRemoveRequest, which
-// tears down the whole deploy; this removes only the quadlet + disables the service). Forwarded
-// to HostBuild("pod-config-remove"), which runs the existing remove orchestration VERBATIM.
+// BoxConfigRemoveCmd's authored fields — distinct from `charly remove`/#PodLifecycleRequest
+// op="remove"+#PodRemovePayload, which tears down the whole deploy; this removes only the
+// quadlet + disables the service). Forwarded to HostBuild("pod-config-remove"), which runs the
+// existing remove orchestration VERBATIM.
 #PodConfigRemoveRequest: {
 	box!:      string @go(Box)
 	instance?: string @go(Instance)
@@ -1345,15 +1323,10 @@
 // VERBATIM as op.Params — no new outer envelope needed; see host_build_pod_config.go for the
 // exact host→plugin forwarding.
 
-// #PodUpdateRequest carries the `charly update` command flags (the former UpdateCmd's
-// authored fields). Forwarded to HostBuild("pod-update"), which runs the existing
-// dispatchByDeployTarget orchestration — loadDeployPlugins/ResolveTarget are core
-// Mechanisms (the provider registry) a plugin cannot import or hold.
-#PodUpdateRequest: {
-	box!:        string @go(Box)
+// #PodUpdatePayload — see #PodLifecycleRequest's header; op="update".
+#PodUpdatePayload: {
 	tag?:        string @go(Tag)
 	build?:      bool   @go(Build)
-	instance?:   string @go(Instance)
 	seed?:       bool   @go(Seed)
 	force_seed?: bool   @go(ForceSeed)
 	data_from?:  string @go(DataFrom)
@@ -1364,9 +1337,6 @@
 	// "no charly.yml" error a nil host-tree-read result produced.
 	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
-
-// #PodUpdateReply is the "pod-update" host-builder reply — empty, mirroring #PodStartReply.
-#PodUpdateReply: {}
 
 // #DeployTargetStatus (S3b, Unit-6 design) mirrors the former charly-core StatusInfo — a
 // deployment's live runtime state, now CUE-sourced because it crosses the plugin boundary once

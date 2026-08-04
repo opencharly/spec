@@ -6516,15 +6516,58 @@ type DeployCompileReply struct {
 	CandySet []string `yaml:"candy_set,omitempty" json:"candy_set,omitempty"`
 }
 
-// #PodStartRequest carries the `charly start` command flags (the former StartCmd's authored
-// fields, DEPLOY-wave CLI-struct port). The command:pod plugin owns the CLI GRAMMAR but cannot
-// drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms), so
-// `charly start`'s command is THIN — it forwards these flags to HostBuild("pod-start"), and the
-// host runs the existing startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add`
-// stayed core behind HostBuild("resolve-target-add").
-type PodStartRequest struct {
+// #PodLifecycleRequest is the ONE discriminated request every pod-lifecycle HostBuild op
+// (start/stop/shell/logs/service/cmd/update/remove) sends over the single "pod-lifecycle"
+// HostBuild kind (#55 W3 A10b). Converges the seam on the codebase's own established
+// op-discriminated wire idiom — #ArbiterInvokeInput's flat action-multiplexed shape,
+// charly/provider.go's own Operation.Params json.RawMessage envelope — which the former
+// 8-per-verb #PodXRequest family (one CUE type + one HostBuild kind string per verb, each
+// redeclaring box/instance/node) was the last outlier against. op selects which #PodXPayload
+// type `payload` unmarshals into (host_build_pod_lifecycle_dispatch.go's hostBuildPodLifecycle
+// switch); box/instance/node — common to nearly every op — hoisted OUT of the per-op payloads
+// into this shared envelope (R3).
+type PodLifecycleRequest struct {
+	Op string `yaml:"op,omitempty" json:"op"`
+
 	Box string `yaml:"box,omitempty" json:"box"`
 
+	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
+
+	// node is the per-host deploy overlay entry the command:pod / command:cmd plugin ALREADY
+	// resolved plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free
+	// plugin-side overlay read) and threads as DATA — so the host's dispatchLifecycleTarget
+	// operates on the passed *spec.Deploy instead of re-reading the per-host config itself (the
+	// config-READ is a plugin loading capability, not a host M — #55 K4 seam-completion). Six of
+	// the eight ops carry it (start/stop/shell/logs/service/cmd); update threads a whole merged
+	// tree instead (#PodUpdatePayload.tree_json) and remove needs no node at all (it only
+	// releases the arbiter claim) — absent for those two.
+	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
+
+	// payload is the op-specific #PodXPayload, JSON-marshalled by the calling command plugin and
+	// re-decoded host-side once op is known (mirrors the plugin wire protocol's own
+	// Operation.Params json.RawMessage design — there is no parallel envelope-vs-payload type
+	// system, R3).
+	Payload RawBody `yaml:"payload,omitempty" json:"payload,omitempty"`
+}
+
+// #PodLifecycleReply is the "pod-lifecycle" host-builder reply. exit_code is populated only for
+// op="cmd" — the container command's own exit code, so `charly cmd`'s process exit propagates it
+// (the plugin reconstructs an *sdk.ExitCodeError from it) — it cannot ride the HostBuild ERROR
+// return, which stringifies the typed error; it must ride a reply FIELD, exactly as the former
+// __cmd/CliReply.ExitCode path did. Every other op's reply is empty; op-specific progress prints
+// host-side (the compiled-in plugin's HostBuild runs in charly's own process) and failure signals
+// via the error return.
+type PodLifecycleReply struct {
+	ExitCode int `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
+}
+
+// #PodStartPayload — see #PodLifecycleRequest's header; op="start". The former StartCmd's
+// authored fields (DEPLOY-wave CLI-struct port): the command:pod plugin owns the CLI GRAMMAR but
+// cannot drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms),
+// so `charly start`'s command is THIN — it forwards these flags, and the host runs the existing
+// startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add` stayed core behind
+// HostBuild("resolve-target-add").
+type PodStartPayload struct {
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
 	Build bool `yaml:"build,omitempty" json:"build,omitempty"`
@@ -6533,8 +6576,6 @@ type PodStartRequest struct {
 
 	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`
 
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
 	Port []string `yaml:"port,omitempty" json:"port,omitempty"`
 
 	VolumeFlag []string `yaml:"volume_flag,omitempty" json:"volume_flag,omitempty"`
@@ -6542,71 +6583,29 @@ type PodStartRequest struct {
 	Bind []string `yaml:"bind,omitempty" json:"bind,omitempty"`
 
 	NoAutoDetect bool `yaml:"no_autodetect,omitempty" json:"no_autodetect,omitempty"`
-
-	// node is the per-host deploy overlay entry the command:pod plugin ALREADY resolved
-	// plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free plugin-side
-	// overlay read) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
-	// *spec.Deploy instead of re-reading the per-host config itself (the config-READ is a plugin
-	// loading capability, not a host M — #55 K4 seam-completion). Absent only for an in-flight
-	// mixed build; the host requires it.
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodStartReply is the "pod-start" host-builder reply — empty; the start prints its own
-// progress to the shared stdio (the compiled-in plugin's HostBuild runs in charly's own process)
-// and signals failure via the error return.
-type PodStartReply struct {
-}
-
-// #PodStopRequest carries the `charly stop` command flags (the former StopCmd's authored fields).
-// Forwarded to HostBuild("pod-stop"), which runs the existing stopViaLifecycle orchestration
-// VERBATIM.
-type PodStopRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
+// #PodStopPayload — see #PodLifecycleRequest's header; op="stop". The former StopCmd's authored
+// fields.
+type PodStopPayload struct {
 	Unmount bool `yaml:"unmount,omitempty" json:"unmount,omitempty"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodStopReply is the "pod-stop" host-builder reply — empty, mirroring #PodStartReply.
-type PodStopReply struct {
-}
-
-// #PodLogsRequest carries the `charly logs` command flags (the former LogsCmd's authored
-// fields). Forwarded to HostBuild("pod-logs"), which runs the existing dispatchLifecycleTarget +
-// LifecycleTarget.Logs orchestration VERBATIM (F12 — the host resolves the journalctl/`<engine>
-// logs` stream command, the owning plugin streams it live to the operator's stdio).
-type PodLogsRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
+// #PodLogsPayload — see #PodLifecycleRequest's header; op="logs". The former LogsCmd's authored
+// fields (F12 — the host resolves the journalctl/`<engine> logs` stream command, the owning
+// plugin streams it live to the operator's stdio).
+type PodLogsPayload struct {
 	Follow bool `yaml:"follow,omitempty" json:"follow,omitempty"`
 
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
 	Sidecar string `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodLogsReply is the "pod-logs" host-builder reply — empty, mirroring #PodStartReply.
-type PodLogsReply struct {
-}
-
-// #PodRemoveRequest carries the `charly remove` command flags (the former RemoveCmd's authored
-// fields). Forwarded to HostBuild("pod-remove"), which runs the existing remove orchestration
-// VERBATIM (quadlet/companion-service teardown, pre_remove hooks, purge, deploy-entry cleanup —
-// deeply core-type-coupled: BoxMetadata/ExtractMetadata/sidecar resolution/deploykit.
-// CleanDeployEntry — not registry-bound, but not portable either).
-type PodRemoveRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
+// #PodRemovePayload — see #PodLifecycleRequest's header; op="remove". The former RemoveCmd's
+// authored fields — the host orchestration this ONE op still performs is just the
+// arbiter-release bracket (host_build_pod_lifecycle_dispatch.go's hostBuildPodRemove); the rest
+// of remove's orchestration (quadlet/companion-service teardown, pre_remove hooks, purge,
+// deploy-entry cleanup) runs entirely in candy/plugin-pod now.
+type PodRemovePayload struct {
 	Purge bool `yaml:"purge,omitempty" json:"purge,omitempty"`
 
 	KeepDeploy bool `yaml:"keep_deploy,omitempty" json:"keep_deploy,omitempty"`
@@ -6614,17 +6613,10 @@ type PodRemoveRequest struct {
 	Env []string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
-// #PodRemoveReply is the "pod-remove" host-builder reply — empty, mirroring #PodStartReply.
-type PodRemoveReply struct {
-}
-
-// #PodShellRequest carries the `charly shell` command flags (the former ShellCmd's authored
-// fields). Forwarded to HostBuild("pod-shell"), which runs the existing dispatchLifecycleTarget +
-// LifecycleTarget.Attach orchestration VERBATIM (F12 — the host resolves the venue command, the
-// owning plugin runs it over the served venue executor via RunInteractive, stdio host-held).
-type PodShellRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
+// #PodShellPayload — see #PodLifecycleRequest's header; op="shell". The former ShellCmd's
+// authored fields (F12 — the host resolves the venue command, the owning plugin runs it over the
+// served venue executor via RunInteractive, stdio host-held).
+type PodShellPayload struct {
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
 	Command string `yaml:"command,omitempty" json:"command,omitempty"`
@@ -6637,70 +6629,33 @@ type PodShellRequest struct {
 
 	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`
 
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
 	VolumeFlag []string `yaml:"volume_flag,omitempty" json:"volume_flag,omitempty"`
 
 	Bind []string `yaml:"bind,omitempty" json:"bind,omitempty"`
 
 	NoAutoDetect bool `yaml:"no_autodetect,omitempty" json:"no_autodetect,omitempty"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodShellReply is the "pod-shell" host-builder reply — empty, mirroring #PodStartReply.
-type PodShellReply struct {
-}
-
-// #PodServiceRequest carries the FULLY plugin-resolved argv for `charly service
-// start/stop/status/restart` (Cutover B unit 2 completion): the plugin now performs
-// resolveServiceInit/validateServiceName/execInitCommand's argv-building itself (all portable —
-// spec.ResolvedInit is already an sdk alias, buildkit.RenderTemplate is sdk-portable) and sends
-// the FINAL `<engine> exec <container> <tool> <op> [svc]` argv; the host does ONLY the
-// irreducible dispatchLifecycleTarget + LifecycleTarget.Shell step (host_build_pod_lifecycle_dispatch.go's
-// hostBuildPodService), mirroring start/stop/logs/update exactly.
-type PodServiceRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
+// #PodServicePayload — see #PodLifecycleRequest's header; op="service". Carries the FULLY
+// plugin-resolved argv for `charly service start/stop/status/restart` (Cutover B unit 2
+// completion): the plugin now performs resolveServiceInit/validateServiceName/execInitCommand's
+// argv-building itself (all portable — spec.ResolvedInit is already an sdk alias,
+// buildkit.RenderTemplate is sdk-portable) and sends the FINAL `<engine> exec <container> <tool>
+// <op> [svc]` argv; the host does ONLY the irreducible dispatchLifecycleTarget +
+// LifecycleTarget.Shell step.
+type PodServicePayload struct {
 	Argv []string `yaml:"argv,omitempty" json:"argv"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodServiceReply is the "pod-service" host-builder reply — empty, mirroring #PodStartReply.
-type PodServiceReply struct {
-}
-
-// #PodCmdRequest carries `charly cmd <box> <command>`'s per-invocation fields for the
-// "pod-cmd" host-builder (candy/plugin-cmd drives it): the host does ONLY the irreducible
-// dispatchLifecycleTarget("cmd") + LifecycleTarget.Attach step (host_build_pod_lifecycle_dispatch.go's
-// hostBuildPodCmd), mirroring hostBuildPodShell exactly — the interactive `-i` exec runs over the
-// SAME host-held exec.RunInteractive leg (stdio never crosses the wire). The plugin owns the CLI
-// grammar + the completion notification itself.
-type PodCmdRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
+// #PodCmdPayload — see #PodLifecycleRequest's header; op="cmd". Carries `charly cmd <box>
+// <command>`'s per-invocation fields: the host does ONLY the irreducible
+// dispatchLifecycleTarget("cmd") + LifecycleTarget.Attach step, mirroring op="shell" exactly —
+// the interactive `-i` exec runs over the SAME host-held exec.RunInteractive leg (stdio never
+// crosses the wire). The plugin owns the CLI grammar + the completion notification itself.
+type PodCmdPayload struct {
 	Command string `yaml:"command,omitempty" json:"command,omitempty"`
 
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
 	Sidecar string `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
-}
-
-// #PodCmdReply is the "pod-cmd" host-builder reply. It carries the container command's exit_code so
-// `charly cmd`'s own non-zero exit propagates to the operator's process code (the plugin reconstructs
-// an *sdk.ExitCodeError from it) — the exit code cannot ride the HostBuild ERROR return, which
-// stringifies the typed *sdk.ExitCodeError; it must ride a reply FIELD, exactly as the former
-// __cmd/CliReply.ExitCode path did. A genuine (non-exit-code) failure still propagates as the error.
-type PodCmdReply struct {
-	ExitCode int `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
 }
 
 // #PodConfigSetupRequest carries the `charly config [setup]` command flags (the former
@@ -6784,14 +6739,15 @@ type PodConfigSetupRequest struct {
 }
 
 // #PodConfigSetupReply is the "pod-config-setup" host-builder reply — empty, mirroring
-// #PodStartReply.
+// #PodLifecycleReply's empty-for-every-op-but-cmd shape.
 type PodConfigSetupReply struct {
 }
 
 // #PodConfigRemoveRequest carries `charly config remove`'s flags (the former
-// BoxConfigRemoveCmd's authored fields — distinct from `charly remove`/#PodRemoveRequest, which
-// tears down the whole deploy; this removes only the quadlet + disables the service). Forwarded
-// to HostBuild("pod-config-remove"), which runs the existing remove orchestration VERBATIM.
+// BoxConfigRemoveCmd's authored fields — distinct from `charly remove`/#PodLifecycleRequest
+// op="remove"+#PodRemovePayload, which tears down the whole deploy; this removes only the
+// quadlet + disables the service). Forwarded to HostBuild("pod-config-remove"), which runs the
+// existing remove orchestration VERBATIM.
 type PodConfigRemoveRequest struct {
 	Box string `yaml:"box,omitempty" json:"box"`
 
@@ -6976,18 +6932,11 @@ type PodConfigListSidecarsReply struct {
 	BodiesJSON RawBody `yaml:"bodies_json,omitempty" json:"bodies_json,omitempty"`
 }
 
-// #PodUpdateRequest carries the `charly update` command flags (the former UpdateCmd's
-// authored fields). Forwarded to HostBuild("pod-update"), which runs the existing
-// dispatchByDeployTarget orchestration — loadDeployPlugins/ResolveTarget are core
-// Mechanisms (the provider registry) a plugin cannot import or hold.
-type PodUpdateRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
+// #PodUpdatePayload — see #PodLifecycleRequest's header; op="update".
+type PodUpdatePayload struct {
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
 	Build bool `yaml:"build,omitempty" json:"build,omitempty"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
 
 	Seed bool `yaml:"seed,omitempty" json:"seed,omitempty"`
 
@@ -7001,10 +6950,6 @@ type PodUpdateRequest struct {
 	// Cone A Unit 3b). Marshalled map[string]spec.Deploy; an absent tree yields the same
 	// "no charly.yml" error a nil host-tree-read result produced.
 	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
-}
-
-// #PodUpdateReply is the "pod-update" host-builder reply — empty, mirroring #PodStartReply.
-type PodUpdateReply struct {
 }
 
 // #DeployTargetStatus (S3b, Unit-6 design) mirrors the former charly-core StatusInfo — a
