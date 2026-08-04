@@ -3431,15 +3431,16 @@ type CheckEnv struct {
 // SAME mechanism candy/plugin-bundle's resolveRootExecutor uses) — over the in-proc reverse channel
 // and asks the COMPILED-IN command:check to DRIVE a deploy-scope check pass PLUGIN-SIDE. This sheds
 // charly core's checkrun.go + planrun_adapter.go sdk/kit imports (the in-proc kit.Runner
-// construction moved plugin-side). TWO mutually-exclusive drive shapes, one per host caller:
-//   - ops  → the deploy-lifecycle Test path (unified_targets.go runUnifiedTargetChecks): raw
-//     deploy-scope Op checks driven via kit.Runner.Run (no plan gating).
-//   - plan → the `target: local` --verify path (check_cmd.go runLocalDeployScopePlan): a
-//     host-ASSEMBLED plan (kind:local template + deploy node + per-host overlay — the deploy/K4
-//     named-exit assembly STAYS core) driven via kit.RunPlan (verify-only/context/keyword gating).
-//     The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:} host-vars + the
-//     cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY does this
-//     for check-live (verb_resolver.go / members.go), so those never cross the wire.
+// construction moved plugin-side). TWO mutually-exclusive drive shapes, one per caller:
+//   - ops  → the deploy-lifecycle Test path (charly core's unified_targets.go runUnifiedTargetChecks):
+//     raw deploy-scope Op checks driven via kit.Runner.Run (no plan gating).
+//   - plan → the `target: local` --verify path (candy/plugin-bundle's verify_local.go, #55 W3
+//     B3 — a PEER plugin now, not core): a PLUGIN-ASSEMBLED plan (kind:local template, resolved
+//     via node_resolve.go's lookupLocalTemplate — no LoadUnified — + deploy node; the per-host
+//     overlay merge happens on THIS side) driven via kit.RunPlan (verify-only/context/keyword
+//     gating). The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:} host-vars
+//   - the cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY does
+//     this for check-live (verb_resolver.go / members.go), so those never cross the wire.
 //
 // The reply is []#StepResult (CUE-sourced in this file) — the deploy-Test path wraps each
 // verdict as a StepResult; CONSUMED, not modified. All plain fields (ops/plan/venue are spec
