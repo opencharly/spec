@@ -5414,6 +5414,18 @@ type ResolvedProjectRequest struct {
 	// emit-pod).
 	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
 
+	// requested_boxes — the explicit build/generate targets (`charly box generate <name>`),
+	// buildkit.NormalizeBoxArgs-normalized (task #17 fix). The reachability-scoped remote-ref
+	// COLLECTION walk (loaderkit.CollectRemoteRefsOpts) only follows base/builder edges from
+	// ROOT-owned images by default — a namespace-qualified on-demand target
+	// (`charly box generate fedora.check-pod`) that is not itself a base/builder of any root
+	// image is otherwise never visited, so its own remote candy refs are silently never
+	// collected/fetched, and the later candy-order RESOLVE step then fails "unknown candy" for a
+	// ref the fetch step skipped. Mirrors spec.ResolveOpts.RequestedBoxes, which already pulls a
+	// qualified on-demand target into buildkit.ResolveAllBox's RESOLVE set the identical way —
+	// this closes the matching gap on the COLLECT half.
+	RequestedBoxes []string `yaml:"requested_boxes,omitempty" json:"requested_boxes,omitempty"`
+
 	// boxes — the resolved-box set the PLUGIN-SIDE build-engine resolve (candy/plugin-build's
 	// resolveBuildEngine) pushes to the host's `buildengine-prep` leg so the host's render-seam-floor
 	// Generator cache stores wire-clean *spec.ResolvedBox WITHOUT the host re-resolving via
