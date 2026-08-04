@@ -9,6 +9,7 @@
 package refs
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -121,7 +122,7 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 //
 //   - sdk + spec — every out-of-process plugin candy builds STANDALONE in its own
 //     module (GOWORK=off) against `replace … => ../../sdk` and `=> ../../spec`.
-//     86 of 87 candy go.mod files carry BOTH replaces, so populating only `sdk`
+//     ALL 86 candy go.mod files carry BOTH replaces, so populating only `sdk`
 //     left every such build failing on `../../spec/go.mod: no such file`, and no
 //     out-of-process verb could be reached through --repo at all.
 //   - box/<distro> — the box definitions themselves; main owns none.
@@ -136,6 +137,23 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 // The insteadOf rewrite forces the .gitmodules SSH URL (git@github.com:) to
 // HTTPS — matching how the parent repo is cloned — so no SSH key is needed in a
 // headless/CI run. Non-recursive, matching the configuration proven to build.
+//
+// A SUBMODULE THAT CANNOT BE FETCHED FAILS THE WHOLE CLONE, deliberately. This
+// is a real widening: the old code was a silent no-op for any repo not
+// declaring `sdk`, so a third-party project with a private or dead submodule
+// used to fetch "fine" and now errors here. That is the correct trade, because a
+// SILENTLY PARTIAL cache is the exact defect this function exists to fix — it
+// cost a full debugging session, surfacing three layers down as
+// `../../spec/go.mod: no such file` with nothing pointing back at the fetch. A
+// caller that cannot reach a declared submodule has an incomplete project and is
+// told so HERE, naming the submodule, rather than at some later build whose
+// error does not mention fetching at all. git's own stderr is wrapped in, so the
+// specific submodule and cause survive into the message.
+//
+// The blast radius is narrower than .gitmodules suggests: `submodule update
+// --init` walks the INDEX, so an entry declared in .gitmodules with no gitlink
+// (mode 160000) recorded is ignored and cannot fail a fetch. Only submodules
+// genuinely committed into the tree are attempted.
 func populateSubmodules(targetDir string) error {
 	gm := filepath.Join(targetDir, ".gitmodules")
 	if _, err := os.Stat(gm); err != nil {
@@ -146,8 +164,16 @@ func populateSubmodules(targetDir string) error {
 		"-c", "advice.detachedHead=false",
 		"submodule", "update", "--init", "--depth", "1", "-q")
 	cmd.Dir = targetDir
-	cmd.Stderr = os.Stderr
+	// Capture rather than pass through: git names the offending submodule and the
+	// reason (auth, missing ref, unreachable host) on stderr, and that is the only
+	// thing that makes this failure actionable. Passing it to os.Stderr would print
+	// it detached from the error the caller reports.
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			return fmt.Errorf("populating submodules in %s: %w\n%s", targetDir, err, detail)
+		}
 		return fmt.Errorf("populating submodules in %s: %w", targetDir, err)
 	}
 	return nil

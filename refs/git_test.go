@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -142,6 +143,53 @@ func TestRepoGitURL(t *testing.T) {
 func TestPopulateSubmodules_NoGitmodulesIsNoOp(t *testing.T) {
 	if err := populateSubmodules(t.TempDir()); err != nil { // no .gitmodules at all
 		t.Fatalf("no-.gitmodules dir must be a no-op, got %v", err)
+	}
+}
+
+// TestPopulateSubmodules_UnreachableSubmoduleFailsLoudly covers the error branch,
+// which is a DELIBERATE widening and therefore needs a test rather than silence.
+// The old code no-op'd for any repo not declaring `sdk`, so a project with a
+// private or dead submodule fetched "fine"; now it errors. That is the intended
+// trade — a silently partial cache is the defect this function exists to fix —
+// but the failure must name the submodule and the cause, or it just moves the
+// mystery. Uses a file:// URL that does not exist, so it fails fast offline.
+func TestPopulateSubmodules_UnreachableSubmoduleFailsLoudly(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "seed"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitmodules"),
+		[]byte("[submodule \"ghost\"]\n\tpath = ghost\n\turl = file:///nonexistent/ghost.git\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The .gitmodules entry alone is NOT enough: `git submodule update --init`
+	// walks the INDEX, so a declared-but-unregistered submodule is ignored and the
+	// command exits 0. A gitlink (mode 160000) has to exist for the fetch — and
+	// therefore the failure — to happen at all.
+	reg := exec.Command("git", "update-index", "--add", "--cacheinfo",
+		"160000,0000000000000000000000000000000000000001,ghost")
+	reg.Dir = dir
+	if out, err := reg.CombinedOutput(); err != nil {
+		t.Fatalf("registering the gitlink: %v\n%s", err, out)
+	}
+
+	err := populateSubmodules(dir)
+	if err == nil {
+		t.Fatal("an unreachable submodule must fail the clone, not populate a partial cache")
+	}
+	// The message has to carry enough to act on: which tree, and git's own reason.
+	if !strings.Contains(err.Error(), dir) {
+		t.Errorf("error must name the target dir, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Errorf("error must name the offending submodule, got: %v", err)
 	}
 }
 
