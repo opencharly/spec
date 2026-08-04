@@ -193,6 +193,68 @@ func TestPopulateSubmodules_UnreachableSubmoduleFailsLoudly(t *testing.T) {
 	}
 }
 
+// TestRepoCacheFresh_IncompleteExportIsStale is the self-heal gate: a cache whose
+// commit matches but whose CONTENT is incomplete must read as STALE, so it is
+// re-downloaded rather than served forever.
+//
+// Without this, the submodule fix would only ever help caches created after it.
+// Every cache written by the old sdk-only code holds one of twelve submodules
+// AND records the correct commit, so the old commit-only freshness check served
+// it as a permanent hit until main happened to advance — and there is no CLI
+// verb to invalidate a repo cache entry. This test is what fails if freshness
+// regresses to comparing commits alone.
+func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
+	const commit = "0123456789012345678901234567890123456789"
+	mk := func(t *testing.T, populate bool) string {
+		t.Helper()
+		dir := t.TempDir()
+		cache := filepath.Join(dir, "export")
+		if err := os.MkdirAll(filepath.Join(cache, "sdk"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Two declared submodules, mirroring the real shape: sdk populated, spec empty.
+		if err := os.WriteFile(filepath.Join(cache, "sdk", "go.mod"), []byte("module x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(cache, "spec"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if populate {
+			if err := os.WriteFile(filepath.Join(cache, "spec", "go.mod"), []byte("module y\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(cache, ".gitmodules"), []byte(
+			"[submodule \"sdk\"]\n\tpath = sdk\n\turl = https://example.invalid/sdk.git\n"+
+				"[submodule \"spec\"]\n\tpath = spec\n\turl = https://example.invalid/spec.git\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := writeRefProvenance(cache, commit); err != nil {
+			t.Fatal(err)
+		}
+		return cache
+	}
+
+	// The exact shape the old code left behind: right commit, eleven empty dirs.
+	if repoCacheFresh(mk(t, false), commit) {
+		t.Error("an export with an EMPTY declared submodule must be stale — otherwise the " +
+			"one-of-twelve cache is served forever and the submodule fix never reaches existing users")
+	}
+	// A complete export at the same commit must still be a cache HIT; over-invalidating
+	// would re-clone every repo on every access.
+	if !repoCacheFresh(mk(t, true), commit) {
+		t.Error("a COMPLETE export at the recorded commit must remain a cache hit")
+	}
+	// A repo declaring no submodules at all is trivially complete.
+	bare := t.TempDir()
+	if err := writeRefProvenance(bare, commit); err != nil {
+		t.Fatal(err)
+	}
+	if !repoCacheFresh(bare, commit) {
+		t.Error("an export declaring no submodules must remain a cache hit")
+	}
+}
+
 // TestGitClone_PopulatesAllSubmodules is the end-to-end integration gate: a
 // fresh GitClone of the charly repo populates EVERY declared submodule, so a
 // --repo cache is a project a user can actually drive with only the binary.

@@ -249,8 +249,20 @@ func writeRefProvenance(cachePath, commit string) error {
 
 // repoCacheFresh reports whether the cache at cachePath is a complete export
 // cloned from exactly commit. A missing export, a missing provenance sidecar
-// (a cache written before this contract), or a sidecar naming a different
-// commit (the ref moved upstream) all count as stale.
+// (a cache written before this contract), a sidecar naming a different commit
+// (the ref moved upstream), or an INCOMPLETE export all count as stale.
+//
+// Completeness is checked, not assumed. This function has always claimed to
+// verify "a complete export" and never did — it compared only the commit — so a
+// cache whose CONTENT was wrong stayed a permanent hit as long as the ref did
+// not move. That is not hypothetical: every cache written before
+// populateSubmodules holds one of twelve submodules, records the correct commit,
+// and is therefore served forever. Without this check the submodule fix would
+// only ever help caches created AFTER it, and every existing user would stay
+// broken until main happened to advance — with no CLI verb to invalidate a repo
+// cache entry (`charly clean --invalidate` targets image tags), leaving hand-
+// deleting a cache directory as the only remedy. Verifying content instead makes
+// every such cache self-heal on next access.
 func repoCacheFresh(cachePath, commit string) bool {
 	if commit == "" {
 		return false
@@ -262,7 +274,40 @@ func repoCacheFresh(cachePath, commit string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.TrimSpace(string(recorded)) == commit
+	if strings.TrimSpace(string(recorded)) != commit {
+		return false
+	}
+	return submodulesPopulated(cachePath)
+}
+
+// submodulesPopulated reports whether every submodule the export declares has
+// content on disk. An export declaring none is trivially complete.
+//
+// The export has had its .git removed (see downloadRepoFrom), so this reads
+// .gitmodules directly — via `git config -f`, the same parser git itself uses,
+// rather than a second hand-rolled INI reader that could disagree with it. An
+// unreadable or absent .gitmodules means nothing to verify, which keeps a
+// non-submodule repo on the pure cache-hit path.
+func submodulesPopulated(cachePath string) bool {
+	gm := filepath.Join(cachePath, ".gitmodules")
+	if _, err := os.Stat(gm); err != nil {
+		return true
+	}
+	out, err := exec.Command("git", "config", "-f", gm, "--get-regexp", `submodule\..*\.path`).Output()
+	if err != nil {
+		return true // no submodule.*.path entries — nothing to verify
+	}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		entries, err := os.ReadDir(filepath.Join(cachePath, fields[1]))
+		if err != nil || len(entries) == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // DownloadRepo downloads a remote repo to the cache.
