@@ -226,13 +226,10 @@
 	rendered?: #RenderedService @go(Rendered, type=*RenderedService)
 }
 
-// #DeployMembersRequest/#DeployMembersReply — bring up / tear down a deployment's sibling
-// members (bringUpMembers/tearDownMembers — providerRegistry + ledger + subprocess-dependent,
-// stays host-side), reached once at the end of Run() / the start of `charly bundle del`.
-#DeployMembersRequest: {
-	node?: #Deploy @go(Node, type=*Deploy)
-}
-#DeployMembersReply: {}
+// #DeployMembersRequest/#DeployMembersReply DIED (#55 W3 A4): the "deploy-members-up"/
+// "deploy-members-down" HostBuild seam is gone — candy/plugin-bundle calls
+// sdk/deploykit.BringUpMembers/TearDownMembers directly now (spec/proc + spec/hostenv +
+// spec/exec fabric, no host-private state, no registry coupling).
 
 // #DeployDelResolveRequest/#DeployDelResolveReply — resolve a `charly bundle del` target's
 // BundleNode (resolveDelNode: literal "host" / "vm:"-prefix legacy forms / a charly.yml tree

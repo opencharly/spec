@@ -120,6 +120,20 @@ func HostRooted(node *BundleNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.HostRooted
 }
 
+// IsVmVenue reports whether node's stamped venue is the SSH-hop (vm) substrate. Mirrors
+// HostRooted's shape (#55 W3 A4) — promoted so a plugin-side deploy-orchestration consumer
+// (sdk/deploykit's BringUpMembers/TearDownMembers) and any future caller share ONE predicate over
+// the wire-stamped node.Descent, instead of each re-deriving the venue check independently.
+func IsVmVenue(node *BundleNode) bool {
+	return node != nil && node.Descent != nil && node.Descent.Venue == "ssh"
+}
+
+// IsContainerVenue reports whether node's stamped venue is the container-exec (pod) substrate.
+// Mirrors HostRooted's shape (#55 W3 A4) — see IsVmVenue.
+func IsContainerVenue(node *BundleNode) bool {
+	return node != nil && node.Descent != nil && node.Descent.Venue == "container"
+}
+
 // DeployNestedLocalChildren deploys a parent venue's nested target:local children via the
 // dotted-path dispatch — each host-rooted (local/SSH-shell) child applies its candies in place.
 // Promoted from sdk/deploykit (#55 U4), now that HostRooted is a spec predicate; deploykit keeps a

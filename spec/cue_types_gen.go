@@ -5692,16 +5692,6 @@ type RenderServiceReply struct {
 	Rendered *RenderedService `yaml:"rendered,omitempty" json:"rendered,omitempty"`
 }
 
-// #DeployMembersRequest/#DeployMembersReply — bring up / tear down a deployment's sibling
-// members (bringUpMembers/tearDownMembers — providerRegistry + ledger + subprocess-dependent,
-// stays host-side), reached once at the end of Run() / the start of `charly bundle del`.
-type DeployMembersRequest struct {
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
-}
-
-type DeployMembersReply struct {
-}
-
 // #DeployDelResolveRequest/#DeployDelResolveReply — resolve a `charly bundle del` target's
 // BundleNode (resolveDelNode: literal "host" / "vm:"-prefix legacy forms / a charly.yml tree
 // entry / a ref-based pod-artifact probe) — needs LoadUnified + the on-disk artifact probe, so
