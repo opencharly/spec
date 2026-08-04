@@ -208,23 +208,13 @@
 	step?: #InstallStepView @go(Step, type=*InstallStepView)
 }
 
-// #RenderServiceRequest/#RenderServiceReply — the "render-service" HostBuild seam (K5-A item 1,
-// compile-seam ctx-threading, increment B): the former charly/service_render.go:RenderService
-// wraps TWO registry consults a plugin cannot do itself — candy/plugin-init's OpResolve
-// (render the unit text/path) and the M16 egress gate (reject a template-render failure's
-// "<no value>" marker before the unit is written) — so the WHOLE function stays host-side,
-// reached as ONE seam call rather than splitting it into two separate InvokeProvider round
-// trips. deploykit.CompileServiceSteps (the ctx/exec-threaded replacement for the retired
-// deploykit.CompileServiceSteps func var) calls this ONLY for a systemd CUSTOM entry that
-// needs unit-text rendering — the packaged-unit case and the supervisord case never reach it.
-#RenderServiceRequest: {
-	entry!: #CandyService @go(Entry)
-	init!:  #ResolvedInit @go(Init)
-	ctx!:   #ServiceRenderContext @go(Ctx)
-}
-#RenderServiceReply: {
-	rendered?: #RenderedService @go(Rendered, type=*RenderedService)
-}
+// #RenderServiceRequest/#RenderServiceReply DIED (#55 W3 B4): the "render-service" HostBuild
+// seam they carried is GONE — their "TWO registry consults a plugin cannot do itself" framing
+// was stale (kind:init's OpResolve and verb:egress's OpValidate are BOTH compiled-in, reachable
+// via direct InvokeProvider peer dispatch from any connected plugin). CompileServiceSteps'
+// render-service call now reuses sdk/deploykit's own render_generator_from_project.go
+// renderSeamCaller.renderService (already doing this exact two-InvokeProvider sequence for the
+// build-time init-assembly path) instead of a host round trip.
 
 // #DeployMembersRequest/#DeployMembersReply DIED (#55 W3 A4): the "deploy-members-up"/
 // "deploy-members-down" HostBuild seam is gone — candy/plugin-bundle calls

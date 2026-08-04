@@ -5675,27 +5675,6 @@ type ConstructStepReply struct {
 	Step *InstallStepView `yaml:"step,omitempty" json:"step,omitempty"`
 }
 
-// #RenderServiceRequest/#RenderServiceReply — the "render-service" HostBuild seam (K5-A item 1,
-// compile-seam ctx-threading, increment B): the former charly/service_render.go:RenderService
-// wraps TWO registry consults a plugin cannot do itself — candy/plugin-init's OpResolve
-// (render the unit text/path) and the M16 egress gate (reject a template-render failure's
-// "<no value>" marker before the unit is written) — so the WHOLE function stays host-side,
-// reached as ONE seam call rather than splitting it into two separate InvokeProvider round
-// trips. deploykit.CompileServiceSteps (the ctx/exec-threaded replacement for the retired
-// deploykit.CompileServiceSteps func var) calls this ONLY for a systemd CUSTOM entry that
-// needs unit-text rendering — the packaged-unit case and the supervisord case never reach it.
-type RenderServiceRequest struct {
-	Entry CandyService `yaml:"entry,omitempty" json:"entry"`
-
-	Init ResolvedInit `yaml:"init,omitempty" json:"init"`
-
-	Ctx ServiceRenderContext `yaml:"ctx,omitempty" json:"ctx"`
-}
-
-type RenderServiceReply struct {
-	Rendered *RenderedService `yaml:"rendered,omitempty" json:"rendered,omitempty"`
-}
-
 // #DeployDelResolveRequest/#DeployDelResolveReply — resolve a `charly bundle del` target's
 // BundleNode (resolveDelNode: literal "host" / "vm:"-prefix legacy forms / a charly.yml tree
 // entry / a ref-based pod-artifact probe) — needs LoadUnified + the on-disk artifact probe, so
