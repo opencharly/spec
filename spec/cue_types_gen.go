@@ -3431,23 +3431,33 @@ type CheckEnv struct {
 // SAME mechanism candy/plugin-bundle's resolveRootExecutor uses) — over the in-proc reverse channel
 // and asks the COMPILED-IN command:check to DRIVE a deploy-scope check pass PLUGIN-SIDE. This sheds
 // charly core's checkrun.go + planrun_adapter.go sdk/kit imports (the in-proc kit.Runner
-// construction moved plugin-side). TWO mutually-exclusive drive shapes, one per caller:
-//   - ops  → the deploy-lifecycle Test path (charly core's unified_targets.go runUnifiedTargetChecks):
-//     raw deploy-scope Op checks driven via kit.Runner.Run (no plan gating).
-//   - plan → the `target: local` --verify path (candy/plugin-bundle's verify_local.go, #55 W3
-//     B3 — a PEER plugin now, not core): a PLUGIN-ASSEMBLED plan (kind:local template, resolved
-//     via node_resolve.go's lookupLocalTemplate — no LoadUnified — + deploy node; the per-host
-//     overlay merge happens on THIS side) driven via kit.RunPlan (verify-only/context/keyword
-//     gating). The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:} host-vars
-//   - the cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY does
-//     this for check-live (verb_resolver.go / members.go), so those never cross the wire.
+// construction moved plugin-side).
 //
-// The reply is []#StepResult (CUE-sourced in this file) — the deploy-Test path wraps each
-// verdict as a StepResult; CONSUMED, not modified. All plain fields (ops/plan/venue are spec
-// envelope types; StepResult.Result is #CheckResult by value) → gengotypes-faithful, no @go(-).
+// ONE drive shape now: plan → the `target: local` --verify path (candy/plugin-bundle's
+// verify_local.go, #55 W3 B3 — a PEER plugin now, not core): a PLUGIN-ASSEMBLED plan (kind:local
+// template, resolved via node_resolve.go's lookupLocalTemplate — no LoadUnified — + deploy node;
+// the per-host overlay merge happens on THIS side) driven via kit.RunPlan (verify-only/context/
+// keyword gating). The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:}
+// host-vars + the cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY
+// does this for check-live (verb_resolver.go / members.go), so those never cross the wire.
+//
+// The former SECOND drive shape (ops/only_ids — the deploy-lifecycle Test path, charly core's
+// unified_targets.go runUnifiedTargetChecks feeding raw deploy-scope Op checks via kit.Runner.Run,
+// no plan gating) is GONE (#55 W3 B3 remainder): its own sole production caller,
+// pluginDeployTarget.Test (UnifiedDeployTarget's Test method), had ZERO real callers anywhere in
+// the tree — `charly check live` reaches candy/plugin-check directly (live_gather.go) and never
+// touches this interface method; the ONE caller was a unit test. Test()/runUnifiedTargetChecks/
+// TestOpts (charly), verifyChecksRunOps/filterOpsByID (candy/plugin-check), and the dead "test" op
+// in #DeployTargetDispatchRequest's enum are all deleted together. The box-mode context-skip
+// regression coverage (TestLiveVerb_SkipsUnderBoxMode, charly/checkrun_charly_verbs_test.go) moved
+// onto the surviving plan shape — RunOne (sdk/kit/planrun.go) is the SAME per-step primitive both
+// kit.Runner.Run and kit.RunPlan dispatched through, so the context-vs-mode gate (opInContext) is
+// identically exercised either way; no coverage was lost.
+//
+// The reply is []#StepResult (CUE-sourced in this file) — CONSUMED, not modified. All plain fields
+// (plan/venue are spec envelope types; StepResult.Result is #CheckResult by value) →
+// gengotypes-faithful, no @go(-).
 type VerifyChecksRequest struct {
-	Ops []Op `yaml:"ops,omitempty" json:"ops,omitempty"`
-
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
@@ -3461,13 +3471,6 @@ type VerifyChecksRequest struct {
 	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
 
 	Venue VenueDescriptor `yaml:"venue,omitempty" json:"venue,omitempty"`
-
-	// only_ids subsets ops to the listed check IDs BEFORE the plugin drives them (K-wave W3a A9):
-	// the former core-side pre-filter loop in unified_targets.go's runUnifiedTargetChecks, moved to
-	// where the ops are already about to run. OPT-IN ADDITIVE: unset/empty runs every op in ops,
-	// byte-identical to every dispatchVerifyChecks caller that predates this field (the
-	// `target: local` --verify path never sets it).
-	OnlyIDs []string `yaml:"only_ids,omitempty" json:"only_ids,omitempty"`
 }
 
 // #VenueDescriptor is the SELF-CONTAINED, serializable description of a
@@ -7002,15 +7005,6 @@ type DeployTargetDelOpts struct {
 	KeepServices bool `yaml:"keep_services,omitempty" json:"keep_services,omitempty"`
 
 	KeepImage bool `yaml:"keep_image,omitempty" json:"keep_image,omitempty"`
-}
-
-// #DeployTargetTestOpts mirrors the former charly-core TestOpts (`charly check live`).
-type DeployTargetTestOpts struct {
-	OnlyIDs []string `yaml:"only_ids,omitempty" json:"only_ids,omitempty"`
-
-	FormatJSON bool `yaml:"format_json,omitempty" json:"format_json,omitempty"`
-
-	StopOnFail bool `yaml:"stop_on_fail,omitempty" json:"stop_on_fail,omitempty"`
 }
 
 // #DeployTargetLogsOpts mirrors the former charly-core LogsOpts (`charly logs`).

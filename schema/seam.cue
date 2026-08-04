@@ -1358,12 +1358,10 @@
 	keep_image?:          bool @go(KeepImage)
 }
 
-// #DeployTargetTestOpts mirrors the former charly-core TestOpts (`charly check live`).
-#DeployTargetTestOpts: {
-	only_ids?:     [...string] @go(OnlyIDs)
-	format_json?:  bool        @go(FormatJSON)
-	stop_on_fail?: bool        @go(StopOnFail)
-}
+// #DeployTargetTestOpts (formerly mirroring charly-core's TestOpts, `charly check live`) is
+// DELETED (#55 W3 B3 remainder): it was ALREADY unreferenced wire vocabulary before this cutover
+// (its own comment said "former" — never wired to any op) and TestOpts itself is now gone too
+// (Test()'s zero-callers precheck, see #VerifyChecksRequest's header).
 
 // (Removed, R10 bed-found bug fix, S3b): a prior discriminated Update-opts shape retired in
 // favor of Update's OptsJSON marshaling the SAME #LifecycleOpts (CUE-sourced,
@@ -1417,7 +1415,7 @@
 // field per opts type so a NEW deploy verb never needs a NEW CUE field, only a new decode
 // branch plugin-side.
 #DeployTargetDispatchRequest: {
-	op!:              "add" | "update" | "del" | "test" | "start" | "stop" | "status" | "logs" | "shell" | "attach" | "rebuild"
+	op!:              "add" | "update" | "del" | "start" | "stop" | "status" | "logs" | "shell" | "attach" | "rebuild"
 	name!:            string      @go(Name)
 	word!:            string      @go(Word)
 	has_lifecycle?:   bool        @go(HasLifecycle)
