@@ -253,6 +253,25 @@ func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
 	if !repoCacheFresh(bare, commit) {
 		t.Error("an export declaring no submodules must remain a cache hit")
 	}
+
+	// A .gitmodules entry with NO gitlink materializes NO directory (verified:
+	// git creates an empty placeholder only for paths it actually clones). Such
+	// an entry is unfetchable — populateSubmodules walks the INDEX and skips it
+	// too — so an ABSENT directory must NOT read as incomplete. Conflating absent
+	// with empty made the export permanently unfresh, re-cloning the repo on
+	// EVERY command forever; this is the assertion that catches that.
+	nogl := t.TempDir()
+	if err := os.WriteFile(filepath.Join(nogl, ".gitmodules"),
+		[]byte("[submodule \"ghost\"]\n\tpath = ghost\n\turl = https://example.invalid/g.git\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRefProvenance(nogl, commit); err != nil {
+		t.Fatal(err)
+	}
+	if !repoCacheFresh(nogl, commit) {
+		t.Error("a .gitmodules entry with no gitlink (no directory on disk) must NOT make the " +
+			"export stale — it is unfetchable, so this would re-clone on every command forever")
+	}
 }
 
 // TestGitClone_PopulatesAllSubmodules is the end-to-end integration gate: a

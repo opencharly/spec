@@ -303,7 +303,17 @@ func submodulesPopulated(cachePath string) bool {
 			continue
 		}
 		entries, err := os.ReadDir(filepath.Join(cachePath, fields[1]))
-		if err != nil || len(entries) == 0 {
+		if err != nil {
+			// ABSENT is not incomplete. git materializes an empty placeholder
+			// directory for every GITLINK it clones, so a path missing entirely
+			// was never gitlinked — a .gitmodules entry with no index entry, which
+			// populateSubmodules cannot fetch either (it walks the index). Treating
+			// that as incomplete would make the export permanently unfresh and
+			// re-clone the repo on EVERY command, forever. Only an existing-but-
+			// empty directory is the real unpopulated-gitlink case.
+			continue
+		}
+		if len(entries) == 0 {
 			return false
 		}
 	}
