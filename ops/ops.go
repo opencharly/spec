@@ -163,6 +163,16 @@ const (
 	// selector, never a provider word (F11).
 	OpVerifyChecks = "verify-checks"
 
+	// OpResolveEndpoint/OpResolveImageLabel/OpDrainEndpointCleanups are verb:check-resolve
+	// selectors (#55 W3 B7) discriminating its THREE capabilities — venue classification
+	// (OpResolve, unchanged) plus the two relocated CheckContext reverse-RPC resolution
+	// bodies + their shared cleanup-drain signal. See spec/schema/seam.cue's
+	// #CheckEndpointResolveRequest/#CheckImageLabelResolveRequest/
+	// #CheckDrainEndpointCleanupsRequest for the full placement rationale.
+	OpResolveEndpoint       = "resolve-endpoint"
+	OpResolveImageLabel     = "resolve-image-label"
+	OpDrainEndpointCleanups = "drain-endpoint-cleanups"
+
 	// EphemeralPanicMarker prefixes an error the command:bundle plugin converts from a
 	// RECOVERED PANIC inside OpEphemeralRegister/OpEphemeralTeardown (RCA #5, FINAL/K5 unit 6a —
 	// a nil-map write panic in persistEphemeralRuntime was previously UNRECOVERED and vanished

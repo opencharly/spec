@@ -2,13 +2,14 @@ package container
 
 // image_inspect.go — the container→image-ref + image-label inspectors, RELOCATED to the
 // spec/container fabric slice (#55 CHECK-ENGINE cone Option A — pure podman/docker CLI
-// invocations charly core's check-endpoint reverse-leg (check_endpoint_resolve.go) reaches
-// importing zero kit). The ONE container→image-ref inspector (ContainerImageRef) + the
+// invocations importing zero kit). The ONE container→image-ref inspector (ContainerImageRef) + the
 // image-label reader (InspectImageLabels), shared between charly core's remaining callers
-// (start.go, commands.go, check_endpoint_resolve.go, service.go) and the candies. sdk/kit
-// re-exports each (sdk/kit/container_image.go + sdk/kit/local_image.go) so every existing
-// kit.ContainerImageRef / kit.ContainerImage / kit.InspectImageLabels call site is untouched.
-// New consumers reference spec/container directly.
+// (start.go, commands.go, service.go) and the candies — the former core caller,
+// check_endpoint_resolve.go's resolveImageLabelFor, relocated to candy/plugin-check's
+// resolve_endpoint.go (#55 W3 B7); it calls THESE functions directly now, same as the other
+// candies. sdk/kit re-exports each (sdk/kit/container_image.go + sdk/kit/local_image.go) so every
+// existing kit.ContainerImageRef / kit.ContainerImage / kit.InspectImageLabels call site is
+// untouched. New consumers reference spec/container directly.
 
 import (
 	"encoding/json"

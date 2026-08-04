@@ -672,6 +672,51 @@
 	nested?:     bool @go(Nested)
 }
 
+// #CheckEndpointResolveRequest/#CheckEndpointResolveReply — the resolution BODY behind the
+// fixed CheckContext.ResolveEndpoint reverse-RPC every out-of-process live-container verb
+// (cdp/wl/vnc/dbus/mcp) dials back into (#55 W3 B7). The reverse-RPC SERVICE surface itself
+// stays core (charly/check_endpoint_resolve.go's hostVerbResolver wraps the core-private
+// verb-dispatch registry no out-of-process caller can bypass) — only the RESOLUTION WORK
+// relocates, compiled-in-REQUIRED placement class (bed_session.go's precedent, #55 W3
+// B2-full): the venue-classify leg it calls was ALREADY plugin-native
+// (#CheckVenueResolveRequest above), and the downstream resolution (spec/checkhost's
+// EndpointForVenue) has zero core-private dependency of its own. Any ssh -L forward it opens
+// is tracked in the plugin's OWN per-process pending-cleanup state, never on the wire (a live
+// cleanup closure cannot cross ANY Invoke — compiled-in or not, the wire is JSON bytes only)
+// — see #CheckDrainEndpointCleanupsRequest for the close-it-now signal.
+#CheckEndpointResolveRequest: {
+	box!:      string @go(Box)
+	instance?: string @go(Instance)
+	mode!:     string @go(Mode)
+	port!:     int    @go(Port, type=int)
+}
+#CheckEndpointResolveReply: {
+	addr?: string @go(Addr)
+}
+
+// #CheckImageLabelResolveRequest/#CheckImageLabelResolveReply — the resolution BODY behind
+// the fixed CheckContext.ResolveImageLabel reverse-RPC (#55 W3 B7), the sibling of
+// #CheckEndpointResolveRequest above (same placement class; no live resource to track — a
+// raw OCI label read is a pure podman-inspect computation).
+#CheckImageLabelResolveRequest: {
+	box!:      string @go(Box)
+	instance?: string @go(Instance)
+	mode!:     string @go(Mode)
+	label!:    string @go(Label)
+}
+#CheckImageLabelResolveReply: {
+	value?: string @go(Value)
+}
+
+// #CheckDrainEndpointCleanupsRequest signals plugin-check to close every forward its
+// #CheckEndpointResolveRequest handler opened since the last drain (LIFO) — the plugin-side
+// twin of the former core-side hostVerbResolver.runEndpointCleanups (#55 W3 B7). Carries no
+// fields: the plugin's pending-cleanup list IS the state, reset+drained per single-verb
+// Invoke — the SAME sequential per-Invoke lifecycle guarantee the former core-side
+// h.endpointCleanups = nil / defer h.runEndpointCleanups() bracket relied on, now owned by
+// the plugin instead.
+#CheckDrainEndpointCleanupsRequest: {}
+
 // #CheckLoadPluginsRequest asks the host to connect the out-of-process plugin candies a check
 // plan's verb words reference (K1-unblock wave — the "live" check-run arm). Verb dispatch itself
 // crosses the wire generically via InvokeProvider (S1 — command:check's pluginVerbResolver), but
