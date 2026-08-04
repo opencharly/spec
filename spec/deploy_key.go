@@ -37,9 +37,10 @@ func ParseDeployKey(key string) (boxName, instance string) {
 // duplicated in charly core, candy/plugin-bundle, and candy/plugin-substrate).
 //
 // The flag is `--assume-yes`, NOT `--yes`/`--force`: the command:bundle plugin's `charly bundle del`
-// Kong grammar (candy/plugin-bundle) renders its AssumeYes field as --assume-yes because Kong
-// derives the long name from the FIELD (the `long:"yes"` tag is a Kong no-op in the separate-tag
-// form), with `-y` as the short form. A `--yes`/`--force` drift — neither of which Kong accepts —
+// Kong grammar (candy/plugin-bundle) declares its AssumeYes field `name:"assume-yes"`, with `-y` as
+// the short form. That tag used to read `long:"yes"` — go-flags syntax Kong ignores, so the flag was
+// only ever --assume-yes by accident of Kong's field-name derivation; the whole tree was converted to
+// `name:` so the declaration states what ships. A `--yes`/`--force` drift — neither of which Kong accepts —
 // once aborted teardown at arg-parse and silently leaked the resource (see CHANGELOG/); the
 // deploy-del-flag regression test guards this.
 func BundleDelArgv(name string) []string {
