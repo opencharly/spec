@@ -20,8 +20,8 @@ import (
 // call this on the SAME deploy name, so the domain they derive always agrees.
 //
 // Home note (FLOOR-legal leaf): lives in package spec — the always-floor-legal
-// wire/vocabulary leaf — so kernel-floor charly files (host_build_check_bed.go)
-// derive the domain identity without a vmshared import. stdlib-only (strings).
+// wire/vocabulary leaf — so BOTH charly core and a plugin (candy/plugin-check's bed_session.go,
+// #55 W3 B2-full) derive the domain identity without a vmshared import. stdlib-only (strings).
 func VmDomainIdentity(deployName string) string {
 	id := strings.TrimPrefix(deployName, "vm:")
 	id = strings.ReplaceAll(id, "/", "-")

@@ -2,14 +2,16 @@ package lock
 
 // bed_vm_domain.go — the per-libvirt-domain host contention locks for a check bed,
 // RELOCATED to the spec/lock fabric slice (#55 CHECK-ENGINE cone Option A — the bed-session
-// lock family charly core's check-bed session seam (host_build_check_bed.go) reaches importing
+// lock family candy/plugin-check's bed session (bed_session.go, #55 W3 B2-full) reaches importing
 // zero kit). Pure over an already-LOADED (loader-stamped) spec.BundleNode: it reads node.Descent
 // directly rather than falling back to a registry-backed resolver — a check bed's node always
 // comes from LoadUnified, so it is always stamped, and the registry fallback never fires for
-// this caller. A caller holding a possibly-synthetic node must NOT use this pair; it needs the
-// registry-aware core nodeTraits. sdk/kit re-exports each symbol (sdk/kit/check_bed_lock.go) so
-// every existing kit.BedVmDomains / kit.AcquireVmDomainLock call site (charly core + plugins) is
-// untouched. New consumers reference spec/lock directly.
+// this caller. A caller holding a possibly-synthetic node must NOT use this pair; a synthetic
+// (un-stamped) node has no registry-aware resolver to fall back to anymore either — core's former
+// on-the-fly nodeTraits died with its last caller (#55 W3 B2-full); every surviving consult site
+// reads node.Descent directly, stamped by the loader. sdk/kit re-exports each symbol
+// (sdk/kit/check_bed_lock.go) so every existing kit.BedVmDomains / kit.AcquireVmDomainLock call
+// site (charly core + plugins) is untouched. New consumers reference spec/lock directly.
 
 import (
 	"os"

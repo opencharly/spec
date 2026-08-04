@@ -134,6 +134,26 @@ func IsContainerVenue(node *BundleNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.Venue == "container"
 }
 
+// ExternalInPlaceVenue reports whether node's stamped venue is an EXTERNAL deploy substrate that
+// applies its workload IN PLACE — local-like: no container image to build, no `charly
+// config`/`charly start`, teardown via `charly bundle del` (replay the recorded reverse ops).
+// local/android/k8s/exampledeploy are in-place (parent/none venues); pod is the one externalized
+// substrate that is NOT in-place (excluded by requiring venue != container implicitly, since
+// parent/none never equals container). Mirrors HostRooted's shape (#55 W3 B2-full) — the
+// plugin-reachable equivalent of the former core-private bedExternalInPlace(target string), which
+// queried isExternalDeploySubstrate against the live provider registry: every node this predicate
+// sees comes from an already-loaded, Descent-stamped project, so the registry round-trip was
+// redundant with data already on the wire (the SAME finding candy/plugin-bundle's
+// externalInPlaceFromDescent already proved for a bed's sibling MEMBERS — this promotes that one
+// shared predicate for the bed ROOT too, R3).
+func ExternalInPlaceVenue(node *BundleNode) bool {
+	if node == nil || node.Descent == nil {
+		return false
+	}
+	v := node.Descent.Venue
+	return v == "parent" || v == "none"
+}
+
 // DeployNestedLocalChildren deploys a parent venue's nested target:local children via the
 // dotted-path dispatch — each host-rooted (local/SSH-shell) child applies its candies in place.
 // Promoted from sdk/deploykit (#55 U4), now that HostRooted is a spec predicate; deploykit keeps a

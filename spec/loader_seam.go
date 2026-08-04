@@ -429,8 +429,9 @@ type RefsCollectSeams struct {
 	// host-supplied callback.
 	ResolveLocal func(body json.RawMessage) (*ResolvedLocal, error)
 	// OverrideEnvValue is the raw CHARLY_REPO_OVERRIDE env value (RDD local-overrides) — the host
-	// reads os.Getenv once; this mechanism never touches the env var NAME (host_build_check_bed.go
-	// also reads/writes it, so the name itself stays a core-resident constant).
+	// reads os.Getenv once; this mechanism never touches the env var NAME (spec/proc.RepoOverrideEnv,
+	// #55 W3 B2-full — shared by charly core's plugin_loader.go and candy/plugin-check's
+	// bed_session.go, both of which read/write it independently).
 	OverrideEnvValue string
 }
 

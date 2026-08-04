@@ -704,31 +704,33 @@
 // loudly later, at actual verb dispatch, never here).
 #CheckLoadPluginsReply: {}
 
-// #CheckBedRequest — the transitional check-bed host-session seam (P12 Wave-2, K5-mortal).
-// A compiled-in plugin-check drives the R10 bed sequence over HostBuild("cli"), but the
-// lock/lease/env lifecycle + the node-derived bed shape are core state a separate module
-// cannot hold: this op-discriminated envelope opens/drives/closes a host-side session keyed by
-// Bed. Class-generic action noun "check-bed" (F11 — never a substrate/provider word). The
-// setup/teardown pair are two of its ops; members-up/members-down are the mid-sequence
-// host-coupled helpers (they run AFTER the substrate deploys, so cannot fold into setup, and call
-// saveDeployState+libvirt+SSHExecutor/podman polls with no `charly` verb, so cannot be
-// cli-reentry). The former `wait-ready` op DIED (#55 W3 B2) — its data (node venue + bed domain)
-// was already returned in the setup reply, so the plugin now calls spec/exec's readiness gates
-// directly. DIES at K5 (post-loaderkit the plugin self-orchestrates its own flock via spec/lock —
-// the delivered any-process-safe state family — computes the repo-override itself, and calls the
-// arbiter over InvokeProvider).
-#CheckBedRequest: {
-	op!:  string @go(Op)  // setup | members-up | members-down | teardown
-	bed!: string @go(Bed) // the disposable bundle (bed) name — the session key
-	ok?:  bool   @go(OK)  // teardown only: true → Lease.Release, false → Lease.ReleaseFailed
-	dir?: string @go(Dir) // project dir (empty → host cwd), matching LoadUnified(dir)
+// #CheckBedRequest DIED (#55 W3 B2-full): the "check-bed" op-discriminated HostBuild seam it
+// carried is gone. The compiled-in plugin-check now self-orchestrates the whole bed session
+// itself — flock via spec/lock, the repo-override via spec/proc, the arbiter lease via a direct
+// InvokeProvider(verb,"arbiter") call (the vm_arbiter_shim precedent) — exactly the K5 death this
+// type's own header already predicted. See candy/plugin-check/bed_session.go.
+//
+// #CheckBedGpuPrereqRequest/#CheckBedGpuPrereqReply is the ONE narrow seam that SURVIVES: GPU
+// host-DETECTION (gpu_allocate.go's bedGPUPrereqMissing, DetectVFIO) is the project's explicitly
+// operator-dropped exception (no hardware to verify against; fenced from every K-wave cutover,
+// including this one — see gpu_shim.go's own header). Threads just the claimant's resource
+// tokens out and the GPU-unsatisfiable verdict back, so the fenced core logic stays completely
+// unchanged.
+#CheckBedGpuPrereqRequest: {
+	tokens?: [...string] @go(Tokens) // dedupeNonEmpty(RequiredExclusive ++ RequiredShared), pre-computed plugin-side
+}
+#CheckBedGpuPrereqReply: {
+	missing?: bool   @go(Missing)
+	token?:   string @go(Token)
+	vendor?:  string @go(Vendor)
 }
 
-// #CheckBedReply — the setup op returns the BedDescriptor (the node-derived shape the kind-blind
-// plugin drives the sequence from — the substrate analogue of OpPrepareVenue's VenueDescriptor).
-// All other ops return {} (errors ride the host-builder error return). PrereqSkip set ⇒ the bed
-// is a clean SKIP (exit 3): the plugin writes the prereq-skip summary + returns CheckSkippedError,
-// running NO other op (not even teardown — setup acquired nothing on the skip path).
+// #CheckBedReply is now a plain plugin-internal DESCRIPTOR VALUE TYPE (#55 W3 B2-full), never a
+// wire reply — candy/plugin-check/bed_session.go constructs it directly (no HostBuild round-trip;
+// the type stays CUE-sourced per SDD, since it is still a useful named shape the plugin builds and
+// consumes internally). PrereqSkip set ⇒ the bed is a clean SKIP (exit 3): the plugin writes the
+// prereq-skip summary + returns CheckSkippedError, running NO other setup step (not even teardown
+// — nothing was acquired on the skip path).
 #CheckBedReply: {
 	calver?:      string            @go(Calver)                    // logDir calver (.check/<bed>/<calver>)
 	log_dir?:     string            @go(LogDir)                    // host-relative; the plugin writes step logs here
