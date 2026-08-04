@@ -5564,7 +5564,7 @@ type ConfigResolveRequest struct {
 // create/build pipeline reads; VmBackend also feeds the plugin-side backend resolve
 // (candy/plugin-vm/vm_backend_resolve.go, F6 vm-lifecycle move, coneB-vmlifecycle — the
 // resolved Backend value itself no longer crosses the wire; the plugin computes it from
-// VmBackend + its own "deploy-entity-resolve" call). VmState is the entity's persisted
+// VmBackend + its own project self-load, K-wave W3a A3-phase-2). VmState is the entity's persisted
 // deploy-ledger runtime state (instance-id, ssh_port, disk path) — the host reads it
 // spec-only via LoadUnified(perHostConfigDir) (#55 coneC-dsh β2 — no deploykit; consumed by
 // plugin-vm + plugin-kube + plugin-deploy-vm, so it stays a wire field) so the plugin reuses
@@ -5960,56 +5960,6 @@ type EphemeralRegisterRequest struct {
 type EphemeralRegisterReply struct {
 }
 
-// #DeployEntityResolveRequest/#DeployEntityResolveReply — the F6-family GENERIC host-side
-// entity-lookup seam (unit 6a, extended for unit 6b's k3s_post consumer, and candy/plugin-vm's own
-// vmConfiguredBackendPlugin — F6 vm-lifecycle move, coneB-vmlifecycle, formerly charly-core's
-// vm_backend_lifecycle.go's vmConfiguredBackend, now plugin-side): a substrate PRERESOLVE body
-// (k8s/vm/android, F6) OR a peer consumer resolving a cross-reference (k3s_post's
-// deployVMForwards, vmConfiguredBackendPlugin) needs a LoadUnified-coupled lookup a plugin cannot
-// do itself — EITHER (a) its own deploy-tree node by name (the Update-path re-resolve every
-// preresolver does when node==nil, OR a bundle-key cross-reference's From-field hop — today: the
-// host merged-tree read) or (b) a referenced kind:<word> entity (k8s/android/vm) by name, returned
-// as the WHOLE RESOLVED envelope so a caller just reads its fields (Backend, Network.PortForwards,
-// Candy, …) without tracing the resolver's own portability. (The kind:local template lookup this
-// seam ALSO used to serve is RETIRED — W4/K4 unit A moved it to the resolved-project envelope's
-// Templates.Local, candy/plugin-bundle/node_resolve.go's lookupLocalTemplate; this seam carries no
-// "local" arm.) ONE discriminated request replaces per-purpose kinds: `kind` is DATA end-to-end
-// (W0) — the host handler routes tree-vs-template by request SHAPE (tree_json set or not), never
-// by inspecting kind's value, and a template lookup reaches the owning substrate provider
-// generically (uf.ProjectTemplates().ByKind(kind) for the raw body, providerRegistry.ResolveKind(kind)
-// for the plugin, {kind:{kind:body}} for the discriminated OpResolve request every substrate word
-// already accepts) — a fifth substrate needs no new `case` in the host handler, only a new word
-// registered by its owning plugin. `entity` carries the kind-specific result OPAQUELY —
-// ResolvedK8s/ResolvedAndroid/the vm entity (ResolvedVm) are ALL CUE-sourced
-// (schema/substrate_template.cue, schema/vm.cue; SDD conversion), but this seam still carries them
-// as opaque bytes rather than a typed field, because `kind` is DATA the host never branches on and
-// the caller already knows which kind it asked for and decodes accordingly — mirroring the
-// DeployCompileReply RawBody idiom used throughout this file for the same reason. `entity` is the
-// Resolved* envelope's JSON VERBATIM for every kind, unwrapped (W0 deleted the one-off
-// #AndroidEntityResolution asymmetry).
-type DeployEntityResolveRequest struct {
-	Kind string `yaml:"kind,omitempty" json:"kind"`
-
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-
-	// tree_json is the merged project+operator deploy tree the invoking plugin resolved PLUGIN-SIDE
-	// (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA for the deploy/bundle-kind node
-	// lookup so the host stops re-loading the tree with a host-resident deploykit read (#55 Cone A Unit 3b).
-	// Marshalled map[string]spec.Deploy; its PRESENCE (not the kind string) is what routes the host
-	// handler to the tree-node lookup — the kind:<word> template lookups (k8s/android/vm/local) never
-	// set it. An absent tree yields a not-found for the deploy/bundle lookup, matching a nil
-	// host-tree-read result.
-	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
-}
-
-type DeployEntityResolveReply struct {
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
-
-	EntityJSON RawBody `yaml:"entity,omitempty" json:"entity,omitempty"`
-}
-
 // #EphemeralTeardownRequest/#EphemeralTeardownReply — the OpEphemeralTeardown leg any
 // substrate's own post-teardown handling can Invoke directly (recursive nested-child teardown,
 // TTL timer cancel, snapshot/parent refcount decrement, charly.yml cleanup lives in
@@ -6026,18 +5976,18 @@ type EphemeralTeardownRequest struct {
 type EphemeralTeardownReply struct {
 }
 
-// #K8sGenerateKustomizeRequest/#K8sGenerateKustomizeReply — the "k8s-generate-kustomize"
-// HostBuild seam (FINAL/K5 unit 6a): the deploy:k8s preresolve body (now plugin-side,
-// candy/plugin-kube/preresolve.go) resolves the cluster template (via
-// "deploy-entity-resolve", kind="k8s") + the image ref + capabilities itself (all
-// sdk-portable — kit.ResolveLocalImageRef / deploykit.ExtractMetadata, no LoadUnified
-// needed), then calls back HERE for the ONE genuinely core-only step:
-// charly/k8s_generate.go's GenerateK8sKustomize (Invokes the compiled-in verb:k8sgen
-// generator + the M16 egress gate + the disk I/O — all core-only glue, unchanged,
-// STAYS in charly/ since `charly bundle from-box --target k8s`
-// (k8s_deploy_from_box.go) is its OTHER, non-moving caller). Cluster/Capabilities ride
-// opaque (the established RawBody idiom this file uses throughout for hand-written
-// host-side types with no CUE def — e.g. CapsJSON/ClusterJSON in this very def below).
+// #K8sGenerateKustomizeRequest/#K8sGenerateKustomizeReply — the request/reply shape
+// candy/plugin-kube's materializeKustomize (materialize.go) takes/returns. The former
+// "k8s-generate-kustomize" HostBuild seam this type pair used to cross (FINAL/K5 unit 6a) is
+// RETIRED (K5-A item 6): the egress-validated Kustomize GENERATION now runs ENTIRELY
+// plugin-side — verb:k8sgen + verb:egress reached peer-to-peer via InvokeProvider, disk I/O done
+// directly by the plugin, no host round trip left — so this pair now travels as a plain Go
+// function signature (materializeKustomize's params/return), not a wire envelope. Both callers
+// (candy/plugin-kube/preresolve.go's deploy:k8s preresolve, which self-loads the cluster
+// template + image ref/capabilities itself now too — K-wave W3a A3-phase-2 — and
+// candy/plugin-bundle/deploy_from_box.go's source-less from-box path) construct it directly.
+// Cluster/Capabilities ride opaque (the established RawBody idiom this file uses throughout for
+// hand-written host-side types with no CUE def — e.g. CapsJSON/ClusterJSON in this very def below).
 type K8sGenerateKustomizeRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
