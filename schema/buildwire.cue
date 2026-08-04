@@ -141,15 +141,13 @@
 	// InstallPlanViews. Empty for the no-overlay path.
 	plans?: [...#InstallPlanView] @go(Plans)
 
-	// base_user is the base image's runtime USER — the candy emits the
-	// post-overlay `USER <base>` restore directive.
-	base_user?: string @go(BaseUser)
-
-	// base_security is the base image's baked LabelSecurity.
-	base_security?: #Security @go(BaseSecurity,optional=nillable)
-
-	// base_registry is the base image's ai.opencharly.registry OCI label.
-	base_registry?: string @go(BaseRegistry)
+	// base_user / base_security / base_registry (the base image's runtime USER,
+	// baked LabelSecurity, and ai.opencharly.registry OCI label) are DELETED
+	// (K3-W2): the candy already holds base_image (this reply) and can read
+	// this metadata itself via deploykit.ExtractMetadata — the same
+	// spec/container mechanism the host used, re-exported sdk-side — no host
+	// round-trip needed (candy/plugin-deploy-pod/lifecycle.go's
+	// podPrepareVenue computes it directly).
 
 	// calver is the host's current CalVer.
 	calver?: string @go(CalVer)

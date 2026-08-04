@@ -2721,16 +2721,6 @@ type OverlayBuildReply struct {
 	// InstallPlanViews. Empty for the no-overlay path.
 	Plans []InstallPlanView `yaml:"plans,omitempty" json:"plans,omitempty"`
 
-	// base_user is the base image's runtime USER — the candy emits the
-	// post-overlay `USER <base>` restore directive.
-	BaseUser string `yaml:"base_user,omitempty" json:"base_user,omitempty"`
-
-	// base_security is the base image's baked LabelSecurity.
-	BaseSecurity *Security `yaml:"base_security,omitempty" json:"base_security,omitempty"`
-
-	// base_registry is the base image's ai.opencharly.registry OCI label.
-	BaseRegistry string `yaml:"base_registry,omitempty" json:"base_registry,omitempty"`
-
 	// calver is the host's current CalVer.
 	CalVer string `yaml:"calver,omitempty" json:"calver,omitempty"`
 
