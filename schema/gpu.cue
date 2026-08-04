@@ -55,16 +55,15 @@
 	devices!: [...string] @go(Devices) // Other device paths to pass via --device
 }
 
-// #GpuProbeInput is the action-multiplexed input the host ships to verb:gpu
-// over OpRun. Action selects the host probe; the three data tables are
-// threaded in from charly's embedded charly.yml (they stay in core for
-// `charly doctor`, R3).
+// #GpuProbeInput is the action-multiplexed input to verb:gpu over OpRun. Action selects the
+// host probe. The three data tables (device_patterns/gpu_vendors/pci_class_labels) are now
+// candy/plugin-gpu's OWN embedded data (K5 seam-death — they moved out of charly-core's
+// embedded charly.yml alongside the "hostprobe" HostBuild kind's dissolution; plugin-gpu is
+// the actual detection consumer, so it is the one data source, R3), so this input no longer
+// threads them.
 #GpuProbeInput: {
 	action!: string @go(Action) // detect-gpu | detect-amd-gpu | detect-vfio | detect-host-devices | ensure-cdi | memlock | vfio-group-accessible | amd-gfx-version
 	group?:  int    @go(Group,type=int) // vfio-group-accessible
-	device_patterns?: [...string] @go(DevicePatterns) // detect-host-devices
-	gpu_vendors?: {[string]: string} @go(GpuVendors) // detect-host-devices (pickRenderNode)
-	pci_class_labels?: {[string]: string} @go(PCIClassLabels) // detect-vfio (readPCIDevice)
 }
 
 // #GpuProbeReply is the action-multiplexed reply from verb:gpu. Each action

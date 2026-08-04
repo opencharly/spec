@@ -4439,143 +4439,6 @@ type CredentialHealth struct {
 	IndexMissing []string `yaml:"index_missing,omitempty" json:"index_missing,omitempty"`
 }
 
-// #HostProbeDevice is one host device-pattern probe result (the doctor
-// "devices" section).
-type HostProbeDevice struct {
-	Pattern string `yaml:"pattern,omitempty" json:"pattern"`
-
-	Path string `yaml:"path,omitempty" json:"path"`
-
-	Present bool `yaml:"present,omitempty" json:"present"`
-
-	Description string `yaml:"description,omitempty" json:"description"`
-}
-
-// #HostProbeDistro is the host distro identity + package manager (drives
-// install-hint rendering).
-type HostProbeDistro struct {
-	ID string `yaml:"id,omitempty" json:"id"`
-
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Manager string `yaml:"manager,omitempty" json:"manager"`
-}
-
-// #HostProbeRequest is the "hostprobe" HostBuild kind request. Engine hints
-// which container engine's GPU run-flags to compute (empty → the host
-// resolves it).
-type HostProbeRequest struct {
-	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
-}
-
-// #HostProbeReply is the "hostprobe" HostBuild kind reply — RAW host facts the
-// plugin renders into the report. All fields are best-effort (a probe failure
-// leaves its field zero/empty, mirroring the shims).
-//
-// group_accessible is RESHAPED from the former hand type's `map[int]bool` to a
-// string-keyed map: `cue exp gengotypes` has no int-keyed-map construct (an
-// int-keyed CUE map degrades to an empty struct — the documented CAN/CANNOT
-// exception). encoding/json ALREADY converts a Go `map[int]bool`'s keys to
-// their decimal string form on the wire (Go's own int->string key rule for
-// map marshaling), so `map[string]bool` with the SAME decimal-string keys is
-// BYTE-IDENTICAL JSON — a pure representation fix, zero wire-format change.
-// The two Go call sites that constructed/read the int-keyed map
-// (charly/host_build_hostprobe.go, candy/plugin-doctor/command.go) are updated
-// in lockstep to key by strconv.Itoa(iommuGroup).
-type HostProbeReply struct {
-	GPU bool `yaml:"gpu,omitempty" json:"gpu"`
-
-	AMDGPU bool `yaml:"amd_gpu,omitempty" json:"amd_gpu"`
-
-	AMDGFXVersion string `yaml:"amd_gfx_version,omitempty" json:"amd_gfx_version,omitempty"`
-
-	GPUFlags []string `yaml:"gpu_flags,omitempty" json:"gpu_flags,omitempty"`
-
-	Vfio *VFIOReport `yaml:"vfio,omitempty" json:"vfio,omitempty"`
-
-	MemlockSoft uint64 `yaml:"memlock_soft,omitempty" json:"memlock_soft"`
-
-	MemlockHard uint64 `yaml:"memlock_hard,omitempty" json:"memlock_hard"`
-
-	VfioPciAvailable bool `yaml:"vfio_pci_available,omitempty" json:"vfio_pci_available"`
-
-	GroupAccessible map[string]bool `yaml:"group_accessible,omitempty" json:"group_accessible,omitempty"`
-
-	Devices []HostProbeDevice `yaml:"devices,omitempty" json:"devices,omitempty"`
-
-	Distro HostProbeDistro `yaml:"distro,omitempty" json:"distro"`
-
-	InstallHints map[string]map[string]string `yaml:"install_hints,omitempty" json:"install_hints,omitempty"`
-
-	DistroFamilyMap map[string]string `yaml:"distro_family_map,omitempty" json:"distro_family_map,omitempty"`
-
-	ConfigPath string `yaml:"config_path,omitempty" json:"config_path,omitempty"`
-
-	Credential *CredentialHealth `yaml:"credential,omitempty" json:"credential,omitempty"`
-
-	CredentialErr string `yaml:"credential_err,omitempty" json:"credential_err,omitempty"`
-
-	Error string `yaml:"error,omitempty" json:"error,omitempty"`
-}
-
-// #VFIOReport summarizes host readiness for VFIO GPU passthrough.
-type VFIOReport struct {
-	IOMMUEnabled bool `yaml:"iommu_enabled,omitempty" json:"iommu_enabled"`
-
-	IOMMUKind string `yaml:"iommu_kind,omitempty" json:"iommu_kind"`
-
-	GPUs []VFIOGpu `yaml:"gpus,omitempty" json:"gpus"`
-}
-
-// #VFIOGpu is a display-class device plus every other function sharing its
-// IOMMU group. Passthrough must move the whole group together, so the
-// renderer emits one <hostdev> per GroupMember.
-//
-// FLATTENED (never a Go anonymous-embedded field — CUE unification has no
-// concept of Go embedding; it always structurally merges fields into one flat
-// struct). The former hand type embedded VFIOPCIDevice anonymously; Go's
-// encoding/json ALREADY promotes an anonymous embedded struct's fields to the
-// parent JSON object on the wire (Go's own embedding-promotion rule), so this
-// flattened shape is BYTE-IDENTICAL JSON to the former embedded type — the
-// only consumer-visible change is Go SOURCE: a composite literal naming the
-// embedded field (`VFIOGpu{VFIOPCIDevice: d}`) must spread d's fields instead
-// (`VFIOGpu{Addr: d.Addr, ...}`). Fixed at every call site in the same
-// cutover (candy/plugin-gpu, charly test fixtures).
-type VFIOGpu struct {
-	Addr string `yaml:"addr,omitempty" json:"addr"`
-
-	GroupMembers []VFIOPCIDevice `yaml:"group_members,omitempty" json:"group_members"`
-
-	VendorID string `yaml:"vendor_id,omitempty" json:"vendor_id"`
-
-	DeviceID string `yaml:"device_id,omitempty" json:"device_id"`
-
-	Class string `yaml:"class,omitempty" json:"class"`
-
-	ClassLabel string `yaml:"class_label,omitempty" json:"class_label"`
-
-	Driver string `yaml:"driver,omitempty" json:"driver"`
-
-	IOMMUGroup int `yaml:"iommu_group,omitempty" json:"iommu_group"`
-}
-
-// #VFIOPCIDevice is a single PCI function discovered under sysfs.
-type VFIOPCIDevice struct {
-	Addr string `yaml:"addr,omitempty" json:"addr"`
-
-	VendorID string `yaml:"vendor_id,omitempty" json:"vendor_id"`
-
-	DeviceID string `yaml:"device_id,omitempty" json:"device_id"`
-
-	Class string `yaml:"class,omitempty" json:"class"`
-
-	ClassLabel string `yaml:"class_label,omitempty" json:"class_label"`
-
-	Driver string `yaml:"driver,omitempty" json:"driver"`
-
-	IOMMUGroup int `yaml:"iommu_group,omitempty" json:"iommu_group"`
-}
-
 // #EncVolumePlan is one encrypted volume, fully resolved HOST-SIDE: its charly
 // name (for messages), the on-disk cipher/plain dirs, the systemd scope-unit
 // name, and the host-probed initialized/mounted state. The plugin acts on
@@ -4654,6 +4517,64 @@ type FeatureReply struct {
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
+// #VFIOPCIDevice is a single PCI function discovered under sysfs.
+type VFIOPCIDevice struct {
+	Addr string `yaml:"addr,omitempty" json:"addr"`
+
+	VendorID string `yaml:"vendor_id,omitempty" json:"vendor_id"`
+
+	DeviceID string `yaml:"device_id,omitempty" json:"device_id"`
+
+	Class string `yaml:"class,omitempty" json:"class"`
+
+	ClassLabel string `yaml:"class_label,omitempty" json:"class_label"`
+
+	Driver string `yaml:"driver,omitempty" json:"driver"`
+
+	IOMMUGroup int `yaml:"iommu_group,omitempty" json:"iommu_group"`
+}
+
+// #VFIOGpu is a display-class device plus every other function sharing its
+// IOMMU group. Passthrough must move the whole group together, so the
+// renderer emits one <hostdev> per GroupMember.
+//
+// FLATTENED (never a Go anonymous-embedded field — CUE unification has no
+// concept of Go embedding; it always structurally merges fields into one flat
+// struct). The former hand type embedded VFIOPCIDevice anonymously; Go's
+// encoding/json ALREADY promotes an anonymous embedded struct's fields to the
+// parent JSON object on the wire (Go's own embedding-promotion rule), so this
+// flattened shape is BYTE-IDENTICAL JSON to the former embedded type — the
+// only consumer-visible change is Go SOURCE: a composite literal naming the
+// embedded field (`VFIOGpu{VFIOPCIDevice: d}`) must spread d's fields instead
+// (`VFIOGpu{Addr: d.Addr, ...}`). Fixed at every call site in the same
+// cutover (candy/plugin-gpu, charly test fixtures).
+type VFIOGpu struct {
+	Addr string `yaml:"addr,omitempty" json:"addr"`
+
+	GroupMembers []VFIOPCIDevice `yaml:"group_members,omitempty" json:"group_members"`
+
+	VendorID string `yaml:"vendor_id,omitempty" json:"vendor_id"`
+
+	DeviceID string `yaml:"device_id,omitempty" json:"device_id"`
+
+	Class string `yaml:"class,omitempty" json:"class"`
+
+	ClassLabel string `yaml:"class_label,omitempty" json:"class_label"`
+
+	Driver string `yaml:"driver,omitempty" json:"driver"`
+
+	IOMMUGroup int `yaml:"iommu_group,omitempty" json:"iommu_group"`
+}
+
+// #VFIOReport summarizes host readiness for VFIO GPU passthrough.
+type VFIOReport struct {
+	IOMMUEnabled bool `yaml:"iommu_enabled,omitempty" json:"iommu_enabled"`
+
+	IOMMUKind string `yaml:"iommu_kind,omitempty" json:"iommu_kind"`
+
+	GPUs []VFIOGpu `yaml:"gpus,omitempty" json:"gpus"`
+}
+
 // #DetectedDevices holds the results of host device auto-detection.
 type DetectedDevices struct {
 	GPU bool `yaml:"gpu,omitempty" json:"gpu"`
@@ -4667,20 +4588,16 @@ type DetectedDevices struct {
 	Devices []string `yaml:"devices,omitempty" json:"devices"`
 }
 
-// #GpuProbeInput is the action-multiplexed input the host ships to verb:gpu
-// over OpRun. Action selects the host probe; the three data tables are
-// threaded in from charly's embedded charly.yml (they stay in core for
-// `charly doctor`, R3).
+// #GpuProbeInput is the action-multiplexed input to verb:gpu over OpRun. Action selects the
+// host probe. The three data tables (device_patterns/gpu_vendors/pci_class_labels) are now
+// candy/plugin-gpu's OWN embedded data (K5 seam-death — they moved out of charly-core's
+// embedded charly.yml alongside the "hostprobe" HostBuild kind's dissolution; plugin-gpu is
+// the actual detection consumer, so it is the one data source, R3), so this input no longer
+// threads them.
 type GpuProbeInput struct {
 	Action string `yaml:"action,omitempty" json:"action"`
 
 	Group int `yaml:"group,omitempty" json:"group,omitempty"`
-
-	DevicePatterns []string `yaml:"device_patterns,omitempty" json:"device_patterns,omitempty"`
-
-	GpuVendors map[string]string `yaml:"gpu_vendors,omitempty" json:"gpu_vendors,omitempty"`
-
-	PCIClassLabels map[string]string `yaml:"pci_class_labels,omitempty" json:"pci_class_labels,omitempty"`
 }
 
 // #GpuProbeReply is the action-multiplexed reply from verb:gpu. Each action
@@ -5624,23 +5541,6 @@ type DeployOverlayRequest struct {
 // exists yet, matching LoadDeployConfigForRead's own nil-BundleConfig contract).
 type DeployOverlayReply struct {
 	ConfigJSON RawBody `yaml:"config_json,omitempty" json:"config_json,omitempty"`
-}
-
-// #DevicePatternsRequest is empty — the embedded device_patterns/gpu_vendors directives are
-// baked into charly-core's binary (the embedded default charly.yml), not project- or host-scoped,
-// so nothing varies per call. Asks the host for the tables candy/plugin-gpu's detect-host-devices
-// action needs (K4: plugin-deploy-pod's device auto-detection reaching verb:gpu directly, the same
-// dispatch charly-core's gpu_shim.go already does — mirrors candy/plugin-vm/vm_gpu_shim.go's
-// existing InvokeProvider("verb","gpu",...) precedent). Class-generic action noun
-// "device-patterns" (F11 — never a substrate word); any substrate resolving devices needs it.
-type DevicePatternsRequest struct {
-}
-
-// #DevicePatternsReply carries the two embedded tables verbatim (see charly/devices.go).
-type DevicePatternsReply struct {
-	DevicePatterns []string `yaml:"device_patterns,omitempty" json:"device_patterns,omitempty"`
-
-	GpuVendors map[string]string `yaml:"gpu_vendors,omitempty" json:"gpu_vendors,omitempty"`
 }
 
 // #VmBuildRequest carries the `charly vm build` command flags (the former
