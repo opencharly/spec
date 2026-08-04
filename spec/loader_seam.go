@@ -225,8 +225,10 @@ type LoaderExecutor interface {
 	// mutates the registry BETWEEN seam construction and the post-walk validators.
 	LoaderThreaded() Threaded
 	// RunBootstrapPhase invokes every registered bootstrap-phase plugin on the raw root bytes,
-	// returning the (possibly transformed) bytes.
-	RunBootstrapPhase(data []byte) []byte
+	// returning the (possibly transformed) bytes. A leg failure (e.g. a broken reverse-channel
+	// HostBuild round trip) is a hard error — never a silent no-op fallback to the raw bytes,
+	// which would let LoadUnified proceed on an un-bootstrapped root with zero visible signal.
+	RunBootstrapPhase(data []byte) ([]byte, error)
 	// WalkProject runs the kind-blind import/discover/namespace walk (the registered ProjectWalker,
 	// reached via the host's WalkSeams) → the generic LoadedProject envelope. The host #NodeDoc CUE
 	// gate (WalkSeams.GateDoc) runs INSIDE this walk.
