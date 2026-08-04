@@ -65,6 +65,7 @@ func TestOpSelectorsStable(t *testing.T) {
 		OpStatusCollectAll:   "status-collect-all",
 		OpPreresolve:         "preresolve",
 		OpBootstrap:          "bootstrap",
+		OpPreflight:          "preflight",
 		OpEphemeralRegister:  "ephemeral-register",
 		OpEphemeralTeardown:  "ephemeral-teardown",
 		OpDeployDispatch:     "deploy-dispatch",
@@ -84,7 +85,7 @@ func TestOpSelectorsDistinct(t *testing.T) {
 		OpCollectContext, OpReverse, OpPrepareVenue, OpArtifactKey, OpPostApply,
 		OpTeardownExecutor, OpPostTeardown, OpStart, OpStop, OpStatus, OpLogs, OpShell,
 		OpAttach, OpRebuild, OpConfigWrite, OpConfigSetup, OpConfigRemove,
-		OpStatusCollect, OpStatusCollectAll, OpPreresolve, OpBootstrap,
+		OpStatusCollect, OpStatusCollectAll, OpPreresolve, OpBootstrap, OpPreflight,
 		OpEphemeralRegister, OpEphemeralTeardown, OpDeployDispatch, OpVerifyChecks,
 	}
 	seen := map[string]bool{}

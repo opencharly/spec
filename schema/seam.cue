@@ -104,21 +104,6 @@
 	config_json?: bytes @go(ConfigJSON,type=RawBody)
 }
 
-// #DevicePatternsRequest is empty — the embedded device_patterns/gpu_vendors directives are
-// baked into charly-core's binary (the embedded default charly.yml), not project- or host-scoped,
-// so nothing varies per call. Asks the host for the tables candy/plugin-gpu's detect-host-devices
-// action needs (K4: plugin-deploy-pod's device auto-detection reaching verb:gpu directly, the same
-// dispatch charly-core's gpu_shim.go already does — mirrors candy/plugin-vm/vm_gpu_shim.go's
-// existing InvokeProvider("verb","gpu",...) precedent). Class-generic action noun
-// "device-patterns" (F11 — never a substrate word); any substrate resolving devices needs it.
-#DevicePatternsRequest: {}
-
-// #DevicePatternsReply carries the two embedded tables verbatim (see charly/devices.go).
-#DevicePatternsReply: {
-	device_patterns?: [...string] @go(DevicePatterns)
-	gpu_vendors?: {[string]: string} @go(GpuVendors)
-}
-
 // #VmBuildRequest carries the `charly vm build` command flags (the former
 // VmBuildCmd fields). candy/plugin-vm/vm_build_resolve.go resolves the kind:vm
 // entity + the build vocabulary + the per-source-kind image refs into a #VmBuildReply
