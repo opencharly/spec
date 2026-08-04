@@ -131,8 +131,9 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 // This deliberately replaces an `sdk`-only special case whose stated rationale
 // ("the ONLY submodule a plugin build depends on … never the heavy box/* ones")
 // was wrong on both counts: spec is equally required, and a shallow init of all
-// twelve measures ~8s / 60MB — the cost that "heavy" was guarding against does
-// not exist at --depth 1. A repo declaring no submodules is a clean no-op.
+// twelve costs ~8s and adds 24MB to a 36MB clone (60MB total) — the cost that
+// "heavy" was guarding against does not exist at --depth 1. A repo declaring no
+// submodules is a clean no-op.
 //
 // The insteadOf rewrite forces the .gitmodules SSH URL (git@github.com:) to
 // HTTPS — matching how the parent repo is cloned — so no SSH key is needed in a
