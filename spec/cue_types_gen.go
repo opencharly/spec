@@ -6256,11 +6256,14 @@ type CheckLoadPluginsReply struct {
 // lock/lease/env lifecycle + the node-derived bed shape are core state a separate module
 // cannot hold: this op-discriminated envelope opens/drives/closes a host-side session keyed by
 // Bed. Class-generic action noun "check-bed" (F11 — never a substrate/provider word). The
-// setup/teardown pair are two of its ops; members-up/members-down/wait-ready are the
-// mid-sequence host-coupled helpers (they run AFTER the substrate deploys, so cannot fold into
-// setup, and call saveDeployState+libvirt+SSHExecutor/podman polls with no `charly` verb, so
-// cannot be cli-reentry). DIES at K5 (post-loaderkit the plugin self-orchestrates its own flock
-// via statekit, computes the repo-override itself, and calls the arbiter over InvokeProvider).
+// setup/teardown pair are two of its ops; members-up/members-down are the mid-sequence
+// host-coupled helpers (they run AFTER the substrate deploys, so cannot fold into setup, and call
+// saveDeployState+libvirt+SSHExecutor/podman polls with no `charly` verb, so cannot be
+// cli-reentry). The former `wait-ready` op DIED (#55 W3 B2) — its data (node venue + bed domain)
+// was already returned in the setup reply, so the plugin now calls spec/exec's readiness gates
+// directly. DIES at K5 (post-loaderkit the plugin self-orchestrates its own flock via spec/lock —
+// the delivered any-process-safe state family — computes the repo-override itself, and calls the
+// arbiter over InvokeProvider).
 type CheckBedRequest struct {
 	Op string `yaml:"op,omitempty" json:"op"`
 
