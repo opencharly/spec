@@ -98,7 +98,7 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 	// ref is a tag object, not a commit).
 	if len(commit) >= 7 && isHex(commit) {
 		if err := gitCloneByCommit(repoURL, commit, targetDir); err == nil {
-			return populateSDKSubmodule(targetDir)
+			return populateSubmodules(targetDir)
 		}
 		_ = os.RemoveAll(targetDir) // clean up partial clone before falling back
 	}
@@ -111,34 +111,44 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 		return fmt.Errorf("git clone --branch %s %s: %w", ref, repoURL, err)
 	}
 
-	return populateSDKSubmodule(targetDir)
+	return populateSubmodules(targetDir)
 }
 
-// populateSDKSubmodule initializes the `sdk` submodule in a freshly-fetched
-// plugin-repo cache. The raw clone/fetch above populates NO submodules, so
-// without this every plugin BUILD from the cache (go.work `use ./sdk`) fails
-// "cannot load module ../../sdk … no such file" — the out-of-tree plugin
-// provider then fails to connect (the examplestructkind connect-fail warning +
-// the check-live "no provider registered" the concurrent roster surfaced).
-// Only the charly superproject declares an `sdk` submodule; a repo without one
-// is a no-op. The insteadOf rewrite forces the .gitmodules SSH URL
-// (git@github.com:) to HTTPS — matching how the parent repo is cloned — so no
-// SSH key is needed in a headless/CI run. Just `sdk` is initialized (the ONLY
-// submodule a plugin build's go.work depends on), never the heavy box/* ones.
-func populateSDKSubmodule(targetDir string) error {
+// populateSubmodules initializes EVERY submodule a freshly-fetched repo declares.
+// The raw clone/fetch above populates none of them, and a `--repo` cache is a
+// WHOLE PROJECT a user drives with nothing but the charly binary — so any
+// submodule may be load-bearing for a documented command:
+//
+//   - sdk + spec — every out-of-process plugin candy builds STANDALONE in its own
+//     module (GOWORK=off) against `replace … => ../../sdk` and `=> ../../spec`.
+//     86 of 87 candy go.mod files carry BOTH replaces, so populating only `sdk`
+//     left every such build failing on `../../spec/go.mod: no such file`, and no
+//     out-of-process verb could be reached through --repo at all.
+//   - box/<distro> — the box definitions themselves; main owns none.
+//   - plugins, docs, pkg/* — skills, the docs site, and the packaging sources.
+//
+// This deliberately replaces an `sdk`-only special case whose stated rationale
+// ("the ONLY submodule a plugin build depends on … never the heavy box/* ones")
+// was wrong on both counts: spec is equally required, and a shallow init of all
+// twelve measures ~8s / 60MB — the cost that "heavy" was guarding against does
+// not exist at --depth 1. A repo declaring no submodules is a clean no-op.
+//
+// The insteadOf rewrite forces the .gitmodules SSH URL (git@github.com:) to
+// HTTPS — matching how the parent repo is cloned — so no SSH key is needed in a
+// headless/CI run. Non-recursive, matching the configuration proven to build.
+func populateSubmodules(targetDir string) error {
 	gm := filepath.Join(targetDir, ".gitmodules")
-	out, err := exec.Command("git", "config", "-f", gm, "--get", "submodule.sdk.path").Output()
-	if err != nil || strings.TrimSpace(string(out)) == "" {
-		return nil // no sdk submodule declared — nothing to populate
+	if _, err := os.Stat(gm); err != nil {
+		return nil // no submodules declared — nothing to populate
 	}
 	cmd := exec.Command("git",
 		"-c", "url.https://github.com/.insteadOf=git@github.com:",
 		"-c", "advice.detachedHead=false",
-		"submodule", "update", "--init", "--depth", "1", "-q", "sdk")
+		"submodule", "update", "--init", "--depth", "1", "-q")
 	cmd.Dir = targetDir
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("populating sdk submodule in %s: %w", targetDir, err)
+		return fmt.Errorf("populating submodules in %s: %w", targetDir, err)
 	}
 	return nil
 }

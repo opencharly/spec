@@ -132,28 +132,34 @@ func TestRepoGitURL(t *testing.T) {
 	}
 }
 
-// TestPopulateSDKSubmodule_NoSDKRepoIsNoOp: a repo dir that declares no `sdk`
-// submodule (no .gitmodules, or no submodule.sdk.path) is a clean no-op — a
-// box/<distro> plugin repo has no sdk submodule and must not error.
-func TestPopulateSDKSubmodule_NoSDKRepoIsNoOp(t *testing.T) {
-	dir := t.TempDir()
-	if err := populateSDKSubmodule(dir); err != nil { // no .gitmodules at all
+// TestPopulateSubmodules_NoGitmodulesIsNoOp: a repo declaring no submodules at
+// all is a clean no-op — a box/<distro> repo has none and must not error.
+//
+// Note the deliberately narrowed contract: this used to also assert that a
+// .gitmodules declaring only box/arch was a no-op, because just `sdk` was ever
+// initialized. Populating EVERY declared submodule is the fix, so that case is
+// no longer a no-op and asserting it would pin the bug in place.
+func TestPopulateSubmodules_NoGitmodulesIsNoOp(t *testing.T) {
+	if err := populateSubmodules(t.TempDir()); err != nil { // no .gitmodules at all
 		t.Fatalf("no-.gitmodules dir must be a no-op, got %v", err)
-	}
-	// .gitmodules present but no sdk entry → still a no-op.
-	if err := os.WriteFile(filepath.Join(dir, ".gitmodules"),
-		[]byte("[submodule \"box/arch\"]\n\tpath = box/arch\n\turl = git@github.com:opencharly/distro-arch.git\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := populateSDKSubmodule(dir); err != nil {
-		t.Fatalf("no sdk submodule declared must be a no-op, got %v", err)
 	}
 }
 
-// TestGitClone_PopulatesSDKSubmodule is the end-to-end integration gate: a fresh
-// GitClone of the charly repo populates the sdk submodule (go.work `use ./sdk`),
-// so plugin builds from the @main cache resolve. Network-gated: skipped offline.
-func TestGitClone_PopulatesSDKSubmodule(t *testing.T) {
+// TestGitClone_PopulatesAllSubmodules is the end-to-end integration gate: a
+// fresh GitClone of the charly repo populates EVERY declared submodule, so a
+// --repo cache is a project a user can actually drive with only the binary.
+//
+// This is the coverage that fails without the fix. `sdk` alone passed before
+// and would still pass, so it proves nothing on its own — `spec` is the
+// assertion that breaks against the old sdk-only special case, and it is the
+// one that matters most: every out-of-process plugin candy carries
+// `replace github.com/opencharly/spec => ../../spec`, so without it every such
+// build dies on "../../spec/go.mod: no such file" and no out-of-process verb is
+// reachable through --repo at all. box/<distro> covers `box build` (main owns
+// no boxes), which the old code excluded as "heavy".
+//
+// Network-gated: skipped offline.
+func TestGitClone_PopulatesAllSubmodules(t *testing.T) {
 	if testing.Short() {
 		t.Skip("network integration test")
 	}
@@ -164,7 +170,14 @@ func TestGitClone_PopulatesSDKSubmodule(t *testing.T) {
 	if err := GitClone("https://github.com/opencharly/charly.git", "main", "", dir); err != nil {
 		t.Fatalf("GitClone: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "sdk", "go.mod")); err != nil {
-		t.Fatalf("sdk submodule not populated (plugin builds would fail 'cannot load module ../../sdk'): %v", err)
+	for _, probe := range []struct{ path, why string }{
+		{"sdk/go.mod", "plugin builds fail 'cannot load module ../../sdk'"},
+		{"spec/go.mod", "plugin builds fail 'cannot load module ../../spec' — every out-of-process verb unreachable via --repo"},
+		{"box/fedora/charly.yml", "`charly --repo … box build` has no box definitions; main owns none"},
+		{"plugins/README.md", "the skill corpus is absent"},
+	} {
+		if _, err := os.Stat(filepath.Join(dir, probe.path)); err != nil {
+			t.Errorf("submodule path %s not populated (%s): %v", probe.path, probe.why, err)
+		}
 	}
 }
