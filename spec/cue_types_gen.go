@@ -3470,6 +3470,13 @@ type VerifyChecksRequest struct {
 	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
 
 	Venue VenueDescriptor `yaml:"venue,omitempty" json:"venue,omitempty"`
+
+	// only_ids subsets ops to the listed check IDs BEFORE the plugin drives them (K-wave W3a A9):
+	// the former core-side pre-filter loop in unified_targets.go's runUnifiedTargetChecks, moved to
+	// where the ops are already about to run. OPT-IN ADDITIVE: unset/empty runs every op in ops,
+	// byte-identical to every dispatchVerifyChecks caller that predates this field (the
+	// `target: local` --verify path never sets it).
+	OnlyIDs []string `yaml:"only_ids,omitempty" json:"only_ids,omitempty"`
 }
 
 // #VenueDescriptor is the SELF-CONTAINED, serializable description of a

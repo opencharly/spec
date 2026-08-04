@@ -99,6 +99,12 @@
 	verify_only?: bool              @go(VerifyOnly)
 	dir?:         string            @go(Dir)
 	venue?:       #VenueDescriptor  @go(Venue)
+	// only_ids subsets ops to the listed check IDs BEFORE the plugin drives them (K-wave W3a A9):
+	// the former core-side pre-filter loop in unified_targets.go's runUnifiedTargetChecks, moved to
+	// where the ops are already about to run. OPT-IN ADDITIVE: unset/empty runs every op in ops,
+	// byte-identical to every dispatchVerifyChecks caller that predates this field (the
+	// `target: local` --verify path never sets it).
+	only_ids?: [...string] @go(OnlyIDs)
 }
 
 // #StepResult is one plan step's outcome — the step's identity (keyword/text/origin/step_id) plus
