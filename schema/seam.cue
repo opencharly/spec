@@ -1181,15 +1181,12 @@
 // InvokeProvider (the plugin already holds a real reverse-channel executor), so no
 // "pod-config-status/-mount/-unmount/-passwd" seam remains to wrap them.
 
-// #PodConfigEnsureImageRequest: EnsureImage + ExtractMetadata bundle (registry/podman-store
-// coupled — a plugin cannot resolve the local podman image store namespace itself).
-#PodConfigEnsureImageRequest: {
-	image_ref!:    string @go(ImageRef)
-	build_engine!: string @go(BuildEngine)
-}
-#PodConfigEnsureImageReply: {
-	meta_json!: bytes @go(MetaJSON, type=RawBody) // marshalled *spec.BoxMetadata
-}
+// #PodConfigEnsureImageRequest/Reply DELETED (K-wave W3a B6): the "pod-config-ensure-image" seam
+// died — candy/plugin-deploy-pod drives podman + build:ensure itself now (spec/container was
+// already portable; build:ensure reached via the generic InvokeProvider peer-dispatch leg). This
+// type's own header claim ("a plugin cannot resolve the local podman image store namespace
+// itself") was refuted, not just superseded — see charly/host_build_pod_config_seams.go and
+// candy/plugin-deploy-pod/image_ensure.go.
 
 // #PodConfigLoadDeployRequest / Reply: deploykit.LoadDeployConfigForRead(caller) — the
 // per-host charly.yml Bundle map. Genuinely loader-coupled: deploykit.SaveBundleConfig/
@@ -1339,16 +1336,12 @@
 	engine!: string @go(Engine)
 }
 
-// #PodConfigSSHKeyRequest / Reply: resolveSSHPubKey(flag, generateDir) + containerSSHKeyDir(name)
-// bundle (the `--ssh-key generate` path is pure ed25519/golang.org/x/crypto/ssh keygen — kept as
-// a narrow host seam rather than adding a crypto dependency to the plugin for a rarely-used flag).
-#PodConfigSSHKeyRequest: {
-	flag!:           string @go(Flag)
-	container_name!: string @go(ContainerName)
-}
-#PodConfigSSHKeyReply: {
-	pubkey?: string @go(Pubkey)
-}
+// #PodConfigSSHKeyRequest/Reply DELETED (K-wave W3a B6): the "pod-config-ssh-key" seam died —
+// candy/plugin-deploy-pod reads the host SSH-key FS itself now (spec/sshx.ContainerSSHKeyDir /
+// ResolveSSHPubKey were already fully portable). This type's own header claim ("kept as a narrow
+// host seam rather than adding a crypto dependency to the plugin") is superseded: the plugin
+// already carries the golang.org/x/crypto transitive dependency via spec/sshx, so avoiding it was
+// never actually achievable — see candy/plugin-deploy-pod/sshkey_resolve.go.
 
 // #PodConfigListSidecarsReply: embeddedSidecarBodies()'s go:embed template names + descriptions —
 // the `charly config --list-sidecars` introspection leaf (rare; kept as a narrow seam since the

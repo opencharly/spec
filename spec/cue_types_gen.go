@@ -6923,18 +6923,6 @@ type PodConfigRemoveRequest struct {
 type PodConfigRemoveReply struct {
 }
 
-// #PodConfigEnsureImageRequest: EnsureImage + ExtractMetadata bundle (registry/podman-store
-// coupled — a plugin cannot resolve the local podman image store namespace itself).
-type PodConfigEnsureImageRequest struct {
-	ImageRef string `yaml:"image_ref,omitempty" json:"image_ref"`
-
-	BuildEngine string `yaml:"build_engine,omitempty" json:"build_engine"`
-}
-
-type PodConfigEnsureImageReply struct {
-	MetaJSON RawBody `yaml:"meta_json,omitempty" json:"meta_json"`
-}
-
 // #PodConfigLoadDeployRequest / Reply: deploykit.LoadDeployConfigForRead(caller) — the
 // per-host charly.yml Bundle map. Genuinely loader-coupled: deploykit.SaveBundleConfig/
 // LoadDeployConfigForRead resolve through the package-var DeployStateHost seam, which is
@@ -7096,19 +7084,6 @@ type PodConfigBoxEngineRequest struct {
 
 type PodConfigBoxEngineReply struct {
 	Engine string `yaml:"engine,omitempty" json:"engine"`
-}
-
-// #PodConfigSSHKeyRequest / Reply: resolveSSHPubKey(flag, generateDir) + containerSSHKeyDir(name)
-// bundle (the `--ssh-key generate` path is pure ed25519/golang.org/x/crypto/ssh keygen — kept as
-// a narrow host seam rather than adding a crypto dependency to the plugin for a rarely-used flag).
-type PodConfigSSHKeyRequest struct {
-	Flag string `yaml:"flag,omitempty" json:"flag"`
-
-	ContainerName string `yaml:"container_name,omitempty" json:"container_name"`
-}
-
-type PodConfigSSHKeyReply struct {
-	Pubkey string `yaml:"pubkey,omitempty" json:"pubkey,omitempty"`
 }
 
 // #PodConfigListSidecarsReply: embeddedSidecarBodies()'s go:embed template names + descriptions —
