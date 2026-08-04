@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -132,28 +133,162 @@ func TestRepoGitURL(t *testing.T) {
 	}
 }
 
-// TestPopulateSDKSubmodule_NoSDKRepoIsNoOp: a repo dir that declares no `sdk`
-// submodule (no .gitmodules, or no submodule.sdk.path) is a clean no-op — a
-// box/<distro> plugin repo has no sdk submodule and must not error.
-func TestPopulateSDKSubmodule_NoSDKRepoIsNoOp(t *testing.T) {
-	dir := t.TempDir()
-	if err := populateSDKSubmodule(dir); err != nil { // no .gitmodules at all
+// TestPopulateSubmodules_NoGitmodulesIsNoOp: a repo declaring no submodules at
+// all is a clean no-op — a box/<distro> repo has none and must not error.
+//
+// Note the deliberately narrowed contract: this used to also assert that a
+// .gitmodules declaring only box/arch was a no-op, because just `sdk` was ever
+// initialized. Populating EVERY declared submodule is the fix, so that case is
+// no longer a no-op and asserting it would pin the bug in place.
+func TestPopulateSubmodules_NoGitmodulesIsNoOp(t *testing.T) {
+	if err := populateSubmodules(t.TempDir()); err != nil { // no .gitmodules at all
 		t.Fatalf("no-.gitmodules dir must be a no-op, got %v", err)
-	}
-	// .gitmodules present but no sdk entry → still a no-op.
-	if err := os.WriteFile(filepath.Join(dir, ".gitmodules"),
-		[]byte("[submodule \"box/arch\"]\n\tpath = box/arch\n\turl = git@github.com:opencharly/distro-arch.git\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := populateSDKSubmodule(dir); err != nil {
-		t.Fatalf("no sdk submodule declared must be a no-op, got %v", err)
 	}
 }
 
-// TestGitClone_PopulatesSDKSubmodule is the end-to-end integration gate: a fresh
-// GitClone of the charly repo populates the sdk submodule (go.work `use ./sdk`),
-// so plugin builds from the @main cache resolve. Network-gated: skipped offline.
-func TestGitClone_PopulatesSDKSubmodule(t *testing.T) {
+// TestPopulateSubmodules_UnreachableSubmoduleFailsLoudly covers the error branch,
+// which is a DELIBERATE widening and therefore needs a test rather than silence.
+// The old code no-op'd for any repo not declaring `sdk`, so a project with a
+// private or dead submodule fetched "fine"; now it errors. That is the intended
+// trade — a silently partial cache is the defect this function exists to fix —
+// but the failure must name the submodule and the cause, or it just moves the
+// mystery. Uses a file:// URL that does not exist, so it fails fast offline.
+func TestPopulateSubmodules_UnreachableSubmoduleFailsLoudly(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "seed"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitmodules"),
+		[]byte("[submodule \"ghost\"]\n\tpath = ghost\n\turl = file:///nonexistent/ghost.git\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The .gitmodules entry alone is NOT enough: `git submodule update --init`
+	// walks the INDEX, so a declared-but-unregistered submodule is ignored and the
+	// command exits 0. A gitlink (mode 160000) has to exist for the fetch — and
+	// therefore the failure — to happen at all.
+	reg := exec.Command("git", "update-index", "--add", "--cacheinfo",
+		"160000,0000000000000000000000000000000000000001,ghost")
+	reg.Dir = dir
+	if out, err := reg.CombinedOutput(); err != nil {
+		t.Fatalf("registering the gitlink: %v\n%s", err, out)
+	}
+
+	err := populateSubmodules(dir)
+	if err == nil {
+		t.Fatal("an unreachable submodule must fail the clone, not populate a partial cache")
+	}
+	// The message has to carry enough to act on: which tree, and git's own reason.
+	if !strings.Contains(err.Error(), dir) {
+		t.Errorf("error must name the target dir, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Errorf("error must name the offending submodule, got: %v", err)
+	}
+}
+
+// TestRepoCacheFresh_IncompleteExportIsStale is the self-heal gate: a cache whose
+// commit matches but whose CONTENT is incomplete must read as STALE, so it is
+// re-downloaded rather than served forever.
+//
+// Without this, the submodule fix would only ever help caches created after it.
+// Every cache written by the old sdk-only code holds one of twelve submodules
+// AND records the correct commit, so the old commit-only freshness check served
+// it as a permanent hit until main happened to advance — and there is no CLI
+// verb to invalidate a repo cache entry. This test is what fails if freshness
+// regresses to comparing commits alone.
+func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
+	const commit = "0123456789012345678901234567890123456789"
+	mk := func(t *testing.T, populate bool) string {
+		t.Helper()
+		dir := t.TempDir()
+		cache := filepath.Join(dir, "export")
+		if err := os.MkdirAll(filepath.Join(cache, "sdk"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Two declared submodules, mirroring the real shape: sdk populated, spec empty.
+		if err := os.WriteFile(filepath.Join(cache, "sdk", "go.mod"), []byte("module x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(cache, "spec"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if populate {
+			if err := os.WriteFile(filepath.Join(cache, "spec", "go.mod"), []byte("module y\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(cache, ".gitmodules"), []byte(
+			"[submodule \"sdk\"]\n\tpath = sdk\n\turl = https://example.invalid/sdk.git\n"+
+				"[submodule \"spec\"]\n\tpath = spec\n\turl = https://example.invalid/spec.git\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := writeRefProvenance(cache, commit); err != nil {
+			t.Fatal(err)
+		}
+		return cache
+	}
+
+	// The exact shape the old code left behind: right commit, eleven empty dirs.
+	if repoCacheFresh(mk(t, false), commit) {
+		t.Error("an export with an EMPTY declared submodule must be stale — otherwise the " +
+			"one-of-twelve cache is served forever and the submodule fix never reaches existing users")
+	}
+	// A complete export at the same commit must still be a cache HIT; over-invalidating
+	// would re-clone every repo on every access.
+	if !repoCacheFresh(mk(t, true), commit) {
+		t.Error("a COMPLETE export at the recorded commit must remain a cache hit")
+	}
+	// A repo declaring no submodules at all is trivially complete.
+	bare := t.TempDir()
+	if err := writeRefProvenance(bare, commit); err != nil {
+		t.Fatal(err)
+	}
+	if !repoCacheFresh(bare, commit) {
+		t.Error("an export declaring no submodules must remain a cache hit")
+	}
+
+	// A .gitmodules entry with NO gitlink materializes NO directory (verified:
+	// git creates an empty placeholder only for paths it actually clones). Such
+	// an entry is unfetchable — populateSubmodules walks the INDEX and skips it
+	// too — so an ABSENT directory must NOT read as incomplete. Conflating absent
+	// with empty made the export permanently unfresh, re-cloning the repo on
+	// EVERY command forever; this is the assertion that catches that.
+	nogl := t.TempDir()
+	if err := os.WriteFile(filepath.Join(nogl, ".gitmodules"),
+		[]byte("[submodule \"ghost\"]\n\tpath = ghost\n\turl = https://example.invalid/g.git\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRefProvenance(nogl, commit); err != nil {
+		t.Fatal(err)
+	}
+	if !repoCacheFresh(nogl, commit) {
+		t.Error("a .gitmodules entry with no gitlink (no directory on disk) must NOT make the " +
+			"export stale — it is unfetchable, so this would re-clone on every command forever")
+	}
+}
+
+// TestGitClone_PopulatesAllSubmodules is the end-to-end integration gate: a
+// fresh GitClone of the charly repo populates EVERY declared submodule, so a
+// --repo cache is a project a user can actually drive with only the binary.
+//
+// This is the coverage that fails without the fix. `sdk` alone passed before
+// and would still pass, so it proves nothing on its own — `spec` is the
+// assertion that breaks against the old sdk-only special case, and it is the
+// one that matters most: every out-of-process plugin candy carries
+// `replace github.com/opencharly/spec => ../../spec`, so without it every such
+// build dies on "../../spec/go.mod: no such file" and no out-of-process verb is
+// reachable through --repo at all. box/<distro> covers `box build` (main owns
+// no boxes), which the old code excluded as "heavy".
+//
+// Network-gated: skipped offline.
+func TestGitClone_PopulatesAllSubmodules(t *testing.T) {
 	if testing.Short() {
 		t.Skip("network integration test")
 	}
@@ -164,7 +299,14 @@ func TestGitClone_PopulatesSDKSubmodule(t *testing.T) {
 	if err := GitClone("https://github.com/opencharly/charly.git", "main", "", dir); err != nil {
 		t.Fatalf("GitClone: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "sdk", "go.mod")); err != nil {
-		t.Fatalf("sdk submodule not populated (plugin builds would fail 'cannot load module ../../sdk'): %v", err)
+	for _, probe := range []struct{ path, why string }{
+		{"sdk/go.mod", "plugin builds fail 'cannot load module ../../sdk'"},
+		{"spec/go.mod", "plugin builds fail 'cannot load module ../../spec' — every out-of-process verb unreachable via --repo"},
+		{"box/fedora/charly.yml", "`charly --repo … box build` has no box definitions; main owns none"},
+		{"plugins/README.md", "the skill corpus is absent"},
+	} {
+		if _, err := os.Stat(filepath.Join(dir, probe.path)); err != nil {
+			t.Errorf("submodule path %s not populated (%s): %v", probe.path, probe.why, err)
+		}
 	}
 }
