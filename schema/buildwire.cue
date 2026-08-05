@@ -275,15 +275,6 @@
 	error?:   string @go(Error)
 }
 
-// #BuildEngineScanRemoteRequest — the `buildengine-scan-remote` host-leg request (K3 build-engine, U6):
-// scan the wanted bare refs out of a downloaded repo cache dir. The plugin's ScanSeams.ScanRemote
-// closure fills it; the host runs requireCandyScanner().ScanRemoteCandy over the cache.
-#BuildEngineScanRemoteRequest: {
-	cache_dir!: string   @go(CacheDir)
-	repo_path!: string   @go(RepoPath)
-	refs?: [...string]   @go(Refs)
-}
-
 // #NamespaceScanEntry / #NamespaceScanReply — the `buildengine-namespaced` host-leg reply (K1
 // loader-cone fabric-tail, #55): the host recurses the project's import-namespace tree ONCE and
 // emits a FLAT list of per-namespace scan inputs. The plugin (candy/plugin-build's
@@ -302,9 +293,9 @@
 //     reading subUF.Candy in-memory — the R1 fix; never a re-load).
 //   - downloads: the namespace-scoped INITIAL RemoteDownload set (from CollectRemoteRefsOpts over
 //     the namespace's own cfg + localScanned raw refs) — the ONE cfg-coupled step. The plugin's
-//     ScanSeams.CollectRemoteRefs returns this verbatim; EnsureRepo runs plugin-side over
-//     loaderkit.EnsureRepoDownloaded and only ScanRemote still round-trips to the cfg-agnostic
-//     buildengine-scan-remote host leg for the transitive fetch (K-wave 2 cone R1 A2).
+//     ScanSeams.CollectRemoteRefs returns this verbatim; EnsureRepo and ScanRemote both run
+//     plugin-side over loaderkit.EnsureRepoDownloaded / loaderkit.ScanRemoteCandy for the
+//     transitive fetch — no ScanSeams leg is a host round-trip any more (K-wave 2 cone R1 A2).
 // initCfg / calver / dir come from the plugin's own resolve context (the seam closure params) and
 // are deliberately NOT duplicated here.
 //
@@ -313,7 +304,7 @@
 // @go(Scanned,type=map[string]ScannedCandy) emits `Scanned map[string]ScannedCandy` referencing the
 // hand-written type, NO duplicate generated type). The inline CUE shapes are structural placeholders
 // for the override only — they are never generated as named Go types (conflict count 0, spiked). The
-// existing buildengine-scan-local / buildengine-scan-remote legs already marshal these same
+// existing buildengine-scan-local leg already marshals these same
 // hand-written types over the wire; #NamespaceScanReply is the CUE-sourced envelope that carries them.
 #NamespaceScanEntry: {
 	child!:     string @go(Child)

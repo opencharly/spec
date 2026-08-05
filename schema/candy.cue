@@ -1,7 +1,8 @@
 // CUE schema for the `candy` kind. #Candy validates ONE candy entity (the value
 // under `candy:` in a kind-keyed candy charly.yml). CLOSED (an unknown top-level
 // key is a typo) — this replaces the Go UnmarshalYAML known-field typo guard
-// (layers.go candyYAMLKnownFields). Every key in candyYAMLKnownFields is modeled.
+// (sdk/loaderkit candyKnownFields, relocated from charly/layers.go in K-wave 2 cone R1 A2).
+// Every key in candyKnownFields is modeled.
 // Shared defs (#Step/#Security/#Shell/#CalVer/#EntityRef/#CandyRef/#PackageItem/
 // #DistroPackages) come from _common.cue. Source of truth: charly/layers.go
 // CandyYAML + its sub-types (PortSpec, VolumeYAML, AliasYAML, ExtractYAML,

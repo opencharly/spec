@@ -186,6 +186,19 @@ type Materializer interface {
 // whole-project scan-all-candies entry point, charly/layers.go) — a similar name on a
 // single-candy-directory scan risks confusion once both exist side by side during the cutover.
 type CandyScanner interface {
+	// ParseCandyManifest is the candy-MANIFEST parse the two scan methods below take as their
+	// `parseManifest` seam. It relocated OUT of charly core in K-wave 2 cone R1 (A2 unit 2) into
+	// sdk/loaderkit, so a plugin driving its own scan (candy/plugin-build's remote-repo fetch) can
+	// parse manifests ITSELF instead of round-tripping to the host for every candy directory.
+	//
+	// It reaches core through this seam because charly/ may not import sdk/loaderkit (import
+	// purity); core's parseCandyYAML is the thin wrapper that supplies the two values the mechanism
+	// needs from the host — t, the registry-derived kind-recognition snapshot, and vocab, the build
+	// vocabulary the misplaced-section shape guard consults. The clause-B buildCandy factory is NOT
+	// on this path: an RDD spike over the whole 324-manifest corpus proved the pre-move
+	// pn->genericNode->pn round trip through it was an identity (321 node-form manifests plus all 3
+	// error paths, byte-identical).
+	ParseCandyManifest(path string, t Threaded, vocab CandyVocab) (*Candy, error)
 	ScanCandyManifest(path, name, manifestName string, parseManifest func(path string) (*Candy, error)) (CandyModel, CandyView, CandyRefs, error)
 	// ScanInlineCandy builds the two views for a candy declared INLINE in a unified charly.yml —
 	// ly is already the parsed body (no manifest file, no parseManifest seam needed). sourceDir is
