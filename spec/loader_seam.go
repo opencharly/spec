@@ -199,6 +199,12 @@ type CandyScanner interface {
 	// pn->genericNode->pn round trip through it was an identity (321 node-form manifests plus all 3
 	// error paths, byte-identical).
 	ParseCandyManifest(path string, t Threaded, vocab CandyVocab) (*Candy, error)
+	// ProjectCandiesScanned scans or synthesizes a candy per uf.Candy entry off an ALREADY-LOADED
+	// project — the local candy scan's body, relocated to sdk/loaderkit in K-wave 2 cone R1 (A2 unit
+	// 3) so a plugin holding a *UnifiedFile no longer round-trips to the host to turn it into a
+	// ScannedCandy map. Reaches core through this seam for the same import-purity reason
+	// ParseCandyManifest does.
+	ProjectCandiesScanned(uf *UnifiedFile, rootDir string, parseDoc func(path string) (*Candy, error)) (map[string]ScannedCandy, error)
 	ScanCandyManifest(path, name, manifestName string, parseManifest func(path string) (*Candy, error)) (CandyModel, CandyView, CandyRefs, error)
 	// ScanInlineCandy builds the two views for a candy declared INLINE in a unified charly.yml —
 	// ly is already the parsed body (no manifest file, no parseManifest seam needed). sourceDir is

@@ -3085,7 +3085,7 @@ type BuildPkgReply struct {
 // @go(Scanned,type=map[string]ScannedCandy) emits `Scanned map[string]ScannedCandy` referencing the
 // hand-written type, NO duplicate generated type). The inline CUE shapes are structural placeholders
 // for the override only — they are never generated as named Go types (conflict count 0, spiked). The
-// existing buildengine-scan-local leg already marshals these same
+// buildengine-namespaced leg already marshals these same
 // hand-written types over the wire; #NamespaceScanReply is the CUE-sourced envelope that carries them.
 type NamespaceScanEntry struct {
 	Child string `yaml:"child,omitempty" json:"child"`
