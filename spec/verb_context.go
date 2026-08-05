@@ -11,10 +11,11 @@ package spec
 // from charly/checkspec.go so charly core's registry-coupled consumers (reserved_registry.go's
 // verb-bijection gate, provider_verb.go's installVerbs membership test) reference this
 // package-level table directly instead of a package-main literal. The FUNCTIONS that consult
-// it against the live provider registry (opActsInBuildDeploy / opEffectiveDo /
-// opEffectiveContexts / opInContext, charly/checkspec.go) stay in core — they dispatch through
-// providerRegistry.ResolveVerb/ResolveStep, a package-main-private mechanism a separate module
-// cannot reach; only the static per-verb metadata table is portable.
+// it against the live provider registry (opActsInBuildDeploy in charly/checkspec.go;
+// opEffectiveContexts / opInContext in charly/planrun_adapter.go, K-wave 2 cone R4; the former
+// opEffectiveDo is gone) stay in core — they dispatch through providerRegistry.ResolveVerb/
+// ResolveStep, a package-main-private mechanism a separate module cannot reach; only the static
+// per-verb metadata table is portable.
 
 // DoMode is the act/assert/instruct axis. act = perform a side-effect; assert = run the
 // matchers (read-only); instruct = hand free-form text to the agent grader.
