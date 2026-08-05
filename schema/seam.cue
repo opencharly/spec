@@ -1056,9 +1056,22 @@
 	host_env_json?: bytes @go(HostEnvJSON, type=RawBody)
 }
 
-// #PodConfigSetupReply is the OpConfigSetup handler's reply — empty, mirroring
-// #PodLifecycleReply's empty-for-every-op-but-cmd shape.
-#PodConfigSetupReply: {}
+// #PodConfigSetupReply is the OpConfigSetup handler's reply — empty for the normal setup path,
+// mirroring #PodLifecycleReply's empty-for-every-op-but-cmd shape. The `--list-sidecars` leaf
+// (r.list_sidecars) fills sidecar_list instead: the plugin's own embedded template library
+// (sidecar_embedded.go — the "pod-config-list-sidecars" seam is DELETED, K-wave 2 cone R3), so
+// candy/plugin-pod prints it in the charly CLI's own stdio (the out-of-process plugin's stdout
+// is go-plugin-discarded).
+#PodConfigSetupReply: {
+	sidecar_list?: #SidecarList @go(SidecarList)
+}
+
+// #SidecarList is the sidecar-template-library introspection list — the `charly config
+// --list-sidecars` payload (names + one-line descriptions), returned inside #PodConfigSetupReply.
+#SidecarList: {
+	names?: [...string] @go(Names)
+	descriptions?: {[string]: string} @go(Descriptions)
+}
 
 // #PodConfigStatusRequest/#PodConfigMountRequest/#PodConfigUnmountRequest/#PodConfigPasswdRequest
 // (+ their empty Reply siblings) — the former HostBuild("pod-config-status"/"-mount"/"-unmount"/
@@ -1100,22 +1113,12 @@
 // died — candy/plugin-deploy-pod drives podman + build:ensure itself now (spec/container was
 // already portable; build:ensure reached via the generic InvokeProvider peer-dispatch leg). This
 // type's own header claim ("a plugin cannot resolve the local podman image store namespace
-// itself") was refuted, not just superseded — see charly/host_build_pod_config_seams.go and
-// candy/plugin-deploy-pod/image_ensure.go.
+// itself") was refuted, not just superseded — see candy/plugin-deploy-pod/image_ensure.go.
 
-// #PodConfigLoadDeployRequest / Reply: deploykit.LoadDeployConfigForRead(caller) — the
-// per-host charly.yml Bundle map. Genuinely loader-coupled: deploykit.SaveBundleConfig/
-// LoadDeployConfigForRead resolve through the package-var DeployStateHost seam, which is
-// filled ONLY in the charly-core process's init() (charly/deploy_state_host.go) — an
-// out-of-process plugin calling these directly would silently no-op (the kit's
-// documented nil-safe degradation), so every load/save call site is a host seam, reusable
-// across the whole ported flow.
-#PodConfigLoadDeployRequest: {
-	caller!: string @go(Caller)
-}
-#PodConfigLoadDeployReply: {
-	config_json?: bytes @go(ConfigJSON, type=RawBody) // marshalled *deploykit.BundleConfig; absent ⇒ nil
-}
+// #PodConfigLoadDeployRequest/Reply DELETED (K-wave 2 cone R3): the last "pod-config-*" seam
+// using them (the list-sidecars handler's request type) is gone — the loader-coupled
+// load/save legs died earlier (#55 coneC-dsh, K4); the plugin reads/writes the per-host overlay
+// via loaderkit/deploykit directly.
 
 
 // #PodConfigSaveBundleRequest / Reply: saveBundleConfigNodeForm(dc) — persists a (plugin-mutated)
@@ -1128,8 +1131,9 @@
 // #PodConfigMigrateSecretsRequest / Reply: MigratePlaintextEnvSecret(dc, meta, box, instance) —
 // the one-time plaintext-env → credential-store migration (file backup + DefaultCredentialStore
 // + saveBundleConfigNodeForm, all FINAL/K5-deferred registry-coupled inventory per the ledger).
-// config_json carries the ALREADY-LOADED dc (from #PodConfigLoadDeployRequest) so the host
-// mutates + re-saves the SAME loaded structure the plugin is mid-flow with, never a stale reload.
+// config_json carries the ALREADY-LOADED dc (the plugin's own loaded overlay — the former
+// #PodConfigLoadDeployRequest is deleted, K-wave 2 cone R3) so the host mutates + re-saves the
+// SAME loaded structure the plugin is mid-flow with, never a stale reload.
 #PodConfigMigrateSecretsRequest: {
 	config_json!: bytes  @go(ConfigJSON, type=RawBody)
 	meta_json!:   bytes  @go(MetaJSON, type=RawBody)
@@ -1152,19 +1156,11 @@
 	imported?: int         @go(Imported, type=int)
 }
 
-// #PodConfigDetectDevicesRequest / Reply: DetectHostDevices()+LogDetectedDevices() —
-// registry-coupled (DetectHostDevices resolves+Invokes verb:gpu via the host provider registry,
-// which a peer plugin cannot dial without the InvokeProvider rewrite this family defers).
-#PodConfigDetectDevicesRequest: {
-	no_auto_detect?: bool @go(NoAutoDetect)
-	// engine, when set to "podman" alongside a GPU detection, triggers EnsureCDI() (the pod
-	// lifecycle's resolvePodRuntimeImage step) — bundled into this SAME seam call (R3) rather
-	// than a dedicated one.
-	engine?: string @go(Engine)
-}
-#PodConfigDetectDevicesReply: {
-	detected_json!: bytes @go(DetectedJSON, type=RawBody) // marshalled DetectedDevices (= spec.DetectedDevices)
-}
+// #PodConfigDetectDevicesRequest/Reply DELETED (K-wave 2 cone R3): the "pod-config-detect-devices"
+// seam is gone — candy/plugin-deploy-pod probes the host peer-to-peer via
+// InvokeProvider(verb:gpu) (detect_devices.go, the same dispatch the core DetectHostDevices/
+// EnsureCDI shims made); the plugin's own go:embed carries the sidecar template library.
+
 
 // #PodConfigTunnelResolveRequest / Reply: TunnelConfigFromMetadata(meta) — resolves the tunnel
 // config (charly.yml overlay applied) from image labels.
@@ -1217,8 +1213,8 @@
 }
 
 // #PodConfigBoxEngineRequest / Reply: ResolveBoxEngineForDeploy(box,instance,globalEngine) — reads
-// the per-host deploy config's Engine override. A thin wrapper distinct from
-// #PodConfigLoadDeployRequest since callers here want only the resolved engine string, not the
+// the per-host deploy config's Engine override. A thin wrapper distinct from the
+// (now-deleted) load-deploy seam since callers here want only the resolved engine string, not the
 // whole BundleConfig.
 #PodConfigBoxEngineRequest: {
 	box!:           string @go(Box)
@@ -1236,19 +1232,16 @@
 // already carries the golang.org/x/crypto transitive dependency via spec/sshx, so avoiding it was
 // never actually achievable — see candy/plugin-deploy-pod/sshkey_resolve.go.
 
-// #PodConfigListSidecarsReply: embeddedSidecarBodies()'s go:embed template names + descriptions —
-// the `charly config --list-sidecars` introspection leaf (rare; kept as a narrow seam since the
-// embedded data lives only in the charly binary).
-#PodConfigListSidecarsReply: {
-	names?: [...string] @go(Names)
-	descriptions?: {[string]: string} @go(Descriptions)
-	bodies_json?: bytes @go(BodiesJSON, type=RawBody) // map[string]json.RawMessage — the full go:embed sidecar bodies the resolve leg needs (plugin-deploy-pod/sidecar_resolve.go)
-}
+// #PodConfigListSidecarsReply DELETED (K-wave 2 cone R3): the "pod-config-list-sidecars" seam is
+// gone — the sidecar template library MOVED INTO candy/plugin-deploy-pod's own go:embed
+// (sidecar_embedded.go), so no host seam carries it; the `--list-sidecars` payload rides
+// #PodConfigSetupReply.sidecar_list (above) instead.
 
-// sdk.OpConfigSetup / sdk.OpConfigRemove (the two new Ops the deploy:pod plugin's Invoke
+// sdk.OpConfigSetup / sdk.OpConfigRemove (the two config-BODY Ops the deploy:pod plugin's Invoke
 // dispatches for the direction-flip) reuse #PodConfigSetupRequest / #PodConfigRemoveRequest
-// VERBATIM as op.Params — no new outer envelope needed; see host_build_pod_config.go for the
-// exact host→plugin forwarding.
+// VERBATIM as op.Params — no new outer envelope needed; candy/plugin-pod's config leaves dispatch
+// them peer-to-peer via InvokeProvider (the former host_build_pod_config.go forwarders are
+// deleted, K-wave 2 cone R3).
 
 // #PodUpdatePayload — see #PodLifecycleRequest's header; op="update".
 #PodUpdatePayload: {

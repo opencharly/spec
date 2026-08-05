@@ -7,7 +7,7 @@ package container
 // ExtractMetadata + InspectLabels (sdk/kit/box_metadata.go is now a thin re-export file) AND
 // sdk/deploykit re-exports ExtractMetadata + InspectLabels (sdk/deploykit/read_labels.go's former
 // R3 DUPLICATE body is deleted — one canonical home, R3 single-source). charly core's callers
-// (build_overlay.go, host_build_pod_config_seams.go, the check harness, start.go, service.go)
+// (build_overlay.go, the check harness, start.go, service.go — host_build_pod_config_seams.go was deleted, K-wave 2 cone R3)
 // and the candies (candy/plugin-deploy-pod) keep their kit.ExtractMetadata / deploykit.ExtractMetadata
 // call sites unchanged via the re-exports; new consumers reference spec/container directly.
 //

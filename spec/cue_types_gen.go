@@ -6614,9 +6614,22 @@ type PodConfigSetupRequest struct {
 	HostEnvJSON RawBody `yaml:"host_env_json,omitempty" json:"host_env_json,omitempty"`
 }
 
-// #PodConfigSetupReply is the OpConfigSetup handler's reply — empty, mirroring
-// #PodLifecycleReply's empty-for-every-op-but-cmd shape.
+// #PodConfigSetupReply is the OpConfigSetup handler's reply — empty for the normal setup path,
+// mirroring #PodLifecycleReply's empty-for-every-op-but-cmd shape. The `--list-sidecars` leaf
+// (r.list_sidecars) fills sidecar_list instead: the plugin's own embedded template library
+// (sidecar_embedded.go — the "pod-config-list-sidecars" seam is DELETED, K-wave 2 cone R3), so
+// candy/plugin-pod prints it in the charly CLI's own stdio (the out-of-process plugin's stdout
+// is go-plugin-discarded).
 type PodConfigSetupReply struct {
+	SidecarList SidecarList `yaml:"sidecar_list,omitempty" json:"sidecar_list,omitempty"`
+}
+
+// #SidecarList is the sidecar-template-library introspection list — the `charly config
+// --list-sidecars` payload (names + one-line descriptions), returned inside #PodConfigSetupReply.
+type SidecarList struct {
+	Names []string `yaml:"names,omitempty" json:"names,omitempty"`
+
+	Descriptions map[string]string `yaml:"descriptions,omitempty" json:"descriptions,omitempty"`
 }
 
 // #PodConfigRemoveRequest carries `charly config remove`'s flags (the former
@@ -6635,21 +6648,6 @@ type PodConfigRemoveRequest struct {
 type PodConfigRemoveReply struct {
 }
 
-// #PodConfigLoadDeployRequest / Reply: deploykit.LoadDeployConfigForRead(caller) — the
-// per-host charly.yml Bundle map. Genuinely loader-coupled: deploykit.SaveBundleConfig/
-// LoadDeployConfigForRead resolve through the package-var DeployStateHost seam, which is
-// filled ONLY in the charly-core process's init() (charly/deploy_state_host.go) — an
-// out-of-process plugin calling these directly would silently no-op (the kit's
-// documented nil-safe degradation), so every load/save call site is a host seam, reusable
-// across the whole ported flow.
-type PodConfigLoadDeployRequest struct {
-	Caller string `yaml:"caller,omitempty" json:"caller"`
-}
-
-type PodConfigLoadDeployReply struct {
-	ConfigJSON RawBody `yaml:"config_json,omitempty" json:"config_json,omitempty"`
-}
-
 // #PodConfigSaveBundleRequest / Reply: saveBundleConfigNodeForm(dc) — persists a (plugin-mutated)
 // *deploykit.BundleConfig back through the SAME loader-coupled seam.
 type PodConfigSaveBundleRequest struct {
@@ -6662,8 +6660,9 @@ type PodConfigSaveBundleReply struct {
 // #PodConfigMigrateSecretsRequest / Reply: MigratePlaintextEnvSecret(dc, meta, box, instance) —
 // the one-time plaintext-env → credential-store migration (file backup + DefaultCredentialStore
 // + saveBundleConfigNodeForm, all FINAL/K5-deferred registry-coupled inventory per the ledger).
-// config_json carries the ALREADY-LOADED dc (from #PodConfigLoadDeployRequest) so the host
-// mutates + re-saves the SAME loaded structure the plugin is mid-flow with, never a stale reload.
+// config_json carries the ALREADY-LOADED dc (the plugin's own loaded overlay — the former
+// #PodConfigLoadDeployRequest is deleted, K-wave 2 cone R3) so the host mutates + re-saves the
+// SAME loaded structure the plugin is mid-flow with, never a stale reload.
 type PodConfigMigrateSecretsRequest struct {
 	ConfigJSON RawBody `yaml:"config_json,omitempty" json:"config_json"`
 
@@ -6692,22 +6691,6 @@ type PodConfigScrubCliEnvReply struct {
 	Cleaned []string `yaml:"cleaned,omitempty" json:"cleaned,omitempty"`
 
 	Imported int `yaml:"imported,omitempty" json:"imported,omitempty"`
-}
-
-// #PodConfigDetectDevicesRequest / Reply: DetectHostDevices()+LogDetectedDevices() —
-// registry-coupled (DetectHostDevices resolves+Invokes verb:gpu via the host provider registry,
-// which a peer plugin cannot dial without the InvokeProvider rewrite this family defers).
-type PodConfigDetectDevicesRequest struct {
-	NoAutoDetect bool `yaml:"no_auto_detect,omitempty" json:"no_auto_detect,omitempty"`
-
-	// engine, when set to "podman" alongside a GPU detection, triggers EnsureCDI() (the pod
-	// lifecycle's resolvePodRuntimeImage step) — bundled into this SAME seam call (R3) rather
-	// than a dedicated one.
-	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
-}
-
-type PodConfigDetectDevicesReply struct {
-	DetectedJSON RawBody `yaml:"detected_json,omitempty" json:"detected_json"`
 }
 
 // #PodConfigTunnelResolveRequest / Reply: TunnelConfigFromMetadata(meta) — resolves the tunnel
@@ -6756,8 +6739,8 @@ type PodConfigContainerTunnelReply struct {
 }
 
 // #PodConfigBoxEngineRequest / Reply: ResolveBoxEngineForDeploy(box,instance,globalEngine) — reads
-// the per-host deploy config's Engine override. A thin wrapper distinct from
-// #PodConfigLoadDeployRequest since callers here want only the resolved engine string, not the
+// the per-host deploy config's Engine override. A thin wrapper distinct from the
+// (now-deleted) load-deploy seam since callers here want only the resolved engine string, not the
 // whole BundleConfig.
 type PodConfigBoxEngineRequest struct {
 	Box string `yaml:"box,omitempty" json:"box"`
@@ -6769,17 +6752,6 @@ type PodConfigBoxEngineRequest struct {
 
 type PodConfigBoxEngineReply struct {
 	Engine string `yaml:"engine,omitempty" json:"engine"`
-}
-
-// #PodConfigListSidecarsReply: embeddedSidecarBodies()'s go:embed template names + descriptions —
-// the `charly config --list-sidecars` introspection leaf (rare; kept as a narrow seam since the
-// embedded data lives only in the charly binary).
-type PodConfigListSidecarsReply struct {
-	Names []string `yaml:"names,omitempty" json:"names,omitempty"`
-
-	Descriptions map[string]string `yaml:"descriptions,omitempty" json:"descriptions,omitempty"`
-
-	BodiesJSON RawBody `yaml:"bodies_json,omitempty" json:"bodies_json,omitempty"`
 }
 
 // #PodUpdatePayload — see #PodLifecycleRequest's header; op="update".
