@@ -5236,6 +5236,24 @@ type SidecarVolume struct {
 	Path string `yaml:"path,omitempty" json:"path"`
 }
 
+// #RefsDownloadInput is the cache-MISS download request the loader plugin ships to the registered
+// refs backend. The caller has already resolved local overrides and checked the cache, exactly as
+// the pre-move host orchestration did — a backend only ever sees a genuine miss.
+type RefsDownloadInput struct {
+	// repo_path is the bare repo coordinate (e.g. "github.com/opencharly/charly").
+	RepoPath string `yaml:"repo_path,omitempty" json:"repo_path"`
+
+	// version is the git tag / branch / sha to fetch. Never empty at this point: an empty authored
+	// version is resolved to the repo's default branch before the request is built.
+	Version string `yaml:"version,omitempty" json:"version"`
+}
+
+// #RefsDownloadReply carries the populated local cache tree the backend produced.
+type RefsDownloadReply struct {
+	// dir is the absolute path of the populated cache directory.
+	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+}
+
 // #BuilderMap — a map of build type (pixi/npm/cargo/aur) → builder image name.
 type BuilderMap map[string]string
 
