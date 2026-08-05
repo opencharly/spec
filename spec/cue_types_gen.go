@@ -731,7 +731,7 @@ type TerminalExit struct {
 //
 // CLOSED: the base struct (no trailing `...`) models every authored key, so an
 // unknown key is still a typo. The box⊻adb exactly-one mutual-exclusion is
-// enforced in GO (validateAndroidDevices in unified.go, the load-time sibling of
+// enforced in GO (loaderkit.ValidateAndroidDevices, the load-time sibling of
 // validateCheckBeds) — NOT by a trailing `& ({box:_} | {adb:_})` disjunction:
 // `cue exp gengotypes` collapses an entity-level top-level disjunction to an
 // EMPTY `struct{}`, which would make spec.Android useless as a drop-in for
@@ -4049,7 +4049,7 @@ type DeployProbes struct {
 // disjunction expressed — disposable required + bed-legal target ∈ {pod,vm,local,
 // android} for the deterministic/ephemeral modes, the iterate AI-benchmark mode,
 // and the ephemeral⇒disposable promotion — are enforced in GO at load time
-// (validateCheckBeds + validateEphemeralUnified in unified.go), which is the
+// (loaderkit.ValidateCheckBeds + the ephemeral validator beside it), which is the
 // SINGLE source of truth for the actual bundle-form beds (a node-form check bed
 // is a `bundle:` node validated via #BundleValue=#Deploy, so the disjunction was
 // only ever applied to the legacy root-shape `check:` collection). Relaxing it to

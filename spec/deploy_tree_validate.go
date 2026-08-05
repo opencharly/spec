@@ -10,7 +10,7 @@ import (
 // charly/unified.go (FLOOR-SLIM K1-proper mechanical batch). Every function
 // here operates ONLY on BundleNode — no registry, no *UnifiedFile, no host
 // I/O — so it belongs beside the wire type it validates (the same D-clause
-// precedent as node_helpers.go's ClassifyDoc). charly's unified.go calls
+// precedent as node_helpers.go's ClassifyDoc). The loader's validation chain calls
 // ValidateDeploymentTree(merged.Bundle) directly; bundle_members.go calls
 // ValidateDeploymentName for a folded peer member's key.
 

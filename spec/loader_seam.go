@@ -438,6 +438,13 @@ type ProjectLoader interface {
 	// belongs beside the fetch rather than in the kernel (K-wave 2 cone R1 relocated it out of
 	// charly/main_repo.go).
 	ResolveProjectRepo(ctx context.Context, repoSpec string) (string, error)
+	// CanonicalRef resolves one `import:` ref — a local path, or
+	// "@host/org/repo[/sub/path]:version" — relative to baseDir, into its stable dedup key and its
+	// on-disk path, fetching a remote ref through the same clone-and-cache machinery. It is the
+	// mechanism behind WalkSeams.ResolveRef; the host wires that seam to this method rather than
+	// holding the resolution itself (K-wave 2 cone R1 relocated it out of charly/unified.go, the
+	// same route ResolveProjectRepo took).
+	CanonicalRef(ctx context.Context, ref, baseDir string) (key, path string, err error)
 	// CollectRemoteRefsOpts collects all unique remote refs reachable from cfg's build/deploy
 	// targets + layers' manifest depends/candy fields, grouped by (repoPath, version).
 	CollectRemoteRefsOpts(ctx context.Context, cfg *Config, layers map[string]CandyReader, opts ResolveOpts) ([]RemoteDownload, error)

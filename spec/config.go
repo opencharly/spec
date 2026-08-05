@@ -37,7 +37,7 @@ type Config struct {
 	Box      BoxMap    `yaml:"box" json:"box"`
 	// Local carries kind:local templates so remote-ref collection + validation walk their candy:
 	// lists symmetrically with box candy lists (kind:local templates compose remote @-ref
-	// candies too). Populated from UnifiedFile.Local by ProjectConfig() (charly/unified.go).
+	// candies too). Populated from UnifiedFile.Local by UnifiedFile.ProjectConfig() (sdk/loaderkit).
 	Local map[string]json.RawMessage `yaml:"local,omitempty" json:"local,omitempty"`
 	// Sidecar carries the project's sidecar-template library as OPAQUE bodies (the raw
 	// PluginKinds["sidecar"] map). The kernel never reads their fields — candy/plugin-sidecar's
