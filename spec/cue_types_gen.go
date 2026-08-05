@@ -2502,56 +2502,6 @@ type BuildTarget struct {
 	Auto bool `yaml:"auto,omitempty" json:"auto,omitempty"`
 }
 
-// #RenderSeamRequest is the generic host↔plugin render-seam dispatch (#67 render-DRIVE move).
-// plugin-build wires the deploykit.Generator seams via HostBuild("render-seam") with a method
-// discriminator + opaque JSON params. The host dispatches by method to the corresponding core
-// function. This is the SINGLE HostBuild kind for ALL render seams that need host callbacks
-// (RenderService, ValidateEgress, EmitPluginOp, etc.) — one CUE type, many methods.
-type RenderSeamRequest struct {
-	Method string `yaml:"method,omitempty" json:"method"`
-
-	Params []byte `yaml:"params,omitempty" json:"params,omitempty"`
-}
-
-// #RenderSeamReply carries the opaque JSON result + the reply-error convention.
-type RenderSeamReply struct {
-	Result []byte `yaml:"result,omitempty" json:"result,omitempty"`
-
-	Error string `yaml:"error,omitempty" json:"error,omitempty"`
-}
-
-// #InlineBuilderParams carries the inputs to the host resolveInlineBuilderSeam for the
-// "inline-builder" render-seam method (RenderSeamInlineBuilder). It rides INSIDE the opaque
-// #RenderSeamRequest.params bytes (marshalled by candy/plugin-build's render, decoded by the
-// host builder). BDef is #Builder, Ctx is #BuildStageContext — both existing CUE defs, so
-// gengotypes generates typed pointers (*Builder / *BuildStageContext).
-type InlineBuilderParams struct {
-	Dir string `yaml:"dir,omitempty" json:"dir"`
-
-	BoxName string `yaml:"box_name,omitempty" json:"box_name"`
-
-	CandyName string `yaml:"candy_name,omitempty" json:"candy_name"`
-
-	BuilderName string `yaml:"builder_name,omitempty" json:"builder_name"`
-
-	BDef *Builder `yaml:"b_def,omitempty" json:"b_def,omitempty"`
-
-	Ctx *BuildStageContext `yaml:"ctx,omitempty" json:"ctx,omitempty"`
-}
-
-// #InlineBuilderResult carries the resolved inline fragment back to the render.
-type InlineBuilderResult struct {
-	Fragment string `yaml:"fragment,omitempty" json:"fragment,omitempty"`
-}
-
-// #EnsureBuildersParams carries the builder words the host must scan+connect for the
-// "ensure-builders" render-seam method (RenderSeamEnsureBuilders).
-type EnsureBuildersParams struct {
-	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-
-	Words []string `yaml:"words,omitempty" json:"words,omitempty"`
-}
-
 // #BuildEnv is the build-context descriptor the host puts in op.Env for an
 // OpEmit Invoke at image-generation time: the image's distro tags + name, so
 // a plugin can tailor its emitted Containerfile fragment per distro/arch.
@@ -5449,18 +5399,13 @@ type ResolvedProjectRequest struct {
 	// ref the fetch step skipped. Mirrors spec.ResolveOpts.RequestedBoxes, which already pulls a
 	// qualified on-demand target into buildkit.ResolveAllBox's RESOLVE set the identical way —
 	// this closes the matching gap on the COLLECT half.
+	//
+	// The `boxes` field is DELETED (K-wave 2 cone R1). It carried the plugin-resolved box set to the
+	// host's `buildengine-prep` leg, whose only job was seeding the render-seam floor's Generator
+	// cache. That seam is gone — every render seam peer-dispatches now — so the leg, the cache, and
+	// this field all lost their single consumer together, along with deploykit's host-side
+	// ResolveAllSpecBoxes/WrapSpecBoxes/SpecBoxes bridge.
 	RequestedBoxes []string `yaml:"requested_boxes,omitempty" json:"requested_boxes,omitempty"`
-
-	// boxes — the resolved-box set the PLUGIN-SIDE build-engine resolve (candy/plugin-build's
-	// resolveBuildEngine) pushes to the host's `buildengine-prep` leg so the host's render-seam-floor
-	// Generator cache stores wire-clean *spec.ResolvedBox WITHOUT the host re-resolving via
-	// deploykit.ResolveAllSpecBoxes — the plugin already resolved them (buildkit.ResolveAllBox, the
-	// SAME primitive ResolveAllSpecBoxes wraps). Pointer map for parity with the host Generator.Boxes
-	// field (map[string]*spec.ResolvedBox); the render-seam floor's 2 consumers read only Name/Tags
-	// off these. Empty for the other buildengine-* legs that don't touch box-resolve data (and for
-	// the loadRenderGen defensive cache-miss fallback, which is provably unreachable in production).
-	// #55 coneB2 Class B — sheds the deploykit import from charly/generate.go.
-	Boxes map[string]*ResolvedBox `yaml:"boxes,omitempty" json:"boxes,omitempty"`
 }
 
 type Resource struct {

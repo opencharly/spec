@@ -336,14 +336,9 @@
 	// qualified on-demand target into buildkit.ResolveAllBox's RESOLVE set the identical way —
 	// this closes the matching gap on the COLLECT half.
 	requested_boxes?: [...string] @go(RequestedBoxes)
-	// boxes — the resolved-box set the PLUGIN-SIDE build-engine resolve (candy/plugin-build's
-	// resolveBuildEngine) pushes to the host's `buildengine-prep` leg so the host's render-seam-floor
-	// Generator cache stores wire-clean *spec.ResolvedBox WITHOUT the host re-resolving via
-	// deploykit.ResolveAllSpecBoxes — the plugin already resolved them (buildkit.ResolveAllBox, the
-	// SAME primitive ResolveAllSpecBoxes wraps). Pointer map for parity with the host Generator.Boxes
-	// field (map[string]*spec.ResolvedBox); the render-seam floor's 2 consumers read only Name/Tags
-	// off these. Empty for the other buildengine-* legs that don't touch box-resolve data (and for
-	// the loadRenderGen defensive cache-miss fallback, which is provably unreachable in production).
-	// #55 coneB2 Class B — sheds the deploykit import from charly/generate.go.
-	boxes?: {[string]: #ResolvedBox} @go(Boxes,type=map[string]*ResolvedBox)
+	// The `boxes` field is DELETED (K-wave 2 cone R1). It carried the plugin-resolved box set to the
+	// host's `buildengine-prep` leg, whose only job was seeding the render-seam floor's Generator
+	// cache. That seam is gone — every render seam peer-dispatches now — so the leg, the cache, and
+	// this field all lost their single consumer together, along with deploykit's host-side
+	// ResolveAllSpecBoxes/WrapSpecBoxes/SpecBoxes bridge.
 }
