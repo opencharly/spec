@@ -3438,14 +3438,14 @@ type StepResult struct {
 	Result CheckResult `yaml:"result,omitempty" json:"result"`
 }
 
-// #CheckRunReply is the host-resolved result of a check-run. Steps is the per-step verdict list the
+// #CheckRunReply is the plugin-resolved result of a check-run. Steps is the per-step verdict list the
 // plugin formats (FormatStepResults*) and tallies into an exit code. Image is the resolved image ref
 // for the "Image: <ref>" header line. NoSteps signals the image declared no plan (the plugin prints
 // "No plan steps defined for this image." and exits 0) — distinct from an empty Steps that ran zero
-// scored steps. Header is the pre-formatted, kind-specific banner line the host builds from data
-// only the host holds (container name, ssh user/host/port, member count), so the plugin stays
-// kind-blind: it prints Header, then the formatted Steps. Passthrough carries the one non-plan-run
-// live path — a nested pod-in-VM leaf whose check the host delegates to the guest over SSH,
+// scored steps. Header is the pre-formatted, kind-specific banner line the plugin builds (container
+// name, ssh user/host/port, member count) — the plugin prints it, then the formatted Steps.
+// Passthrough carries the one non-plan-run
+// live path — a nested pod-in-VM leaf whose check is delegated to the guest over SSH,
 // forwarded verbatim; nil for every plan-run mode. Score is the "score"-mode reply (the AI-harness
 // SCORING result, #CheckRunResults), nil for the box/live/feature plan-run modes that carry their
 // verdicts in Steps. CUE-sourced (SDD): plain carrier, no json:"-".
@@ -5969,25 +5969,23 @@ type PodLogsOpts struct {
 	Sidecar string `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 }
 
-// #CheckRunRequest asks the host to RUN a check plan against a venue and return the
-// per-step results (P12). command:check (candy/plugin-check) owns the `charly check`
-// CLI + output formatting, but RUNNING a plan is a composite of core host-serving
-// Mechanisms a plugin (a separate module importing only sdk) cannot perform: the
-// venue→executor construction, the OCI-label plan extraction, and the plan-walk's verb
-// dispatch through the provider registry. So the plugin resolves its intent into this
-// envelope and the host builds the venue + runs the kit-Runner through the in-core
-// registry VerbResolver, exactly as command:vm resolves `vm build` plugin-side
-// (candy/plugin-vm/vm_build_resolve.go — the former HostBuild("vm-build") is DELETED). The action
+// #CheckRunRequest is the check-run dispatch envelope (P12). command:check
+// (candy/plugin-check) owns the `charly check` CLI + output formatting AND runs every
+// mode itself (hostCheckRunCtx's per-mode bodies — the former "check-run" HostBuild
+// kind is DELETED, K-wave 2 cone R4): the venue→executor construction + OCI-label plan
+// extraction are plugin-side (loaderkit / deploykit), while the plan-walk's verb
+// dispatch resolves through the provider registry (in-proc, or the out-of-process
+// check-context reverse channel for the live-container verbs). The action
 // noun "check-run" is class-generic (F11).
 //
 // Mode selects the run shape (discriminated union): "box" — a pure-box run against a
 // disposable container built from Image (RunModeBox, build-scope steps only, the CheckBoxCmd
-// engine); "live" — a full-stack run against a running deployment resolved by Name (the host
-// classifies vm/pod/local/group internally, so the plugin stays kind-blind), applying the
+// engine); "live" — a full-stack run against a running deployment resolved by Name (the plugin
+// classifies vm/pod/local/group via its own venue.go), applying the
 // Instance/Section/Filter selectors; "feature-box" / "feature-live" — the ADE acceptance run
 // (SkipDeterministicRun) over Image (build scope) or the live deployment Name (deploy scope,
-// the host-side agent grader wiring, gated by NoAgent/Agent/Timeout), scoped by Tag/Strict.
-// Dir is the project dir (empty → the host uses its own cwd), matching LoadUnified(dir).
+// the plugin-side agent grader wiring, gated by NoAgent/Agent/Timeout), scoped by Tag/Strict.
+// Dir is the project dir (empty → the plugin uses its own cwd), matching LoadUnified(dir).
 // `format` is deliberately NOT a field — the plugin formats the returned Steps itself.
 // run-bed + iterate are NOT seam modes: the plugin drives them over HostBuild("cli").
 //

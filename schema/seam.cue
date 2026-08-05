@@ -490,25 +490,23 @@
 	sidecar?: string @go(Sidecar)
 }
 
-// #CheckRunRequest asks the host to RUN a check plan against a venue and return the
-// per-step results (P12). command:check (candy/plugin-check) owns the `charly check`
-// CLI + output formatting, but RUNNING a plan is a composite of core host-serving
-// Mechanisms a plugin (a separate module importing only sdk) cannot perform: the
-// venue→executor construction, the OCI-label plan extraction, and the plan-walk's verb
-// dispatch through the provider registry. So the plugin resolves its intent into this
-// envelope and the host builds the venue + runs the kit-Runner through the in-core
-// registry VerbResolver, exactly as command:vm resolves `vm build` plugin-side
-// (candy/plugin-vm/vm_build_resolve.go — the former HostBuild("vm-build") is DELETED). The action
+// #CheckRunRequest is the check-run dispatch envelope (P12). command:check
+// (candy/plugin-check) owns the `charly check` CLI + output formatting AND runs every
+// mode itself (hostCheckRunCtx's per-mode bodies — the former "check-run" HostBuild
+// kind is DELETED, K-wave 2 cone R4): the venue→executor construction + OCI-label plan
+// extraction are plugin-side (loaderkit / deploykit), while the plan-walk's verb
+// dispatch resolves through the provider registry (in-proc, or the out-of-process
+// check-context reverse channel for the live-container verbs). The action
 // noun "check-run" is class-generic (F11).
 //
 // Mode selects the run shape (discriminated union): "box" — a pure-box run against a
 // disposable container built from Image (RunModeBox, build-scope steps only, the CheckBoxCmd
-// engine); "live" — a full-stack run against a running deployment resolved by Name (the host
-// classifies vm/pod/local/group internally, so the plugin stays kind-blind), applying the
+// engine); "live" — a full-stack run against a running deployment resolved by Name (the plugin
+// classifies vm/pod/local/group via its own venue.go), applying the
 // Instance/Section/Filter selectors; "feature-box" / "feature-live" — the ADE acceptance run
 // (SkipDeterministicRun) over Image (build scope) or the live deployment Name (deploy scope,
-// the host-side agent grader wiring, gated by NoAgent/Agent/Timeout), scoped by Tag/Strict.
-// Dir is the project dir (empty → the host uses its own cwd), matching LoadUnified(dir).
+// the plugin-side agent grader wiring, gated by NoAgent/Agent/Timeout), scoped by Tag/Strict.
+// Dir is the project dir (empty → the plugin uses its own cwd), matching LoadUnified(dir).
 // `format` is deliberately NOT a field — the plugin formats the returned Steps itself.
 // run-bed + iterate are NOT seam modes: the plugin drives them over HostBuild("cli").
 //

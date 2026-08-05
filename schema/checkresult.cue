@@ -133,14 +133,14 @@
 	result!:  #CheckResult @go(Result)
 }
 
-// #CheckRunReply is the host-resolved result of a check-run. Steps is the per-step verdict list the
+// #CheckRunReply is the plugin-resolved result of a check-run. Steps is the per-step verdict list the
 // plugin formats (FormatStepResults*) and tallies into an exit code. Image is the resolved image ref
 // for the "Image: <ref>" header line. NoSteps signals the image declared no plan (the plugin prints
 // "No plan steps defined for this image." and exits 0) — distinct from an empty Steps that ran zero
-// scored steps. Header is the pre-formatted, kind-specific banner line the host builds from data
-// only the host holds (container name, ssh user/host/port, member count), so the plugin stays
-// kind-blind: it prints Header, then the formatted Steps. Passthrough carries the one non-plan-run
-// live path — a nested pod-in-VM leaf whose check the host delegates to the guest over SSH,
+// scored steps. Header is the pre-formatted, kind-specific banner line the plugin builds (container
+// name, ssh user/host/port, member count) — the plugin prints it, then the formatted Steps.
+// Passthrough carries the one non-plan-run
+// live path — a nested pod-in-VM leaf whose check is delegated to the guest over SSH,
 // forwarded verbatim; nil for every plan-run mode. Score is the "score"-mode reply (the AI-harness
 // SCORING result, #CheckRunResults), nil for the box/live/feature plan-run modes that carry their
 // verdicts in Steps. CUE-sourced (SDD): plain carrier, no json:"-".
