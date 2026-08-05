@@ -11,7 +11,7 @@ package spec
 type ScanSeams struct {
 	// CollectRemoteRefs runs the reachability-scoped remote-ref walk over the project's boxes +
 	// this local candy set, returning each distinct (repo, git-tag) to fetch. Host closure:
-	// CollectRemoteRefsOpts(cfg, FinalizeScannedCandies(localScanned, nil), withLocalRawRefs(opts, localScanned)).
+	// CollectRemoteRefsOpts(cfg, FinalizeScannedCandies(localScanned, nil), WithLocalRawRefs(opts, localScanned)).
 	CollectRemoteRefs func(localScanned map[string]ScannedCandy) ([]RemoteDownload, error)
 	// EnsureRepo resolves a (repoPath, version) to a local cache directory, fetching + auto-migrating
 	// on a cache miss (host closure: EnsureRepoDownloaded).

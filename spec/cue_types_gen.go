@@ -3084,9 +3084,9 @@ type BuildEngineScanRemoteRequest struct {
 //     reading subUF.Candy in-memory — the R1 fix; never a re-load).
 //   - downloads: the namespace-scoped INITIAL RemoteDownload set (from CollectRemoteRefsOpts over
 //     the namespace's own cfg + localScanned raw refs) — the ONE cfg-coupled step. The plugin's
-//     ScanSeams.CollectRemoteRefs returns this verbatim; EnsureRepo/ScanRemote still round-trip to
-//     the cfg-agnostic host legs (buildengine-ensure-repo / buildengine-scan-remote) for the
-//     transitive fetch.
+//     ScanSeams.CollectRemoteRefs returns this verbatim; EnsureRepo runs plugin-side over
+//     loaderkit.EnsureRepoDownloaded and only ScanRemote still round-trips to the cfg-agnostic
+//     buildengine-scan-remote host leg for the transitive fetch (K-wave 2 cone R1 A2).
 //
 // initCfg / calver / dir come from the plugin's own resolve context (the seam closure params) and
 // are deliberately NOT duplicated here.
@@ -3096,7 +3096,7 @@ type BuildEngineScanRemoteRequest struct {
 // @go(Scanned,type=map[string]ScannedCandy) emits `Scanned map[string]ScannedCandy` referencing the
 // hand-written type, NO duplicate generated type). The inline CUE shapes are structural placeholders
 // for the override only — they are never generated as named Go types (conflict count 0, spiked). The
-// existing buildengine-scan-local / buildengine-collect-remote-refs legs already marshal these same
+// existing buildengine-scan-local / buildengine-scan-remote legs already marshal these same
 // hand-written types over the wire; #NamespaceScanReply is the CUE-sourced envelope that carries them.
 type NamespaceScanEntry struct {
 	Child string `yaml:"child,omitempty" json:"child"`
