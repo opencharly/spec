@@ -53,7 +53,7 @@ const (
 	// F6 — the SUBSTRATE LIFECYCLE selectors (host→plugin on Provider.Invoke): a deploy
 	// substrate plugin brings its OWN host-side venue lifecycle. PrepareVenue/VenueExecutor
 	// return a VenueDescriptor the HOST re-materializes into a real DeployExecutor (the live
-	// executor never crosses the wire); the rest carry name/node/opts in, error/StatusInfo out.
+	// executor never crosses the wire); the rest carry name/node/opts in, error/spec.DeployTargetStatus out.
 	OpPrepareVenue     = "prepare-venue"     // lifecycle: build the venue → VenueDescriptor (re-materialized host-side)
 	OpArtifactKey      = "artifact-key"      // lifecycle: the per-deploy artifact ledger key
 	OpPostApply        = "post-apply"        // lifecycle: post-walk finalize on the venue
@@ -61,7 +61,7 @@ const (
 	OpPostTeardown     = "post-teardown"     // lifecycle: drop venue artifacts (image/domain)
 	OpStart            = "start"             // lifecycle: start the venue
 	OpStop             = "stop"              // lifecycle: stop the venue
-	OpStatus           = "status"            // lifecycle: venue status → StatusInfo
+	OpStatus           = "status"            // lifecycle: venue status → spec.DeployTargetStatus
 	OpLogs             = "logs"              // lifecycle: stream venue logs
 	OpShell            = "shell"             // lifecycle: NON-interactive in-container exec CAPTURE (charly service — output-in-reply); interactive shell is OpAttach
 	OpAttach           = "attach"            // F12 lifecycle: LIVE-STDIO attach — charly shell (-it TTY) + charly cmd (-i, stdin piped). The plugin exec.RunInteractive's a host-resolved #PodLiveStdioPlan.script; the host reverse-server holds the operator's terminal (stdio never crosses the wire)
@@ -141,11 +141,11 @@ const (
 	OpEphemeralTeardown = "ephemeral-teardown"
 
 	// OpDeployDispatch is the command:bundle S3b selector: the ONE generic host→plugin envelope
-	// every UnifiedDeployTarget/LifecycleTarget method (Add/Update/Del/Test/Start/Stop/Status/
-	// Logs/Shell/Attach/Rebuild) dispatches through, discriminated by
+	// every UnifiedDeployTarget/LifecycleTarget method (Add/Update/Del/Start/Stop/Status/Logs/
+	// Shell/Attach/Rebuild — Test DELETED, #55 W3 B3 remainder) dispatches through, discriminated by
 	// spec.DeployTargetDispatchRequest.Op — a generic action selector (never a provider word,
-	// F11), mirroring OpCompile's shape but carrying ELEVEN former methods through ONE wire pair
-	// instead of eleven (R3 — the project rulebook's "generic over ad-hoc"). Core's thin
+	// F11), mirroring OpCompile's shape but carrying TEN former methods through ONE wire pair
+	// instead of ten (R3 — the project rulebook's "generic over ad-hoc"). Core's thin
 	// ResolveTarget proxy (charly/unified_targets.go) Invokes this; candy/plugin-bundle's handler
 	// switches on Op and reaches the ACTUAL deploy-substrate provider (pod/vm/local/k8s/android)
 	// via its OWN sdk.Executor.InvokeProvider (S1) — core never talks to the substrate directly

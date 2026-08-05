@@ -5958,9 +5958,9 @@ type PodAttachOpts struct {
 }
 
 // #PodLogsOpts carries `charly logs [-f]`'s parameters (K4/F12 inversion), replacing the former
-// host-side resolvePodLogsPlan. Mirrors charly-core's substrate-agnostic LogsOpts (Follow/Tail/
-// Sidecar) — a plugin-facing wire twin, since LogsOpts itself is a hand-written charly-core type
-// with no CUE def.
+// host-side resolvePodLogsPlan. Mirrors spec.DeployTargetLogsOpts (Follow/Tail/Sidecar) — the
+// plugin-side wire twin for the pod logs payload, distinct from the dispatch-envelope
+// DeployTargetLogsOpts (K-wave 2 cone R5: the charly-core LogsOpts type is DELETED).
 type PodLogsOpts struct {
 	Follow bool `yaml:"follow,omitempty" json:"follow,omitempty"`
 
@@ -6801,9 +6801,9 @@ type PodUpdatePayload struct {
 	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
 }
 
-// #DeployTargetStatus (S3b, Unit-6 design) mirrors the former charly-core StatusInfo — a
-// deployment's live runtime state, now CUE-sourced because it crosses the plugin boundary once
-// externalDeployTarget/grpcSubstrateLifecycle move to candy/plugin-bundle.
+// #DeployTargetStatus is the live-runtime state for the "status" deploy op — formerly the
+// charly-core StatusInfo, now CUE-sourced because it crosses the plugin boundary; the
+// UnifiedDeployTarget contract (spec/spec/deploy_target_unified.go) uses this type directly.
 type DeployTargetStatus struct {
 	State string `yaml:"state,omitempty" json:"state,omitempty"`
 
@@ -6812,12 +6812,11 @@ type DeployTargetStatus struct {
 	Details map[string]string `yaml:"details,omitempty" json:"details,omitempty"`
 }
 
-// #DeployTargetDelOpts mirrors the former charly-core DelOpts (`charly bundle del`) PLUS the
-// three teardown gates externalDeployTarget used to receive as externally-set STRUCT FIELDS
-// (KeepRepoChanges/KeepServices/KeepImage, set via a type-assertion in
-// host_build_deploy_node_del_dispatch.go before calling .Del()) — folded into DelOpts proper
-// (S3b) since the moved target is now constructed fresh per call from data alone, with no
-// settable-after-construction fields to type-assert onto.
+// #DeployTargetDelOpts is the `charly bundle del` opts type — formerly the charly-core DelOpts,
+// now CUE-sourced (the UnifiedDeployTarget contract lives in spec/spec/deploy_target_unified.go).
+// The three teardown gates (KeepRepoChanges/KeepServices/KeepImage) were folded into DelOpts
+// proper in S3b, replacing the pre-S3b type-assertion in host_build_deploy_node_del_dispatch.go;
+// the del dispatcher now passes them as plain fields.
 type DeployTargetDelOpts struct {
 	DryRun bool `yaml:"dry_run,omitempty" json:"dry_run,omitempty"`
 
@@ -6834,7 +6833,8 @@ type DeployTargetDelOpts struct {
 	KeepImage bool `yaml:"keep_image,omitempty" json:"keep_image,omitempty"`
 }
 
-// #DeployTargetLogsOpts mirrors the former charly-core LogsOpts (`charly logs`).
+// #DeployTargetLogsOpts is the `charly logs` opts type — formerly the charly-core LogsOpts, now
+// CUE-sourced (the UnifiedDeployTarget contract lives in spec/spec/deploy_target_unified.go).
 type DeployTargetLogsOpts struct {
 	Follow bool `yaml:"follow,omitempty" json:"follow,omitempty"`
 
@@ -6843,7 +6843,9 @@ type DeployTargetLogsOpts struct {
 	Sidecar string `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 }
 
-// #DeployTargetRebuildOpts mirrors the former charly-core RebuildOpts (`charly update` rebuild path).
+// #DeployTargetRebuildOpts is the `charly update` rebuild-path opts type — formerly the
+// charly-core RebuildOpts, now CUE-sourced (the UnifiedDeployTarget contract lives in
+// spec/spec/deploy_target_unified.go).
 type DeployTargetRebuildOpts struct {
 	RebuildImage bool `yaml:"rebuild_image,omitempty" json:"rebuild_image,omitempty"`
 

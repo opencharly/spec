@@ -481,9 +481,9 @@
 }
 
 // #PodLogsOpts carries `charly logs [-f]`'s parameters (K4/F12 inversion), replacing the former
-// host-side resolvePodLogsPlan. Mirrors charly-core's substrate-agnostic LogsOpts (Follow/Tail/
-// Sidecar) — a plugin-facing wire twin, since LogsOpts itself is a hand-written charly-core type
-// with no CUE def.
+// host-side resolvePodLogsPlan. Mirrors spec.DeployTargetLogsOpts (Follow/Tail/Sidecar) — the
+// plugin-side wire twin for the pod logs payload, distinct from the dispatch-envelope
+// DeployTargetLogsOpts (K-wave 2 cone R5: the charly-core LogsOpts type is DELETED).
 #PodLogsOpts: {
 	follow?:  bool   @go(Follow)
 	tail?:    int    @go(Tail,type=int)
@@ -1263,21 +1263,20 @@
 	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 
-// #DeployTargetStatus (S3b, Unit-6 design) mirrors the former charly-core StatusInfo — a
-// deployment's live runtime state, now CUE-sourced because it crosses the plugin boundary once
-// externalDeployTarget/grpcSubstrateLifecycle move to candy/plugin-bundle.
+// #DeployTargetStatus is the live-runtime state for the "status" deploy op — formerly the
+// charly-core StatusInfo, now CUE-sourced because it crosses the plugin boundary; the
+// UnifiedDeployTarget contract (spec/spec/deploy_target_unified.go) uses this type directly.
 #DeployTargetStatus: {
 	state?:   string          @go(State)
 	healthy?: bool            @go(Healthy)
 	details?: {[string]: string} @go(Details)
 }
 
-// #DeployTargetDelOpts mirrors the former charly-core DelOpts (`charly bundle del`) PLUS the
-// three teardown gates externalDeployTarget used to receive as externally-set STRUCT FIELDS
-// (KeepRepoChanges/KeepServices/KeepImage, set via a type-assertion in
-// host_build_deploy_node_del_dispatch.go before calling .Del()) — folded into DelOpts proper
-// (S3b) since the moved target is now constructed fresh per call from data alone, with no
-// settable-after-construction fields to type-assert onto.
+// #DeployTargetDelOpts is the `charly bundle del` opts type — formerly the charly-core DelOpts,
+// now CUE-sourced (the UnifiedDeployTarget contract lives in spec/spec/deploy_target_unified.go).
+// The three teardown gates (KeepRepoChanges/KeepServices/KeepImage) were folded into DelOpts
+// proper in S3b, replacing the pre-S3b type-assertion in host_build_deploy_node_del_dispatch.go;
+// the del dispatcher now passes them as plain fields.
 #DeployTargetDelOpts: {
 	dry_run?:             bool @go(DryRun)
 	assume_yes?:          bool @go(AssumeYes)
@@ -1305,14 +1304,17 @@
 // (ParentExec non-nil) tried to Add — proven on the check-sidecar-pod R10 bed. Full narrative:
 // this repo's CHANGELOG/2026.203.0212.md.
 
-// #DeployTargetLogsOpts mirrors the former charly-core LogsOpts (`charly logs`).
+// #DeployTargetLogsOpts is the `charly logs` opts type — formerly the charly-core LogsOpts, now
+// CUE-sourced (the UnifiedDeployTarget contract lives in spec/spec/deploy_target_unified.go).
 #DeployTargetLogsOpts: {
 	follow?:  bool   @go(Follow)
 	tail?:    int    @go(Tail)
 	sidecar?: string @go(Sidecar)
 }
 
-// #DeployTargetRebuildOpts mirrors the former charly-core RebuildOpts (`charly update` rebuild path).
+// #DeployTargetRebuildOpts is the `charly update` rebuild-path opts type — formerly the
+// charly-core RebuildOpts, now CUE-sourced (the UnifiedDeployTarget contract lives in
+// spec/spec/deploy_target_unified.go).
 #DeployTargetRebuildOpts: {
 	rebuild_image?: bool @go(RebuildImage)
 	assume_yes?:    bool @go(AssumeYes)
