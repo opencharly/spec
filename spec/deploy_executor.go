@@ -204,7 +204,7 @@ type BuilderRunOpts struct {
 
 // EmitOpts carries cross-cutting toggles passed by command-line flags.
 // Gates are checked per-step by the target; target-specific options (the
-// container target's registry auth, the host target's --yes, --dry-run)
+// container target's registry auth, the host target's --assume-yes, --dry-run)
 // are bundled here too.
 type EmitOpts struct {
 	DryRun               bool

@@ -2139,9 +2139,9 @@ type CandyView struct {
 
 	// capabilities — the per-candy capability surface the validate ENGINE reads (task #60,
 	// ruling a). The projector fills it from the candy's `capabilities:` block; the validate
-	// plugin re-runs AggregateCandyCapabilities over a box's candy order (a boolean OR of
-	// preserve_user, order-independent) + the PreserveUser rule (validateInitDependencies +
-	// validatePackagedServices box-arms). An aggregate over RESOLVED models belongs on the
+	// plugin re-derives it via boxPreserveUser over a box's candy order (a boolean OR of
+	// preserve_user, order-independent) + the PreserveUser rule (the validatePackagedServices
+	// box-arm). An aggregate over RESOLVED models belongs on the
 	// envelope, not a host route-B diagnostic — a lean envelope is not a virtue when it keeps
 	// an R-rule in core.
 	Capabilities *CandyCapabilitiesView `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`

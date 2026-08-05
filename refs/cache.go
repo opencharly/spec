@@ -34,7 +34,20 @@ func RepoCachePath(repoPath, version string) (string, error) {
 	return filepath.Join(cacheDir, repoPath+"@"+version), nil
 }
 
-// IsRepoCached checks if a repo version is already in the cache.
+// IsRepoCached reports whether a repo version is already in the cache AS A
+// USABLE EXPORT — the directory exists AND every submodule it declares has
+// content.
+//
+// The completeness half is load-bearing for IMMUTABLE refs. EnsureRepoDownloaded
+// short-circuits on `cached && !IsMutableRef(version)`, returning RepoCachePath
+// directly and never entering DownloadRepo — so the repoCacheFresh completeness
+// check cannot see a tag's cache at all. Directory-exists alone therefore pinned
+// every incomplete TAG export permanently: a tag never moves, so nothing would
+// ever re-fetch it. On the machine this was found, `charly@v2026.183.1359` held
+// 0 of its 9 declared submodules and `charly@v2026.201.0706` held 1 of 10, both
+// unrepairable for the life of the cache. Checking content here routes an
+// incomplete export down the download branch instead, so tag and branch caches
+// self-heal by the SAME predicate rather than one growing its own copy.
 func IsRepoCached(repoPath, version string) (bool, error) {
 	cachePath, err := RepoCachePath(repoPath, version)
 	if err != nil {
@@ -47,5 +60,5 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 		}
 		return false, err
 	}
-	return true, nil
+	return submodulesPopulated(cachePath), nil
 }

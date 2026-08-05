@@ -9,6 +9,7 @@
 package refs
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -98,7 +99,7 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 	// ref is a tag object, not a commit).
 	if len(commit) >= 7 && isHex(commit) {
 		if err := gitCloneByCommit(repoURL, commit, targetDir); err == nil {
-			return populateSDKSubmodule(targetDir)
+			return populateSubmodules(targetDir)
 		}
 		_ = os.RemoveAll(targetDir) // clean up partial clone before falling back
 	}
@@ -111,34 +112,70 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 		return fmt.Errorf("git clone --branch %s %s: %w", ref, repoURL, err)
 	}
 
-	return populateSDKSubmodule(targetDir)
+	return populateSubmodules(targetDir)
 }
 
-// populateSDKSubmodule initializes the `sdk` submodule in a freshly-fetched
-// plugin-repo cache. The raw clone/fetch above populates NO submodules, so
-// without this every plugin BUILD from the cache (go.work `use ./sdk`) fails
-// "cannot load module ../../sdk … no such file" — the out-of-tree plugin
-// provider then fails to connect (the examplestructkind connect-fail warning +
-// the check-live "no provider registered" the concurrent roster surfaced).
-// Only the charly superproject declares an `sdk` submodule; a repo without one
-// is a no-op. The insteadOf rewrite forces the .gitmodules SSH URL
-// (git@github.com:) to HTTPS — matching how the parent repo is cloned — so no
-// SSH key is needed in a headless/CI run. Just `sdk` is initialized (the ONLY
-// submodule a plugin build's go.work depends on), never the heavy box/* ones.
-func populateSDKSubmodule(targetDir string) error {
+// populateSubmodules initializes EVERY submodule a freshly-fetched repo declares.
+// The raw clone/fetch above populates none of them, and a `--repo` cache is a
+// WHOLE PROJECT a user drives with nothing but the charly binary — so any
+// submodule may be load-bearing for a documented command:
+//
+//   - sdk + spec — every out-of-process plugin candy builds STANDALONE in its own
+//     module (GOWORK=off) against `replace … => ../../sdk` and `=> ../../spec`.
+//     ALL 86 candy go.mod files carry BOTH replaces, so populating only `sdk`
+//     left every such build failing on `../../spec/go.mod: no such file`, and no
+//     out-of-process verb could be reached through --repo at all.
+//   - box/<distro> — the box definitions themselves; main owns none.
+//   - plugins, docs, pkg/* — skills, the docs site, and the packaging sources.
+//
+// This deliberately replaces an `sdk`-only special case whose stated rationale
+// ("the ONLY submodule a plugin build depends on … never the heavy box/* ones")
+// was wrong on both counts: spec is equally required, and a shallow init of all
+// twelve costs ~8s and adds 24MB to a 36MB clone (60MB total) — the cost that
+// "heavy" was guarding against does not exist at --depth 1. A repo declaring no
+// submodules is a clean no-op.
+//
+// The insteadOf rewrite forces the .gitmodules SSH URL (git@github.com:) to
+// HTTPS — matching how the parent repo is cloned — so no SSH key is needed in a
+// headless/CI run. Non-recursive, matching the configuration proven to build.
+//
+// A SUBMODULE THAT CANNOT BE FETCHED FAILS THE WHOLE CLONE, deliberately. This
+// is a real widening: the old code was a silent no-op for any repo not
+// declaring `sdk`, so a third-party project with a private or dead submodule
+// used to fetch "fine" and now errors here. That is the correct trade, because a
+// SILENTLY PARTIAL cache is the exact defect this function exists to fix — it
+// cost a full debugging session, surfacing three layers down as
+// `../../spec/go.mod: no such file` with nothing pointing back at the fetch. A
+// caller that cannot reach a declared submodule has an incomplete project and is
+// told so HERE, naming the submodule, rather than at some later build whose
+// error does not mention fetching at all. git's own stderr is wrapped in, so the
+// specific submodule and cause survive into the message.
+//
+// The blast radius is narrower than .gitmodules suggests: `submodule update
+// --init` walks the INDEX, so an entry declared in .gitmodules with no gitlink
+// (mode 160000) recorded is ignored and cannot fail a fetch. Only submodules
+// genuinely committed into the tree are attempted.
+func populateSubmodules(targetDir string) error {
 	gm := filepath.Join(targetDir, ".gitmodules")
-	out, err := exec.Command("git", "config", "-f", gm, "--get", "submodule.sdk.path").Output()
-	if err != nil || strings.TrimSpace(string(out)) == "" {
-		return nil // no sdk submodule declared — nothing to populate
+	if _, err := os.Stat(gm); err != nil {
+		return nil // no submodules declared — nothing to populate
 	}
 	cmd := exec.Command("git",
 		"-c", "url.https://github.com/.insteadOf=git@github.com:",
 		"-c", "advice.detachedHead=false",
-		"submodule", "update", "--init", "--depth", "1", "-q", "sdk")
+		"submodule", "update", "--init", "--depth", "1", "-q")
 	cmd.Dir = targetDir
-	cmd.Stderr = os.Stderr
+	// Capture rather than pass through: git names the offending submodule and the
+	// reason (auth, missing ref, unreachable host) on stderr, and that is the only
+	// thing that makes this failure actionable. Passing it to os.Stderr would print
+	// it detached from the error the caller reports.
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("populating sdk submodule in %s: %w", targetDir, err)
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			return fmt.Errorf("populating submodules in %s: %w\n%s", targetDir, err, detail)
+		}
+		return fmt.Errorf("populating submodules in %s: %w", targetDir, err)
 	}
 	return nil
 }
@@ -213,8 +250,20 @@ func writeRefProvenance(cachePath, commit string) error {
 
 // repoCacheFresh reports whether the cache at cachePath is a complete export
 // cloned from exactly commit. A missing export, a missing provenance sidecar
-// (a cache written before this contract), or a sidecar naming a different
-// commit (the ref moved upstream) all count as stale.
+// (a cache written before this contract), a sidecar naming a different commit
+// (the ref moved upstream), or an INCOMPLETE export all count as stale.
+//
+// Completeness is checked, not assumed. This function has always claimed to
+// verify "a complete export" and never did — it compared only the commit — so a
+// cache whose CONTENT was wrong stayed a permanent hit as long as the ref did
+// not move. That is not hypothetical: every cache written before
+// populateSubmodules holds one of twelve submodules, records the correct commit,
+// and is therefore served forever. Without this check the submodule fix would
+// only ever help caches created AFTER it, and every existing user would stay
+// broken until main happened to advance — with no CLI verb to invalidate a repo
+// cache entry (`charly clean --invalidate` targets image tags), leaving hand-
+// deleting a cache directory as the only remedy. Verifying content instead makes
+// every such cache self-heal on next access.
 func repoCacheFresh(cachePath, commit string) bool {
 	if commit == "" {
 		return false
@@ -226,7 +275,50 @@ func repoCacheFresh(cachePath, commit string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.TrimSpace(string(recorded)) == commit
+	if strings.TrimSpace(string(recorded)) != commit {
+		return false
+	}
+	return submodulesPopulated(cachePath)
+}
+
+// submodulesPopulated reports whether every submodule the export declares has
+// content on disk. An export declaring none is trivially complete.
+//
+// The export has had its .git removed (see downloadRepoFrom), so this reads
+// .gitmodules directly — via `git config -f`, the same parser git itself uses,
+// rather than a second hand-rolled INI reader that could disagree with it. An
+// unreadable or absent .gitmodules means nothing to verify, which keeps a
+// non-submodule repo on the pure cache-hit path.
+func submodulesPopulated(cachePath string) bool {
+	gm := filepath.Join(cachePath, ".gitmodules")
+	if _, err := os.Stat(gm); err != nil {
+		return true
+	}
+	out, err := exec.Command("git", "config", "-f", gm, "--get-regexp", `submodule\..*\.path`).Output()
+	if err != nil {
+		return true // no submodule.*.path entries — nothing to verify
+	}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		entries, err := os.ReadDir(filepath.Join(cachePath, fields[1]))
+		if err != nil {
+			// ABSENT is not incomplete. git materializes an empty placeholder
+			// directory for every GITLINK it clones, so a path missing entirely
+			// was never gitlinked — a .gitmodules entry with no index entry, which
+			// populateSubmodules cannot fetch either (it walks the index). Treating
+			// that as incomplete would make the export permanently unfresh and
+			// re-clone the repo on EVERY command, forever. Only an existing-but-
+			// empty directory is the real unpopulated-gitlink case.
+			continue
+		}
+		if len(entries) == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // DownloadRepo downloads a remote repo to the cache.
