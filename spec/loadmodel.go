@@ -202,6 +202,31 @@ func (uf *UnifiedFile) ProjectTemplates() *ProjectTemplates {
 	return t
 }
 
+// ByKind returns t's namespace-qualified template map for kind (nil for an unknown kind or a nil
+// receiver). This is the ONE place ProjectTemplates' named fields fold back to a kind-keyed lookup —
+// kept here (spec, the shared vocabulary) rather than in the kernel: a kernel caller that needs "the
+// template map for THIS kind" stays genuinely kind-blind by keying on the string it already carries
+// instead of switching on it itself (host_build_deploy_entity_resolve.go, W0).
+func (t *ProjectTemplates) ByKind(kind string) map[string]RawBody {
+	if t == nil {
+		return nil
+	}
+	switch kind {
+	case "local":
+		return t.Local
+	case "k8s":
+		return t.K8s
+	case "pod":
+		return t.Pod
+	case "vm":
+		return t.VM
+	case "android":
+		return t.Android
+	default:
+		return nil
+	}
+}
+
 // fillNamespacedTemplates recursively copies uf's OWN template maps (qualified by prefix) into t, then
 // descends into uf.Namespaces with the accumulated prefix. The visited set guards the pointer-keyed
 // namespace cache against a self-referential cycle (mirrors FillBoxPlans's own guard).

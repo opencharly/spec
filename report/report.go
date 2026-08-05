@@ -1,7 +1,7 @@
 // Package report hosts the check-run result reporters — the FormatStepResults* family +
 // ReportStepResultsCount + ClassifyStepFailures — relocated to a spec fabric slice (#55
-// CHECK-ENGINE cone Option A) so charly core's deploy-verify path (check_cmd.go's
-// checkLocalDeployScope) reaches them importing zero kit. The reporters operate on
+// CHECK-ENGINE cone Option A) so the deploy-verify path (candy/plugin-bundle's verify_local.go,
+// #55 W3 B3 — a plugin now, not core) reaches them importing zero kit. The reporters operate on
 // []spec.StepResult (the CUE-sourced spec wire type, checkresult.cue) + spec.Status; the INFRA-failure
 // discriminator IsContainerInfraResult lives in spec/exec (a host primitive over podman exit
 // strings), so this slice is its own package to import spec/exec WITHOUT forcing spec/spec to

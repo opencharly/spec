@@ -84,6 +84,16 @@
 	transient?: bool @go(Transient)
 	success?:   bool @go(Success)  // release-claimant
 	token?:     string @go(Token) // clear-poison / resource-poisoned
+	// GPU-implied-consumer projection (acquire-shared only, K-wave W3a A2): the claimant node's
+	// GPU-relevant traits, so verb:arbiter can union its OWN implied-consumer token onto tokens
+	// before applying its early-return-on-empty acquire policy — arbiter policy belongs in the
+	// arbiter, not the in-core proxy (the former charly/gpu_imply.go, now
+	// candy/plugin-preempt/gpu_imply.go). is_group/is_pod_member are pre-derived core-side (the
+	// in-core nodeTraits/isPodMember trait resolution — not duplicated plugin-side);
+	// security_devices is the claimant's raw security.devices list.
+	is_group?:         bool @go(IsGroup)
+	is_pod_member?:    bool @go(IsPodMember)
+	security_devices?: [...string] @go(SecurityDevices)
 }
 
 // #ArbiterInvokeReply is the action-multiplexed reply from verb:arbiter.

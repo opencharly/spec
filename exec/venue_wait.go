@@ -14,8 +14,11 @@ import (
 // sdk/deploykit (#55 K4) — they compose only spec/exec executors + spec readiness primitives +
 // os/exec (the process fabric), with NO registry/loader/host-state coupling, so they belong in
 // spec/exec beside the executors they gate (the boundary law: "drives podman/ssh itself" is not a
-// permanence reason). Charly's bed/member orchestration calls them; the bed-SESSION mechanism
-// (lock/lease/persist — ResolveBedCheckLevel/PersistBedDeployOverrides) stays in sdk/deploykit (K5).
+// permanence reason). candy/plugin-check's bed session calls them directly (#55 W3 B2-full — the
+// bed-SESSION mechanism dissolved entirely into bed_session.go; PersistBedDeployOverrides is the
+// one piece that genuinely stayed in sdk/deploykit, a plain library function any placement can
+// call — ResolveBedCheckLevel, its sibling, turned out to have zero remaining callers once every
+// consumer inlined to the spec.* helpers directly, and was deleted as dead code).
 
 // WaitForVmSshReady gates on the VM being SSH-reachable AND cloud-init having settled, using
 // the SAME deterministic SSHExecutor preflight the VM check-live path and the external vm

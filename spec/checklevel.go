@@ -1,8 +1,8 @@
 package spec
 
 // checklevel.go — the per-box acceptance-depth ladder, RELOCATED to the spec contract module
-// (#55 CHECK-ENGINE cone Option A — a pure string-ladder classifier charly core's check-bed
-// session seam (host_build_check_bed.go) reaches importing zero kit). sdk/kit re-exports each
+// (#55 CHECK-ENGINE cone Option A — a pure string-ladder classifier candy/plugin-check's bed
+// session (bed_session.go, #55 W3 B2-full) reaches importing zero kit). sdk/kit re-exports each
 // symbol (sdk/kit/checklevel.go) so every existing kit.CheckLevel* / kit.CheckLevelReaches /
 // kit.ResolveCheckLevel / kit.IsValidCheckLevel call site (charly core + plugins + sdk) is
 // untouched. New consumers reference spec.* directly.

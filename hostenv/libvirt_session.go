@@ -4,9 +4,10 @@ import "os/exec"
 
 // libvirt_session.go — StartLibvirtUserSession, RELOCATED from sdk/vmshared (#55 vmshared Bucket C):
 // a pure host-environment action with zero registry/loader coupling, so it belongs in this
-// kind-agnostic host-probe leaf, shared by every caller — charly core (bundle_members.go,
-// host_build_check_bed.go — both pre-warm it before a VM/group-bed probe) and candy/plugin-vm
-// (vm_libvirt.go, vm_backend_resolve.go, reaching it via the sdk/vmshared re-export forwarder).
+// kind-agnostic host-probe leaf, shared by every caller — sdk/deploykit.BringUpMembers (#55 W3
+// A4), candy/plugin-check's bed_session.go (#55 W3 B2-full — both pre-warm it before a VM/group-bed
+// probe) and candy/plugin-vm (vm_libvirt.go, vm_backend_resolve.go, reaching it via the sdk/vmshared
+// re-export forwarder).
 
 // StartLibvirtUserSession ensures the libvirt user-session daemon is
 // running. Modular libvirt's `virtqemud --timeout=120` auto-exits

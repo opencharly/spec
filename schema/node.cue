@@ -45,7 +45,8 @@
 // (C2-substrate), and candy (C2-candy) are ALL plugin-served, so the arm-derived KindWords is
 // now EMPTY. #ResourceKind is INDEPENDENT of KindWords: it is the set of kinds that NEST members
 // (so the loader classifies a resource child + nests it), NOT the set with a #Node arm. Their
-// members are pre-decoded host-side (buildResourceMemberChildren) and threaded to the plugin via
+// members are pre-decoded host-side (sdk/loaderkit.BuildResourceMemberChildren, reached through
+// the ProjectLoader seam) and threaded to the plugin via
 // op.Env (F5); the parser gate admits them because resourceKindSet has them. candy is NOT a
 // resource kind (it nests no deploy members — it is the box⊻layer factory).
 #ResourceKind: ("pod" | "vm" | "k8s" | "local" | "android" | "group") @go(-)
@@ -161,40 +162,20 @@
 	// data in the embedded charly.yml. Read by generate.go to emit .containerignore /
 	// .dockerignore; a project's defaults.context_ignore still overlays on top.
 	context_ignore_baseline?: [...string]
-	// install_hints — binary name → (distro ID → package name) for `charly doctor` host
-	// dependency install suggestions, formerly the Go var installHints (distro.go), now
-	// data in the embedded charly.yml. An "AUR: <cmd>" value carries its own install line.
-	install_hints?: {[string]: {[string]: string}}
 	// ovmf_paths — distro family (fedora|arch|debian) → secure/nonsecure ordered OVMF
 	// firmware candidate path pairs, formerly inline literals in ovmf_paths.go. The
 	// alias→family resolution + secure selection + unknown-distro union stay Go logic;
 	// only the path DATA is here. {code, vars} per candidate.
 	ovmf_paths?: {[string]: {secure: [...{code: string, vars: string}], nonsecure: [...{code: string, vars: string}]}}
-	// device_descriptions — host device path → human description for `charly doctor`'s
-	// hardware section, formerly the Go var deviceDescriptions (doctor.go); data, not code.
-	device_descriptions?: {[string]: string}
-	// device_patterns — host device glob patterns probed for auto-detection
-	// (DetectHostDevices) + `charly doctor`'s hardware section, formerly the Go var
-	// devicePatterns (devices.go); data, not code.
-	device_patterns?: [...string]
-	// gpu_vendors — PCI vendor ID → name for the render nodes that count as a real,
-	// encode-capable GPU (vs the paravirtual virtio-gpu), formerly the inline switch in
-	// pickRenderNode (devices.go); key membership picks the DRINODE render node.
-	gpu_vendors?: {[string]: string}
-	// pci_class_labels — PCI class code (high 16 bits) → human label for VFIO passthrough
-	// device reporting, formerly the inline switch in pciClassLabel (devices.go); an
-	// unknown class falls back to the raw class (logic, not data).
-	pci_class_labels?: {[string]: string}
-	// distro_package_managers — host distro ID → install command prefix for `charly
-	// doctor` install hints, formerly the inline switch in parseOsRelease (distro.go).
-	distro_package_managers?: {[string]: string}
-	// distro_family_map — host distro ID → base family for install-hint package-name
-	// lookup, formerly the inline switch in distroFamily (distro.go); an unlisted distro
-	// maps to itself (logic, not data).
-	distro_family_map?: {[string]: string}
 	// ovmf_distro_aliases — host distro ID → OVMF firmware family (fedora|arch|debian),
 	// formerly the inline switches in ovmfCandidatesForDistro + ovmfNotFoundError
 	// (ovmf_paths.go); an unlisted distro tries the union of all families (logic).
 	ovmf_distro_aliases?: {[string]: string}
-	{[!~"^(version|repo|import|discover|defaults|provides|providers|compiled_plugins|context_ignore_baseline|install_hints|ovmf_paths|device_descriptions|device_patterns|gpu_vendors|pci_class_labels|distro_package_managers|distro_family_map|ovmf_distro_aliases)$"]: #Node}
+	// install_hints / device_descriptions / device_patterns / gpu_vendors / pci_class_labels /
+	// distro_package_managers / distro_family_map are GONE (K5 seam-death): they were core's
+	// embedded-charly.yml data feeding the former "hostprobe" HostBuild kind, used by no other
+	// charly.yml (project or box) ever. candy/plugin-gpu and candy/plugin-doctor now carry
+	// their own independent copies as plain (non-#NodeDoc) embedded YAML — see
+	// candy/plugin-gpu/data.yml and candy/plugin-doctor/data.yml.
+	{[!~"^(version|repo|import|discover|defaults|provides|providers|compiled_plugins|context_ignore_baseline|ovmf_paths|ovmf_distro_aliases)$"]: #Node}
 })

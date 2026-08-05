@@ -185,11 +185,18 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 //
 // For full refs (registry prefix present) it validates the image exists
 // locally and passes through unchanged. For short names it resolves via
-// CalVer: collect every local image matching the short name (either by
-// `ai.opencharly.image=<short>` label or by the tag-suffix short-name
-// match) and pick the one whose tag has the highest CalVer (or the
-// highest `ai.opencharly.version` label). charly is CalVer-only — no
-// `:latest` fallback. See `/charly-build:build` "CalVer-only" for the contract.
+// CalVer: collect every candidate ref and pick the one with the highest
+// `ai.opencharly.version` label (falling back to the highest tag CalVer).
+// charly is CalVer-only — no `:latest` fallback. See `/charly-build:build`
+// "CalVer-only" for the contract.
+//
+// A candidate ref must satisfy BOTH halves: its image is identified as the short
+// name (preferred: an `ai.opencharly.image=<short>` label; fallback: no such
+// label) AND the ref ITSELF is named `<short>` in its trailing repo component.
+// The second half is not cosmetic — a label-family image accumulates the deploy-name
+// alias tags of every OTHER deployment built on the same base box, and they inherit
+// its label, so without it an untagged resolve can return a sibling deployment's
+// image (see the invariant comment in the label branch below).
 //
 // Returns `spec.ErrImageNotLocal` when nothing matches. An ambiguous result
 // across multiple repos with the same highest CalVer tag surfaces as an
@@ -215,6 +222,19 @@ func ResolveLocalImageRef(engine, input string) (string, error) {
 		if img.Labels[spec.LabelBox] == shortName && shortName != "" {
 			for _, n := range img.Names {
 				if requestedTag != "" && !refHasExactTag(n, requestedTag) {
+					continue
+				}
+				// THE NAMING INVARIANT: a candidate ref must itself be NAMED shortName.
+				// A label-family image carries every tag ever put on it, including the
+				// `<registry>/<deploy-name>:<calver>` aliases `tagDeployAlias` mints for
+				// OTHER deployments of this same base box (they inherit the base's
+				// ai.opencharly.image label, so they land in this branch). Those aliases are
+				// resolvable by their OWN deploy name through the name-fallback below; they
+				// are never the answer for the base box's name. Without this filter the
+				// candidates all share one content-derived label-CalVer, so the tag-CalVer
+				// tiebreak silently elected whichever SIBLING deployment happened to be
+				// (re)deployed most recently — the cross-deployment image-crossing defect.
+				if !shortNameMatchesRef(n, shortName) {
 					continue
 				}
 				// label-CalVer is the PRIMARY ordering key; tag-CalVer (the
@@ -263,25 +283,11 @@ func ResolveLocalImageRef(engine, input string) (string, error) {
 	// YYYY.DDD.HHMM is NOT lexically sortable (DDD 1-366, HHMM 0-2359, both
 	// variable-width) — compareCalVerKey parses each component numerically; an
 	// empty CalVer sorts last (compareCalVerKey).
-	// Final tiebreak: prefer the ref whose repo trailing segment exactly
-	// matches `input` (the base over a per-deploy alias). Without it a
-	// `<registry>/<base>/<instance>:<cv>` alias sorts BEFORE the base
-	// `<registry>/<base>:<cv>` (ASCII `/` < `:`), silently picking the
-	// instance alias. Pattern A deploys create these via `tagDeployAlias`
-	// (deploy_target_pod.go), inheriting the base's
-	// `ai.opencharly.image` label, so both land in `labelCands` with
-	// identical label+tag CalVers.
-	matchesShortName := func(ref, name string) bool {
-		// Strip tag/digest, take repo's trailing segment, compare.
-		repo := ref
-		if i := strings.IndexAny(ref, ":@"); i >= 0 {
-			repo = ref[:i]
-		}
-		if i := strings.LastIndex(repo, "/"); i >= 0 {
-			repo = repo[i+1:]
-		}
-		return repo == name
-	}
+	// There is no trailing-segment tiebreak here any more: BOTH candidate sets are
+	// now FILTERED on shortNameMatchesRef, so every survivor is named shortName and a
+	// prefer-the-exact-name tiebreak could never fire. Preferring the base at sort time
+	// was too weak anyway — it only broke exact CalVer ties, so a sibling deployment's
+	// alias with a NEWER tag-CalVer won outright.
 	sort.SliceStable(cands, func(i, j int) bool {
 		// Primary: label-CalVer descending (label > tag, always).
 		if c := compareCalVerKey(cands[i].labelCalVer, cands[j].labelCalVer); c != 0 {
@@ -290,11 +296,6 @@ func ResolveLocalImageRef(engine, input string) (string, error) {
 		// Tiebreaker: tag-CalVer descending (newest build).
 		if c := compareCalVerKey(cands[i].tagCalVer, cands[j].tagCalVer); c != 0 {
 			return c > 0
-		}
-		iMatch := matchesShortName(cands[i].ref, shortName)
-		jMatch := matchesShortName(cands[j].ref, shortName)
-		if iMatch != jMatch {
-			return iMatch
 		}
 		return cands[i].ref < cands[j].ref
 	})
@@ -465,18 +466,26 @@ func ResolveShellImageRef(registry, name, tag string) string {
 // shortNameMatchesRef reports whether a short name like "jupyter" matches a
 // full ref like "ghcr.io/opencharly/jupyter:latest" by comparing the trailing
 // repo component (after the last "/", before the tag).
+//
+// This is the SOLE trailing-segment predicate — ResolveLocalImageRef filters BOTH its
+// label-family and its name-fallback candidate sets through it (a second, subtly
+// different inline copy used to exist as the sort tiebreak; it is deleted).
 func shortNameMatchesRef(fullRef, short string) bool {
-	// Strip tag: find the last ":" that comes after the last "/".
+	return refRepoName(fullRef) == short
+}
+
+// refRepoName returns a ref's trailing repository segment — the name a short-name
+// resolve has to match. It strips a digest, then a tag (the last ":" AFTER the last
+// "/", so a `host:port/repo` registry port is never mistaken for a tag), then takes
+// the segment after the final "/".
+func refRepoName(fullRef string) string {
 	repo := fullRef
-	if lastSlash := strings.LastIndex(repo, "/"); lastSlash >= 0 {
-		if colon := strings.LastIndex(repo, ":"); colon > lastSlash {
-			repo = repo[:colon]
-		}
-		return repo[lastSlash+1:] == short
+	if at := strings.Index(repo, "@"); at >= 0 {
+		repo = repo[:at]
 	}
-	// No slash — compare the whole thing minus any tag.
-	if colon := strings.LastIndex(repo, ":"); colon >= 0 {
+	lastSlash := strings.LastIndex(repo, "/")
+	if colon := strings.LastIndex(repo, ":"); colon > lastSlash {
 		repo = repo[:colon]
 	}
-	return repo == short
+	return repo[lastSlash+1:]
 }

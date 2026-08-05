@@ -857,6 +857,19 @@ type ArbiterInvokeInput struct {
 	Success bool `yaml:"success,omitempty" json:"success,omitempty"`
 
 	Token string `yaml:"token,omitempty" json:"token,omitempty"`
+
+	// GPU-implied-consumer projection (acquire-shared only, K-wave W3a A2): the claimant node's
+	// GPU-relevant traits, so verb:arbiter can union its OWN implied-consumer token onto tokens
+	// before applying its early-return-on-empty acquire policy — arbiter policy belongs in the
+	// arbiter, not the in-core proxy (the former charly/gpu_imply.go, now
+	// candy/plugin-preempt/gpu_imply.go). is_group/is_pod_member are pre-derived core-side (the
+	// in-core nodeTraits/isPodMember trait resolution — not duplicated plugin-side);
+	// security_devices is the claimant's raw security.devices list.
+	IsGroup bool `yaml:"is_group,omitempty" json:"is_group,omitempty"`
+
+	IsPodMember bool `yaml:"is_pod_member,omitempty" json:"is_pod_member,omitempty"`
+
+	SecurityDevices []string `yaml:"security_devices,omitempty" json:"security_devices,omitempty"`
 }
 
 // #ArbiterInvokeReply is the action-multiplexed reply from verb:arbiter.
@@ -2320,6 +2333,23 @@ type CandyService struct {
 
 	Enable bool `yaml:"enable,omitempty" json:"enable,omitempty"`
 
+	// exec_start_pre / exec_start_post — ordered hook commands run around a CUSTOM
+	// (exec:) entry's own start, rendered by the init system's service_template
+	// (systemd: ExecStartPre= / ExecStartPost= lines, emitted in authored order).
+	// They exist for guards belonging to the SERVICE's lifecycle rather than to the
+	// install timeline: a plan step runs ONCE, at deploy, whereas a pre-start hook
+	// re-asserts a host precondition on EVERY start (a restart included), and a
+	// post-start hook is the only place a guard runs ALONGSIDE the daemon it
+	// guards — the sole vantage from which that daemon's own socket/API is
+	// reachable. Both are init-supervised, so a failure surfaces in the unit's
+	// status instead of being swallowed; prefix a command with "-" for systemd's
+	// ignore-failure semantics.
+	// Canonical consumer: candy/k3s-server (the cgroup cpuset-delegation assertion
+	// and the CRD-establishment wedge heal).
+	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
+
+	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
+
 	Overrides *CandyServiceOverrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 
 	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
@@ -2707,16 +2737,6 @@ type OverlayBuildReply struct {
 	// plans is the deployment's compiled InstallPlans serialized as
 	// InstallPlanViews. Empty for the no-overlay path.
 	Plans []InstallPlanView `yaml:"plans,omitempty" json:"plans,omitempty"`
-
-	// base_user is the base image's runtime USER — the candy emits the
-	// post-overlay `USER <base>` restore directive.
-	BaseUser string `yaml:"base_user,omitempty" json:"base_user,omitempty"`
-
-	// base_security is the base image's baked LabelSecurity.
-	BaseSecurity *Security `yaml:"base_security,omitempty" json:"base_security,omitempty"`
-
-	// base_registry is the base image's ai.opencharly.registry OCI label.
-	BaseRegistry string `yaml:"base_registry,omitempty" json:"base_registry,omitempty"`
 
 	// calver is the host's current CalVer.
 	CalVer string `yaml:"calver,omitempty" json:"calver,omitempty"`
@@ -3428,22 +3448,33 @@ type CheckEnv struct {
 // SAME mechanism candy/plugin-bundle's resolveRootExecutor uses) — over the in-proc reverse channel
 // and asks the COMPILED-IN command:check to DRIVE a deploy-scope check pass PLUGIN-SIDE. This sheds
 // charly core's checkrun.go + planrun_adapter.go sdk/kit imports (the in-proc kit.Runner
-// construction moved plugin-side). TWO mutually-exclusive drive shapes, one per host caller:
-//   - ops  → the deploy-lifecycle Test path (unified_targets.go runUnifiedTargetChecks): raw
-//     deploy-scope Op checks driven via kit.Runner.Run (no plan gating).
-//   - plan → the `target: local` --verify path (check_cmd.go runLocalDeployScopePlan): a
-//     host-ASSEMBLED plan (kind:local template + deploy node + per-host overlay — the deploy/K4
-//     named-exit assembly STAYS core) driven via kit.RunPlan (verify-only/context/keyword gating).
-//     The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:} host-vars + the
-//     cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY does this
-//     for check-live (verb_resolver.go / members.go), so those never cross the wire.
+// construction moved plugin-side).
 //
-// The reply is []#StepResult (CUE-sourced in this file) — the deploy-Test path wraps each
-// verdict as a StepResult; CONSUMED, not modified. All plain fields (ops/plan/venue are spec
-// envelope types; StepResult.Result is #CheckResult by value) → gengotypes-faithful, no @go(-).
+// ONE drive shape now: plan → the `target: local` --verify path (candy/plugin-bundle's
+// verify_local.go, #55 W3 B3 — a PEER plugin now, not core): a PLUGIN-ASSEMBLED plan (kind:local
+// template, resolved via node_resolve.go's lookupLocalTemplate — no LoadUnified — + deploy node;
+// the per-host overlay merge happens on THIS side) driven via kit.RunPlan (verify-only/context/
+// keyword gating). The plugin rebuilds the runtime env (USER/HOME/IMAGE/INSTANCE) + ${HOST:}
+// host-vars + the cross-deployment TargetResolver from {dir, box, instance} — plugin-check ALREADY
+// does this for check-live (verb_resolver.go / members.go), so those never cross the wire.
+//
+// The former SECOND drive shape (ops/only_ids — the deploy-lifecycle Test path, charly core's
+// unified_targets.go runUnifiedTargetChecks feeding raw deploy-scope Op checks via kit.Runner.Run,
+// no plan gating) is GONE (#55 W3 B3 remainder): its own sole production caller,
+// pluginDeployTarget.Test (UnifiedDeployTarget's Test method), had ZERO real callers anywhere in
+// the tree — `charly check live` reaches candy/plugin-check directly (live_gather.go) and never
+// touches this interface method; the ONE caller was a unit test. Test()/runUnifiedTargetChecks/
+// TestOpts (charly), verifyChecksRunOps/filterOpsByID (candy/plugin-check), and the dead "test" op
+// in #DeployTargetDispatchRequest's enum are all deleted together. The box-mode context-skip
+// regression coverage (TestLiveVerb_SkipsUnderBoxMode, charly/checkrun_charly_verbs_test.go) moved
+// onto the surviving plan shape — RunOne (sdk/kit/planrun.go) is the SAME per-step primitive both
+// kit.Runner.Run and kit.RunPlan dispatched through, so the context-vs-mode gate (opInContext) is
+// identically exercised either way; no coverage was lost.
+//
+// The reply is []#StepResult (CUE-sourced in this file) — CONSUMED, not modified. All plain fields
+// (plan/venue are spec envelope types; StepResult.Result is #CheckResult by value) →
+// gengotypes-faithful, no @go(-).
 type VerifyChecksRequest struct {
-	Ops []Op `yaml:"ops,omitempty" json:"ops,omitempty"`
-
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
@@ -4426,143 +4457,6 @@ type CredentialHealth struct {
 	IndexMissing []string `yaml:"index_missing,omitempty" json:"index_missing,omitempty"`
 }
 
-// #HostProbeDevice is one host device-pattern probe result (the doctor
-// "devices" section).
-type HostProbeDevice struct {
-	Pattern string `yaml:"pattern,omitempty" json:"pattern"`
-
-	Path string `yaml:"path,omitempty" json:"path"`
-
-	Present bool `yaml:"present,omitempty" json:"present"`
-
-	Description string `yaml:"description,omitempty" json:"description"`
-}
-
-// #HostProbeDistro is the host distro identity + package manager (drives
-// install-hint rendering).
-type HostProbeDistro struct {
-	ID string `yaml:"id,omitempty" json:"id"`
-
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Manager string `yaml:"manager,omitempty" json:"manager"`
-}
-
-// #HostProbeRequest is the "hostprobe" HostBuild kind request. Engine hints
-// which container engine's GPU run-flags to compute (empty → the host
-// resolves it).
-type HostProbeRequest struct {
-	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
-}
-
-// #HostProbeReply is the "hostprobe" HostBuild kind reply — RAW host facts the
-// plugin renders into the report. All fields are best-effort (a probe failure
-// leaves its field zero/empty, mirroring the shims).
-//
-// group_accessible is RESHAPED from the former hand type's `map[int]bool` to a
-// string-keyed map: `cue exp gengotypes` has no int-keyed-map construct (an
-// int-keyed CUE map degrades to an empty struct — the documented CAN/CANNOT
-// exception). encoding/json ALREADY converts a Go `map[int]bool`'s keys to
-// their decimal string form on the wire (Go's own int->string key rule for
-// map marshaling), so `map[string]bool` with the SAME decimal-string keys is
-// BYTE-IDENTICAL JSON — a pure representation fix, zero wire-format change.
-// The two Go call sites that constructed/read the int-keyed map
-// (charly/host_build_hostprobe.go, candy/plugin-doctor/command.go) are updated
-// in lockstep to key by strconv.Itoa(iommuGroup).
-type HostProbeReply struct {
-	GPU bool `yaml:"gpu,omitempty" json:"gpu"`
-
-	AMDGPU bool `yaml:"amd_gpu,omitempty" json:"amd_gpu"`
-
-	AMDGFXVersion string `yaml:"amd_gfx_version,omitempty" json:"amd_gfx_version,omitempty"`
-
-	GPUFlags []string `yaml:"gpu_flags,omitempty" json:"gpu_flags,omitempty"`
-
-	Vfio *VFIOReport `yaml:"vfio,omitempty" json:"vfio,omitempty"`
-
-	MemlockSoft uint64 `yaml:"memlock_soft,omitempty" json:"memlock_soft"`
-
-	MemlockHard uint64 `yaml:"memlock_hard,omitempty" json:"memlock_hard"`
-
-	VfioPciAvailable bool `yaml:"vfio_pci_available,omitempty" json:"vfio_pci_available"`
-
-	GroupAccessible map[string]bool `yaml:"group_accessible,omitempty" json:"group_accessible,omitempty"`
-
-	Devices []HostProbeDevice `yaml:"devices,omitempty" json:"devices,omitempty"`
-
-	Distro HostProbeDistro `yaml:"distro,omitempty" json:"distro"`
-
-	InstallHints map[string]map[string]string `yaml:"install_hints,omitempty" json:"install_hints,omitempty"`
-
-	DistroFamilyMap map[string]string `yaml:"distro_family_map,omitempty" json:"distro_family_map,omitempty"`
-
-	ConfigPath string `yaml:"config_path,omitempty" json:"config_path,omitempty"`
-
-	Credential *CredentialHealth `yaml:"credential,omitempty" json:"credential,omitempty"`
-
-	CredentialErr string `yaml:"credential_err,omitempty" json:"credential_err,omitempty"`
-
-	Error string `yaml:"error,omitempty" json:"error,omitempty"`
-}
-
-// #VFIOReport summarizes host readiness for VFIO GPU passthrough.
-type VFIOReport struct {
-	IOMMUEnabled bool `yaml:"iommu_enabled,omitempty" json:"iommu_enabled"`
-
-	IOMMUKind string `yaml:"iommu_kind,omitempty" json:"iommu_kind"`
-
-	GPUs []VFIOGpu `yaml:"gpus,omitempty" json:"gpus"`
-}
-
-// #VFIOGpu is a display-class device plus every other function sharing its
-// IOMMU group. Passthrough must move the whole group together, so the
-// renderer emits one <hostdev> per GroupMember.
-//
-// FLATTENED (never a Go anonymous-embedded field — CUE unification has no
-// concept of Go embedding; it always structurally merges fields into one flat
-// struct). The former hand type embedded VFIOPCIDevice anonymously; Go's
-// encoding/json ALREADY promotes an anonymous embedded struct's fields to the
-// parent JSON object on the wire (Go's own embedding-promotion rule), so this
-// flattened shape is BYTE-IDENTICAL JSON to the former embedded type — the
-// only consumer-visible change is Go SOURCE: a composite literal naming the
-// embedded field (`VFIOGpu{VFIOPCIDevice: d}`) must spread d's fields instead
-// (`VFIOGpu{Addr: d.Addr, ...}`). Fixed at every call site in the same
-// cutover (candy/plugin-gpu, charly test fixtures).
-type VFIOGpu struct {
-	Addr string `yaml:"addr,omitempty" json:"addr"`
-
-	GroupMembers []VFIOPCIDevice `yaml:"group_members,omitempty" json:"group_members"`
-
-	VendorID string `yaml:"vendor_id,omitempty" json:"vendor_id"`
-
-	DeviceID string `yaml:"device_id,omitempty" json:"device_id"`
-
-	Class string `yaml:"class,omitempty" json:"class"`
-
-	ClassLabel string `yaml:"class_label,omitempty" json:"class_label"`
-
-	Driver string `yaml:"driver,omitempty" json:"driver"`
-
-	IOMMUGroup int `yaml:"iommu_group,omitempty" json:"iommu_group"`
-}
-
-// #VFIOPCIDevice is a single PCI function discovered under sysfs.
-type VFIOPCIDevice struct {
-	Addr string `yaml:"addr,omitempty" json:"addr"`
-
-	VendorID string `yaml:"vendor_id,omitempty" json:"vendor_id"`
-
-	DeviceID string `yaml:"device_id,omitempty" json:"device_id"`
-
-	Class string `yaml:"class,omitempty" json:"class"`
-
-	ClassLabel string `yaml:"class_label,omitempty" json:"class_label"`
-
-	Driver string `yaml:"driver,omitempty" json:"driver"`
-
-	IOMMUGroup int `yaml:"iommu_group,omitempty" json:"iommu_group"`
-}
-
 // #EncVolumePlan is one encrypted volume, fully resolved HOST-SIDE: its charly
 // name (for messages), the on-disk cipher/plain dirs, the systemd scope-unit
 // name, and the host-probed initialized/mounted state. The plugin acts on
@@ -4641,6 +4535,64 @@ type FeatureReply struct {
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
+// #VFIOPCIDevice is a single PCI function discovered under sysfs.
+type VFIOPCIDevice struct {
+	Addr string `yaml:"addr,omitempty" json:"addr"`
+
+	VendorID string `yaml:"vendor_id,omitempty" json:"vendor_id"`
+
+	DeviceID string `yaml:"device_id,omitempty" json:"device_id"`
+
+	Class string `yaml:"class,omitempty" json:"class"`
+
+	ClassLabel string `yaml:"class_label,omitempty" json:"class_label"`
+
+	Driver string `yaml:"driver,omitempty" json:"driver"`
+
+	IOMMUGroup int `yaml:"iommu_group,omitempty" json:"iommu_group"`
+}
+
+// #VFIOGpu is a display-class device plus every other function sharing its
+// IOMMU group. Passthrough must move the whole group together, so the
+// renderer emits one <hostdev> per GroupMember.
+//
+// FLATTENED (never a Go anonymous-embedded field — CUE unification has no
+// concept of Go embedding; it always structurally merges fields into one flat
+// struct). The former hand type embedded VFIOPCIDevice anonymously; Go's
+// encoding/json ALREADY promotes an anonymous embedded struct's fields to the
+// parent JSON object on the wire (Go's own embedding-promotion rule), so this
+// flattened shape is BYTE-IDENTICAL JSON to the former embedded type — the
+// only consumer-visible change is Go SOURCE: a composite literal naming the
+// embedded field (`VFIOGpu{VFIOPCIDevice: d}`) must spread d's fields instead
+// (`VFIOGpu{Addr: d.Addr, ...}`). Fixed at every call site in the same
+// cutover (candy/plugin-gpu, charly test fixtures).
+type VFIOGpu struct {
+	Addr string `yaml:"addr,omitempty" json:"addr"`
+
+	GroupMembers []VFIOPCIDevice `yaml:"group_members,omitempty" json:"group_members"`
+
+	VendorID string `yaml:"vendor_id,omitempty" json:"vendor_id"`
+
+	DeviceID string `yaml:"device_id,omitempty" json:"device_id"`
+
+	Class string `yaml:"class,omitempty" json:"class"`
+
+	ClassLabel string `yaml:"class_label,omitempty" json:"class_label"`
+
+	Driver string `yaml:"driver,omitempty" json:"driver"`
+
+	IOMMUGroup int `yaml:"iommu_group,omitempty" json:"iommu_group"`
+}
+
+// #VFIOReport summarizes host readiness for VFIO GPU passthrough.
+type VFIOReport struct {
+	IOMMUEnabled bool `yaml:"iommu_enabled,omitempty" json:"iommu_enabled"`
+
+	IOMMUKind string `yaml:"iommu_kind,omitempty" json:"iommu_kind"`
+
+	GPUs []VFIOGpu `yaml:"gpus,omitempty" json:"gpus"`
+}
+
 // #DetectedDevices holds the results of host device auto-detection.
 type DetectedDevices struct {
 	GPU bool `yaml:"gpu,omitempty" json:"gpu"`
@@ -4654,20 +4606,16 @@ type DetectedDevices struct {
 	Devices []string `yaml:"devices,omitempty" json:"devices"`
 }
 
-// #GpuProbeInput is the action-multiplexed input the host ships to verb:gpu
-// over OpRun. Action selects the host probe; the three data tables are
-// threaded in from charly's embedded charly.yml (they stay in core for
-// `charly doctor`, R3).
+// #GpuProbeInput is the action-multiplexed input to verb:gpu over OpRun. Action selects the
+// host probe. The three data tables (device_patterns/gpu_vendors/pci_class_labels) are now
+// candy/plugin-gpu's OWN embedded data (K5 seam-death — they moved out of charly-core's
+// embedded charly.yml alongside the "hostprobe" HostBuild kind's dissolution; plugin-gpu is
+// the actual detection consumer, so it is the one data source, R3), so this input no longer
+// threads them.
 type GpuProbeInput struct {
 	Action string `yaml:"action,omitempty" json:"action"`
 
 	Group int `yaml:"group,omitempty" json:"group,omitempty"`
-
-	DevicePatterns []string `yaml:"device_patterns,omitempty" json:"device_patterns,omitempty"`
-
-	GpuVendors map[string]string `yaml:"gpu_vendors,omitempty" json:"gpu_vendors,omitempty"`
-
-	PCIClassLabels map[string]string `yaml:"pci_class_labels,omitempty" json:"pci_class_labels,omitempty"`
 }
 
 // #GpuProbeReply is the action-multiplexed reply from verb:gpu. Each action
@@ -4815,6 +4763,14 @@ type ServiceRenderContext struct {
 	ExitCodes string `yaml:"exit_codes,omitempty" json:"exit_codes,omitempty"`
 
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// Start hooks (systemd only — supervisord's service_template references
+	// neither, exactly as it already ignores wanted_by/before). Carried through
+	// from the entry's exec_start_pre/exec_start_post so the template emits one
+	// ExecStartPre=/ExecStartPost= line per element, in authored order.
+	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
+
+	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
 
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The
@@ -5483,6 +5439,18 @@ type ResolvedProjectRequest struct {
 	// emit-pod).
 	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
 
+	// requested_boxes — the explicit build/generate targets (`charly box generate <name>`),
+	// buildkit.NormalizeBoxArgs-normalized (task #17 fix). The reachability-scoped remote-ref
+	// COLLECTION walk (loaderkit.CollectRemoteRefsOpts) only follows base/builder edges from
+	// ROOT-owned images by default — a namespace-qualified on-demand target
+	// (`charly box generate fedora.check-pod`) that is not itself a base/builder of any root
+	// image is otherwise never visited, so its own remote candy refs are silently never
+	// collected/fetched, and the later candy-order RESOLVE step then fails "unknown candy" for a
+	// ref the fetch step skipped. Mirrors spec.ResolveOpts.RequestedBoxes, which already pulls a
+	// qualified on-demand target into buildkit.ResolveAllBox's RESOLVE set the identical way —
+	// this closes the matching gap on the COLLECT half.
+	RequestedBoxes []string `yaml:"requested_boxes,omitempty" json:"requested_boxes,omitempty"`
+
 	// boxes — the resolved-box set the PLUGIN-SIDE build-engine resolve (candy/plugin-build's
 	// resolveBuildEngine) pushes to the host's `buildengine-prep` leg so the host's render-seam-floor
 	// Generator cache stores wire-clean *spec.ResolvedBox WITHOUT the host re-resolving via
@@ -5544,7 +5512,7 @@ type ConfigResolveRequest struct {
 // create/build pipeline reads; VmBackend also feeds the plugin-side backend resolve
 // (candy/plugin-vm/vm_backend_resolve.go, F6 vm-lifecycle move, coneB-vmlifecycle — the
 // resolved Backend value itself no longer crosses the wire; the plugin computes it from
-// VmBackend + its own "deploy-entity-resolve" call). VmState is the entity's persisted
+// VmBackend + its own project self-load, K-wave W3a A3-phase-2). VmState is the entity's persisted
 // deploy-ledger runtime state (instance-id, ssh_port, disk path) — the host reads it
 // spec-only via LoadUnified(perHostConfigDir) (#55 coneC-dsh β2 — no deploykit; consumed by
 // plugin-vm + plugin-kube + plugin-deploy-vm, so it stays a wire field) so the plugin reuses
@@ -5611,23 +5579,6 @@ type DeployOverlayRequest struct {
 // exists yet, matching LoadDeployConfigForRead's own nil-BundleConfig contract).
 type DeployOverlayReply struct {
 	ConfigJSON RawBody `yaml:"config_json,omitempty" json:"config_json,omitempty"`
-}
-
-// #DevicePatternsRequest is empty — the embedded device_patterns/gpu_vendors directives are
-// baked into charly-core's binary (the embedded default charly.yml), not project- or host-scoped,
-// so nothing varies per call. Asks the host for the tables candy/plugin-gpu's detect-host-devices
-// action needs (K4: plugin-deploy-pod's device auto-detection reaching verb:gpu directly, the same
-// dispatch charly-core's gpu_shim.go already does — mirrors candy/plugin-vm/vm_gpu_shim.go's
-// existing InvokeProvider("verb","gpu",...) precedent). Class-generic action noun
-// "device-patterns" (F11 — never a substrate word); any substrate resolving devices needs it.
-type DevicePatternsRequest struct {
-}
-
-// #DevicePatternsReply carries the two embedded tables verbatim (see charly/devices.go).
-type DevicePatternsReply struct {
-	DevicePatterns []string `yaml:"device_patterns,omitempty" json:"device_patterns,omitempty"`
-
-	GpuVendors map[string]string `yaml:"gpu_vendors,omitempty" json:"gpu_vendors,omitempty"`
 }
 
 // #VmBuildRequest carries the `charly vm build` command flags (the former
@@ -5761,37 +5712,6 @@ type ConstructStepReply struct {
 	Step *InstallStepView `yaml:"step,omitempty" json:"step,omitempty"`
 }
 
-// #RenderServiceRequest/#RenderServiceReply — the "render-service" HostBuild seam (K5-A item 1,
-// compile-seam ctx-threading, increment B): the former charly/service_render.go:RenderService
-// wraps TWO registry consults a plugin cannot do itself — candy/plugin-init's OpResolve
-// (render the unit text/path) and the M16 egress gate (reject a template-render failure's
-// "<no value>" marker before the unit is written) — so the WHOLE function stays host-side,
-// reached as ONE seam call rather than splitting it into two separate InvokeProvider round
-// trips. deploykit.CompileServiceSteps (the ctx/exec-threaded replacement for the retired
-// deploykit.CompileServiceSteps func var) calls this ONLY for a systemd CUSTOM entry that
-// needs unit-text rendering — the packaged-unit case and the supervisord case never reach it.
-type RenderServiceRequest struct {
-	Entry CandyService `yaml:"entry,omitempty" json:"entry"`
-
-	Init ResolvedInit `yaml:"init,omitempty" json:"init"`
-
-	Ctx ServiceRenderContext `yaml:"ctx,omitempty" json:"ctx"`
-}
-
-type RenderServiceReply struct {
-	Rendered *RenderedService `yaml:"rendered,omitempty" json:"rendered,omitempty"`
-}
-
-// #DeployMembersRequest/#DeployMembersReply — bring up / tear down a deployment's sibling
-// members (bringUpMembers/tearDownMembers — providerRegistry + ledger + subprocess-dependent,
-// stays host-side), reached once at the end of Run() / the start of `charly bundle del`.
-type DeployMembersRequest struct {
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
-}
-
-type DeployMembersReply struct {
-}
-
 // #DeployDelResolveRequest/#DeployDelResolveReply — resolve a `charly bundle del` target's
 // BundleNode (resolveDelNode: literal "host" / "vm:"-prefix legacy forms / a charly.yml tree
 // entry / a ref-based pod-artifact probe) — needs LoadUnified + the on-disk artifact probe, so
@@ -5891,6 +5811,13 @@ type DeployResolveTargetAddRequest struct {
 	AssumeYes bool `yaml:"assume_yes,omitempty" json:"assume_yes,omitempty"`
 
 	BuilderImage string `yaml:"builder_image,omitempty" json:"builder_image,omitempty"`
+
+	// dev_local_pkg marks a DISPOSABLE CHECK BED's deploy, the deploy-side twin of `charly box
+	// build --dev-local-pkg`. On a bed, a localpkg candy whose package source cannot be found is
+	// a HARD FAILURE rather than the benign skip a normal deploy takes — a bed exists to prove
+	// the in-development package builds and installs, so silently installing nothing (or an
+	// older release) makes the bed assert something it never tested.
+	DevLocalPkg bool `yaml:"dev_local_pkg,omitempty" json:"dev_local_pkg,omitempty"`
 }
 
 type DeployResolveTargetAddReply struct {
@@ -5922,19 +5849,6 @@ type DeployFromBoxRequest struct {
 type DeployFromBoxReply struct {
 }
 
-// #AndroidEntityResolution is the kind="android" payload carried OPAQUELY inside
-// #DeployEntityResolveReply.entity (unit 6a): the resolved kind:android #ResolvedAndroid spec
-// (CUE-sourced at schema/substrate_template.cue, SDD conversion — carried OPAQUELY here anyway,
-// see the #DeployEntityResolveRequest doc below for why). The google-play credentials are NO
-// LONGER threaded through this seam (deploy-cone cutover 1): candy/plugin-adb resolves them
-// itself via a direct peer InvokeProvider(verb:credential) call — the same peer-to-peer pattern
-// candy/plugin-vm already uses for verb:arbiter/verb:gpu/verb:egress — instead of the host
-// pre-resolving them behind "deploy-entity-resolve". The former "credential STORE touch is
-// core-only" justification was stale: InvokeProvider reaches ANY verb from ANY plugin.
-type AndroidEntityResolution struct {
-	SpecJSON RawBody `yaml:"spec,omitempty" json:"spec,omitempty"`
-}
-
 // #EphemeralRegisterRequest/#EphemeralRegisterReply — the host→command:bundle OpEphemeralRegister
 // leg (FINAL/K5 unit 6a): ephemeral_lifecycle.go's cross-substrate ephemeral-instance registration
 // (systemd TTL transient timer + parent-detection + charly.yml persistence) moved to
@@ -5953,55 +5867,6 @@ type EphemeralRegisterRequest struct {
 type EphemeralRegisterReply struct {
 }
 
-// #DeployEntityResolveRequest/#DeployEntityResolveReply — the F6-family GENERIC host-side
-// entity-lookup seam (unit 6a, extended for unit 6b's k3s_post consumer, candy/plugin-vm's own
-// vmConfiguredBackendPlugin (F6 vm-lifecycle move, coneB-vmlifecycle — formerly charly-core's
-// vm_backend_lifecycle.go's vmConfiguredBackend, now plugin-side), and for W4's
-// resolveNodeTemplate — candy/plugin-bundle's kind:local template lookup): a substrate PRERESOLVE
-// body (k8s/vm/android, F6) OR a peer consumer resolving a cross-reference (k3s_post's
-// deployVMForwards, vmConfiguredBackendPlugin, resolveNodeTemplate's kind:local merge) needs a
-// LoadUnified-coupled lookup a plugin cannot do itself — EITHER (a) its
-// own deploy-tree node by name (the Update-path re-resolve every preresolver does when node==nil,
-// OR a bundle-key cross-reference's From-field hop — today: the host merged-tree read) or (b) a referenced
-// kind:<word> entity (k8s/android/vm/local) by name, returned as the WHOLE RESOLVED envelope so a
-// caller just reads its fields (Backend, Network.PortForwards, Candy, …) without tracing the
-// resolver's own portability (today: findK8sSpec / findAndroidSpec / a direct uf.VM[name] lookup +
-// resolveVmViaPlugin / findLocalSpec). ONE discriminated request replaces per-purpose kinds:
-// `kind` is DATA the host body dispatches on internally (clause-D) — never a compiled-in per-KIND
-// HostBuild registration, so a new consumer needs no new wire shape, only a new `case` in the host
-// handler (or reuse of an existing one — "bundle" and "deploy" share ONE case, both a deploy-tree
-// node lookup by name). `entity` carries the kind-specific result OPAQUELY — ResolvedK8s/
-// ResolvedAndroid/the vm entity (ResolvedVm)/ResolvedLocal are ALL CUE-sourced
-// (schema/substrate_template.cue, schema/vm.cue; SDD conversion), but this seam still carries them
-// as opaque bytes rather than a typed field, because `kind` is DATA the host dispatches on
-// internally (clause-D) and the caller already knows which kind it asked for and decodes
-// accordingly — mirroring the DeployCompileReply RawBody idiom used
-// throughout this file for the same reason. The "local" case's EMPTY reply (no EntityJSON, no
-// error) is itself meaningful — "no kind:local template by that name" — distinct from a genuine
-// host-side load-failure error; the caller (resolveNodeTemplate) tells the two apart.
-type DeployEntityResolveRequest struct {
-	Kind string `yaml:"kind,omitempty" json:"kind"`
-
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-
-	// tree_json is the merged project+operator deploy tree the invoking plugin resolved PLUGIN-SIDE
-	// (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA for the deploy/bundle-kind node
-	// lookup so the host stops re-loading the tree with a host-resident deploykit read (#55 Cone A Unit 3b).
-	// Marshalled map[string]spec.Deploy; consulted ONLY for kind ∈ {"","deploy","bundle"} (the
-	// kind:<word> lookups — k8s/android/vm/local — use their own findK8sSpec/etc. host resolvers,
-	// unaffected). An absent tree yields a not-found for the deploy/bundle lookup, matching a nil
-	// host-tree-read result.
-	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
-}
-
-type DeployEntityResolveReply struct {
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
-
-	EntityJSON RawBody `yaml:"entity,omitempty" json:"entity,omitempty"`
-}
-
 // #EphemeralTeardownRequest/#EphemeralTeardownReply — the OpEphemeralTeardown leg any
 // substrate's own post-teardown handling can Invoke directly (recursive nested-child teardown,
 // TTL timer cancel, snapshot/parent refcount decrement, charly.yml cleanup lives in
@@ -6018,18 +5883,18 @@ type EphemeralTeardownRequest struct {
 type EphemeralTeardownReply struct {
 }
 
-// #K8sGenerateKustomizeRequest/#K8sGenerateKustomizeReply — the "k8s-generate-kustomize"
-// HostBuild seam (FINAL/K5 unit 6a): the deploy:k8s preresolve body (now plugin-side,
-// candy/plugin-kube/preresolve.go) resolves the cluster template (via
-// "deploy-entity-resolve", kind="k8s") + the image ref + capabilities itself (all
-// sdk-portable — kit.ResolveLocalImageRef / deploykit.ExtractMetadata, no LoadUnified
-// needed), then calls back HERE for the ONE genuinely core-only step:
-// charly/k8s_generate.go's GenerateK8sKustomize (Invokes the compiled-in verb:k8sgen
-// generator + the M16 egress gate + the disk I/O — all core-only glue, unchanged,
-// STAYS in charly/ since `charly bundle from-box --target k8s`
-// (k8s_deploy_from_box.go) is its OTHER, non-moving caller). Cluster/Capabilities ride
-// opaque (the established RawBody idiom this file uses throughout for hand-written
-// host-side types with no CUE def — e.g. CapsJSON/ClusterJSON in this very def below).
+// #K8sGenerateKustomizeRequest/#K8sGenerateKustomizeReply — the request/reply shape
+// candy/plugin-kube's materializeKustomize (materialize.go) takes/returns. The former
+// "k8s-generate-kustomize" HostBuild seam this type pair used to cross (FINAL/K5 unit 6a) is
+// RETIRED (K5-A item 6): the egress-validated Kustomize GENERATION now runs ENTIRELY
+// plugin-side — verb:k8sgen + verb:egress reached peer-to-peer via InvokeProvider, disk I/O done
+// directly by the plugin, no host round trip left — so this pair now travels as a plain Go
+// function signature (materializeKustomize's params/return), not a wire envelope. Both callers
+// (candy/plugin-kube/preresolve.go's deploy:k8s preresolve, which self-loads the cluster
+// template + image ref/capabilities itself now too — K-wave W3a A3-phase-2 — and
+// candy/plugin-bundle/deploy_from_box.go's source-less from-box path) construct it directly.
+// Cluster/Capabilities ride opaque (the established RawBody idiom this file uses throughout for
+// hand-written host-side types with no CUE def — e.g. CapsJSON/ClusterJSON in this very def below).
 type K8sGenerateKustomizeRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
@@ -6379,6 +6244,60 @@ type CheckVenueResolveReply struct {
 	Nested bool `yaml:"nested,omitempty" json:"nested,omitempty"`
 }
 
+// #CheckEndpointResolveRequest/#CheckEndpointResolveReply — the resolution BODY behind the
+// fixed CheckContext.ResolveEndpoint reverse-RPC every out-of-process live-container verb
+// (cdp/wl/vnc/dbus/mcp) dials back into (#55 W3 B7). The reverse-RPC SERVICE surface itself
+// stays core (charly/check_endpoint_resolve.go's hostVerbResolver wraps the core-private
+// verb-dispatch registry no out-of-process caller can bypass) — only the RESOLUTION WORK
+// relocates, compiled-in-REQUIRED placement class (bed_session.go's precedent, #55 W3
+// B2-full): the venue-classify leg it calls was ALREADY plugin-native
+// (#CheckVenueResolveRequest above), and the downstream resolution (spec/checkhost's
+// EndpointForVenue) has zero core-private dependency of its own. Any ssh -L forward it opens
+// is tracked in the plugin's OWN per-process pending-cleanup state, never on the wire (a live
+// cleanup closure cannot cross ANY Invoke — compiled-in or not, the wire is JSON bytes only)
+// — see #CheckDrainEndpointCleanupsRequest for the close-it-now signal.
+type CheckEndpointResolveRequest struct {
+	Box string `yaml:"box,omitempty" json:"box"`
+
+	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode"`
+
+	Port int `yaml:"port,omitempty" json:"port"`
+}
+
+type CheckEndpointResolveReply struct {
+	Addr string `yaml:"addr,omitempty" json:"addr,omitempty"`
+}
+
+// #CheckImageLabelResolveRequest/#CheckImageLabelResolveReply — the resolution BODY behind
+// the fixed CheckContext.ResolveImageLabel reverse-RPC (#55 W3 B7), the sibling of
+// #CheckEndpointResolveRequest above (same placement class; no live resource to track — a
+// raw OCI label read is a pure podman-inspect computation).
+type CheckImageLabelResolveRequest struct {
+	Box string `yaml:"box,omitempty" json:"box"`
+
+	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode"`
+
+	Label string `yaml:"label,omitempty" json:"label"`
+}
+
+type CheckImageLabelResolveReply struct {
+	Value string `yaml:"value,omitempty" json:"value,omitempty"`
+}
+
+// #CheckDrainEndpointCleanupsRequest signals plugin-check to close every forward its
+// #CheckEndpointResolveRequest handler opened since the last drain (LIFO) — the plugin-side
+// twin of the former core-side hostVerbResolver.runEndpointCleanups (#55 W3 B7). Carries no
+// fields: the plugin's pending-cleanup list IS the state, reset+drained per single-verb
+// Invoke — the SAME sequential per-Invoke lifecycle guarantee the former core-side
+// h.endpointCleanups = nil / defer h.runEndpointCleanups() bracket relied on, now owned by
+// the plugin instead.
+type CheckDrainEndpointCleanupsRequest struct {
+}
+
 // #CheckLoadPluginsRequest asks the host to connect the out-of-process plugin candies a check
 // plan's verb words reference (K1-unblock wave — the "live" check-run arm). Verb dispatch itself
 // crosses the wire generically via InvokeProvider (S1 — command:check's pluginVerbResolver), but
@@ -6403,31 +6322,36 @@ type CheckLoadPluginsRequest struct {
 type CheckLoadPluginsReply struct {
 }
 
-// #CheckBedRequest — the transitional check-bed host-session seam (P12 Wave-2, K5-mortal).
-// A compiled-in plugin-check drives the R10 bed sequence over HostBuild("cli"), but the
-// lock/lease/env lifecycle + the node-derived bed shape are core state a separate module
-// cannot hold: this op-discriminated envelope opens/drives/closes a host-side session keyed by
-// Bed. Class-generic action noun "check-bed" (F11 — never a substrate/provider word). The
-// setup/teardown pair are two of its ops; members-up/members-down/wait-ready are the
-// mid-sequence host-coupled helpers (they run AFTER the substrate deploys, so cannot fold into
-// setup, and call saveDeployState+libvirt+SSHExecutor/podman polls with no `charly` verb, so
-// cannot be cli-reentry). DIES at K5 (post-loaderkit the plugin self-orchestrates its own flock
-// via statekit, computes the repo-override itself, and calls the arbiter over InvokeProvider).
-type CheckBedRequest struct {
-	Op string `yaml:"op,omitempty" json:"op"`
-
-	Bed string `yaml:"bed,omitempty" json:"bed"`
-
-	OK bool `yaml:"ok,omitempty" json:"ok,omitempty"`
-
-	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+// #CheckBedRequest DIED (#55 W3 B2-full): the "check-bed" op-discriminated HostBuild seam it
+// carried is gone. The compiled-in plugin-check now self-orchestrates the whole bed session
+// itself — flock via spec/lock, the repo-override via spec/proc, the arbiter lease via a direct
+// InvokeProvider(verb,"arbiter") call (the vm_arbiter_shim precedent) — exactly the K5 death this
+// type's own header already predicted. See candy/plugin-check/bed_session.go.
+//
+// #CheckBedGpuPrereqRequest/#CheckBedGpuPrereqReply is the ONE narrow seam that SURVIVES: GPU
+// host-DETECTION (gpu_allocate.go's bedGPUPrereqMissing, DetectVFIO) is the project's explicitly
+// operator-dropped exception (no hardware to verify against; fenced from every K-wave cutover,
+// including this one — see gpu_shim.go's own header). Threads just the claimant's resource
+// tokens out and the GPU-unsatisfiable verdict back, so the fenced core logic stays completely
+// unchanged.
+type CheckBedGpuPrereqRequest struct {
+	Tokens []string `yaml:"tokens,omitempty" json:"tokens,omitempty"`
 }
 
-// #CheckBedReply — the setup op returns the BedDescriptor (the node-derived shape the kind-blind
-// plugin drives the sequence from — the substrate analogue of OpPrepareVenue's VenueDescriptor).
-// All other ops return {} (errors ride the host-builder error return). PrereqSkip set ⇒ the bed
-// is a clean SKIP (exit 3): the plugin writes the prereq-skip summary + returns CheckSkippedError,
-// running NO other op (not even teardown — setup acquired nothing on the skip path).
+type CheckBedGpuPrereqReply struct {
+	Missing bool `yaml:"missing,omitempty" json:"missing,omitempty"`
+
+	Token string `yaml:"token,omitempty" json:"token,omitempty"`
+
+	Vendor string `yaml:"vendor,omitempty" json:"vendor,omitempty"`
+}
+
+// #CheckBedReply is now a plain plugin-internal DESCRIPTOR VALUE TYPE (#55 W3 B2-full), never a
+// wire reply — candy/plugin-check/bed_session.go constructs it directly (no HostBuild round-trip;
+// the type stays CUE-sourced per SDD, since it is still a useful named shape the plugin builds and
+// consumes internally). PrereqSkip set ⇒ the bed is a clean SKIP (exit 3): the plugin writes the
+// prereq-skip summary + returns CheckSkippedError, running NO other setup step (not even teardown
+// — nothing was acquired on the skip path).
 type CheckBedReply struct {
 	Calver string `yaml:"calver,omitempty" json:"calver,omitempty"`
 
@@ -6636,15 +6560,58 @@ type DeployCompileReply struct {
 	CandySet []string `yaml:"candy_set,omitempty" json:"candy_set,omitempty"`
 }
 
-// #PodStartRequest carries the `charly start` command flags (the former StartCmd's authored
-// fields, DEPLOY-wave CLI-struct port). The command:pod plugin owns the CLI GRAMMAR but cannot
-// drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms), so
-// `charly start`'s command is THIN — it forwards these flags to HostBuild("pod-start"), and the
-// host runs the existing startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add`
-// stayed core behind HostBuild("resolve-target-add").
-type PodStartRequest struct {
+// #PodLifecycleRequest is the ONE discriminated request every pod-lifecycle HostBuild op
+// (start/stop/shell/logs/service/cmd/update/remove) sends over the single "pod-lifecycle"
+// HostBuild kind (#55 W3 A10b). Converges the seam on the codebase's own established
+// op-discriminated wire idiom — #ArbiterInvokeInput's flat action-multiplexed shape,
+// charly/provider.go's own Operation.Params json.RawMessage envelope — which the former
+// 8-per-verb #PodXRequest family (one CUE type + one HostBuild kind string per verb, each
+// redeclaring box/instance/node) was the last outlier against. op selects which #PodXPayload
+// type `payload` unmarshals into (host_build_pod_lifecycle_dispatch.go's hostBuildPodLifecycle
+// switch); box/instance/node — common to nearly every op — hoisted OUT of the per-op payloads
+// into this shared envelope (R3).
+type PodLifecycleRequest struct {
+	Op string `yaml:"op,omitempty" json:"op"`
+
 	Box string `yaml:"box,omitempty" json:"box"`
 
+	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
+
+	// node is the per-host deploy overlay entry the command:pod / command:cmd plugin ALREADY
+	// resolved plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free
+	// plugin-side overlay read) and threads as DATA — so the host's dispatchLifecycleTarget
+	// operates on the passed *spec.Deploy instead of re-reading the per-host config itself (the
+	// config-READ is a plugin loading capability, not a host M — #55 K4 seam-completion). Six of
+	// the eight ops carry it (start/stop/shell/logs/service/cmd); update threads a whole merged
+	// tree instead (#PodUpdatePayload.tree_json) and remove needs no node at all (it only
+	// releases the arbiter claim) — absent for those two.
+	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
+
+	// payload is the op-specific #PodXPayload, JSON-marshalled by the calling command plugin and
+	// re-decoded host-side once op is known (mirrors the plugin wire protocol's own
+	// Operation.Params json.RawMessage design — there is no parallel envelope-vs-payload type
+	// system, R3).
+	Payload RawBody `yaml:"payload,omitempty" json:"payload,omitempty"`
+}
+
+// #PodLifecycleReply is the "pod-lifecycle" host-builder reply. exit_code is populated only for
+// op="cmd" — the container command's own exit code, so `charly cmd`'s process exit propagates it
+// (the plugin reconstructs an *sdk.ExitCodeError from it) — it cannot ride the HostBuild ERROR
+// return, which stringifies the typed error; it must ride a reply FIELD, exactly as the former
+// __cmd/CliReply.ExitCode path did. Every other op's reply is empty; op-specific progress prints
+// host-side (the compiled-in plugin's HostBuild runs in charly's own process) and failure signals
+// via the error return.
+type PodLifecycleReply struct {
+	ExitCode int `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
+}
+
+// #PodStartPayload — see #PodLifecycleRequest's header; op="start". The former StartCmd's
+// authored fields (DEPLOY-wave CLI-struct port): the command:pod plugin owns the CLI GRAMMAR but
+// cannot drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms),
+// so `charly start`'s command is THIN — it forwards these flags, and the host runs the existing
+// startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add` stayed core behind
+// HostBuild("resolve-target-add").
+type PodStartPayload struct {
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
 	Build bool `yaml:"build,omitempty" json:"build,omitempty"`
@@ -6653,8 +6620,6 @@ type PodStartRequest struct {
 
 	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`
 
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
 	Port []string `yaml:"port,omitempty" json:"port,omitempty"`
 
 	VolumeFlag []string `yaml:"volume_flag,omitempty" json:"volume_flag,omitempty"`
@@ -6662,71 +6627,29 @@ type PodStartRequest struct {
 	Bind []string `yaml:"bind,omitempty" json:"bind,omitempty"`
 
 	NoAutoDetect bool `yaml:"no_autodetect,omitempty" json:"no_autodetect,omitempty"`
-
-	// node is the per-host deploy overlay entry the command:pod plugin ALREADY resolved
-	// plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free plugin-side
-	// overlay read) and threads as DATA — so the host's dispatchLifecycleTarget operates on the passed
-	// *spec.Deploy instead of re-reading the per-host config itself (the config-READ is a plugin
-	// loading capability, not a host M — #55 K4 seam-completion). Absent only for an in-flight
-	// mixed build; the host requires it.
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodStartReply is the "pod-start" host-builder reply — empty; the start prints its own
-// progress to the shared stdio (the compiled-in plugin's HostBuild runs in charly's own process)
-// and signals failure via the error return.
-type PodStartReply struct {
-}
-
-// #PodStopRequest carries the `charly stop` command flags (the former StopCmd's authored fields).
-// Forwarded to HostBuild("pod-stop"), which runs the existing stopViaLifecycle orchestration
-// VERBATIM.
-type PodStopRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
+// #PodStopPayload — see #PodLifecycleRequest's header; op="stop". The former StopCmd's authored
+// fields.
+type PodStopPayload struct {
 	Unmount bool `yaml:"unmount,omitempty" json:"unmount,omitempty"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodStopReply is the "pod-stop" host-builder reply — empty, mirroring #PodStartReply.
-type PodStopReply struct {
-}
-
-// #PodLogsRequest carries the `charly logs` command flags (the former LogsCmd's authored
-// fields). Forwarded to HostBuild("pod-logs"), which runs the existing dispatchLifecycleTarget +
-// LifecycleTarget.Logs orchestration VERBATIM (F12 — the host resolves the journalctl/`<engine>
-// logs` stream command, the owning plugin streams it live to the operator's stdio).
-type PodLogsRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
+// #PodLogsPayload — see #PodLifecycleRequest's header; op="logs". The former LogsCmd's authored
+// fields (F12 — the host resolves the journalctl/`<engine> logs` stream command, the owning
+// plugin streams it live to the operator's stdio).
+type PodLogsPayload struct {
 	Follow bool `yaml:"follow,omitempty" json:"follow,omitempty"`
 
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
 	Sidecar string `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodLogsReply is the "pod-logs" host-builder reply — empty, mirroring #PodStartReply.
-type PodLogsReply struct {
-}
-
-// #PodRemoveRequest carries the `charly remove` command flags (the former RemoveCmd's authored
-// fields). Forwarded to HostBuild("pod-remove"), which runs the existing remove orchestration
-// VERBATIM (quadlet/companion-service teardown, pre_remove hooks, purge, deploy-entry cleanup —
-// deeply core-type-coupled: BoxMetadata/ExtractMetadata/sidecar resolution/deploykit.
-// CleanDeployEntry — not registry-bound, but not portable either).
-type PodRemoveRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
+// #PodRemovePayload — see #PodLifecycleRequest's header; op="remove". The former RemoveCmd's
+// authored fields — the host orchestration this ONE op still performs is just the
+// arbiter-release bracket (host_build_pod_lifecycle_dispatch.go's hostBuildPodRemove); the rest
+// of remove's orchestration (quadlet/companion-service teardown, pre_remove hooks, purge,
+// deploy-entry cleanup) runs entirely in candy/plugin-pod now.
+type PodRemovePayload struct {
 	Purge bool `yaml:"purge,omitempty" json:"purge,omitempty"`
 
 	KeepDeploy bool `yaml:"keep_deploy,omitempty" json:"keep_deploy,omitempty"`
@@ -6734,17 +6657,10 @@ type PodRemoveRequest struct {
 	Env []string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
-// #PodRemoveReply is the "pod-remove" host-builder reply — empty, mirroring #PodStartReply.
-type PodRemoveReply struct {
-}
-
-// #PodShellRequest carries the `charly shell` command flags (the former ShellCmd's authored
-// fields). Forwarded to HostBuild("pod-shell"), which runs the existing dispatchLifecycleTarget +
-// LifecycleTarget.Attach orchestration VERBATIM (F12 — the host resolves the venue command, the
-// owning plugin runs it over the served venue executor via RunInteractive, stdio host-held).
-type PodShellRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
+// #PodShellPayload — see #PodLifecycleRequest's header; op="shell". The former ShellCmd's
+// authored fields (F12 — the host resolves the venue command, the owning plugin runs it over the
+// served venue executor via RunInteractive, stdio host-held).
+type PodShellPayload struct {
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
 	Command string `yaml:"command,omitempty" json:"command,omitempty"`
@@ -6757,70 +6673,33 @@ type PodShellRequest struct {
 
 	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`
 
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
 	VolumeFlag []string `yaml:"volume_flag,omitempty" json:"volume_flag,omitempty"`
 
 	Bind []string `yaml:"bind,omitempty" json:"bind,omitempty"`
 
 	NoAutoDetect bool `yaml:"no_autodetect,omitempty" json:"no_autodetect,omitempty"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodShellReply is the "pod-shell" host-builder reply — empty, mirroring #PodStartReply.
-type PodShellReply struct {
-}
-
-// #PodServiceRequest carries the FULLY plugin-resolved argv for `charly service
-// start/stop/status/restart` (Cutover B unit 2 completion): the plugin now performs
-// resolveServiceInit/validateServiceName/execInitCommand's argv-building itself (all portable —
-// spec.ResolvedInit is already an sdk alias, buildkit.RenderTemplate is sdk-portable) and sends
-// the FINAL `<engine> exec <container> <tool> <op> [svc]` argv; the host does ONLY the
-// irreducible dispatchLifecycleTarget + LifecycleTarget.Shell step (host_build_pod_lifecycle_dispatch.go's
-// hostBuildPodService), mirroring start/stop/logs/update exactly.
-type PodServiceRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
+// #PodServicePayload — see #PodLifecycleRequest's header; op="service". Carries the FULLY
+// plugin-resolved argv for `charly service start/stop/status/restart` (Cutover B unit 2
+// completion): the plugin now performs resolveServiceInit/validateServiceName/execInitCommand's
+// argv-building itself (all portable — spec.ResolvedInit is already an sdk alias,
+// buildkit.RenderTemplate is sdk-portable) and sends the FINAL `<engine> exec <container> <tool>
+// <op> [svc]` argv; the host does ONLY the irreducible dispatchLifecycleTarget +
+// LifecycleTarget.Shell step.
+type PodServicePayload struct {
 	Argv []string `yaml:"argv,omitempty" json:"argv"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 }
 
-// #PodServiceReply is the "pod-service" host-builder reply — empty, mirroring #PodStartReply.
-type PodServiceReply struct {
-}
-
-// #PodCmdRequest carries `charly cmd <box> <command>`'s per-invocation fields for the
-// "pod-cmd" host-builder (candy/plugin-cmd drives it): the host does ONLY the irreducible
-// dispatchLifecycleTarget("cmd") + LifecycleTarget.Attach step (host_build_pod_lifecycle_dispatch.go's
-// hostBuildPodCmd), mirroring hostBuildPodShell exactly — the interactive `-i` exec runs over the
-// SAME host-held exec.RunInteractive leg (stdio never crosses the wire). The plugin owns the CLI
-// grammar + the completion notification itself.
-type PodCmdRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
+// #PodCmdPayload — see #PodLifecycleRequest's header; op="cmd". Carries `charly cmd <box>
+// <command>`'s per-invocation fields: the host does ONLY the irreducible
+// dispatchLifecycleTarget("cmd") + LifecycleTarget.Attach step, mirroring op="shell" exactly —
+// the interactive `-i` exec runs over the SAME host-held exec.RunInteractive leg (stdio never
+// crosses the wire). The plugin owns the CLI grammar + the completion notification itself.
+type PodCmdPayload struct {
 	Command string `yaml:"command,omitempty" json:"command,omitempty"`
 
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
 	Sidecar string `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
-
-	// node — the plugin-resolved per-host deploy overlay entry threaded as DATA (see #PodStartRequest.node).
-	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
-}
-
-// #PodCmdReply is the "pod-cmd" host-builder reply. It carries the container command's exit_code so
-// `charly cmd`'s own non-zero exit propagates to the operator's process code (the plugin reconstructs
-// an *sdk.ExitCodeError from it) — the exit code cannot ride the HostBuild ERROR return, which
-// stringifies the typed *sdk.ExitCodeError; it must ride a reply FIELD, exactly as the former
-// __cmd/CliReply.ExitCode path did. A genuine (non-exit-code) failure still propagates as the error.
-type PodCmdReply struct {
-	ExitCode int `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
 }
 
 // #PodConfigSetupRequest carries the `charly config [setup]` command flags (the former
@@ -6904,14 +6783,15 @@ type PodConfigSetupRequest struct {
 }
 
 // #PodConfigSetupReply is the "pod-config-setup" host-builder reply — empty, mirroring
-// #PodStartReply.
+// #PodLifecycleReply's empty-for-every-op-but-cmd shape.
 type PodConfigSetupReply struct {
 }
 
 // #PodConfigRemoveRequest carries `charly config remove`'s flags (the former
-// BoxConfigRemoveCmd's authored fields — distinct from `charly remove`/#PodRemoveRequest, which
-// tears down the whole deploy; this removes only the quadlet + disables the service). Forwarded
-// to HostBuild("pod-config-remove"), which runs the existing remove orchestration VERBATIM.
+// BoxConfigRemoveCmd's authored fields — distinct from `charly remove`/#PodLifecycleRequest
+// op="remove"+#PodRemovePayload, which tears down the whole deploy; this removes only the
+// quadlet + disables the service). Forwarded to HostBuild("pod-config-remove"), which runs the
+// existing remove orchestration VERBATIM.
 type PodConfigRemoveRequest struct {
 	Box string `yaml:"box,omitempty" json:"box"`
 
@@ -6920,18 +6800,6 @@ type PodConfigRemoveRequest struct {
 
 // #PodConfigRemoveReply is the "pod-config-remove" host-builder reply — empty.
 type PodConfigRemoveReply struct {
-}
-
-// #PodConfigEnsureImageRequest: EnsureImage + ExtractMetadata bundle (registry/podman-store
-// coupled — a plugin cannot resolve the local podman image store namespace itself).
-type PodConfigEnsureImageRequest struct {
-	ImageRef string `yaml:"image_ref,omitempty" json:"image_ref"`
-
-	BuildEngine string `yaml:"build_engine,omitempty" json:"build_engine"`
-}
-
-type PodConfigEnsureImageReply struct {
-	MetaJSON RawBody `yaml:"meta_json,omitempty" json:"meta_json"`
 }
 
 // #PodConfigLoadDeployRequest / Reply: deploykit.LoadDeployConfigForRead(caller) — the
@@ -7097,19 +6965,6 @@ type PodConfigBoxEngineReply struct {
 	Engine string `yaml:"engine,omitempty" json:"engine"`
 }
 
-// #PodConfigSSHKeyRequest / Reply: resolveSSHPubKey(flag, generateDir) + containerSSHKeyDir(name)
-// bundle (the `--ssh-key generate` path is pure ed25519/golang.org/x/crypto/ssh keygen — kept as
-// a narrow host seam rather than adding a crypto dependency to the plugin for a rarely-used flag).
-type PodConfigSSHKeyRequest struct {
-	Flag string `yaml:"flag,omitempty" json:"flag"`
-
-	ContainerName string `yaml:"container_name,omitempty" json:"container_name"`
-}
-
-type PodConfigSSHKeyReply struct {
-	Pubkey string `yaml:"pubkey,omitempty" json:"pubkey,omitempty"`
-}
-
 // #PodConfigListSidecarsReply: embeddedSidecarBodies()'s go:embed template names + descriptions —
 // the `charly config --list-sidecars` introspection leaf (rare; kept as a narrow seam since the
 // embedded data lives only in the charly binary).
@@ -7121,18 +6976,11 @@ type PodConfigListSidecarsReply struct {
 	BodiesJSON RawBody `yaml:"bodies_json,omitempty" json:"bodies_json,omitempty"`
 }
 
-// #PodUpdateRequest carries the `charly update` command flags (the former UpdateCmd's
-// authored fields). Forwarded to HostBuild("pod-update"), which runs the existing
-// dispatchByDeployTarget orchestration — loadDeployPlugins/ResolveTarget are core
-// Mechanisms (the provider registry) a plugin cannot import or hold.
-type PodUpdateRequest struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
+// #PodUpdatePayload — see #PodLifecycleRequest's header; op="update".
+type PodUpdatePayload struct {
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
 	Build bool `yaml:"build,omitempty" json:"build,omitempty"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
 
 	Seed bool `yaml:"seed,omitempty" json:"seed,omitempty"`
 
@@ -7146,10 +6994,6 @@ type PodUpdateRequest struct {
 	// Cone A Unit 3b). Marshalled map[string]spec.Deploy; an absent tree yields the same
 	// "no charly.yml" error a nil host-tree-read result produced.
 	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
-}
-
-// #PodUpdateReply is the "pod-update" host-builder reply — empty, mirroring #PodStartReply.
-type PodUpdateReply struct {
 }
 
 // #DeployTargetStatus (S3b, Unit-6 design) mirrors the former charly-core StatusInfo — a
@@ -7183,15 +7027,6 @@ type DeployTargetDelOpts struct {
 	KeepServices bool `yaml:"keep_services,omitempty" json:"keep_services,omitempty"`
 
 	KeepImage bool `yaml:"keep_image,omitempty" json:"keep_image,omitempty"`
-}
-
-// #DeployTargetTestOpts mirrors the former charly-core TestOpts (`charly check live`).
-type DeployTargetTestOpts struct {
-	OnlyIDs []string `yaml:"only_ids,omitempty" json:"only_ids,omitempty"`
-
-	FormatJSON bool `yaml:"format_json,omitempty" json:"format_json,omitempty"`
-
-	StopOnFail bool `yaml:"stop_on_fail,omitempty" json:"stop_on_fail,omitempty"`
 }
 
 // #DeployTargetLogsOpts mirrors the former charly-core LogsOpts (`charly logs`).
@@ -7607,40 +7442,6 @@ type BoxFetchResolveRequest struct {
 
 type BoxFetchResolveReply struct {
 	Path string `yaml:"path,omitempty" json:"path,omitempty"`
-}
-
-// #RawProjectRequest / #RawProject — the CHEAP raw-loader HostBuild seam ("raw-project"), the
-// endgame keystone that lets the loader-coupled deploy files MOVE to their plugins (the ruling:
-// loader-coupling is the work, not a defer reason). It mirrors resolved-project (#ResolvedProject)
-// but SKIPS the expensive ResolveBox-per-box cost: a plugin that only needs the RAW loader reads
-// (kind templates, the folded deploy tree with stamped Descent, the plugin-primaries D-fact) fetches
-// this instead of paying the full box resolution the resolved-project envelope also pays. Kind-blind
-// throughout — templates/deploy carry OPAQUE bytes the consuming plugin decodes itself. Additive:
-// later fields (config defaults, etc.) join as the consumer unit that first needs them lands (the
-// SAME additive pattern #ResolvedProject uses).
-type RawProjectRequest struct {
-	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-
-	IncludeDisabled bool `yaml:"include_disabled,omitempty" json:"include_disabled,omitempty"`
-
-	LocalSuperproject bool `yaml:"local_superproject,omitempty" json:"local_superproject,omitempty"`
-}
-
-type RawProject struct {
-	Version string `yaml:"version,omitempty" json:"version,omitempty"`
-
-	// the bare pod/vm/local/k8s/android template maps (loaderkit.ProjectTemplates — a cheap raw-byte
-	// copy, NO ResolveBox); findK8sSpec / local-template resolvers read this.
-	Templates *ProjectTemplates `yaml:"templates,omitempty" json:"templates,omitempty"`
-
-	// the folded deploy tree (uf.Bundle verbatim, with stamped Descent traits) — deploy-key→box
-	// resolution, the trait/tree resolvers, and member bring-up read this (the Descent is DATA already
-	// in the fold, clause-D, NOT a live registry query).
-	Deploy map[string]*Deploy `yaml:"deploy,omitempty" json:"deploy,omitempty"`
-
-	// the plugin-verb PRIMARY-field D-fact (word→primary input field) for plan resugar (carried here
-	// so a plugin holding this projection resugars WITHOUT dialing the host provider registry).
-	Primaries map[string]string `yaml:"primaries,omitempty" json:"primaries,omitempty"`
 }
 
 // #SidecarResolveInput is the input to candy/plugin-sidecar's OpResolve leg

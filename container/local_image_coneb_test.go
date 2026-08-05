@@ -177,3 +177,68 @@ func TestResolveShellImageRef_TagSetNoRegistry(t *testing.T) {
 		t.Errorf("tag-set no-registry: got %q", got)
 	}
 }
+
+// TestResolveLocalImageRef_NeverReturnsSiblingDeployAlias is the regression witness for the
+// cross-deployment image-crossing defect. The fixture is the REAL local store shape measured on
+// the dev host (`charly box list tags check-pod`): several disposable beds share ONE base box, so
+// every bed's `tagDeployAlias` alias (`<registry>/<deploy-name>:<calver>`) sits on an image
+// carrying the BASE box's ai.opencharly.image label, and — because the label-CalVer is
+// content-derived — they all share ONE label-CalVer. Pre-fix, the tag-CalVer tiebreak therefore
+// elected whichever sibling bed was (re)deployed most recently: an untagged resolve of the BASE
+// box name returned another deployment's image.
+//
+// The property: an untagged resolve of box B returns a ref NAMED B, never a sibling's alias.
+func TestResolveLocalImageRef_NeverReturnsSiblingDeployAlias(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	const labelCV = "2026.209.1500" // one content-derived label-CalVer across the whole family
+	ListLocalImages = func(engine string) ([]LocalImageInfo, error) {
+		return []LocalImageInfo{
+			{ID: "base", Names: []string{"ghcr.io/opencharly/check-pod:2026.216.2119"},
+				Labels: map[string]string{spec.LabelBox: "check-pod", spec.LabelVersion: labelCV}},
+			// Sibling beds' aliases — NEWER tag-CalVers, same inherited base label.
+			{ID: "sib1", Names: []string{"ghcr.io/opencharly/check-preempt-arbiter-pod:2026.216.2124"},
+				Labels: map[string]string{spec.LabelBox: "check-pod", spec.LabelVersion: labelCV}},
+			{ID: "sib2", Names: []string{"ghcr.io/opencharly/check-stepkind-emit-pod:2026.216.2120"},
+				Labels: map[string]string{spec.LabelBox: "check-pod", spec.LabelVersion: labelCV}},
+		}, nil
+	}
+	got, err := ResolveLocalImageRef("podman", "check-pod")
+	if err != nil {
+		t.Fatalf("ResolveLocalImageRef(check-pod): %v", err)
+	}
+	if want := "ghcr.io/opencharly/check-pod:2026.216.2119"; got != want {
+		t.Fatalf("untagged base resolve = %q, want %q (a sibling deployment's alias must never win)", got, want)
+	}
+	// The aliases stay resolvable by their OWN deploy name via the name fallback — the alias's
+	// entire purpose (deploy-name-keyed `charly config`/`charly start`).
+	got, err = ResolveLocalImageRef("podman", "check-stepkind-emit-pod")
+	if err != nil {
+		t.Fatalf("ResolveLocalImageRef(check-stepkind-emit-pod): %v", err)
+	}
+	if want := "ghcr.io/opencharly/check-stepkind-emit-pod:2026.216.2120"; got != want {
+		t.Fatalf("deploy-name resolve = %q, want %q", got, want)
+	}
+}
+
+// TestRefRepoName covers the two shapes the promoted-to-filter predicate now has to get right
+// (it gates candidacy, not just tie ordering): a registry PORT must not read as a tag, and a
+// digest must be stripped.
+func TestRefRepoName(t *testing.T) {
+	cases := []struct{ ref, want string }{
+		{"ghcr.io/opencharly/jupyter:2026.216.2119", "jupyter"},
+		{"ghcr.io/opencharly/jupyter", "jupyter"},
+		{"localhost/jupyter:v2", "jupyter"},
+		{"jupyter:latest", "jupyter"},
+		{"jupyter", "jupyter"},
+		{"localhost:5000/jupyter", "jupyter"},                             // registry port, no tag
+		{"localhost:5000/jupyter:2026.216.2119", "jupyter"},               // registry port + tag
+		{"ghcr.io/opencharly/jupyter@sha256:abc123", "jupyter"},           // digest
+		{"ghcr.io/opencharly/versa/ecovoyage:2026.216.2119", "ecovoyage"}, // instance alias
+	}
+	for _, tc := range cases {
+		if got := refRepoName(tc.ref); got != tc.want {
+			t.Errorf("refRepoName(%q) = %q, want %q", tc.ref, got, tc.want)
+		}
+	}
+}

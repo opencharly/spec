@@ -120,6 +120,19 @@ const (
 	// plugins are COMPILED-IN (in-proc), so this hook never re-enters the validated-config load.
 	OpBootstrap = "bootstrap"
 
+	// OpPreflight is the PREFLIGHT-PHASE hook (K5 seam-death of charly/main_freshness.go): the
+	// kernel invokes every Phase=="preflight" plugin ONCE per CLI invocation, right after Kong
+	// parses the command line and BEFORE dispatching to ANY command (main.go, before ctx.Run()) —
+	// earlier than OpBootstrap, which fires only when a project actually loads. Params carry the
+	// two host-only facts a compiled-in preflight plugin cannot compute itself (it CAN read
+	// os.Args/os.Getwd/os.Executable directly, being in-process, but cannot call package-main's
+	// CharlyVersion() — no package may import "main"): the parsed verb path and the binary's
+	// stamped CalVer version. A refusing reply's Message is printed to stderr and the process
+	// exits 1 — this is a HARD gate, not a data transform like OpBootstrap. Preflight plugins are
+	// COMPILED-IN ONLY (same reasoning as bootstrap: they must run before any out-of-process
+	// plugin could even be discovered).
+	OpPreflight = "preflight"
+
 	// OpEphemeralRegister / OpEphemeralTeardown are the command:bundle EPHEMERAL-LIFECYCLE
 	// selectors (FINAL/K5 unit 6a): the host Invokes these as the first action of an ephemeral
 	// deploy's Add and the last action of its Del, mirroring OpCompile's host→plugin dispatch
@@ -149,6 +162,16 @@ const (
 	// moved plugin-side). The reply is the sanctioned sdk/kit []StepResult wire. A generic drive
 	// selector, never a provider word (F11).
 	OpVerifyChecks = "verify-checks"
+
+	// OpResolveEndpoint/OpResolveImageLabel/OpDrainEndpointCleanups are verb:check-resolve
+	// selectors (#55 W3 B7) discriminating its THREE capabilities — venue classification
+	// (OpResolve, unchanged) plus the two relocated CheckContext reverse-RPC resolution
+	// bodies + their shared cleanup-drain signal. See spec/schema/seam.cue's
+	// #CheckEndpointResolveRequest/#CheckImageLabelResolveRequest/
+	// #CheckDrainEndpointCleanupsRequest for the full placement rationale.
+	OpResolveEndpoint       = "resolve-endpoint"
+	OpResolveImageLabel     = "resolve-image-label"
+	OpDrainEndpointCleanups = "drain-endpoint-cleanups"
 
 	// EphemeralPanicMarker prefixes an error the command:bundle plugin converts from a
 	// RECOVERED PANIC inside OpEphemeralRegister/OpEphemeralTeardown (RCA #5, FINAL/K5 unit 6a —

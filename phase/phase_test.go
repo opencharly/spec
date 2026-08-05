@@ -19,7 +19,7 @@ func TestNormalizePhaseUnknownDefaultsRuntime(t *testing.T) {
 }
 
 func TestPhaseOrderAscending(t *testing.T) {
-	want := []string{PhaseBootstrap, PhaseSchema, PhaseLoad, PhaseBuild, PhaseRuntime}
+	want := []string{PhasePreflight, PhaseBootstrap, PhaseSchema, PhaseLoad, PhaseBuild, PhaseRuntime}
 	if len(PhaseOrder) != len(want) {
 		t.Fatalf("PhaseOrder len = %d, want %d", len(PhaseOrder), len(want))
 	}
