@@ -302,25 +302,6 @@
 }
 #DeployResolveTargetAddReply: {}
 
-// #DeployFromBoxRequest carries the `charly bundle from-box` command flags (the
-// former BundleFromBoxCmd) — a SOURCE-LESS deploy driven entirely by an image's
-// baked OCI labels. The plugin forwards these to HostBuild("deploy-from-box"); the
-// host runs the existing from-box orchestration VERBATIM (the project-free runConfig
-// core via BoxConfigSetupCmd, or the K8s Kustomize path with --cluster).
-#DeployFromBoxRequest: {
-	ref!:       string @go(Ref)
-	name?:      string @go(Name)
-	instance?:  string @go(Instance)
-	env?: [...string] @go(Env)
-	port?: [...string] @go(Port)
-	cluster?:   string @go(Cluster)
-	namespace?: string @go(Namespace)
-}
-
-// #DeployFromBoxReply is the "deploy-from-box" host-builder reply — empty (prints
-// host-side, errors via the return).
-#DeployFromBoxReply: {}
-
 // (The `charly bundle import`/`reset` deploy-state WRITE host seam was DELETED in #55 K4 —
 // command:bundle now performs the SAVE plugin-side via deploykit.SaveBundleConfig with its own
 // loader-backed reader + loader-threaded Primaries, so no host seam remains for it.)
@@ -1063,7 +1044,7 @@
 }
 
 // #PodConfigSetupRequest carries the `charly config [setup]` command flags (the former
-// BoxConfigSetupCmd's authored fields, PLUS explicit_ref — bundle_from_box_cmd.go's
+// BoxConfigSetupCmd's authored fields, PLUS explicit_ref — from_box_pod.go's
 // programmatically-set source-less-deploy field, below). P13-KERNEL direction-flip: forwarded
 // from HostBuild("pod-config-setup") (host_build_pod_config.go's hostBuildPodConfigSetup) onward
 // to the deploy:pod plugin's sdk.OpConfigSetup — the plugin now RUNS the former runConfig
@@ -1097,7 +1078,7 @@
 	list_sidecars?:    bool   @go(ListSidecars)
 	no_autodetect?:    bool   @go(NoAutoDetect)
 	// explicit_ref is set programmatically (never authored) by `charly bundle from-box`'s
-	// source-less deploy path (bundle_from_box_cmd.go) — the P13-KERNEL direction-flip carries
+	// source-less deploy path (from_box_pod.go) — the P13-KERNEL direction-flip carries
 	// it across the wire now that the ORCHESTRATION (formerly reading the kong:"-" Go field
 	// directly) moved into the plugin.
 	explicit_ref?: string @go(ExplicitRef)

@@ -49,7 +49,7 @@ func BundleDelArgv(name string) []string {
 
 // DeriveDeploymentName turns "quay.io/myorg/openclaw:v1" → "openclaw" and
 // "registry.example.com/path/foo" → "foo" — the shared default-name derivation for a
-// source-less `charly bundle from-box` deploy (both the pod path, charly/bundle_from_box_cmd.go,
+// source-less `charly bundle from-box` deploy (both the pod path, candy/plugin-bundle/from_box_pod.go,
 // and the k8s path, candy/plugin-bundle/deploy_from_box.go — R3, one function, two callers).
 func DeriveDeploymentName(imageRef string) string {
 	// Strip tag.

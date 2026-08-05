@@ -5730,32 +5730,6 @@ type DeployResolveTargetAddRequest struct {
 type DeployResolveTargetAddReply struct {
 }
 
-// #DeployFromBoxRequest carries the `charly bundle from-box` command flags (the
-// former BundleFromBoxCmd) — a SOURCE-LESS deploy driven entirely by an image's
-// baked OCI labels. The plugin forwards these to HostBuild("deploy-from-box"); the
-// host runs the existing from-box orchestration VERBATIM (the project-free runConfig
-// core via BoxConfigSetupCmd, or the K8s Kustomize path with --cluster).
-type DeployFromBoxRequest struct {
-	Ref string `yaml:"ref,omitempty" json:"ref"`
-
-	Name string `yaml:"name,omitempty" json:"name,omitempty"`
-
-	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
-
-	Env []string `yaml:"env,omitempty" json:"env,omitempty"`
-
-	Port []string `yaml:"port,omitempty" json:"port,omitempty"`
-
-	Cluster string `yaml:"cluster,omitempty" json:"cluster,omitempty"`
-
-	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-}
-
-// #DeployFromBoxReply is the "deploy-from-box" host-builder reply — empty (prints
-// host-side, errors via the return).
-type DeployFromBoxReply struct {
-}
-
 // #EphemeralRegisterRequest/#EphemeralRegisterReply — the host→command:bundle OpEphemeralRegister
 // leg (FINAL/K5 unit 6a): ephemeral_lifecycle.go's cross-substrate ephemeral-instance registration
 // (systemd TTL transient timer + parent-detection + charly.yml persistence) moved to
@@ -6610,7 +6584,7 @@ type PodCmdPayload struct {
 }
 
 // #PodConfigSetupRequest carries the `charly config [setup]` command flags (the former
-// BoxConfigSetupCmd's authored fields, PLUS explicit_ref — bundle_from_box_cmd.go's
+// BoxConfigSetupCmd's authored fields, PLUS explicit_ref — from_box_pod.go's
 // programmatically-set source-less-deploy field, below). P13-KERNEL direction-flip: forwarded
 // from HostBuild("pod-config-setup") (host_build_pod_config.go's hostBuildPodConfigSetup) onward
 // to the deploy:pod plugin's sdk.OpConfigSetup — the plugin now RUNS the former runConfig
@@ -6670,7 +6644,7 @@ type PodConfigSetupRequest struct {
 	NoAutoDetect bool `yaml:"no_autodetect,omitempty" json:"no_autodetect,omitempty"`
 
 	// explicit_ref is set programmatically (never authored) by `charly bundle from-box`'s
-	// source-less deploy path (bundle_from_box_cmd.go) — the P13-KERNEL direction-flip carries
+	// source-less deploy path (from_box_pod.go) — the P13-KERNEL direction-flip carries
 	// it across the wire now that the ORCHESTRATION (formerly reading the kong:"-" Go field
 	// directly) moved into the plugin.
 	ExplicitRef string `yaml:"explicit_ref,omitempty" json:"explicit_ref,omitempty"`
