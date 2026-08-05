@@ -7709,14 +7709,38 @@ type ValidateProjectRequest struct {
 	IncludeDisabled bool `yaml:"include_disabled,omitempty" json:"include_disabled,omitempty"`
 }
 
-// #ValidateProjectReply — the host-side project-validation result: the error-TOLERANT
-// #ResolvedProject projection (partial; only boxes/candies that resolved) + the host-anchored
-// diagnostics (per-box resolve failures + CUE-conformance + resource-vocab + build-tunable/merge).
-// The plugin merges these with its own pure-rule + resolution-graph findings for the final verdict.
+// #ValidateProjectReply — the error-TOLERANT #ResolvedProject projection (partial; only boxes and
+// candies that resolved) + the per-box resolve-failure diagnostics. The plugin merges these with
+// its own pure-rule, raw-config, CUE-conformance and resolution-graph findings for the verdict.
 type ValidateProjectReply struct {
 	Project *ResolvedProject `yaml:"project,omitempty" json:"project,omitempty"`
 
 	Diagnostics Diagnostics `yaml:"diagnostics,omitempty" json:"diagnostics,omitempty"`
+}
+
+// #ValidateWordSetsRequest — the plugin-supplied inventory the host answers registry-D over.
+//
+// plugin_words are the DISTINCT `plugin:` verb words the plugin enumerated from its OWN envelope
+// (every candy model's plan plus every box plan); the host reports which of them ACT in
+// build/deploy. external_providers are the `plugin.providers:` capability strings ("<class>:<word>")
+// of every candy whose `plugin.source:` is a real out-of-tree ref — the host must LEARN those
+// declarations before it can answer, because a declared-but-not-yet-connected external verb/step is
+// act-capable by declaration alone (there is no provider to resolve until the build connects it).
+type ValidateWordSetsRequest struct {
+	PluginWords []string `yaml:"plugin_words,omitempty" json:"plugin_words,omitempty"`
+
+	ExternalProviders []string `yaml:"external_providers,omitempty" json:"external_providers,omitempty"`
+}
+
+// #ValidateWordSetsReply — the two registry-derived D-data word sets the validate rules consume as
+// membership sets. provider_capabilities is every compiled-in provider as "<class>:<word>" (the
+// TARGET set a `source: builtin` plugin candy's declared providers must be a member of);
+// act_capable_verbs is the subset of the request's plugin_words whose act form has a build/deploy
+// install path (the check act-form rule).
+type ValidateWordSetsReply struct {
+	ProviderCapabilities []string `yaml:"provider_capabilities,omitempty" json:"provider_capabilities,omitempty"`
+
+	ActCapableVerbs []string `yaml:"act_capable_verbs,omitempty" json:"act_capable_verbs,omitempty"`
 }
 
 type Vm struct {

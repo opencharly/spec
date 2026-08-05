@@ -116,10 +116,12 @@ type CandyReader interface {
 	HasSecretAccepts() bool
 	HasSecretRequires() bool
 
-	// W9 pipeline-retype fill: the candy's OWN `plugin:` declaration (registerExternalVerbsFromCandies'
-	// data-read half, findCommandPluginCandy) — the provider REGISTRATION itself stays core-M
-	// (touches the providerRegistry), but recognizing which capability words a scanned candy
-	// declares is a plain data read the interface must expose once *Candy is gone.
+	// W9 pipeline-retype fill: the candy's OWN `plugin:` declaration (the data-read half of external
+	// verb/step-word recognition, plus findCommandPluginCandy) — the provider REGISTRATION itself
+	// stays core-M (it touches the providerRegistry), but recognizing which capability words a
+	// scanned candy declares is a plain data read the interface must expose once *Candy is gone. The
+	// validate path reads exactly these three off the resolved-project envelope and hands the
+	// capability strings to the host's "validate-word-sets" seam, which does the registration.
 	IsPluginCandy() bool
 	GetPluginSource() string
 	GetPluginProviders() []string
