@@ -93,5 +93,10 @@ func BuildServiceRenderContext(entry *ServiceEntry, ctx ServiceRenderContext) Se
 	ctx.StopSignal = entry.StopSignal
 	ctx.ExitCodes = entry.ExitCode
 	ctx.Priority = entry.Priority
+	// Start hooks pass through verbatim: they are init-system command lines, so they carry no
+	// home-relative paths to expand and no ordering to merge (unlike After, which unions the
+	// entry's and the overrides' lists).
+	ctx.ExecStartPre = entry.ExecStartPre
+	ctx.ExecStartPost = entry.ExecStartPost
 	return ctx
 }

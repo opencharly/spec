@@ -173,7 +173,22 @@
 	stop_timeout?: (string & !="") | int @go(StopTimeout,type=string) // "20s" or an unquoted 20 (Go-coerced; Go field is string)
 	scope?:        "system" | "user"
 	enable?:       bool
-	overrides?:    #CandyServiceOverrides @go(Overrides,optional=nillable)
+	// exec_start_pre / exec_start_post — ordered hook commands run around a CUSTOM
+	// (exec:) entry's own start, rendered by the init system's service_template
+	// (systemd: ExecStartPre= / ExecStartPost= lines, emitted in authored order).
+	// They exist for guards belonging to the SERVICE's lifecycle rather than to the
+	// install timeline: a plan step runs ONCE, at deploy, whereas a pre-start hook
+	// re-asserts a host precondition on EVERY start (a restart included), and a
+	// post-start hook is the only place a guard runs ALONGSIDE the daemon it
+	// guards — the sole vantage from which that daemon's own socket/API is
+	// reachable. Both are init-supervised, so a failure surfaces in the unit's
+	// status instead of being swallowed; prefix a command with "-" for systemd's
+	// ignore-failure semantics.
+	// Canonical consumer: candy/k3s-server (the cgroup cpuset-delegation assertion
+	// and the CRD-establishment wedge heal).
+	exec_start_pre?: [...(string & !="")] @go(ExecStartPre)
+	exec_start_post?: [...(string & !="")] @go(ExecStartPost)
+	overrides?: #CandyServiceOverrides @go(Overrides,optional=nillable)
 	kind?:         "program" | "eventlistener"
 	event?:        string & !="" @go(Events)
 	auto_start?:   bool          @go(AutoStart,type=*bool)

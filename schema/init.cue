@@ -104,6 +104,13 @@
 	exit_codes?:    string @go(ExitCodes)
 	priority?:      int    @go(Priority,type=int)
 
+	// Start hooks (systemd only — supervisord's service_template references
+	// neither, exactly as it already ignores wanted_by/before). Carried through
+	// from the entry's exec_start_pre/exec_start_post so the template emits one
+	// ExecStartPre=/ExecStartPost= line per element, in authored order.
+	exec_start_pre?: [...string] @go(ExecStartPre)
+	exec_start_post?: [...string] @go(ExecStartPost)
+
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The
 	// host derives both from the ServiceEntry so the plugin renders from the

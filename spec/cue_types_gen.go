@@ -2333,6 +2333,23 @@ type CandyService struct {
 
 	Enable bool `yaml:"enable,omitempty" json:"enable,omitempty"`
 
+	// exec_start_pre / exec_start_post — ordered hook commands run around a CUSTOM
+	// (exec:) entry's own start, rendered by the init system's service_template
+	// (systemd: ExecStartPre= / ExecStartPost= lines, emitted in authored order).
+	// They exist for guards belonging to the SERVICE's lifecycle rather than to the
+	// install timeline: a plan step runs ONCE, at deploy, whereas a pre-start hook
+	// re-asserts a host precondition on EVERY start (a restart included), and a
+	// post-start hook is the only place a guard runs ALONGSIDE the daemon it
+	// guards — the sole vantage from which that daemon's own socket/API is
+	// reachable. Both are init-supervised, so a failure surfaces in the unit's
+	// status instead of being swallowed; prefix a command with "-" for systemd's
+	// ignore-failure semantics.
+	// Canonical consumer: candy/k3s-server (the cgroup cpuset-delegation assertion
+	// and the CRD-establishment wedge heal).
+	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
+
+	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
+
 	Overrides *CandyServiceOverrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 
 	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
@@ -4746,6 +4763,14 @@ type ServiceRenderContext struct {
 	ExitCodes string `yaml:"exit_codes,omitempty" json:"exit_codes,omitempty"`
 
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// Start hooks (systemd only — supervisord's service_template references
+	// neither, exactly as it already ignores wanted_by/before). Carried through
+	// from the entry's exec_start_pre/exec_start_post so the template emits one
+	// ExecStartPre=/ExecStartPost= line per element, in authored order.
+	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
+
+	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
 
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The
