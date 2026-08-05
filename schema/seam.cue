@@ -2,11 +2,12 @@
 // compiled-in command plugin (candy/plugin-vm's command:vm leg) owns its CLI
 // handlers but cannot LoadUnified, hold the deploy ledger, or run the VM-disk
 // build engine — those are core Mechanisms a plugin (a separate module importing
-// only sdk) reaches over the in-proc reverse channel: config → HostBuild(
-// "config-resolve"); the ledger write (candy/plugin-vm/vm_host_persist.go) and the
-// VM-disk build (candy/plugin-vm/vm_build_resolve.go) moved plugin-side — the former
-// config-persist / vm-build HostBuilds are DELETED. Each action noun is CLASS-GENERIC
-// (never a substrate word — the F11 uniform-API gate); pod (P11) + bundle (P13) reuse the same seams.
+// only sdk) reaches over the in-proc reverse channel. The config READ (the
+// "config-resolve" seam) + the ledger write (candy/plugin-vm/vm_host_persist.go)
+// and the VM-disk build (candy/plugin-vm/vm_build_resolve.go) moved PLUGIN-SIDE —
+// the former config-resolve / config-persist / vm-build HostBuilds are DELETED.
+// Each action noun is CLASS-GENERIC (never a substrate word — the F11 uniform-API
+// gate); pod (P11) + bundle (P13) reuse the same seams.
 //
 // Package-less; concatenated into the spec compilation unit. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire types, single-sourced here so
@@ -19,47 +20,6 @@
 // def with a hand materialization, referenced via @go(...,type=*VmDeployState) —
 // the same shape #Deploy.vm_state uses). @go names match the Go field names the
 // host + plugin consumers reference so the CUE-source flip is call-site-invisible.
-
-// #ConfigResolveRequest asks the host to resolve the project config for one
-// entity. Entity is the resolved entity name (a kind:vm entity for command:vm;
-// empty resolves the project-wide enumeration in VmEntities). Dir is the project
-// dir (empty → the host uses its own cwd), matching the LoadUnified(dir) contract.
-#ConfigResolveRequest: {
-	entity!: string @go(Entity)
-	dir?:    string @go(Dir)
-}
-
-// #ConfigResolveReply is the host-resolved config data. For a kind:vm entity:
-// VmJSON is the resolved vm value envelope (uf.VM[entity] via resolveVmViaPlugin,
-// #Vm-defaulted host-side), ResourcesJSON the resolved resource map
-// (uf.resolveResources() — drives GPU auto-allocation) — both opaque JSON of a
-// hand-written runtime type with no CUE def. BundleJSON is the PROJECT deploy tree
-// (uf.Bundle) as opaque JSON — the plugin merges it with the per-host overlay ITSELF
-// via deploykit.MergedDeployTree + spec.FindVMClaimant (placement-invariant, #55
-// coneC-dsh β2 config-RESOLVE shed: the host no longer calls deploykit; the Claimant
-// computation moved plugin-side, so Claimant/ClaimantNode are no longer wire fields).
-// VmBackend/BuildEngine/RunEngine are the runtime-settings fields (ResolveRuntime) the
-// create/build pipeline reads; VmBackend also feeds the plugin-side backend resolve
-// (candy/plugin-vm/vm_backend_resolve.go, F6 vm-lifecycle move, coneB-vmlifecycle — the
-// resolved Backend value itself no longer crosses the wire; the plugin computes it from
-// VmBackend + its own project self-load, K-wave W3a A3-phase-2). VmState is the entity's persisted
-// deploy-ledger runtime state (instance-id, ssh_port, disk path) — the host reads it
-// spec-only via LoadUnified(perHostConfigDir) (#55 coneC-dsh β2 — no deploykit; consumed by
-// plugin-vm + plugin-kube + plugin-deploy-vm, so it stays a wire field) so the plugin reuses
-// the persisted auto-port + regenerates the seed ISO without holding the deploy-config lock.
-// VmEntities is the project's declared kind:vm entity NAMES (the keys of uf.VM) — the
-// enumeration `charly vm import` needs to detect name conflicts. Fields absent for an
-// entity that does not need them stay zero.
-#ConfigResolveReply: {
-	vm_json?:        bytes  @go(VmJSON, type=RawBody)
-	resources_json?: bytes  @go(ResourcesJSON, type=RawBody)
-	bundle_json?:    bytes  @go(BundleJSON, type=RawBody)
-	vm_backend?:     string @go(VmBackend)
-	build_engine?:   string @go(BuildEngine)
-	run_engine?:     string @go(RunEngine)
-	vm_state?:       #VmDeployState @go(VmState, type=*VmDeployState)
-	vm_entities?: [...string] @go(VmEntities)
-}
 
 // #PodDisposableRequest asks the host whether a per-host POD deploy overlay entry is disposable
 // (K5-U2/3). This is the ONE AI-harness check-project fact the resolved-project envelope cannot
@@ -130,8 +90,8 @@
 // host-builder is DELETED; candy/plugin-vm/vm_build_resolve.go resolves it plugin-side):
 // everything the plugin needs to run the disk-build engine without importing the loader. VmJSON is
 // the resolved+validated kind:vm entity (the #Vm-shaped value resolveVmViaPlugin
-// already produces — opaque bytes, the SAME convention #ConfigResolveReply.vm_json
-// uses for a #Vm-shaped payload) so the plugin decodes it into its own spec.Vm rather
+// already produces — opaque bytes of the same #Vm-shaped payload convention) so the
+// plugin decodes it into its own spec.Vm rather
 // than re-parsing uf.VM[entity] itself (which needs LoadUnified, a core Mechanism).
 // DistroJSON/BuilderJSON carry the matched *DistroDef/*BuilderDef (bootstrap source
 // only) — hand-written runtime types with no CUE def, so they ride as opaque RawBody

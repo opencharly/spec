@@ -5396,55 +5396,6 @@ type ResourceResolveReply struct {
 	Resolved *ResolvedResource `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
-// #ConfigResolveRequest asks the host to resolve the project config for one
-// entity. Entity is the resolved entity name (a kind:vm entity for command:vm;
-// empty resolves the project-wide enumeration in VmEntities). Dir is the project
-// dir (empty → the host uses its own cwd), matching the LoadUnified(dir) contract.
-type ConfigResolveRequest struct {
-	Entity string `yaml:"entity,omitempty" json:"entity"`
-
-	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-}
-
-// #ConfigResolveReply is the host-resolved config data. For a kind:vm entity:
-// VmJSON is the resolved vm value envelope (uf.VM[entity] via resolveVmViaPlugin,
-// #Vm-defaulted host-side), ResourcesJSON the resolved resource map
-// (uf.resolveResources() — drives GPU auto-allocation) — both opaque JSON of a
-// hand-written runtime type with no CUE def. BundleJSON is the PROJECT deploy tree
-// (uf.Bundle) as opaque JSON — the plugin merges it with the per-host overlay ITSELF
-// via deploykit.MergedDeployTree + spec.FindVMClaimant (placement-invariant, #55
-// coneC-dsh β2 config-RESOLVE shed: the host no longer calls deploykit; the Claimant
-// computation moved plugin-side, so Claimant/ClaimantNode are no longer wire fields).
-// VmBackend/BuildEngine/RunEngine are the runtime-settings fields (ResolveRuntime) the
-// create/build pipeline reads; VmBackend also feeds the plugin-side backend resolve
-// (candy/plugin-vm/vm_backend_resolve.go, F6 vm-lifecycle move, coneB-vmlifecycle — the
-// resolved Backend value itself no longer crosses the wire; the plugin computes it from
-// VmBackend + its own project self-load, K-wave W3a A3-phase-2). VmState is the entity's persisted
-// deploy-ledger runtime state (instance-id, ssh_port, disk path) — the host reads it
-// spec-only via LoadUnified(perHostConfigDir) (#55 coneC-dsh β2 — no deploykit; consumed by
-// plugin-vm + plugin-kube + plugin-deploy-vm, so it stays a wire field) so the plugin reuses
-// the persisted auto-port + regenerates the seed ISO without holding the deploy-config lock.
-// VmEntities is the project's declared kind:vm entity NAMES (the keys of uf.VM) — the
-// enumeration `charly vm import` needs to detect name conflicts. Fields absent for an
-// entity that does not need them stay zero.
-type ConfigResolveReply struct {
-	VmJSON RawBody `yaml:"vm_json,omitempty" json:"vm_json,omitempty"`
-
-	ResourcesJSON RawBody `yaml:"resources_json,omitempty" json:"resources_json,omitempty"`
-
-	BundleJSON RawBody `yaml:"bundle_json,omitempty" json:"bundle_json,omitempty"`
-
-	VmBackend string `yaml:"vm_backend,omitempty" json:"vm_backend,omitempty"`
-
-	BuildEngine string `yaml:"build_engine,omitempty" json:"build_engine,omitempty"`
-
-	RunEngine string `yaml:"run_engine,omitempty" json:"run_engine,omitempty"`
-
-	VmState *VmDeployState `yaml:"vm_state,omitempty" json:"vm_state,omitempty"`
-
-	VmEntities []string `yaml:"vm_entities,omitempty" json:"vm_entities,omitempty"`
-}
-
 // #PodDisposableRequest asks the host whether a per-host POD deploy overlay entry is disposable
 // (K5-U2/3). This is the ONE AI-harness check-project fact the resolved-project envelope cannot
 // carry: the harness's iterate sandbox is an OPERATOR-provisioned per-host deploy (`charly bundle
@@ -5521,8 +5472,8 @@ type VmBuildRequest struct {
 // host-builder is DELETED; candy/plugin-vm/vm_build_resolve.go resolves it plugin-side):
 // everything the plugin needs to run the disk-build engine without importing the loader. VmJSON is
 // the resolved+validated kind:vm entity (the #Vm-shaped value resolveVmViaPlugin
-// already produces — opaque bytes, the SAME convention #ConfigResolveReply.vm_json
-// uses for a #Vm-shaped payload) so the plugin decodes it into its own spec.Vm rather
+// already produces — opaque bytes of the same #Vm-shaped payload convention) so the
+// plugin decodes it into its own spec.Vm rather
 // than re-parsing uf.VM[entity] itself (which needs LoadUnified, a core Mechanism).
 // DistroJSON/BuilderJSON carry the matched *DistroDef/*BuilderDef (bootstrap source
 // only) — hand-written runtime types with no CUE def, so they ride as opaque RawBody

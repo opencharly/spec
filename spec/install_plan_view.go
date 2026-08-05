@@ -10,6 +10,7 @@ package spec
 // thin `var WireView = spec.WireView` aliases.
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -51,6 +52,48 @@ func WireView(p *InstallPlan) InstallPlanView {
 // by TestStepView_RoundTrip. The host re-materialized plan is byte-equivalent to the former
 // in-proc compile output (the K4-B parity golden proves it via DeepEqual against the OLD
 // host-compile path).
+// PlansFromViews decodes a marshalled []InstallPlanView (the wire shape a command plugin ships for
+// already-compiled plans) and re-materializes each into an *InstallPlan — the resolve-target-add
+// seam's per-view loop, consolidated here (K-wave 2 cone R2 bank D thin).
+func PlansFromViews(viewsJSON json.RawMessage) ([]*InstallPlan, error) {
+	var views []InstallPlanView
+	if len(viewsJSON) > 0 {
+		if err := json.Unmarshal(viewsJSON, &views); err != nil {
+			return nil, fmt.Errorf("decode compiled plans: %w", err)
+		}
+	}
+	plans := make([]*InstallPlan, 0, len(views))
+	for _, v := range views {
+		p, perr := PlanFromView(v)
+		if perr != nil {
+			return nil, perr
+		}
+		plans = append(plans, p)
+	}
+	return plans, nil
+}
+
+// ReconstructParentExec re-derives the ancestor executor chain from ROOT-FIRST ancestor
+// path/node lists (deploykit.ResolveNodePath's contract, EXCLUDING the target itself), applying
+// derive to each ancestor. derive is the registry-coupled per-ancestor hop (core's
+// deriveChildExecutorForPath) — the loop itself is pure, so it lives here once (K-wave 2 cone R2
+// bank D thin: the resolve-target-add seam's former reconstructParentExec).
+func ReconstructParentExec(ancestorPaths []string, ancestorNodes []BundleNode, derive func(string, *BundleNode, DeployExecutor) (DeployExecutor, error)) (DeployExecutor, error) {
+	var parentExec DeployExecutor
+	for i, ap := range ancestorPaths {
+		var anc *BundleNode
+		if i < len(ancestorNodes) {
+			anc = &ancestorNodes[i]
+		}
+		next, err := derive(ap, anc, parentExec)
+		if err != nil {
+			return nil, fmt.Errorf("deriving executor for ancestor %q: %w", ap, err)
+		}
+		parentExec = next
+	}
+	return parentExec, nil
+}
+
 func PlanFromView(v InstallPlanView) (*InstallPlan, error) {
 	steps, err := stepsFromView(v.Steps)
 	if err != nil {

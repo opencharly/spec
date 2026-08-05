@@ -9,9 +9,10 @@
 // verb:oci (candy/plugin-oci — no HostBuild seam; the merge wire types
 // #MergeRequest/#MergeReply live in schema/oci.cue). Each action
 // noun is CLASS-GENERIC (never a provider word — the F11 uniform-API gate),
-// mirroring the P10 config-resolve seam in seam.cue (the VM-disk build moved
+// mirroring the P10 config-resolve seam's fate in seam.cue (the VM-disk build moved
 // plugin-side to candy/plugin-vm/vm_build_resolve.go — the former vm-build
-// HostBuild is DELETED).
+// HostBuild is DELETED; the config-resolve seam itself is DELETED too, K-wave 2
+// cone R2 bank D).
 //
 // This REVERSES the P8 "permanent facade": P8 kept the whole engine host-side
 // behind HostBuild("image"); P8b moves the DRIVE into the candy and leaves the

@@ -256,3 +256,24 @@ type EmitOpts struct {
 func (o EmitOpts) ContextOrDefault() context.Context {
 	return context.Background()
 }
+
+// EmitOptsFromResolveTargetAdd rebuilds the FINAL resolved EmitOpts for the resolve-target-add
+// seam from the plugin-sent gate flags + the re-derived parent executor (K-wave 2 cone R2 bank D
+// thin — the seam's inline construction moved here). ParentExec/Path are the two live/local pieces
+// filled host-side; DryRun never reaches the seam (a dry-run prints plugin-side and returns), so
+// it is absent from the request and left false.
+func EmitOptsFromResolveTargetAdd(req DeployResolveTargetAddRequest, parentExec DeployExecutor) EmitOpts {
+	return EmitOpts{
+		AllowRepoChanges:     req.AllowRepoChanges,
+		AllowRootTasks:       req.AllowRootTasks,
+		WithServices:         req.WithServices,
+		SkipIncompatible:     req.SkipIncompatible,
+		AssumeYes:            req.AssumeYes,
+		Verify:               req.Verify,
+		Pull:                 req.Pull,
+		BuilderImageOverride: req.BuilderImage,
+		DevLocalPkg:          req.DevLocalPkg,
+		ParentExec:           parentExec,
+		Path:                 req.Path,
+	}
+}
