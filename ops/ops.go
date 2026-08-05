@@ -80,12 +80,11 @@ const (
 	// OpConfigSetup / OpConfigRemove are the P13-KERNEL config-BODY selectors: the deploy:pod
 	// plugin's Invoke handles these carrying #PodConfigSetupRequest / #PodConfigRemoveRequest
 	// VERBATIM as Params — the direction-flip counterpart of OpConfigWrite (which stayed
-	// host-initiated/plugin-rendered): host_build_pod_config.go's hostBuildPodConfigSetup/
-	// hostBuildPodConfigRemove now FORWARD onward to the plugin (resolve the deploy:pod provider +
-	// InvokeWithExecutor, the SAME primitive InvokeProvider/grpcSubstrateLifecycle use) instead of
-	// running the ported BoxConfigSetupCmd/BoxConfigRemoveCmd orchestration in-core. The plugin
-	// calls back the narrow "pod-config-*" HostBuild seams (sdk/schema/seam.cue) for the
-	// genuinely host/loader/registry-coupled sub-steps.
+	// host-initiated/plugin-rendered). The former "pod-config-setup"/"pod-config-remove" HostBuild
+	// forwarders are DELETED (K-wave 2 cone R3): candy/plugin-pod's config leaves dispatch these ops
+	// peer-to-peer via InvokeProvider (the pattern candy/plugin-bundle/from_box_pod.go proves),
+	// threading HostEnvJSON as DATA on the OpRun envelope. The plugin runs the ported
+	// BoxConfigSetupCmd/BoxConfigRemoveCmd orchestration in its own code.
 	OpConfigSetup  = "config-setup"
 	OpConfigRemove = "config-remove"
 

@@ -6534,11 +6534,12 @@ type PodCmdPayload struct {
 
 // #PodConfigSetupRequest carries the `charly config [setup]` command flags (the former
 // BoxConfigSetupCmd's authored fields, PLUS explicit_ref — from_box_pod.go's
-// programmatically-set source-less-deploy field, below). P13-KERNEL direction-flip: forwarded
-// from HostBuild("pod-config-setup") (host_build_pod_config.go's hostBuildPodConfigSetup) onward
-// to the deploy:pod plugin's sdk.OpConfigSetup — the plugin now RUNS the former runConfig
-// orchestration (candy/plugin-deploy-pod/config_setup.go), calling back the narrow
-// "pod-config-*" seams below for the host/loader/registry/credential-coupled sub-steps.
+// programmatically-set source-less-deploy field, below). P13-KERNEL direction-flip: the
+// deploy:pod plugin's sdk.OpConfigSetup handler receives it VERBATIM as Params. The former
+// HostBuild("pod-config-setup") forwarder is DELETED (K-wave 2 cone R3) — candy/plugin-pod's
+// ConfigSetupCmd (and plugin-bundle's from_box_pod.go) dispatch the op peer-to-peer via
+// InvokeProvider; the plugin RUNS the former runConfig orchestration
+// (candy/plugin-deploy-pod/config_setup.go).
 type PodConfigSetupRequest struct {
 	Box string `yaml:"box,omitempty" json:"box,omitempty"`
 
@@ -6606,13 +6607,14 @@ type PodConfigSetupRequest struct {
 	// charly binary path for the encrypted-mount ExecStartPre line
 	// (deploykit.QuadletConfig.CharlyBin); the bug was dormant here until a deploy actually had
 	// an encrypted volume to mount (check-enc-pod's R10 first exercised it once the
-	// project-declared-volume fallback started resolving one). hostBuildPodConfigSetup
-	// populates this via the SAME core hostEnvJSON() helper the dispatch seam uses (R3 — one
-	// host-identity helper, not a second one invented here).
+	// project-declared-volume fallback started resolving one). The HOST computes it (core's
+	// hostEnvJSON(), R3 — one host-identity helper) and threads it as DATA on the OpRun dispatch
+	// envelope; candy/plugin-pod forwards it verbatim into this field (the former
+	// hostBuildPodConfigSetup forwarder is DELETED, K-wave 2 cone R3).
 	HostEnvJSON RawBody `yaml:"host_env_json,omitempty" json:"host_env_json,omitempty"`
 }
 
-// #PodConfigSetupReply is the "pod-config-setup" host-builder reply — empty, mirroring
+// #PodConfigSetupReply is the OpConfigSetup handler's reply — empty, mirroring
 // #PodLifecycleReply's empty-for-every-op-but-cmd shape.
 type PodConfigSetupReply struct {
 }
@@ -6620,15 +6622,16 @@ type PodConfigSetupReply struct {
 // #PodConfigRemoveRequest carries `charly config remove`'s flags (the former
 // BoxConfigRemoveCmd's authored fields — distinct from `charly remove`/#PodLifecycleRequest
 // op="remove"+#PodRemovePayload, which tears down the whole deploy; this removes only the
-// quadlet + disables the service). Forwarded to HostBuild("pod-config-remove"), which runs the
-// existing remove orchestration VERBATIM.
+// quadlet + disables the service). Dispatched to the deploy:pod plugin's OpConfigRemove handler
+// VERBATIM as Params, peer-to-peer from candy/plugin-pod's ConfigRemoveCmd (the former
+// HostBuild("pod-config-remove") forwarder is DELETED, K-wave 2 cone R3).
 type PodConfigRemoveRequest struct {
 	Box string `yaml:"box,omitempty" json:"box"`
 
 	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"`
 }
 
-// #PodConfigRemoveReply is the "pod-config-remove" host-builder reply — empty.
+// #PodConfigRemoveReply is the OpConfigRemove handler's reply — empty.
 type PodConfigRemoveReply struct {
 }
 
