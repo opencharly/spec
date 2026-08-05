@@ -131,7 +131,7 @@
 // discriminator + per-child strictness is the LAYERED loader check (node_parse.go classifies
 // each child + HARD-ERRORS a typo'd/absent/double discriminator and a wrong-kind child); the
 // step-CHILD Op fields are typed by the VALIDATE entrypoint (charly box validate →
-// validateNodeFormSteps, cue_schema.go). nodeDiscriminators (schemagen) derives an EMPTY
+// loaderkit.ValidateNodeFormSteps). nodeDiscriminators (schemagen) derives an EMPTY
 // KindWords from this arm-less #Node — every kind resolves via its ClassKind provider.
 #Node: {...}
 
