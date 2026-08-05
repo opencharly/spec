@@ -4400,12 +4400,6 @@ type EncExecReply struct {
 	Error string `yaml:"error,omitempty" json:"error"`
 }
 
-// #FeatureRequest is the "feature" HostBuild kind request. Filter (empty | a
-// kind "candy"/"box" | an entity id "candy:redis") narrows the enumeration.
-type FeatureRequest struct {
-	Filter string `yaml:"filter,omitempty" json:"filter,omitempty"`
-}
-
 // #FeatureEntity is one enumerated kind: entity + its RAW plan data (Step is
 // already a plain CUE-sourced wire type, so no separate flattened form is
 // needed on the wire). An entity with neither a description nor a plan is
@@ -4419,16 +4413,6 @@ type FeatureEntity struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-}
-
-// #FeatureReply is the "feature" HostBuild kind reply — the enumerated entities
-// the plugin transforms (summary/steps/validation) and formats into the
-// list/pending/validate output. Error is a human-facing message on a load
-// failure.
-type FeatureReply struct {
-	Entities []FeatureEntity `yaml:"entities,omitempty" json:"entities,omitempty"`
-
-	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
 // #VFIOPCIDevice is a single PCI function discovered under sysfs.
