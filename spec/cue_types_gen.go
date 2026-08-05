@@ -3544,7 +3544,9 @@ type ScoreSummary struct {
 // keep_images/keep_check_runs are the caller's PRE-RESOLVED defaults.keep_images/
 // keep_check_runs (0 = disabled) — this engine never reads charly.yml itself; a
 // core caller (already running LoadConfig in-process) resolves these directly, a
-// plugin caller fetches them via the "retention-defaults" HostBuild seam first.
+// plugin caller resolves them PLUGIN-SIDE via the shared
+// sdk/loaderkit.ResolveRetentionDefaultsViaExecutor (K-wave 2 cone R6 — the former
+// "retention-defaults" HostBuild seam is DELETED).
 // keep (the CLI --keep override) wins over both when > 0.
 type RetentionRequest struct {
 	Dir string `yaml:"dir,omitempty" json:"dir"`
