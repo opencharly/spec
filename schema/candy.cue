@@ -146,7 +146,7 @@
 // Candy sub-shapes (#Candy-prefixed to avoid cross-kind collisions). Each CLOSED.
 // ---------------------------------------------------------------------------
 
-// ServiceEntry (service_render.go). use_packaged XOR exec is a Go cross-field
+// ServiceEntry (spec). use_packaged XOR exec is a Go cross-field
 // rule (mixed-entry polymorphism allows the SAME name twice: one packaged form,
 // one exec form) — neither is required at the CUE layer.
 #CandyService: {

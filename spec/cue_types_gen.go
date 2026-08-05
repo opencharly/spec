@@ -2290,7 +2290,7 @@ type CandyModel struct {
 	BakePlugin []CandyRef `yaml:"bake_plugin,omitempty" json:"bake_plugin,omitempty"`
 }
 
-// ServiceEntry (service_render.go). use_packaged XOR exec is a Go cross-field
+// ServiceEntry (spec). use_packaged XOR exec is a Go cross-field
 // rule (mixed-entry polymorphism allows the SAME name twice: one packaged form,
 // one exec form) — neither is required at the CUE layer.
 type CandyService struct {
@@ -4592,7 +4592,7 @@ type InitServiceSchema struct {
 // kind (RDD-caught live: it appeared in the generated KindValueDefs map). The
 // charly-name alias `KeyValue = EnvKV` (spec/charly_names.go) preserves the
 // exported Go type name every real consumer (deploykit.MapToKeyValueSlice,
-// spec.SortedEnvList, charly/service_render.go) already uses.
+// spec.SortedEnvList) already uses.
 type EnvKV struct {
 	Key string `yaml:"key,omitempty" json:"key"`
 

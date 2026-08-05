@@ -84,7 +84,7 @@ classes in the `*.cue` source fix this — both are **inert for runtime validati
 The egress schemas (the CUE charly validates the config it WRITES against) do NOT
 live here. They live in the superproject's compiled-in
 `candy/plugin-egress/egress-schemas/` (+ `vendor/cloud_config.cue`), with
-`charly/egress.go` as a thin shim — see `/charly-internals:egress`. So
+`candy/plugin-bundle/egress.go` as a thin shim — see `/charly-internals:egress`. So
 `schema/*.cue` here is purely the INGRESS schema; only the `node.cue`
 node-disjunction grammar defs appear as (harmless) generated types in
 `cue_types_gen.go` (excluded from param-gen by `excludeParamGen`).

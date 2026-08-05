@@ -758,7 +758,7 @@
 // tokens out and the GPU-unsatisfiable verdict back, so the fenced core logic stays completely
 // unchanged.
 #CheckBedGpuPrereqRequest: {
-	tokens?: [...string] @go(Tokens) // dedupeNonEmpty(RequiredExclusive ++ RequiredShared), pre-computed plugin-side
+	tokens?: [...string] @go(Tokens) // spec.DedupeNonEmpty(RequiredExclusive ++ RequiredShared), pre-computed plugin-side
 }
 #CheckBedGpuPrereqReply: {
 	missing?: bool   @go(Missing)
