@@ -9,8 +9,9 @@ import (
 // charly/uf_box_generic.go + charly/candy_chain.go + charly/namespace.go). Config is the
 // resolved-but-not-yet-built view of a project's charly.yml: every method here is PURE over
 // already-loaded spec types (BoxConfig / the opaque box map / the namespace tree) — no LoadUnified,
-// no host I/O. charly's LoadConfig/LoadConfigRaw (the ONLY LoadUnified-coupled surface) stay in
-// charly/config.go and return *Config (an alias `type Config = spec.Config`).
+// no host I/O. charly's LoadConfig (the ONLY LoadUnified-coupled surface it still holds) lives
+// beside the loader seam it forwards into, charly/loader_threaded.go — K-wave 2 cone R1 deleted
+// charly/config.go and its LoadConfigRaw twin, which had become an alias of LoadConfig.
 //
 // Split rationale (why this file holds ONLY the spec-typed subset): a Config method whose
 // signature touches a buildkit type (e.g. *buildkit.ResolvedBox) cannot be defined here — spec is

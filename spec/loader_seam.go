@@ -412,6 +412,13 @@ type ProjectLoader interface {
 	// EnsureRepoDownloaded downloads repoPath@version if not already cached and returns the cache
 	// path, auto-migrating it to the latest schema CalVer.
 	EnsureRepoDownloaded(ctx context.Context, repoPath, version string) (string, error)
+	// ResolveProjectRepo turns a --repo spec ("owner/repo", "owner/repo@ref", a host-qualified
+	// path, or the "default" literal) into a local cache path a caller can chdir into. It is the
+	// SAME clone-and-cache machinery EnsureRepoDownloaded drives, with the spec normalization and
+	// default-branch resolution in front — pure spec vocabulary over one fetch, which is why it
+	// belongs beside the fetch rather than in the kernel (K-wave 2 cone R1 relocated it out of
+	// charly/main_repo.go).
+	ResolveProjectRepo(ctx context.Context, repoSpec string) (string, error)
 	// CollectRemoteRefsOpts collects all unique remote refs reachable from cfg's build/deploy
 	// targets + layers' manifest depends/candy fields, grouped by (repoPath, version).
 	CollectRemoteRefsOpts(ctx context.Context, cfg *Config, layers map[string]CandyReader, opts ResolveOpts) ([]RemoteDownload, error)
