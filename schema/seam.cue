@@ -900,10 +900,10 @@
 	// resolved plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free
 	// plugin-side overlay read) and threads as DATA — so the host's dispatchLifecycleTarget
 	// operates on the passed *spec.Deploy instead of re-reading the per-host config itself (the
-	// config-READ is a plugin loading capability, not a host M — #55 K4 seam-completion). Six of
-	// the eight ops carry it (start/stop/shell/logs/service/cmd); update threads a whole merged
-	// tree instead (#PodUpdatePayload.tree_json) and remove needs no node at all (it only
-	// releases the arbiter claim) — absent for those two.
+	// config-READ is a plugin loading capability, not a host M — #55 K4 seam-completion). Seven of
+	// the eight ops carry it (start/stop/shell/logs/service/cmd + update — which resolves the
+	// deploy node from the merged tree plugin-side since K-wave 2 cone CONTESTED) and remove
+	// needs no node at all (it only releases the arbiter claim) — absent for that one.
 	node?: #Deploy @go(Node, type=*Deploy)
 	// payload is the op-specific #PodXPayload, JSON-marshalled by the calling command plugin and
 	// re-decoded host-side once op is known (mirrors the plugin wire protocol's own
@@ -1243,19 +1243,15 @@
 // them peer-to-peer via InvokeProvider (the former host_build_pod_config.go forwarders are
 // deleted, K-wave 2 cone R3).
 
-// #PodUpdatePayload — see #PodLifecycleRequest's header; op="update".
+// #PodUpdatePayload — see #PodLifecycleRequest's header; op="update". Since K-wave 2 cone
+// CONTESTED the resolved deploy node rides the #PodLifecycleRequest.node field (the plugin
+// resolves it plugin-side from the merged tree); the former tree_json field is DELETED.
 #PodUpdatePayload: {
 	tag?:        string @go(Tag)
 	build?:      bool   @go(Build)
 	seed?:       bool   @go(Seed)
 	force_seed?: bool   @go(ForceSeed)
 	data_from?:  string @go(DataFrom)
-	// tree_json is the merged project+operator deploy tree command:update (plugin-pod) resolved
-	// PLUGIN-SIDE (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA so the host
-	// dispatchByDeployTarget consumes it instead of re-loading the tree host-side (#55
-	// Cone A Unit 3b). Marshalled map[string]spec.Deploy; an absent tree yields the same
-	// "no charly.yml" error a nil host-tree-read result produced.
-	tree_json?: bytes @go(TreeJSON, type=RawBody)
 }
 
 // #DeployTargetStatus is the live-runtime state for the "status" deploy op — formerly the

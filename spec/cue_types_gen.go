@@ -6397,10 +6397,10 @@ type PodLifecycleRequest struct {
 	// resolved plugin-side (loaderkit.ResolveLifecycleDeployNodeViaExecutor, the cycle-free
 	// plugin-side overlay read) and threads as DATA — so the host's dispatchLifecycleTarget
 	// operates on the passed *spec.Deploy instead of re-reading the per-host config itself (the
-	// config-READ is a plugin loading capability, not a host M — #55 K4 seam-completion). Six of
-	// the eight ops carry it (start/stop/shell/logs/service/cmd); update threads a whole merged
-	// tree instead (#PodUpdatePayload.tree_json) and remove needs no node at all (it only
-	// releases the arbiter claim) — absent for those two.
+	// config-READ is a plugin loading capability, not a host M — #55 K4 seam-completion). Seven of
+	// the eight ops carry it (start/stop/shell/logs/service/cmd + update — which resolves the
+	// deploy node from the merged tree plugin-side since K-wave 2 cone CONTESTED) and remove
+	// needs no node at all (it only releases the arbiter claim) — absent for that one.
 	Node *Deploy `yaml:"node,omitempty" json:"node,omitempty"`
 
 	// payload is the op-specific #PodXPayload, JSON-marshalled by the calling command plugin and
@@ -6740,7 +6740,9 @@ type PodConfigBoxEngineReply struct {
 	Engine string `yaml:"engine,omitempty" json:"engine"`
 }
 
-// #PodUpdatePayload — see #PodLifecycleRequest's header; op="update".
+// #PodUpdatePayload — see #PodLifecycleRequest's header; op="update". Since K-wave 2 cone
+// CONTESTED the resolved deploy node rides the #PodLifecycleRequest.node field (the plugin
+// resolves it plugin-side from the merged tree); the former tree_json field is DELETED.
 type PodUpdatePayload struct {
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
@@ -6751,13 +6753,6 @@ type PodUpdatePayload struct {
 	ForceSeed bool `yaml:"force_seed,omitempty" json:"force_seed,omitempty"`
 
 	DataFrom string `yaml:"data_from,omitempty" json:"data_from,omitempty"`
-
-	// tree_json is the merged project+operator deploy tree command:update (plugin-pod) resolved
-	// PLUGIN-SIDE (loaderkit.ResolveMergedTreeViaExecutor) — threaded as DATA so the host
-	// dispatchByDeployTarget consumes it instead of re-loading the tree host-side (#55
-	// Cone A Unit 3b). Marshalled map[string]spec.Deploy; an absent tree yields the same
-	// "no charly.yml" error a nil host-tree-read result produced.
-	TreeJSON RawBody `yaml:"tree_json,omitempty" json:"tree_json,omitempty"`
 }
 
 // #DeployTargetStatus is the live-runtime state for the "status" deploy op — formerly the
