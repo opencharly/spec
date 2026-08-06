@@ -206,7 +206,7 @@ func TestExtractMetadata_SkillsLabel(t *testing.T) {
 		return map[string]string{
 			spec.LabelVersion: "2026.218.1200",
 			spec.LabelBox:     "ripgrep-app",
-			spec.LabelSkill: `[{"family":"tools","name":"ripgrep","owner":"ripgrep","description":"Fast recursive text search.","content":"# ripgrep\nbody"}]`,
+			spec.LabelSkill:   `[{"family":"tools","name":"ripgrep","owner":"ripgrep","description":"Fast recursive text search.","content":"# ripgrep\nbody"}]`,
 		}, nil
 	}
 	meta, err := ExtractMetadata("podman", "ripgrep-app")
