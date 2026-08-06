@@ -8,8 +8,11 @@ import (
 
 func TestCLISubcommandFields(t *testing.T) {
 	sc := CLISubcommand{Name: "agent", Help: "run an agent"}
-	if sc.Name != "agent" || sc.Help != "run an agent" {
-		t.Fatalf("CLISubcommand = %+v, want {agent run an agent}", sc)
+	if sc.Name != "agent" || sc.Help != "run an agent" || sc.Hidden {
+		t.Fatalf("CLISubcommand = %+v, want {agent run an agent false}", sc)
+	}
+	if !(CLISubcommand{Name: "run-local", Hidden: true}.Hidden) {
+		t.Fatal("CLISubcommand.Hidden must round-trip (hidden-but-reachable subcommands)")
 	}
 }
 

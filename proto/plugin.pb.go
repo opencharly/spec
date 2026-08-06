@@ -298,12 +298,17 @@ func (x *ProvidedCapability) GetCommandModelJson() []byte {
 // A plain name+help pair, not a full grammar: the host renders it as a Kong `cmd:""` child whose
 // OWN body is still a pass-through Args leaf (the plugin's real internal flag/positional shape
 // stays invisible to the host, exactly like today's flat holder — only the NAMING becomes real).
+// A hidden child (hidden=true) is HIDDEN-BUT-REACHABLE: still a real Kong `cmd:""` node tagged
+// `hidden:""` (so it DISPATCHES — e.g. the iterate harness's `charly check run-local` re-exec —
+// but stays out of `--help` and the CLI model/MCP tool surface).
 type CLISubcommand struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// the subcommand word, e.g. "live", "boxes"
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// one-line help text, shown in `--help` and used as the MCP tool description
-	Help          string `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
+	Help string `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
+	// hidden-but-reachable: the host renders a hidden child with a Kong `hidden:""` tag — it is still a REAL dispatchable cmd node, but `--help` and the CLI model (MCP) keep it invisible, mirroring the `hidden:""` tag on the plugin's own grammar struct field (KongSubcommands derives it)
+	Hidden        bool `protobuf:"varint,3,opt,name=hidden,proto3" json:"hidden,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -350,6 +355,13 @@ func (x *CLISubcommand) GetHelp() string {
 		return x.Help
 	}
 	return ""
+}
+
+func (x *CLISubcommand) GetHidden() bool {
+	if x != nil {
+		return x.Hidden
+	}
+	return false
 }
 
 // DeployTraits — a SUBSTRATE kind's DECLARED deploy behaviour (P9), advertised per substrate
@@ -2440,10 +2452,11 @@ const file_plugin_proto_rawDesc = "" +
 	" \x01(\tR\aprimary\x12?\n" +
 	"\rdeploy_traits\x18\v \x01(\v2\x1a.charlyplugin.DeployTraitsR\fdeployTraits\x12=\n" +
 	"\vsubcommands\x18\f \x03(\v2\x1b.charlyplugin.CLISubcommandR\vsubcommands\x12,\n" +
-	"\x12command_model_json\x18\r \x01(\fR\x10commandModelJson\"7\n" +
+	"\x12command_model_json\x18\r \x01(\fR\x10commandModelJson\"O\n" +
 	"\rCLISubcommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04help\x18\x02 \x01(\tR\x04help\"\x8c\x03\n" +
+	"\x04help\x18\x02 \x01(\tR\x04help\x12\x16\n" +
+	"\x06hidden\x18\x03 \x01(\bR\x06hidden\"\x8c\x03\n" +
 	"\fDeployTraits\x12\x14\n" +
 	"\x05venue\x18\x01 \x01(\tR\x05venue\x12!\n" +
 	"\fimage_backed\x18\x02 \x01(\bR\vimageBacked\x12#\n" +

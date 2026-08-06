@@ -9,9 +9,10 @@
 // verb:oci (candy/plugin-oci — no HostBuild seam; the merge wire types
 // #MergeRequest/#MergeReply live in schema/oci.cue). Each action
 // noun is CLASS-GENERIC (never a provider word — the F11 uniform-API gate),
-// mirroring the P10 config-resolve seam in seam.cue (the VM-disk build moved
+// mirroring the P10 config-resolve seam's fate in seam.cue (the VM-disk build moved
 // plugin-side to candy/plugin-vm/vm_build_resolve.go — the former vm-build
-// HostBuild is DELETED).
+// HostBuild is DELETED; the config-resolve seam itself is DELETED too, K-wave 2
+// cone R2 bank D).
 //
 // This REVERSES the P8 "permanent facade": P8 kept the whole engine host-side
 // behind HostBuild("image"); P8b moves the DRIVE into the candy and leaves the
@@ -112,44 +113,15 @@
 	error?: string @go(Error)
 }
 
-// #RenderSeamRequest is the generic host↔plugin render-seam dispatch (#67 render-DRIVE move).
-// plugin-build wires the deploykit.Generator seams via HostBuild("render-seam") with a method
-// discriminator + opaque JSON params. The host dispatches by method to the corresponding core
-// function. This is the SINGLE HostBuild kind for ALL render seams that need host callbacks
-// (RenderService, ValidateEgress, EmitPluginOp, etc.) — one CUE type, many methods.
-#RenderSeamRequest: {
-	method!: string @go(Method)
-	params?: bytes @go(Params)
-}
-
-// #RenderSeamReply carries the opaque JSON result + the reply-error convention.
-#RenderSeamReply: {
-	result?: bytes @go(Result)
-	error?:  string @go(Error)
-}
-
-// #InlineBuilderParams carries the inputs to the host resolveInlineBuilderSeam for the
-// "inline-builder" render-seam method (RenderSeamInlineBuilder). It rides INSIDE the opaque
-// #RenderSeamRequest.params bytes (marshalled by candy/plugin-build's render, decoded by the
-// host builder). BDef is #Builder, Ctx is #BuildStageContext — both existing CUE defs, so
-// gengotypes generates typed pointers (*Builder / *BuildStageContext).
-#InlineBuilderParams: {
-	dir!:          string             @go(Dir)
-	box_name!:     string             @go(BoxName)
-	candy_name!:   string             @go(CandyName)
-	builder_name!: string             @go(BuilderName)
-	b_def?:        #Builder           @go(BDef,optional=nillable)
-	ctx?:          #BuildStageContext @go(Ctx,optional=nillable)
-}
-
-// #InlineBuilderResult carries the resolved inline fragment back to the render.
-#InlineBuilderResult: {
-	fragment?: string @go(Fragment)
-}
-
-// #EnsureBuildersParams carries the builder words the host must scan+connect for the
-// "ensure-builders" render-seam method (RenderSeamEnsureBuilders).
-#EnsureBuildersParams: {
-	dir?: string @go(Dir)
-	words?: [...string] @go(Words)
-}
+// The render-seam HostBuild family (#RenderSeamRequest / #RenderSeamReply / #InlineBuilderParams /
+// #InlineBuilderResult / #EnsureBuildersParams) is DELETED in K-wave 2 cone R1. Its last two methods
+// were inline-builder + ensure-builders, both claiming a host-only dependency on "the live loader's
+// scan+connect machinery AND the provider registry". That claim FAILED the boundary law the same way
+// LocalPkg's and EmitPluginOp's already had: the inline-builder resolve is byte-for-byte the
+// OpResolve peer-dispatch the DETECTION and EXTERNAL builder legs ALREADY run plugin-side
+// (deploykit renderSeamCaller.resolveBuilderStage), and the ensure-builders connect duplicated
+// connectPluginByWordRef — reachable from any plugin generically as ops.InvokeProviderOpts.ExtraRef
+// (fed by spec.ExternalBuilderPluginRef). plugin-build now dispatches both through InvokeProvider
+// directly, so NO render seam needs a host callback and the HostBuild kind itself is gone.
+// The pod-overlay's per-step emit was never on this seam — it rides HostBuild("step-emit",
+// #StepEmitRequest{Word:"oci-emit-step"}), which is untouched.

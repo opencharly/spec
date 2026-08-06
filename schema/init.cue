@@ -64,7 +64,7 @@
 // kind (RDD-caught live: it appeared in the generated KindValueDefs map). The
 // charly-name alias `KeyValue = EnvKV` (spec/charly_names.go) preserves the
 // exported Go type name every real consumer (deploykit.MapToKeyValueSlice,
-// spec.SortedEnvList, charly/service_render.go) already uses.
+// spec.SortedEnvList) already uses.
 #EnvKV: {
 	key!:   string @go(Key)
 	value!: string @go(Value)

@@ -9,8 +9,9 @@ import (
 // charly/uf_box_generic.go + charly/candy_chain.go + charly/namespace.go). Config is the
 // resolved-but-not-yet-built view of a project's charly.yml: every method here is PURE over
 // already-loaded spec types (BoxConfig / the opaque box map / the namespace tree) — no LoadUnified,
-// no host I/O. charly's LoadConfig/LoadConfigRaw (the ONLY LoadUnified-coupled surface) stay in
-// charly/config.go and return *Config (an alias `type Config = spec.Config`).
+// no host I/O. charly's LoadConfig (the ONLY LoadUnified-coupled surface it still holds) lives
+// beside the loader seam it forwards into, charly/loader_threaded.go — K-wave 2 cone R1 deleted
+// charly/config.go and its LoadConfigRaw twin, which had become an alias of LoadConfig.
 //
 // Split rationale (why this file holds ONLY the spec-typed subset): a Config method whose
 // signature touches a buildkit type (e.g. *buildkit.ResolvedBox) cannot be defined here — spec is
@@ -36,7 +37,7 @@ type Config struct {
 	Box      BoxMap    `yaml:"box" json:"box"`
 	// Local carries kind:local templates so remote-ref collection + validation walk their candy:
 	// lists symmetrically with box candy lists (kind:local templates compose remote @-ref
-	// candies too). Populated from UnifiedFile.Local by ProjectConfig() (charly/unified.go).
+	// candies too). Populated from UnifiedFile.Local by UnifiedFile.ProjectConfig() (sdk/loaderkit).
 	Local map[string]json.RawMessage `yaml:"local,omitempty" json:"local,omitempty"`
 	// Sidecar carries the project's sidecar-template library as OPAQUE bodies (the raw
 	// PluginKinds["sidecar"] map). The kernel never reads their fields — candy/plugin-sidecar's

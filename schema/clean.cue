@@ -4,7 +4,7 @@
 // the charly-labeled image-tag inventory) — not just the CLI. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire structs, single-sourced here so `task
 // cue:gen` produces the Go structs (spec.RetentionRequest / spec.RetentionReply)
-// candy/plugin-clean and the thin core adapter (charly/retention_plugin.go)
+// candy/plugin-clean and its peer plugins (candy/plugin-check, candy/plugin-box)
 // reference directly. Both are plain structs — gengotypes generates them
 // faithfully, no disjunction/inexpressibility escape needed (per the SDD "wire
 // types are CUE-sourced without exception" mandate).
@@ -31,7 +31,9 @@
 // keep_images/keep_check_runs are the caller's PRE-RESOLVED defaults.keep_images/
 // keep_check_runs (0 = disabled) — this engine never reads charly.yml itself; a
 // core caller (already running LoadConfig in-process) resolves these directly, a
-// plugin caller fetches them via the "retention-defaults" HostBuild seam first.
+// plugin caller resolves them PLUGIN-SIDE via the shared
+// sdk/loaderkit.ResolveRetentionDefaultsViaExecutor (K-wave 2 cone R6 — the former
+// "retention-defaults" HostBuild seam is DELETED).
 // keep (the CLI --keep override) wins over both when > 0.
 #RetentionRequest: {
 	dir!:             string @go(Dir)

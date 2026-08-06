@@ -5,7 +5,7 @@
 //
 // CLOSED: the base struct (no trailing `...`) models every authored key, so an
 // unknown key is still a typo. The box⊻adb exactly-one mutual-exclusion is
-// enforced in GO (validateAndroidDevices in unified.go, the load-time sibling of
+// enforced in GO (loaderkit.ValidateAndroidDevices, the load-time sibling of
 // validateCheckBeds) — NOT by a trailing `& ({box:_} | {adb:_})` disjunction:
 // `cue exp gengotypes` collapses an entity-level top-level disjunction to an
 // EMPTY `struct{}`, which would make spec.Android useless as a drop-in for

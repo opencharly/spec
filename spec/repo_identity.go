@@ -13,9 +13,10 @@ import (
 // normalization. Pure fs/git/yaml logic with no *Config/*Candy dependency, relocated to the
 // dedicated spec module (#55 2b Class A) so charly core + the loader-consuming plugins reach it
 // without importing loaderkit. Consumed by the WalkProject entry point (candy/plugin-loader defaults
-// the WalkSeams.RepoIdentity + rootIdentity), candy/plugin-build's superproject resolve, and charly's
-// remaining loader-cone files (refs.go, main_repo.go). loaderkit re-exports these as forwarders for
-// its own callers.
+// the WalkSeams.RepoIdentity + rootIdentity) and candy/plugin-build's superproject resolve. charly's
+// own loader-cone consumers (refs.go, main_repo.go) are GONE — K-wave 2 cone R1 moved the fetch
+// orchestration and the --repo resolve into candy/plugin-loader. loaderkit re-exports these as
+// forwarders for its own callers.
 //
 // The namespaced-import loader breaks mutual-import cycles by REPO IDENTITY (the `host/owner/repo`
 // path), NOT by the pinned `:version`. This makes the importing project's namespace pins

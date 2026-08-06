@@ -200,7 +200,7 @@
 // disjunction expressed — disposable required + bed-legal target ∈ {pod,vm,local,
 // android} for the deterministic/ephemeral modes, the iterate AI-benchmark mode,
 // and the ephemeral⇒disposable promotion — are enforced in GO at load time
-// (validateCheckBeds + validateEphemeralUnified in unified.go), which is the
+// (loaderkit.ValidateCheckBeds + the ephemeral validator beside it), which is the
 // SINGLE source of truth for the actual bundle-form beds (a node-form check bed
 // is a `bundle:` node validated via #BundleValue=#Deploy, so the disjunction was
 // only ever applied to the legacy root-shape `check:` collection). Relaxing it to
@@ -268,7 +268,7 @@
 		// deploy_address is the CLI-addressable deploy identity (the dotted tree path for a
 		// nested deploy — `charly bundle del <deploy_address>`), DISTINCT from the dc.Bundle
 		// map key this entry is stored under (a dot-sanitized "vm:<domain-id>" form — see
-		// charly/unified.go's validateDeploymentName + sdk/vmshared.VmDomainIdentity). RCA #2,
+		// spec.ValidateDeploymentName + sdk/vmshared.VmDomainIdentity). RCA #2,
 		// FINAL/K5 unit 6a.
 		deploy_address?: string
 	}

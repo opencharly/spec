@@ -6,7 +6,8 @@ package spec
 // primitives (cache_mount_render.go) — no *ResolvedBox, no *Generator, no
 // deploykit/buildkit import. Shared by the box-build path (sdk/deploykit
 // resolveDetectionBuilderReply), the pod-overlay build-emit (candy/plugin-installstep, via
-// the deploykit re-export) + the host inline-builder seam (charly resolveInlineBuilderSeam),
+// the deploykit re-export) + the INLINE-builder resolve (sdk/deploykit's dg.ResolveInlineBuilder;
+// K-wave 2 cone R1 moved that leg plugin-side, deleting the host seam that used to call this),
 // R3 — hence the deploykit re-export of this symbol. The coneSpecBuilder precedent
 // (builder_resolve.go: builder value-primitives → spec/spec) EXTENDS, and the cone-render
 // precedent (render_seam.go: render primitive → spec/spec so the host shares ONE source
@@ -23,8 +24,8 @@ package spec
 // the former cacheMountsOwned/cacheMountsAuto template funcs used, so the plugin's rendered
 // stage is byte-identical to the former embedded-vocabulary render. Shared by the box-build
 // path (sdk/deploykit resolveDetectionBuilderReply) AND the pod-overlay build-emit
-// (candy/plugin-installstep stepEmitBuilder, via the deploykit re-export) + the inline-builder
-// seam (charly resolveInlineBuilderSeam), R3 — hence exported.
+// (candy/plugin-installstep stepEmitBuilder, via the deploykit re-export) + the INLINE-builder
+// resolve (sdk/deploykit's dg.ResolveInlineBuilder), R3 — hence exported.
 func BuilderResolveInputFrom(candyName, builderName string, builderDef *BuilderDef, ctx *BuildStageContext) BuilderResolveInput {
 	return BuilderResolveInput{
 		Candy:            candyName,

@@ -48,21 +48,13 @@ type Threaded struct {
 	ExternalDeploySubstrates map[string]bool
 }
 
-// CueSchema is the process-wide compiled CUE schema HANDLE the relocated CUE-validate mechanism
-// (K1 unit 2) consults instead of compiling its own — cue.Value instances only interoperate within
-// the cue.Context that built them, so a call that Unifies against Root MUST ingest/build using
-// Ctx, the SAME context Root was compiled with (unlike DecodeEntityViaCUE's self-contained
-// shorthand-decode, which never Unifies against the shared base schema and so safely owns an
-// independent context). The host builds one value from its still-core D-data (the process-wide
-// cueSchemaCtx / sharedCueSchema / cueKindDef — cue_schema.go, unchanged by K1) and passes it to
-// every CUE-validate seam call below; loaderkit never constructs its own.
-type CueSchema struct {
-	Ctx  *cue.Context // the context every ingest/build/Unify call must use.
-	Root cue.Value    // sharedCueSchema — every schema/*.cue file unified into one value.
-	// KindDef resolves a kind name to its compiled entity definition within Root (mirrors
-	// DeployTraits' registry-derived-DATA threading pattern above).
-	KindDef func(kind string) (cue.Value, bool)
-}
+// The former CueSchema handle type is GONE (K-wave 2, cone R1, ruling 1). The compiled CUE schema
+// and its kind→def table are the LOADER's own possession now (sdk/loaderkit/cue_schema.go), not a
+// kernel D-datum the host threads in: the loader is the only consumer of the schema it validates
+// against, so under the boundary law the schema travels with that capability (clause R). The six
+// CUE-validate methods below therefore take no schema parameter. charly core keeps an
+// independently-compiled copy solely for the two kernel mechanisms that genuinely need one — the
+// plugin-schema splice and the structural-kind value gate — and the two never interoperate.
 
 // DocParser is the swappable per-document PARSE seam: the loader plugin candy implements it
 // (candy/plugin-loader, delegating to loaderkit.ParseDoc), and the host resolves the registered
@@ -194,6 +186,25 @@ type Materializer interface {
 // whole-project scan-all-candies entry point, charly/layers.go) — a similar name on a
 // single-candy-directory scan risks confusion once both exist side by side during the cutover.
 type CandyScanner interface {
+	// ParseCandyManifest is the candy-MANIFEST parse the two scan methods below take as their
+	// `parseManifest` seam. It relocated OUT of charly core in K-wave 2 cone R1 (A2 unit 2) into
+	// sdk/loaderkit, so a plugin driving its own scan (candy/plugin-build's remote-repo fetch) can
+	// parse manifests ITSELF instead of round-tripping to the host for every candy directory.
+	//
+	// It reaches core through this seam because charly/ may not import sdk/loaderkit (import
+	// purity); core's parseCandyYAML is the thin wrapper that supplies the two values the mechanism
+	// needs from the host — t, the registry-derived kind-recognition snapshot, and vocab, the build
+	// vocabulary the misplaced-section shape guard consults. The clause-B buildCandy factory is NOT
+	// on this path: an RDD spike over the whole 324-manifest corpus proved the pre-move
+	// pn->genericNode->pn round trip through it was an identity (321 node-form manifests plus all 3
+	// error paths, byte-identical).
+	ParseCandyManifest(path string, t Threaded, vocab CandyVocab) (*Candy, error)
+	// ProjectCandiesScanned scans or synthesizes a candy per uf.Candy entry off an ALREADY-LOADED
+	// project — the local candy scan's body, relocated to sdk/loaderkit in K-wave 2 cone R1 (A2 unit
+	// 3) so a plugin holding a *UnifiedFile no longer round-trips to the host to turn it into a
+	// ScannedCandy map. Reaches core through this seam for the same import-purity reason
+	// ParseCandyManifest does.
+	ProjectCandiesScanned(uf *UnifiedFile, rootDir string, parseDoc func(path string) (*Candy, error)) (map[string]ScannedCandy, error)
 	ScanCandyManifest(path, name, manifestName string, parseManifest func(path string) (*Candy, error)) (CandyModel, CandyView, CandyRefs, error)
 	// ScanInlineCandy builds the two views for a candy declared INLINE in a unified charly.yml —
 	// ly is already the parsed body (no manifest file, no parseManifest seam needed). sourceDir is
@@ -265,20 +276,27 @@ type ProjectLoader interface {
 	// bootstrap-critical), no wire envelope — every kind/candy/node-form decode in charly core
 	// routes through this seam instead of importing loaderkit directly.
 	DecodeEntityViaCUE(node *yaml.Node, t reflect.Type, out any, label string) error
-	// ValidateEntityClosedCUE unifies a single entity with #<Kind> (cs.KindDef(kind)) and validates
+	// ValidateEntityClosedCUE unifies a single entity with #<Kind> and validates
 	// it WITHOUT requiring concreteness — closedness violations (unknown keys) and type/enum/regex
 	// conflicts, but not missing-required fields (K1 unit 2 relocation).
-	ValidateEntityClosedCUE(cs CueSchema, kind, label string, entity cue.Value) error
-	// CueDocFromYAML ingests one YAML document into a cue.Value (the whole doc), built with cs.Ctx
-	// so the result can Unify against cs.Root's definitions (K1 unit 2 relocation).
-	CueDocFromYAML(cs CueSchema, path string, data []byte) (cue.Value, error)
+	ValidateEntityClosedCUE(kind, label string, entity cue.Value) error
+	// ValidateEntityCUE is the CONCRETE twin of the above — closedness PLUS missing-required
+	// fields and unresolved disjunctions. The schema-tightening corpus (charly's
+	// cue_tighten_test.go) drives it as the regression guard that the modeled subtrees stay
+	// strict; it needs the host's registry-derived verb primaries to parse its candy cases, so it
+	// runs host-side and reaches the loader's compiled schema through this seam.
+	ValidateEntityCUE(kind, label string, entity cue.Value) error
+	// CueDocFromYAML ingests one YAML document into a cue.Value (the whole doc), built with the
+	// loader's own cue.Context so the result can Unify against its compiled schema (K1 unit 2
+	// relocation; the host-threaded schema handle was dropped in K-wave 2 cone R1).
+	CueDocFromYAML(path string, data []byte) (cue.Value, error)
 	// ValidateNodeDocCUE validates a unified node-form document (raw YAML bytes) by unifying EACH
 	// top-level entity node against #Node — the load-time "validate-before-execute" structural gate
 	// (K1 unit 2 relocation).
-	ValidateNodeDocCUE(cs CueSchema, label string, data []byte) error
+	ValidateNodeDocCUE(label string, data []byte) error
 	// ApplyCueDefaults fills schema-declared defaults into an already-RESOLVED entity by unifying
-	// its marshaled form with #<Kind> (cs.KindDef(kind)) and decoding back (K1 unit 2 relocation).
-	ApplyCueDefaults(cs CueSchema, kind string, out any) error
+	// its marshaled form with #<Kind> and decoding back (K1 unit 2 relocation).
+	ApplyCueDefaults(kind string, out any) error
 	// ResolveMergedDeployTree returns the top-level Bundle (deploy-node) map — the merged project
 	// charly.yml + per-host operator overlay, ready for dotted-path traversal — the host-side
 	// merged-tree read the check host seams (deployNodePluginContext + check_venue_resolve) need.
@@ -392,25 +410,44 @@ type ProjectLoader interface {
 
 	// ValidateCandyManifestCUE validates a candy manifest: the whole-document #NodeDoc structural
 	// gate, then the parsed+desugared entity-tree walk (ValidateNodeFormSteps).
-	ValidateCandyManifestCUE(path string, data []byte, t Threaded, parser DocParser, cs CueSchema) error
+	ValidateCandyManifestCUE(path string, data []byte, t Threaded, parser DocParser) error
 	// ValidateNodeFormSteps parses a node-form document and validates EVERY entity's (and nested
 	// sub-entity's) assembled body against its closed per-kind def — the step-typo gate for
 	// candies, boxes, pods, deploys, and check beds alike.
-	ValidateNodeFormSteps(path string, data []byte, t Threaded, parser DocParser, cs CueSchema) error
+	ValidateNodeFormSteps(path string, data []byte, t Threaded, parser DocParser) error
 
-	// -- K1 unit 4: the remote-repo fetch ORCHESTRATION + candy-ref collection mechanism —
-	// EnsureRepoDownloaded (local-override short-circuit, cache-hit check, cache-miss dispatch,
-	// post-fetch schema auto-migration) and CollectRemoteRefsOpts (the base/builder/candy-ref graph
-	// walk). seams carries the host-coupled legs (the resolved RefsDownloader, the registry-touching
-	// migrate-command dispatch, the registry-touching local-template substrate resolve, and the raw
-	// CHARLY_REPO_OVERRIDE env value) — this mechanism never touches the provider registry itself.
+	// -- K1 unit 4 / K-wave 2 cone R1: the remote-repo fetch ORCHESTRATION + candy-ref collection
+	// mechanism — EnsureRepoDownloaded (local-override short-circuit, cache-hit check, cache-miss
+	// dispatch, post-fetch schema auto-migration) and CollectRemoteRefsOpts (the base/builder/
+	// candy-ref graph walk).
+	//
+	// These took a host-built RefsCollectSeams until cone R1. They now take ctx and the loader plugin
+	// builds those legs ITSELF over the executor the host threads on (sdk.ExecutorFromContext — the
+	// SAME in-proc reverse channel ResolveMergedDeployTree uses). charly core was not defining a
+	// mechanism by assembling them; it was only resolving three peers and reading one env var on the
+	// loader's behalf, which the defines-vs-calls test classifies as an R-item. So charly/refs.go and
+	// charly/refs_threaded.go are gone and every caller reaches this seam directly.
 
 	// EnsureRepoDownloaded downloads repoPath@version if not already cached and returns the cache
-	// path, auto-migrating it to the latest schema CalVer via seams.MigrateCache.
-	EnsureRepoDownloaded(repoPath, version string, seams RefsCollectSeams) (string, error)
+	// path, auto-migrating it to the latest schema CalVer.
+	EnsureRepoDownloaded(ctx context.Context, repoPath, version string) (string, error)
+	// ResolveProjectRepo turns a --repo spec ("owner/repo", "owner/repo@ref", a host-qualified
+	// path, or the "default" literal) into a local cache path a caller can chdir into. It is the
+	// SAME clone-and-cache machinery EnsureRepoDownloaded drives, with the spec normalization and
+	// default-branch resolution in front — pure spec vocabulary over one fetch, which is why it
+	// belongs beside the fetch rather than in the kernel (K-wave 2 cone R1 relocated it out of
+	// charly/main_repo.go).
+	ResolveProjectRepo(ctx context.Context, repoSpec string) (string, error)
+	// CanonicalRef resolves one `import:` ref — a local path, or
+	// "@host/org/repo[/sub/path]:version" — relative to baseDir, into its stable dedup key and its
+	// on-disk path, fetching a remote ref through the same clone-and-cache machinery. It is the
+	// mechanism behind WalkSeams.ResolveRef; the host wires that seam to this method rather than
+	// holding the resolution itself (K-wave 2 cone R1 relocated it out of charly/unified.go, the
+	// same route ResolveProjectRepo took).
+	CanonicalRef(ctx context.Context, ref, baseDir string) (key, path string, err error)
 	// CollectRemoteRefsOpts collects all unique remote refs reachable from cfg's build/deploy
 	// targets + layers' manifest depends/candy fields, grouped by (repoPath, version).
-	CollectRemoteRefsOpts(cfg *Config, layers map[string]CandyReader, opts ResolveOpts, seams RefsCollectSeams) ([]RemoteDownload, error)
+	CollectRemoteRefsOpts(ctx context.Context, cfg *Config, layers map[string]CandyReader, opts ResolveOpts) ([]RemoteDownload, error)
 }
 
 // RefsCollectSeams is the set of host-supplied callbacks EnsureRepoDownloaded/
@@ -418,9 +455,16 @@ type ProjectLoader interface {
 // hands it to the ProjectLoader seam call; the mechanism never touches the provider registry
 // directly (boundary law clause M: the resolve+invoke dispatch stays host-side, reached through
 // these callbacks, exactly like WalkSeams/MaterializeSeams above).
+//
+// K-wave 2 cone R1: the value is no longer built by charly core. candy/plugin-loader assembles it
+// per call from the ctx-threaded executor (refs_seams.go) — core was only resolving three peers and
+// reading one env var on the loader's behalf, which is a CALL, not a mechanism. The struct itself
+// stays: it is still how the kind-blind loaderkit mechanism receives its registry-coupled legs, and
+// keeping it a plain parameter is what lets the mechanism be unit-tested with stubs.
 type RefsCollectSeams struct {
-	// Downloader is the registered remote-repo fetch backend (P7) — the host resolves it once
-	// (requireRefsDownloader()) and passes it in; a cache-miss download dispatches through it.
+	// Downloader is the registered remote-repo fetch backend (P7). The loader plugin reaches it as a
+	// peer — InvokeProvider(class:"refs", word:"refs", OpResolve) — and wraps that dispatch in this
+	// interface; a cache-miss download goes through it.
 	Downloader RefsDownloader
 	// MigrateCache brings a remote-repo cache's PROJECT files up to the head schema via the
 	// compiled-in command:migrate plugin — registry-coupled (resolves ClassCommand "migrate" +
