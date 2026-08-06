@@ -143,6 +143,9 @@ protocol: {
 				A plain name+help pair, not a full grammar: the host renders it as a Kong `cmd:""` child whose
 				OWN body is still a pass-through Args leaf (the plugin's real internal flag/positional shape
 				stays invisible to the host, exactly like today's flat holder — only the NAMING becomes real).
+				A hidden child (hidden=true) is HIDDEN-BUT-REACHABLE: still a real Kong `cmd:""` node tagged
+				`hidden:""` (so it DISPATCHES — e.g. the iterate harness's `charly check run-local` re-exec —
+				but stays out of `--help` and the CLI model/MCP tool surface).
 				"""
 			"fields": [
 				{
@@ -156,6 +159,12 @@ protocol: {
 					"type":   "string"
 					"number": 2
 					"doc":    "one-line help text, shown in `--help` and used as the MCP tool description"
+				},
+				{
+					"name":   "hidden"
+					"type":   "bool"
+					"number": 3
+					"doc":    "hidden-but-reachable: the host renders a hidden child with a Kong `hidden:\"\"` tag — it is still a REAL dispatchable cmd node, but `--help` and the CLI model (MCP) keep it invisible, mirroring the `hidden:\"\"` tag on the plugin's own grammar struct field (KongSubcommands derives it)"
 				},
 			]
 		},

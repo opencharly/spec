@@ -104,6 +104,13 @@ type ProvidedCapability struct {
 type CLISubcommand struct {
 	Name string
 	Help string
+	// Hidden marks a DECLARED subcommand as HIDDEN-BUT-REACHABLE (F-CLI-NEST): the host still
+	// renders it as a real Kong `cmd:""` child — tagged `hidden:""` — so it DISPATCHES (e.g.
+	// the iterate harness's `charly check run-local` re-exec) but stays invisible to `--help`
+	// and the CLI model (MCP tool surface), mirroring the `hidden:""` tag on the plugin's own
+	// grammar struct field. KongSubcommands (sdk) derives it from that tag; a plugin declaring
+	// a catalog by hand sets it directly.
+	Hidden bool
 }
 
 // StepContract is the SDK-facing form of the proto StepContract — a class="step" plugin's
