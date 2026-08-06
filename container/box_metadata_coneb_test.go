@@ -194,3 +194,48 @@ func TestLabelConstantsAreSingular(t *testing.T) {
 		}
 	}
 }
+
+// TestExtractMetadata_SkillsLabel proves the ai.opencharly.skill label (the composed candies'
+// skill definitions, a JSON array) parses back into spec.BoxMetadata.Skills — an image is
+// self-describing. The wire shape migrated from a doc-pointer URL string to this array; a
+// valid array must round-trip.
+func TestExtractMetadata_SkillsLabel(t *testing.T) {
+	orig := InspectLabels
+	defer func() { InspectLabels = orig }()
+	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
+		return map[string]string{
+			spec.LabelVersion: "2026.218.1200",
+			spec.LabelBox:     "ripgrep-app",
+			spec.LabelSkill: `[{"family":"tools","name":"ripgrep","owner":"ripgrep","description":"Fast recursive text search.","content":"# ripgrep\nbody"}]`,
+		}, nil
+	}
+	meta, err := ExtractMetadata("podman", "ripgrep-app")
+	if err != nil {
+		t.Fatalf("ExtractMetadata must decode the skills label: %v", err)
+	}
+	if len(meta.Skills) != 1 {
+		t.Fatalf("meta.Skills = %d entries, want 1: %+v", len(meta.Skills), meta.Skills)
+	}
+	s := meta.Skills[0]
+	if s.Family != "tools" || s.Name != "ripgrep" || s.Owner != "ripgrep" || s.Content != "# ripgrep\nbody" {
+		t.Fatalf("skills entry not round-tripped: %+v", s)
+	}
+}
+
+// TestExtractMetadata_SkillsLabelMalformed proves a malformed skill label value (a pre-cutover
+// image carrying the vestigial doc-pointer URL string, not JSON) FAILS the parse — the deliberate
+// wire-shape cutover surfaces loudly rather than silently returning empty skills.
+func TestExtractMetadata_SkillsLabelMalformed(t *testing.T) {
+	orig := InspectLabels
+	defer func() { InspectLabels = orig }()
+	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
+		return map[string]string{
+			spec.LabelVersion: "1",
+			spec.LabelBox:     "old-image",
+			spec.LabelSkill:   "https://github.com/opencharly/charly-plugins/blob/main/skills/old/SKILL.md",
+		}, nil
+	}
+	if _, err := ExtractMetadata("podman", "old-image"); err == nil {
+		t.Fatal("ExtractMetadata must FAIL on a malformed skills label value")
+	}
+}

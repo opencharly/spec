@@ -7,7 +7,7 @@
 // scalar — nothing is fetched from elsewhere. The marketplace generator (candy/plugin-marketplace,
 // command:marketplace) synthesizes plugins/<family>/skills/<name>/SKILL.md + references/*.md from
 // these entities; CollectSkills (sdk/deploykit) projects the composed candies' skills into the
-// `ai.opencharly.skills` OCI label so a built image is self-describing (readable via
+// `ai.opencharly.skill` OCI label so a built image is self-describing (readable via
 // `charly box labels` / `charly bundle from-box`, no external fetch).
 //
 // owner is the candy/concept-candy entity name that owns this skill — the build-time association

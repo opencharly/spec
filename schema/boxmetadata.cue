@@ -120,7 +120,7 @@
 	env?:    string @go(Env)
 }
 
-// #LabelSkillEntry — one skill baked into ai.opencharly.skills (the migration of the vestigial
+// #LabelSkillEntry — one skill baked into ai.opencharly.skill (the migration of the vestigial
 // ai.opencharly.skill doc-pointer URL into the actual definitions — an image now carries its
 // composed candies' skills, readable directly via ExtractMetadata / `charly box labels` /
 // `charly bundle from-box`, with no external fetch). family+name+content required (an entry

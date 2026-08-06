@@ -1171,7 +1171,7 @@ type LabelSecretEntry struct {
 	Env string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
-// #LabelSkillEntry — one skill baked into ai.opencharly.skills (the migration of the vestigial
+// #LabelSkillEntry — one skill baked into ai.opencharly.skill (the migration of the vestigial
 // ai.opencharly.skill doc-pointer URL into the actual definitions — an image now carries its
 // composed candies' skills, readable directly via ExtractMetadata / `charly box labels` /
 // `charly bundle from-box`, with no external fetch). family+name+content required (an entry
@@ -7399,7 +7399,7 @@ type ResolvedSidecarVolume struct {
 // scalar — nothing is fetched from elsewhere. The marketplace generator (candy/plugin-marketplace,
 // command:marketplace) synthesizes plugins/<family>/skills/<name>/SKILL.md + references/*.md from
 // these entities; CollectSkills (sdk/deploykit) projects the composed candies' skills into the
-// `ai.opencharly.skills` OCI label so a built image is self-describing (readable via
+// `ai.opencharly.skill` OCI label so a built image is self-describing (readable via
 // `charly box labels` / `charly bundle from-box`, no external fetch).
 //
 // owner is the candy/concept-candy entity name that owns this skill — the build-time association

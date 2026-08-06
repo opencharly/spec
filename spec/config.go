@@ -45,7 +45,7 @@ type Config struct {
 	Sidecar map[string]json.RawMessage `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 	// Skills carries the project's skill-kind library as OPAQUE bodies (the raw
 	// PluginKinds["skill"] map). The kernel never reads their fields — CollectSkills
-	// (deploykit) projects the composed candies' skills into the ai.opencharly.skills label
+	// (deploykit) projects the composed candies' skills into the ai.opencharly.skill label
 	// and candy/plugin-marketplace regenerates the plugins/ corpus from the same source.
 	Skills map[string]json.RawMessage `yaml:"skills,omitempty" json:"skills,omitempty"`
 	// Namespaces carries child namespaces mounted by namespaced `import:` entries (alias →
