@@ -120,6 +120,27 @@
 	env?:    string @go(Env)
 }
 
+// #LabelSkillEntry — one skill baked into ai.opencharly.skills (the migration of the vestigial
+// ai.opencharly.skill doc-pointer URL into the actual definitions — an image now carries its
+// composed candies' skills, readable directly via ExtractMetadata / `charly box labels` /
+// `charly bundle from-box`, with no external fetch). family+name+content required (an entry
+// without content is not a readable skill); the JSON label wire form of the authoring #Skill
+// (CollectSkills projects authoring → wire).
+#LabelSkillEntry: {
+	family!:      string @go(Family)
+	name!:        string @go(Name)
+	owner?:       string @go(Owner)
+	description?: string @go(Description)
+	content!:     string @go(Content)
+	references?: [...#LabelSkillReference] @go(References)
+	triggers?:    [...string] @go(Triggers)
+	category?:    string @go(Category)
+}
+#LabelSkillReference: {
+	name!:    string @go(Name)
+	content!: string @go(Content)
+}
+
 // #BoxMetadata — the OCI-label metadata hub. NEVER whole-marshaled (ExtractMetadata builds it
 // field-by-field), so its own tags are wire-irrelevant. Deploy-only fields (Tunnel/DNS/
 // AcmeEmail/Engine) are fed by MergeDeployOntoMetadata, never baked. PortProto RESHAPED
@@ -154,7 +175,7 @@
 	engine?: string @go(Engine)
 	port_proto?: {[string]: string} @go(PortProto)
 	port_relay?: [...int] @go(PortRelay,type=[]int)
-	skill?:  string @go(Skill)
+	skills?: [...#LabelSkillEntry] @go(Skills,type=[]LabelSkillEntry)
 	status?: string @go(Status)
 	info?:   string @go(Info)
 	candy_version?: {[string]: string} @go(CandyVersion)
@@ -230,6 +251,7 @@
 	service_names?: [...string] @go(ServiceNames)
 	service?: [...#CapabilityService] @go(Service)
 	port_relay?: [...int] @go(PortRelay,type=[]int)
+	skills?: [...#LabelSkillEntry] @go(Skills,type=[]LabelSkillEntry)
 	secret?: [...#LabelSecretEntry] @go(Secret)
 	env_provide?: {[string]: string} @go(EnvProvide)
 	env_require?: [...#EnvDependency] @go(EnvRequire)
@@ -244,7 +266,7 @@
 	route?: [...#LabelRouteEntry] @go(Route)
 	env_candy?: {[string]: string} @go(EnvCandy)
 	path_append?: [...string] @go(PathAppend)
-	skill?:       string @go(Skill)
+	skills?:      [...#LabelSkillEntry] @go(Skills,type=[]LabelSkillEntry)
 	status?:      string @go(Status)
 	check_level?: string @go(CheckLevel)
 	info?:        string @go(Info)
