@@ -228,8 +228,12 @@ func ExtractMetadata(engine, imageRef string) (*spec.BoxMetadata, error) {
 		}
 	}
 
-	// Skills
-	meta.Skill = labels[spec.LabelSkill]
+	// Skills (the composed candies' skill definitions — an image is self-describing)
+	if v := labels[spec.LabelSkill]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Skills); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", spec.LabelSkill, err)
+		}
+	}
 
 	// Status and info
 	meta.Status = labels[spec.LabelStatus]
