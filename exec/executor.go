@@ -257,7 +257,7 @@ func (e *Executor) GetFile(ctx context.Context, path string, asRoot bool) ([]byt
 // served by ANOTHER out-of-process plugin, dispatched over a nested reverse channel) — drives
 // this. The host reconstructs the step, runs the existing in-core machinery on the host,
 // applies the effect onto the venue, and returns the step's recorded reverse ops. The plugin
-// folds them into its DeployReply (sdk.BuildDeployReply) so `charly bundle del` replays them
+// folds them into its DeployReply (sdk.BuildDeployReply) so `charly fleet del` replays them
 // (record-and-replay teardown). The plugin owns the plan WALK; the host owns the host ENGINE.
 // A non-nil error is a host-engine/apply FAILURE on the venue.
 func (e *Executor) RunHostStep(ctx context.Context, step spec.InstallStepView, optsJSON []byte) ([]spec.ReverseOp, error) {

@@ -9,7 +9,7 @@ import (
 // stdin/stdout/stderr. Relocated from charly core (run_subcommand.go) as a
 // stdlib-only host-exec leaf: the host-side update/deploy orchestration
 // (podUpdateCmd, the unified-target Update/Rebuild methods, per-kind R10
-// sequences, `charly vm cycle`, bundle member bring-up/teardown) spawns child
+// sequences, `charly vm cycle`, fleet member bring-up/teardown) spawns child
 // `charly <args…>` invocations through it, and resolving the build-under-test
 // means an update loop (or a member fork) picks up the local build automatically.
 //
@@ -22,7 +22,7 @@ import (
 // RELATIVE path like `./bin/charly`. A relative os.Args[0] resolves against the
 // process's CURRENT working directory at fork time, not the directory it had
 // when os.Args[0] was captured — so a caller that os.Chdir()s (e.g. `charly -C
-// box/fedora …`) before this var forks a child (e.g. bundle-member bring-up's
+// box/fedora …`) before this var forks a child (e.g. fleet-member bring-up's
 // `charly config <member>`) sends the child hunting for
 // box/fedora/bin/charly, which doesn't exist (ENOENT). os.Executable() has no
 // such relative-path hazard — it is resolved once, absolutely, at the OS level.

@@ -75,12 +75,12 @@
 // #VerifyChecksRequest is the command:check OpVerifyChecks envelope (#55 CHECK-ENGINE cone,
 // Unit 2): the host threads a live venue executor — flattened to #VenueDescriptor, since a live
 // executor cannot cross the wire, and re-materialized PLUGIN-SIDE via kit.VenueFromDescriptor (the
-// SAME mechanism candy/plugin-bundle's resolveRootExecutor uses) — over the in-proc reverse channel
+// SAME mechanism candy/plugin-fleet's resolveRootExecutor uses) — over the in-proc reverse channel
 // and asks the COMPILED-IN command:check to DRIVE a deploy-scope check pass PLUGIN-SIDE. This sheds
 // charly core's checkrun.go + planrun_adapter.go sdk/kit imports (the in-proc kit.Runner
 // construction moved plugin-side).
 //
-// ONE drive shape now: plan → the `target: local` --verify path (candy/plugin-bundle's
+// ONE drive shape now: plan → the `target: local` --verify path (candy/plugin-fleet's
 // verify_local.go, #55 W3 B3 — a PEER plugin now, not core): a PLUGIN-ASSEMBLED plan (kind:local
 // template, resolved via node_resolve.go's lookupLocalTemplate — no LoadUnified — + deploy node;
 // the per-host overlay merge happens on THIS side) driven via kit.RunPlan (verify-only/context/

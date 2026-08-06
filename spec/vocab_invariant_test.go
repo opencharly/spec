@@ -16,8 +16,8 @@ import (
 // kind word — forcing the author to pick a non-colliding spelling.
 //
 // The companion cross-reference half of the invariant — no deploy VALUE def may
-// carry a kind word as a non-opening cross-ref field (the `bundle:{box:X}` shape)
-// — lands with cutover B (bundle: elimination), where the cross-ref fields are
+// carry a kind word as a non-opening cross-ref field (the `fleet:{box:X}` shape)
+// — lands with cutover B (fleet: elimination), where the cross-ref fields are
 // deleted in favour of from:/image:/tree-position.
 func TestNoKindWordAsStepVerb(t *testing.T) {
 	kind := make(map[string]bool, len(KindWords))

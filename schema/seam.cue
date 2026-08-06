@@ -7,7 +7,7 @@
 // and the VM-disk build (candy/plugin-vm/vm_build_resolve.go) moved PLUGIN-SIDE —
 // the former config-resolve / config-persist / vm-build HostBuilds are DELETED.
 // Each action noun is CLASS-GENERIC (never a substrate word — the F11 uniform-API
-// gate); pod (P11) + bundle (P13) reuse the same seams.
+// gate); pod (P11) + fleet (P13) reuse the same seams.
 //
 // Package-less; concatenated into the spec compilation unit. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire types, single-sourced here so
@@ -23,12 +23,12 @@
 
 // #PodDisposableRequest asks the host whether a per-host POD deploy overlay entry is disposable
 // (K5-U2/3). This is the ONE AI-harness check-project fact the resolved-project envelope cannot
-// carry: the harness's iterate sandbox is an OPERATOR-provisioned per-host deploy (`charly bundle
+// carry: the harness's iterate sandbox is an OPERATOR-provisioned per-host deploy (`charly fleet
 // add <sandbox> <ref> --disposable`), so its disposability lives in the per-host overlay
-// (LoadBundleConfig → ~/.config/charly/charly.yml), NOT the project charly.yml the resolved-project
+// (LoadFleetConfig → ~/.config/charly/charly.yml), NOT the project charly.yml the resolved-project
 // envelope projects (Mode Purity keeps the overlay out of the build-mode projection). The overlay
 // read needs the core loader a plugin cannot import, and no deploy/status provider serves it, so it
-// rides this THIN retained host seam. The host returns Bundle[Name].IsDisposable() (false when the
+// rides this THIN retained host seam. The host returns Fleet[Name].IsDisposable() (false when the
 // sandbox has no entry — the harness then skips its fresh-per-run restart). Class-generic action
 // noun "pod-disposable" (F11 — never a substrate word).
 #PodDisposableRequest: {
@@ -44,10 +44,10 @@
 // deploykit.LoadDeployConfigForRead — the runtime ledger at ~/.config/charly/charly.yml, NOT the
 // project charly.yml the resolved-project envelope projects; Mode Purity keeps the two apart, same
 // distinction #PodDisposableRequest documents). Unlike #PodDisposableRequest (a single overlay
-// BIT), several pod-lifecycle resolvers need CROSS-DEPLOYMENT visibility (deploykit.BundleConfig's
+// BIT), several pod-lifecycle resolvers need CROSS-DEPLOYMENT visibility (deploykit.FleetConfig's
 // GlobalEnvForImage/OccupiedHostPorts/DeployedContainerNames all read OTHER deploys' entries, not
 // just the caller's own), so a single-field extraction can't serve them — the host returns the
-// WHOLE marshaled *deploykit.BundleConfig and the plugin calls the SAME already-portable
+// WHOLE marshaled *deploykit.FleetConfig and the plugin calls the SAME already-portable
 // deploykit methods locally. Re-fetched on EVERY call (no caching): the ledger can change between
 // invocations (an intervening `charly config`), and PrepareVenue-time data is stale by the time
 // OpStart/OpStop/OpShell run much later — this is NOT threaded through the one-shot
@@ -57,9 +57,9 @@
 	context!: string @go(Context) // caller label for host-side diagnostics, e.g. "charly start tunnel"
 }
 
-// #DeployOverlayReply carries the marshaled per-host BundleConfig. config_json is the JSON
-// encoding of *deploykit.BundleConfig (nil-safe: absent/null when no per-host overlay file
-// exists yet, matching LoadDeployConfigForRead's own nil-BundleConfig contract).
+// #DeployOverlayReply carries the marshaled per-host FleetConfig. config_json is the JSON
+// encoding of *deploykit.FleetConfig (nil-safe: absent/null when no per-host overlay file
+// exists yet, matching LoadDeployConfigForRead's own nil-FleetConfig contract).
 #DeployOverlayReply: {
 	config_json?: bytes @go(ConfigJSON,type=RawBody)
 }
@@ -121,15 +121,15 @@
 }
 
 // #DeployPluginsConnectRequest/#DeployPluginsConnectReply — the K1-LOADER RELOCATION witness (Unit
-// D). candy/plugin-bundle now DRIVES loaderkit.LoadUnified ITSELF, plugin-side, over the
+// D). candy/plugin-fleet now DRIVES loaderkit.LoadUnified ITSELF, plugin-side, over the
 // reverse-channel LoaderExecutor (execLoaderExecutor → the "loader-*" host legs), to resolve the
-// `charly bundle add` deploy tree — the host no longer runs a host-side merged-tree read for the walk. This seam
+// `charly fleet add` deploy tree — the host no longer runs a host-side merged-tree read for the walk. This seam
 // is the ONE host-only PREAMBLE the plugin still needs: connect the deployment's out-of-tree plugin
 // candies (loadDeployPlugins — registry-coupled, a core Mechanism) BEFORE ResolveTarget can route to
 // an external substrate, and return the resolved project dir (host os.Getwd — the SAME dir
 // the host loader uses) the plugin passes to loaderkit.LoadUnified. The plugin reads root-venue-ssh
 // itself from the tree's stamped node.Descent (loaderkit.LoadUnified stamps it), so no host trait
-// call — proving plugin-bundle → loaderkit.LoadUnified end-to-end.
+// call — proving plugin-fleet → loaderkit.LoadUnified end-to-end.
 #DeployPluginsConnectRequest: {
 	path!:      string @go(Path) // the target dotted path (Run's targetPath == c.Name)
 	add_candy?: [...string] @go(AddCandy) // CLI --add-candy, threaded into loadDeployPlugins's scan
@@ -177,17 +177,17 @@
 // build-time init-assembly path) instead of a host round trip.
 
 // #DeployMembersRequest/#DeployMembersReply DIED (#55 W3 A4): the "deploy-members-up"/
-// "deploy-members-down" HostBuild seam is gone — candy/plugin-bundle calls
+// "deploy-members-down" HostBuild seam is gone — candy/plugin-fleet calls
 // sdk/deploykit.BringUpMembers/TearDownMembers directly now (spec/proc + spec/hostenv +
 // spec/exec fabric, no host-private state, no registry coupling).
 
-// #DeployDelResolveRequest/#DeployDelResolveReply — resolve a `charly bundle del` target's
-// BundleNode (resolveDelNode: literal "host" / "vm:"-prefix legacy forms / a charly.yml tree
+// #DeployDelResolveRequest/#DeployDelResolveReply — resolve a `charly fleet del` target's
+// FleetNode (resolveDelNode: literal "host" / "vm:"-prefix legacy forms / a charly.yml tree
 // entry / a ref-based pod-artifact probe) — needs LoadUnified + the on-disk artifact probe, so
-// it stays host-side; the plugin's `charly bundle del` calls this FIRST.
+// it stays host-side; the plugin's `charly fleet del` calls this FIRST.
 #DeployDelResolveRequest: {
 	name!: string @go(Name)
-	// tree_json is the merged project+operator deploy tree the command:bundle plugin already
+	// tree_json is the merged project+operator deploy tree the command:fleet plugin already
 	// resolved PLUGIN-SIDE (resolveTreeViaLoader, which also connects the deployment's plugins) —
 	// threaded as DATA so the host resolveDelNode consumes it instead of re-loading the tree
 	// host-side (#55 Cone A Unit 3a). Marshalled map[string]spec.Deploy; an absent/empty tree
@@ -200,7 +200,7 @@
 	kind?: string  @go(Kind)
 }
 
-// #DeployNodeDelDispatchRequest/#DeployNodeDelDispatchReply — the `charly bundle del` terminal
+// #DeployNodeDelDispatchRequest/#DeployNodeDelDispatchReply — the `charly fleet del` terminal
 // step: ResolveTarget + target.Del, honoring the teardown gates (the live ReverseRunner is still
 // never carried on the wire — a programmatic teardown needing a specific runner is resolved
 // host-side during dispatch).
@@ -262,8 +262,8 @@
 }
 #DeployResolveTargetAddReply: {}
 
-// (The `charly bundle import`/`reset` deploy-state WRITE host seam was DELETED in #55 K4 —
-// command:bundle now performs the SAVE plugin-side via deploykit.SaveBundleConfig with its own
+// (The `charly fleet import`/`reset` deploy-state WRITE host seam was DELETED in #55 K4 —
+// command:fleet now performs the SAVE plugin-side via deploykit.SaveFleetConfig with its own
 // loader-backed reader + loader-threaded Primaries, so no host seam remains for it.)
 
 // (#AndroidEntityResolution — the kind="android" one-off wrapper the former
@@ -273,12 +273,12 @@
 // justified it moved to a direct peer InvokeProvider(verb:credential) call (deploy-cone cutover 1)
 // before the seam itself died.)
 
-// #EphemeralRegisterRequest/#EphemeralRegisterReply — the host→command:bundle OpEphemeralRegister
+// #EphemeralRegisterRequest/#EphemeralRegisterReply — the host→command:fleet OpEphemeralRegister
 // leg (FINAL/K5 unit 6a): ephemeral_lifecycle.go's cross-substrate ephemeral-instance registration
 // (systemd TTL transient timer + parent-detection + charly.yml persistence) moved to
-// candy/plugin-bundle, the substrate-neutral deploy-lifecycle owner (vm/pod/k8s all register
+// candy/plugin-fleet, the substrate-neutral deploy-lifecycle owner (vm/pod/k8s all register
 // through it via deploy_add_shared.go's registerEphemeralIfMarked, which STAYS host-side —
-// candidate-floor sibling of bundle_add_cmd.go — and Invokes this as the FIRST action of every
+// candidate-floor sibling of fleet_add_cmd.go — and Invokes this as the FIRST action of every
 // Add). Registration failure is best-effort (logged plugin-side, never fatal to the deploy) —
 // the reply is empty; the host discards the returned handle (the prior in-core contract already
 // did, registerEphemeralIfMarked only checked the error).
@@ -296,13 +296,13 @@
 // loaderkit.ResolveMergedTreeViaExecutor (the request's own tree_json field was already
 // documented dead weight — "the tree already threaded via req.TreeJSON, could inline at all
 // callers with zero host coupling"). See charly/host_build_deploy_entity_resolve.go's deletion
-// and candy/{plugin-adb,plugin-bundle,plugin-deploy-vm,plugin-kube,plugin-vm} for the per-caller
+// and candy/{plugin-adb,plugin-fleet,plugin-deploy-vm,plugin-kube,plugin-vm} for the per-caller
 // migration.
 
 // #EphemeralTeardownRequest/#EphemeralTeardownReply — the OpEphemeralTeardown leg any
 // substrate's own post-teardown handling can Invoke directly (recursive nested-child teardown,
 // TTL timer cancel, snapshot/parent refcount decrement, charly.yml cleanup lives in
-// candy/plugin-bundle's teardownEphemeral). Today's one caller is candy/plugin-deploy-vm/
+// candy/plugin-fleet's teardownEphemeral). Today's one caller is candy/plugin-deploy-vm/
 // lifecycle.go's vmPostTeardown (F6 vm-lifecycle move, coneB-vmlifecycle — formerly a host-side
 // pre-dispatch hook, charly/vm_lifecycle_preresolve.go's vmLifecyclePostTeardown, dispatched
 // in-proc via the now-deleted charly/ephemeral_dispatch.go's TeardownEphemeralLifecycle).
@@ -321,7 +321,7 @@
 // function signature (materializeKustomize's params/return), not a wire envelope. Both callers
 // (candy/plugin-kube/preresolve.go's deploy:k8s preresolve, which self-loads the cluster
 // template + image ref/capabilities itself now too — K-wave W3a A3-phase-2 — and
-// candy/plugin-bundle/deploy_from_box.go's source-less from-box path) construct it directly.
+// candy/plugin-fleet/deploy_from_box.go's source-less from-box path) construct it directly.
 // Cluster/Capabilities ride opaque (the established RawBody idiom this file uses throughout for
 // hand-written host-side types with no CUE def — e.g. CapsJSON/ClusterJSON in this very def below).
 #K8sGenerateKustomizeRequest: {
@@ -719,9 +719,9 @@
 	is_vm?:       bool   @go(IsVM)
 	is_local?:    bool   @go(IsLocal)
 	is_group?:    bool   @go(IsGroup)
-	is_external?: bool   @go(IsExternal) // in-place external (bundle-del teardown)
-	// node_json is the bed ROOT BundleNode (spec.Deploy) serialized — including its nested
-	// Members peer map (each member's full BundleNode, with stamped Descent) — so the plugin
+	is_external?: bool   @go(IsExternal) // in-place external (fleet-del teardown)
+	// node_json is the bed ROOT FleetNode (spec.Deploy) serialized — including its nested
+	// Members peer map (each member's full FleetNode, with stamped Descent) — so the plugin
 	// bed runner can call deploykit.PersistBedDeployOverrides PLUGIN-SIDE for the bed root AND
 	// each member (#55 coneC-dsh β1 — the bed-root + member persist relocate off the host seam;
 	// the host-side persistBedDeployOverrides wrapper + its deploykit import shed). The plugin
@@ -733,7 +733,7 @@
 	image?:       string @go(Image)      // pod bed box ref ("" for vm/local/group)
 	has_add_candy?: bool @go(HasAddCandy) // node.AddCandy is non-empty (a pod's add_candy: overlay
 	// bed) — bed_run.go skips --tag at the config/start steps for such a bed: the FRESH artifact to
-	// verify is the overlay bundle-add just built + persisted (resolved via plugin-deploy-pod's
+	// verify is the overlay fleet-add just built + persisted (resolved via plugin-deploy-pod's
 	// resolveDeployRefLocal resolved_image overlay preference), not the base
 	// image's own --tag build ref.
 	vm_template?: string @go(VMTemplate) // node.From for a vm bed (the ENTITY — `charly vm build` builds off it)
@@ -774,7 +774,7 @@
 }
 
 // #DeployCompileRequest is the per-node COMPILE seam (K4-B / K4 unit B): the host asks the
-// command:bundle plugin's OpCompile handler to compile, in one of THREE selection SHAPES (a
+// command:fleet plugin's OpCompile handler to compile, in one of THREE selection SHAPES (a
 // discriminated set, not three Ops — R3). The plugin fetches the resolved-project envelope
 // itself via InvokeProvider("build","project", OpResolve) peer-dispatch (the former
 // HostBuild("resolved-project") seam is DELETED — it does NOT receive the whole project in the
@@ -811,7 +811,7 @@
 //
 // Exactly one of {box_view, box_ref, candy_ref-alone} is set, OR the ADD-CANDY-ON-BOX pair
 // (candy_ref + base_box_ref) together. Neither CANDY nor BOX-REF needs
-// LoadUnified or the provider-CONNECT registry (verified live, K4 unit B: candy/plugin-bundle's
+// LoadUnified or the provider-CONNECT registry (verified live, K4 unit B: candy/plugin-fleet's
 // own ALREADY-EXISTING preresolveBuilderContexts, called unconditionally for every OpCompile,
 // already S2-lazy-connects any externalized builder the resolved order+img trigger via
 // exec.InvokeProvider — an exhaustive repo grep found zero target:local/vm or pod/k8s deploy
@@ -927,7 +927,7 @@
 // authored fields (DEPLOY-wave CLI-struct port): the command:pod plugin owns the CLI GRAMMAR but
 // cannot drive the LifecycleTarget dispatch (ResolveTarget, the plugin loader — core Mechanisms),
 // so `charly start`'s command is THIN — it forwards these flags, and the host runs the existing
-// startViaLifecycle orchestration VERBATIM, exactly as `charly bundle add` stayed core behind
+// startViaLifecycle orchestration VERBATIM, exactly as `charly fleet add` stayed core behind
 // HostBuild("resolve-target-add").
 #PodStartPayload: {
 	tag?:             string @go(Tag)
@@ -1006,7 +1006,7 @@
 // programmatically-set source-less-deploy field, below). P13-KERNEL direction-flip: the
 // deploy:pod plugin's sdk.OpConfigSetup handler receives it VERBATIM as Params. The former
 // HostBuild("pod-config-setup") forwarder is DELETED (K-wave 2 cone R3) — candy/plugin-pod's
-// ConfigSetupCmd (and plugin-bundle's from_box_pod.go) dispatch the op peer-to-peer via
+// ConfigSetupCmd (and plugin-fleet's from_box_pod.go) dispatch the op peer-to-peer via
 // InvokeProvider; the plugin RUNS the former runConfig orchestration
 // (candy/plugin-deploy-pod/config_setup.go).
 #PodConfigSetupRequest: {
@@ -1036,7 +1036,7 @@
 	sidecar?: [...string] @go(Sidecar)
 	list_sidecars?:    bool   @go(ListSidecars)
 	no_autodetect?:    bool   @go(NoAutoDetect)
-	// explicit_ref is set programmatically (never authored) by `charly bundle from-box`'s
+	// explicit_ref is set programmatically (never authored) by `charly fleet from-box`'s
 	// source-less deploy path (from_box_pod.go) — the P13-KERNEL direction-flip carries
 	// it across the wire now that the ORCHESTRATION (formerly reading the kong:"-" Go field
 	// directly) moved into the plugin.
@@ -1121,16 +1121,16 @@
 // via loaderkit/deploykit directly.
 
 
-// #PodConfigSaveBundleRequest / Reply: saveBundleConfigNodeForm(dc) — persists a (plugin-mutated)
-// *deploykit.BundleConfig back through the SAME loader-coupled seam.
-#PodConfigSaveBundleRequest: {
+// #PodConfigSaveFleetRequest / Reply: saveFleetConfigNodeForm(dc) — persists a (plugin-mutated)
+// *deploykit.FleetConfig back through the SAME loader-coupled seam.
+#PodConfigSaveFleetRequest: {
 	config_json!: bytes @go(ConfigJSON, type=RawBody)
 }
-#PodConfigSaveBundleReply: {}
+#PodConfigSaveFleetReply: {}
 
 // #PodConfigMigrateSecretsRequest / Reply: MigratePlaintextEnvSecret(dc, meta, box, instance) —
 // the one-time plaintext-env → credential-store migration (file backup + DefaultCredentialStore
-// + saveBundleConfigNodeForm, all FINAL/K5-deferred registry-coupled inventory per the ledger).
+// + saveFleetConfigNodeForm, all FINAL/K5-deferred registry-coupled inventory per the ledger).
 // config_json carries the ALREADY-LOADED dc (the plugin's own loaded overlay — the former
 // #PodConfigLoadDeployRequest is deleted, K-wave 2 cone R3) so the host mutates + re-saves the
 // SAME loaded structure the plugin is mid-flow with, never a stale reload.
@@ -1172,16 +1172,16 @@
 }
 
 // (The terminal per-deploy persist WRITE seam — its request/reply wire types — was DELETED in
-// #55 K4: candy/plugin-bundle AND candy/plugin-deploy-pod now call deploykit.SaveDeployState
+// #55 K4: candy/plugin-fleet AND candy/plugin-deploy-pod now call deploykit.SaveDeployState
 // directly, plugin-side, with their own loader-backed reader + loader-threaded Primaries, so no
 // host seam carries the SaveDeployStateInput across the wire anymore.)
 
 // #PodConfigCleanDeployEntryRequest / Reply: deploykit.CleanDeployEntry(box, instance,
 // marshalDeployNode) — the `charly remove` deploy-entry cleanup (Cutover B unit 2 remove-verb
 // completion). Follows the {box!, instance?} → {} host-owns-load+lock+mutate+save shape —
-// deliberately NOT the plugin-side deploykit.SaveDeployState/SaveBundleConfig write (bundle
+// deliberately NOT the plugin-side deploykit.SaveDeployState/SaveFleetConfig write (fleet
 // import/reset + deploy-state persist, #55 K4 — no host seam),
-// which persists an ALREADY-LOADED, already-mutated whole BundleConfig with no internal
+// which persists an ALREADY-LOADED, already-mutated whole FleetConfig with no internal
 // load/lock/entry-removal logic — a genuinely different, narrower operation CleanDeployEntry's own
 // internal file-lock + entry-removal + provides-cleanup + empty-file-delete logic cannot be
 // reduced to.
@@ -1215,7 +1215,7 @@
 // #PodConfigBoxEngineRequest / Reply: ResolveBoxEngineForDeploy(box,instance,globalEngine) — reads
 // the per-host deploy config's Engine override. A thin wrapper distinct from the
 // (now-deleted) load-deploy seam since callers here want only the resolved engine string, not the
-// whole BundleConfig.
+// whole FleetConfig.
 #PodConfigBoxEngineRequest: {
 	box!:           string @go(Box)
 	instance?:      string @go(Instance)
@@ -1263,7 +1263,7 @@
 	details?: {[string]: string} @go(Details)
 }
 
-// #DeployTargetDelOpts is the `charly bundle del` opts type — formerly the charly-core DelOpts,
+// #DeployTargetDelOpts is the `charly fleet del` opts type — formerly the charly-core DelOpts,
 // now CUE-sourced (the UnifiedDeployTarget contract lives in spec/spec/deploy_target_unified.go).
 // The three teardown gates (KeepRepoChanges/KeepServices/KeepImage) were folded into DelOpts
 // proper in S3b, replacing the pre-S3b type-assertion in host_build_deploy_node_del_dispatch.go;
@@ -1312,7 +1312,7 @@
 	dry_run?:       bool @go(DryRun)
 }
 
-// #DeployTargetDispatchRequest (S3b) is the ONE generic host→command:bundle envelope every
+// #DeployTargetDispatchRequest (S3b) is the ONE generic host→command:fleet envelope every
 // UnifiedDeployTarget/LifecycleTarget method dispatches through, discriminated by `op` (the
 // project rulebook's "generic over ad-hoc" — one wire shape, not eleven). Core's thin
 // ResolveTarget proxy (unified_targets.go) constructs this per call from data alone — it never
@@ -1327,11 +1327,11 @@
 // applies to Start/Stop — `has_plan` is that DIFFERENT, narrower boolean (K4-exit, FLOOR-SLIM-
 // proper Unit-8): core still computes it (lifecycleStartPlanHooks[word]/lifecycleStopPlanHooks[word]
 // presence, pod_lifecycle_dispatch.go, unmoved) and now THREADS it on the wire instead of bracketing
-// the dispatch call itself — command:bundle's handleLifecycleSimple owns the bracket call, by
+// the dispatch call itself — command:fleet's handleLifecycleSimple owns the bracket call, by
 // InvokeProvider("verb","arbiter") peer dispatch (the "arbiter-bracket-*" HostBuild seams are
 // DELETED, K-wave 2 cone R2 bank E; the CHARLY_PREEMPT_LEASE os.Setenv/os.Getenv
 // nested-subprocess-inheritance property lives in candy/plugin-preempt's invokeArbiter + the
-// plugin-bundle bracket, both compiled-in sharing the host process). `node` is the dispatch-merged BundleNode
+// plugin-fleet bracket, both compiled-in sharing the host process). `node` is the dispatch-merged FleetNode
 // (nil for a ref-based deploy with no charly.yml entry) — required when has_plan is true (the claim
 // fields live on it). `plans_json` carries []InstallPlanView
 // for Add/Update. `opts_json` carries the op-specific opts struct as an opaque envelope (the
@@ -1387,8 +1387,8 @@
 	// happened not to crash on it, since a bare `spec.HostEnv{}` zero-value was marshalled instead
 	// of ever actually calling it, plugin-side, in the S3b port). Core (unified_targets.go's
 	// dispatch, the ONLY place that reliably knows its OWN binary regardless of the substrate's or
-	// command:bundle's own placement) now computes it ONCE per dispatch call and threads it here;
-	// candy/plugin-bundle forwards it verbatim to every lifecycle Op instead of computing its own.
+	// command:fleet's own placement) now computes it ONCE per dispatch call and threads it here;
+	// candy/plugin-fleet forwards it verbatim to every lifecycle Op instead of computing its own.
 	host_env_json?: bytes @go(HostEnvJSON, type=RawBody)
 }
 
@@ -1508,8 +1508,8 @@
 }
 
 // (The "deploy-candy-secrets" + "deploy-artifacts-retrieve" HostBuild seams — their request/reply
-// wire types — were DELETED in #55 K4: command:bundle's add path resolves candy secrets +
-// retrieves artifacts PLUGIN-SIDE (candy/plugin-bundle/secrets_artifacts.go) from the candy set it
+// wire types — were DELETED in #55 K4: command:fleet's add path resolves candy secrets +
+// retrieves artifacts PLUGIN-SIDE (candy/plugin-fleet/secrets_artifacts.go) from the candy set it
 // already holds in the resolved-project envelope + the shared verb:credential CredentialAccess +
 // deploykit.RetrieveCandyArtifacts over a host ShellExecutor, so no host seam carries them.)
 

@@ -39,7 +39,7 @@ type StepContractCarrier interface {
 
 // StructuralKindCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider
 // compiled-in) that carries a class:kind capability's STRUCTURAL flag (F5). true → the kind's
-// OpLoad returns a Deploy member tree the host folds into uf.Bundle; false (or not implemented)
+// OpLoad returns a Deploy member tree the host folds into uf.Fleet; false (or not implemented)
 // → the flat F4 path (opaque body → uf.PluginKinds).
 type StructuralKindCarrier interface {
 	IsStructuralKind() bool

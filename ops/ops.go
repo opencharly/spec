@@ -32,9 +32,9 @@ const (
 	OpResolve  = "resolve"  // builder: resolve a builder image + steps (build-time multi-stage)
 	OpBuild    = "build"    // build: dispatch the image-build / generate engine host-side (F10 HostBuild seam)
 
-	// OpCompile is the K4-B deploy-COMPILE selector (command:bundle): the host's
+	// OpCompile is the K4-B deploy-COMPILE selector (command:fleet): the host's
 	// deployAddCmd.compileNodePlans computes the per-node selection and Invokes the
-	// command:bundle plugin's OpCompile with a spec.DeployCompileRequest; the plugin
+	// command:fleet plugin's OpCompile with a spec.DeployCompileRequest; the plugin
 	// re-hydrates the resolved-project envelope (InvokeProvider("build","project", OpResolve) —
 	// the former HostBuild("resolved-project") seam is DELETED) +
 	// loops deploykit.BuildDeployPlan, returning []spec.InstallPlanView the host
@@ -82,7 +82,7 @@ const (
 	// VERBATIM as Params — the direction-flip counterpart of OpConfigWrite (which stayed
 	// host-initiated/plugin-rendered). The former "pod-config-setup"/"pod-config-remove" HostBuild
 	// forwarders are DELETED (K-wave 2 cone R3): candy/plugin-pod's config leaves dispatch these ops
-	// peer-to-peer via InvokeProvider (the pattern candy/plugin-bundle/from_box_pod.go proves),
+	// peer-to-peer via InvokeProvider (the pattern candy/plugin-fleet/from_box_pod.go proves),
 	// threading HostEnvJSON as DATA on the OpRun envelope. The plugin runs the ported
 	// BoxConfigSetupCmd/BoxConfigRemoveCmd orchestration in its own code.
 	OpConfigSetup  = "config-setup"
@@ -132,20 +132,20 @@ const (
 	// plugin could even be discovered).
 	OpPreflight = "preflight"
 
-	// OpEphemeralRegister / OpEphemeralTeardown are the command:bundle EPHEMERAL-LIFECYCLE
+	// OpEphemeralRegister / OpEphemeralTeardown are the command:fleet EPHEMERAL-LIFECYCLE
 	// selectors (FINAL/K5 unit 6a): the host Invokes these as the first action of an ephemeral
 	// deploy's Add and the last action of its Del, mirroring OpCompile's host→plugin dispatch
 	// shape (a generic action selector, never a provider word — F11).
 	OpEphemeralRegister = "ephemeral-register"
 	OpEphemeralTeardown = "ephemeral-teardown"
 
-	// OpDeployDispatch is the command:bundle S3b selector: the ONE generic host→plugin envelope
+	// OpDeployDispatch is the command:fleet S3b selector: the ONE generic host→plugin envelope
 	// every UnifiedDeployTarget/LifecycleTarget method (Add/Update/Del/Start/Stop/Status/Logs/
 	// Shell/Attach/Rebuild — Test DELETED, #55 W3 B3 remainder) dispatches through, discriminated by
 	// spec.DeployTargetDispatchRequest.Op — a generic action selector (never a provider word,
 	// F11), mirroring OpCompile's shape but carrying TEN former methods through ONE wire pair
 	// instead of ten (R3 — the project rulebook's "generic over ad-hoc"). Core's thin
-	// ResolveTarget proxy (charly/unified_targets.go) Invokes this; candy/plugin-bundle's handler
+	// ResolveTarget proxy (charly/unified_targets.go) Invokes this; candy/plugin-fleet's handler
 	// switches on Op and reaches the ACTUAL deploy-substrate provider (pod/vm/local/k8s/android)
 	// via its OWN sdk.Executor.InvokeProvider (S1) — core never talks to the substrate directly
 	// once this lands.
@@ -172,12 +172,12 @@ const (
 	OpResolveImageLabel     = "resolve-image-label"
 	OpDrainEndpointCleanups = "drain-endpoint-cleanups"
 
-	// EphemeralPanicMarker prefixes an error the command:bundle plugin converts from a
+	// EphemeralPanicMarker prefixes an error the command:fleet plugin converts from a
 	// RECOVERED PANIC inside OpEphemeralRegister/OpEphemeralTeardown (RCA #5, FINAL/K5 unit 6a —
 	// a nil-map write panic in persistEphemeralRuntime was previously UNRECOVERED and vanished
 	// silently: the deploy still reported PASS). A STRING marker (not a typed Go error) because
 	// this classification must survive the Provider.Invoke wire boundary dual-placement demands
-	// stay portable — command:bundle is compiled-in TODAY, but the SAME code must behave
+	// stay portable — command:fleet is compiled-in TODAY, but the SAME code must behave
 	// identically if ever served out-of-process, where only a string error crosses gRPC. The
 	// host-side caller (charly's registerEphemeralIfMarked) checks for this marker to distinguish
 	// a PANIC (a genuine bug — must FAIL the whole deploy Add, never silently continue) from an

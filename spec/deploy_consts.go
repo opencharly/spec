@@ -67,7 +67,7 @@ func ScopeFromName(name string) Scope {
 }
 
 // ReverseOpKind discriminates the kinds of teardown actions Reverse() produces.
-// Ledger entries serialize these verbatim so a later `charly bundle del` can
+// Ledger entries serialize these verbatim so a later `charly fleet del` can
 // walk them without re-compiling the plan.
 type ReverseOpKind string
 

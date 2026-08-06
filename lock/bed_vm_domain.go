@@ -3,7 +3,7 @@ package lock
 // bed_vm_domain.go — the per-libvirt-domain host contention locks for a check bed,
 // RELOCATED to the spec/lock fabric slice (#55 CHECK-ENGINE cone Option A — the bed-session
 // lock family candy/plugin-check's bed session (bed_session.go, #55 W3 B2-full) reaches importing
-// zero kit). Pure over an already-LOADED (loader-stamped) spec.BundleNode: it reads node.Descent
+// zero kit). Pure over an already-LOADED (loader-stamped) spec.FleetNode: it reads node.Descent
 // directly rather than falling back to a registry-backed resolver — a check bed's node always
 // comes from LoadUnified, so it is always stamped, and the registry fallback never fires for
 // this caller. A caller holding a possibly-synthetic node must NOT use this pair; a synthetic
@@ -25,7 +25,7 @@ import (
 // occupy — the bed's own vm target plus any group-member vm targets. This is the unit of
 // exclusive host contention two DISTINCT beds can collide on (the per-domain lock in
 // AcquireVmDomainLock serializes them).
-func BedVmDomains(name string, node spec.BundleNode) []string {
+func BedVmDomains(name string, node spec.FleetNode) []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(domainID string) {

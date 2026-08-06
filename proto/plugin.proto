@@ -36,7 +36,7 @@ message ProvidedCapability {
   string input_def = 3;
   // set ONLY for class="step" (F3): the plugin-declared install-step contract
   StepContract step_contract = 4;
-  // set ONLY for class="kind" (F5): the kind decodes a STRUCTURAL entity (a spec.Deploy member tree -> uf.Bundle) rather than a FLAT body (-> uf.PluginKinds)
+  // set ONLY for class="kind" (F5): the kind decodes a STRUCTURAL entity (a spec.Deploy member tree -> uf.Fleet) rather than a FLAT body (-> uf.PluginKinds)
   bool structural = 5;
   // set ONLY for class="deploy" (F6): the substrate brings its OWN host-side venue lifecycle (PrepareVenue/Start/Stop/...) served over the lifecycle Ops; the host registers a wire-backed substrateLifecycle for it
   bool lifecycle = 6;

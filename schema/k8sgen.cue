@@ -12,7 +12,7 @@
 // faithfully, no disjunction needed.
 
 // #K8sGenInput is the pure-generation input the host ships to plugin-k8sgen
-// over OpEmit. Deploy is the deployment node (the former BundleNode =
+// over OpEmit. Deploy is the deployment node (the former FleetNode =
 // spec.Deploy); Cluster is the kind:k8s cluster template (the former K8sSpec =
 // spec.K8s); Ports / UID / GID are lifted from the image's OCI-label
 // Capabilities host-side so the plugin needs no access to the package-main
@@ -21,7 +21,7 @@
 	deployment_name!: string @go(DeploymentName)
 	instance!:        string @go(Instance)
 	image_ref!:       string @go(ImageRef)
-	deploy!:          #Deploy @go(Deploy) // = the former BundleNode
+	deploy!:          #Deploy @go(Deploy) // = the former FleetNode
 	// cluster is the decoded kind:k8s cluster template. After the k8s
 	// substrate-value de-type (Cutover K) the KERNEL no longer sets it — it
 	// ships the opaque body in ClusterRaw and the plugin decodes ClusterRaw

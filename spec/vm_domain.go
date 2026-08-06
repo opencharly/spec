@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// VmDomainIdentity normalizes a deploy/bundle name into the per-deploy VM DOMAIN IDENTITY — the
+// VmDomainIdentity normalizes a deploy/fleet name into the per-deploy VM DOMAIN IDENTITY — the
 // token that keys the libvirt domain (charly-<identity>), the per-domain state dir, the managed
 // ssh-config alias, and the ssh-port ledger entry (vm:<identity>). It is DISTINCT from the kind:vm
 // ENTITY (the disk/spec source, resolved via the deploy's `from:` cross-ref): several distinct beds
@@ -15,7 +15,7 @@ import (
 //
 // The normalization strips a leading "vm:" prefix and flattens the instance ("/") and nested-path
 // (".") separators to "-", so a bare bed name maps to itself (check-builder-vm → check-builder-vm),
-// a bundle ref maps to its VM token (vm:arch → arch), and a direct `charly vm create <entity>` (whose
+// a fleet ref maps to its VM token (vm:arch → arch), and a direct `charly vm create <entity>` (whose
 // domain identity IS the entity) is unchanged. Both the host preresolver and candy/plugin-deploy-vm
 // call this on the SAME deploy name, so the domain they derive always agrees.
 //
@@ -62,11 +62,11 @@ func VmNameFromDeployName(deployName string) (string, error) {
 	return rest, nil
 }
 
-// SplitVmAddress detects the "vm:"-prefixed CLI ADDRESSING form (`charly bundle add/del
+// SplitVmAddress detects the "vm:"-prefixed CLI ADDRESSING form (`charly fleet add/del
 // vm:<name>` / `vm:<parent.child>`) and returns the address with that prefix stripped, plus
 // whether it was present. "vm:" here is an ADDRESSING HINT — "resolve this via the vm
 // substrate" — NEVER an identity itself; a caller that needs the plain (tree-lookup /
-// ledger-identity) form strips it via this helper, one which needs the sanitized dc.Bundle
+// ledger-identity) form strips it via this helper, one which needs the sanitized dc.Fleet
 // key form still applies "vm:"+VmDomainIdentity(...) separately (a DIFFERENT canonical form).
 //
 // NOT the same job as VmNameFromDeployName (which extracts the VM ENTITY and errors when the

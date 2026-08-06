@@ -2,7 +2,7 @@ package spec
 
 // deploy_executor.go — the InstallPlan IR's EXECUTION contract (P4 "IR E-envelope"):
 // the DeployExecutor interface every host-side executor implements, the BuilderRunOpts
-// it carries, and the EmitOpts cross-cutting toggle bundle. These live in spec (not
+// it carries, and the EmitOpts cross-cutting toggle fleet. These live in spec (not
 // deploykit) because they are part of the E-envelope an out-of-process deploy/step
 // plugin resolves against — EmitOpts.ParentExec threads a DeployExecutor through the
 // nested-deploy tree, and the executor IMPLEMENTATIONS (sdk/kit) implement THIS
@@ -205,7 +205,7 @@ type BuilderRunOpts struct {
 // EmitOpts carries cross-cutting toggles passed by command-line flags.
 // Gates are checked per-step by the target; target-specific options (the
 // container target's registry auth, the host target's --assume-yes, --dry-run)
-// are bundled here too.
+// are fleetdverb here too.
 type EmitOpts struct {
 	DryRun               bool
 	FormatJSON           bool // print IR as JSON on stdout instead of table
@@ -229,7 +229,7 @@ type EmitOpts struct {
 
 	// ParentExec is the DeployExecutor of the parent deployment in a
 	// nested tree. Non-nil iff this target is dispatched as a child of
-	// another — BundleAddCmd's tree walker builds the chain root-first
+	// another — FleetAddCmd's tree walker builds the chain root-first
 	// and passes the immediate ancestor's executor here. Targets that
 	// support being nested (host, container, vm) compose their own
 	// executor over ParentExec via NestedExecutor; leaf-only targets
@@ -241,11 +241,11 @@ type EmitOpts struct {
 	// to have no `children:`.
 	ParentExec DeployExecutor
 
-	// ParentNode is the BundleNode above this target in the tree.
+	// ParentNode is the FleetNode above this target in the tree.
 	// Useful for targets that need parent-level context beyond the
 	// executor (e.g. a vm child wants to know its parent container's
 	// name to wire network forwarding). nil at the root.
-	ParentNode *BundleNode
+	ParentNode *FleetNode
 
 	// Path is the dotted-path identifier of this node (e.g.
 	// "stack.web.db"). Used for logging + ledger keying.

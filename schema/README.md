@@ -1,6 +1,6 @@
 # sdk/schema — the single-source CUE schema
 
-Every `charly.yml` shape (box / candy / bundle / vm / k8s / deploy / …) is defined
+Every `charly.yml` shape (box / candy / fleet / vm / k8s / deploy / …) is defined
 ONCE here, in package-less `*.cue` files. These files are the single source of
 truth for two consumers:
 
@@ -84,7 +84,7 @@ classes in the `*.cue` source fix this — both are **inert for runtime validati
 The egress schemas (the CUE charly validates the config it WRITES against) do NOT
 live here. They live in the superproject's compiled-in
 `candy/plugin-egress/egress-schemas/` (+ `vendor/cloud_config.cue`), with
-`candy/plugin-bundle/egress.go` as a thin shim — see `/charly-internals:egress`. So
+`candy/plugin-fleet/egress.go` as a thin shim — see `/charly-internals:egress`. So
 `schema/*.cue` here is purely the INGRESS schema; only the `node.cue`
 node-disjunction grammar defs appear as (harmless) generated types in
 `cue_types_gen.go` (excluded from param-gen by `excludeParamGen`).

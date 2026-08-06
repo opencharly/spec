@@ -8,19 +8,19 @@ import (
 	"strings"
 )
 
-// deploy_bundle_ops.go — the pure deploy-tree / deploy-path / candy-stage / preempt-resolve /
+// deploy_fleet_ops.go — the pure deploy-tree / deploy-path / candy-stage / preempt-resolve /
 // task-var value HELPERS, promoted from sdk/deploykit (#55 import-purity, deploykit D2-clean).
 // Every one carries NO mechanism dependency (stdlib + spec's own value types only), so they are
 // spec-hosted contract helpers an import-clean charly file can reach without an sdk mechanism-kit
 // import — the FUNCTION analogue of the value TYPES the same phase moved. deploykit keeps thin
-// re-export aliases (deploy_bundle_ops_aliases.go) so its own callers + tests + the deploy candies
+// re-export aliases (deploy_fleet_ops_aliases.go) so its own callers + tests + the deploy candies
 // compile unchanged; charly repoints to spec.X directly.
 
 // --- deploy-path helpers ---
 
 // ResolveNodePath resolves a dotted deployment path against a root map, returning the leaf node,
 // its ancestor chain, and any lookup error.
-func ResolveNodePath(roots map[string]BundleNode, path string) (*BundleNode, []*BundleNode, error) {
+func ResolveNodePath(roots map[string]FleetNode, path string) (*FleetNode, []*FleetNode, error) {
 	parts := SplitDottedPath(path)
 	if len(parts) == 0 {
 		return nil, nil, fmt.Errorf("empty or malformed deployment path %q", path)
@@ -31,7 +31,7 @@ func ResolveNodePath(roots map[string]BundleNode, path string) (*BundleNode, []*
 		return nil, nil, fmt.Errorf("no deployment named %q", rootName)
 	}
 	current := &rootEntry
-	var ancestors []*BundleNode
+	var ancestors []*FleetNode
 	for i := 1; i < len(parts); i++ {
 		ancestors = append(ancestors, current)
 		next, ok := current.Children[parts[i]]
@@ -72,10 +72,10 @@ func PathLeaf(path string) string {
 
 // ClassifyNodeTarget picks the target discriminator for a node. Uses node.Target when non-empty
 // (canonical pod|vm|k8s|local|android, set from the node-form kind by the loader's
-// bundleTargetForDisc). For ref-based deploys with no charly.yml entry, the deploy name itself is
+// fleetTargetForDisc). For ref-based deploys with no charly.yml entry, the deploy name itself is
 // the hint: a literal `host`/`local` LEAF → local target; anything else → pod. A pure function of
 // node+path with no LoadUnified/executor dependency.
-func ClassifyNodeTarget(node *BundleNode, path string) string {
+func ClassifyNodeTarget(node *FleetNode, path string) string {
 	if node != nil && node.Target != "" {
 		return node.Target
 	}
@@ -88,10 +88,10 @@ func ClassifyNodeTarget(node *BundleNode, path string) string {
 // nodeDescentVenue reads a node's stamped descent VENUE trait (P9) nil-safely — the pure-data
 // half of the former core-only nodeTraits/deployTraitDescent pair. A node with no stamped
 // descent yields "" (the external-in-place default). This unifies the former deploykit
-// deployNodeVenue(*BundleNode) + nodeVenue(BundleNode value) helpers into one (R3); a node
+// deployNodeVenue(*FleetNode) + nodeVenue(FleetNode value) helpers into one (R3); a node
 // sourced from LoadUnified/materialize or the resolved-project envelope is always stamped before
 // any consult site sees it, so this needs no registry fallback.
-func nodeDescentVenue(n *BundleNode) string {
+func nodeDescentVenue(n *FleetNode) string {
 	if n != nil && n.Descent != nil {
 		return n.Descent.Venue
 	}
@@ -100,7 +100,7 @@ func nodeDescentVenue(n *BundleNode) string {
 
 // SortedNestedKeys returns the keys of a children map in deterministic order so traversal
 // produces stable output across runs.
-func SortedNestedKeys(children map[string]*BundleNode) []string {
+func SortedNestedKeys(children map[string]*FleetNode) []string {
 	out := make([]string, 0, len(children))
 	for k := range children {
 		out = append(out, k)
@@ -116,7 +116,7 @@ func SortedNestedKeys(children map[string]*BundleNode) []string {
 // former private host-rooted predicate (#55 U4) so DeployNestedLocalChildren + the bed-session
 // apply path (PersistBedDeployOverrides) share ONE predicate over the spec value type; deploykit
 // callers repoint to spec.HostRooted directly.
-func HostRooted(node *BundleNode) bool {
+func HostRooted(node *FleetNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.HostRooted
 }
 
@@ -124,29 +124,29 @@ func HostRooted(node *BundleNode) bool {
 // HostRooted's shape (#55 W3 A4) — promoted so a plugin-side deploy-orchestration consumer
 // (sdk/deploykit's BringUpMembers/TearDownMembers) and any future caller share ONE predicate over
 // the wire-stamped node.Descent, instead of each re-deriving the venue check independently.
-func IsVmVenue(node *BundleNode) bool {
+func IsVmVenue(node *FleetNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.Venue == "ssh"
 }
 
 // IsContainerVenue reports whether node's stamped venue is the container-exec (pod) substrate.
 // Mirrors HostRooted's shape (#55 W3 A4) — see IsVmVenue.
-func IsContainerVenue(node *BundleNode) bool {
+func IsContainerVenue(node *FleetNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.Venue == "container"
 }
 
 // ExternalInPlaceVenue reports whether node's stamped venue is an EXTERNAL deploy substrate that
 // applies its workload IN PLACE — local-like: no container image to build, no `charly
-// config`/`charly start`, teardown via `charly bundle del` (replay the recorded reverse ops).
+// config`/`charly start`, teardown via `charly fleet del` (replay the recorded reverse ops).
 // local/android/k8s/exampledeploy are in-place (parent/none venues); pod is the one externalized
 // substrate that is NOT in-place (excluded by requiring venue != container implicitly, since
 // parent/none never equals container). Mirrors HostRooted's shape (#55 W3 B2-full) — the
 // plugin-reachable equivalent of the former core-private bedExternalInPlace(target string), which
 // queried isExternalDeploySubstrate against the live provider registry: every node this predicate
 // sees comes from an already-loaded, Descent-stamped project, so the registry round-trip was
-// redundant with data already on the wire (the SAME finding candy/plugin-bundle's
+// redundant with data already on the wire (the SAME finding candy/plugin-fleet's
 // externalInPlaceFromDescent already proved for a bed's sibling MEMBERS — this promotes that one
 // shared predicate for the bed ROOT too, R3).
-func ExternalInPlaceVenue(node *BundleNode) bool {
+func ExternalInPlaceVenue(node *FleetNode) bool {
 	if node == nil || node.Descent == nil {
 		return false
 	}
@@ -167,7 +167,7 @@ func ExternalInPlaceVenue(node *BundleNode) bool {
 // Both sites that own a VM venue call it: the isVM bed ROOT and bringUpMembers' VM-member branch.
 // They differ only in how a child deploy is executed (the root wraps it in a recorded step(); a
 // member shells out directly), so that is the injected apply func.
-func DeployNestedLocalChildren(parent string, children map[string]*BundleNode, apply func(childKey, dotted string) error) error {
+func DeployNestedLocalChildren(parent string, children map[string]*FleetNode, apply func(childKey, dotted string) error) error {
 	for _, childKey := range SortedNestedKeys(children) {
 		child := children[childKey]
 		if child == nil || !HostRooted(child) { // local (host-rooted shell venue) only
@@ -184,7 +184,7 @@ func DeployNestedLocalChildren(parent string, children map[string]*BundleNode, a
 // itself first, then each nested child as a sorted dotted path. A `target: android` child shares
 // the parent pod's venue (Descent.Venue == "parent") and has no own image — its app-presence
 // checks are baked into the parent ref, so it is skipped. Pure + unit-tested.
-func BedCheckLiveRefs(name string, children map[string]*BundleNode) []string {
+func BedCheckLiveRefs(name string, children map[string]*FleetNode) []string {
 	refs := []string{name}
 	for _, k := range SortedNestedKeys(children) {
 		if c := children[k]; c != nil && nodeDescentVenue(c) == "parent" { // android (parent venue)
@@ -207,11 +207,11 @@ func DescriptionInfo(d string) string {
 	return d
 }
 
-// MergeBundleNode overlays src onto dst: every authored (yaml-tagged, non-zero) field of src
+// MergeFleetNode overlays src onto dst: every authored (yaml-tagged, non-zero) field of src
 // wins, and the loader-DERIVED structural TREE fields (Target/Children/Members) merge explicitly
 // (src non-zero wins) because the reflect loop skips yaml:"-" fields. Pure (reflect over the
-// spec.BundleNode value type).
-func MergeBundleNode(dst, src BundleNode) BundleNode {
+// spec.FleetNode value type).
+func MergeFleetNode(dst, src FleetNode) FleetNode {
 	dstV := reflect.ValueOf(&dst).Elem()
 	srcV := reflect.ValueOf(src)
 	t := dstV.Type()
@@ -266,9 +266,9 @@ func CandyStageDirName(layer CandyReader) string {
 // --- preempt-resolve helpers ---
 
 // HolderAddrFor derives the resource-arbiter holder address for a deploy-tree node — servable off
-// a plain map[string]BundleNode (the shape both a freshly-loaded uf.Bundle and a resolved-project
+// a plain map[string]FleetNode (the shape both a freshly-loaded uf.Fleet and a resolved-project
 // envelope's Deploy map carry).
-func HolderAddrFor(name string, node BundleNode) HolderAddr {
+func HolderAddrFor(name string, node FleetNode) HolderAddr {
 	base, instance := ParseDeployKey(name)
 	target := node.Target
 	if target == "" {
@@ -285,13 +285,13 @@ func HolderAddrFor(name string, node BundleNode) HolderAddr {
 }
 
 // FindVMClaimant returns the first node claiming the given VM entity via requires_exclusive.
-func FindVMClaimant(tree map[string]BundleNode, vmEntity string) (string, BundleNode, bool) {
+func FindVMClaimant(tree map[string]FleetNode, vmEntity string) (string, FleetNode, bool) {
 	for name, node := range tree {
 		if nodeDescentVenue(&node) == "ssh" && node.From == vmEntity && len(node.RequiredExclusive()) > 0 {
 			return name, node, true
 		}
 	}
-	return "", BundleNode{}, false
+	return "", FleetNode{}, false
 }
 
 // --- task-var helpers ---

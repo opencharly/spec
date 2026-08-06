@@ -1,6 +1,6 @@
 package spec
 
-// MaterializeProjectSeams bundles the host-coupled leaf legs the kind-blind whole-project MATERIALIZE
+// MaterializeProjectSeams fleets the host-coupled leaf legs the kind-blind whole-project MATERIALIZE
 // orchestration (loaderkit.MaterializeLoadedProject) calls out to. Each is registry-/host-/bootstrap-
 // coupled and CANNOT run kind-blind inside loaderkit; the host wrapper (charly's
 // hostMaterializeProjectSeams) is the sole constructor and always populates every field. A nil field
@@ -11,7 +11,7 @@ package spec
 type MaterializeProjectSeams struct {
 	// MaterializeProject folds ONE document's parsed entity nodes into uf via the registered
 	// Materializer (registry kind-decode + the per-node not-found policy). uf already carries the
-	// document's decoded reserved directives; this adds the Box/Candy/Bundle/PluginKinds entities,
+	// document's decoded reserved directives; this adds the Box/Candy/Fleet/PluginKinds entities,
 	// accumulating across the document's node list.
 	MaterializeProject func(pp *ParsedProject, uf *UnifiedFile) error
 	// FoldDiscoveredManifests folds every discovered manifest's parsed nodes into uf — a LAYER candy

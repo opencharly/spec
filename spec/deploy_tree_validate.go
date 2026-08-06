@@ -6,24 +6,24 @@ import (
 )
 
 // deploy_tree_validate.go — pure, kind-blind structural validation over an
-// already-merged deployments tree (map[string]BundleNode), relocated from
+// already-merged deployments tree (map[string]FleetNode), relocated from
 // charly/unified.go (FLOOR-SLIM K1-proper mechanical batch). Every function
-// here operates ONLY on BundleNode — no registry, no *UnifiedFile, no host
+// here operates ONLY on FleetNode — no registry, no *UnifiedFile, no host
 // I/O — so it belongs beside the wire type it validates (the same D-clause
 // precedent as node_helpers.go's ClassifyDoc). The loader's validation chain calls
-// ValidateDeploymentTree(merged.Bundle) directly; bundle_members.go calls
+// ValidateDeploymentTree(merged.Fleet) directly; fleet_members.go calls
 // ValidateDeploymentName for a folded peer member's key.
 
 // ValidateDeploymentTree enforces structural invariants on the deployments tree
 // that can't be expressed in the YAML struct tags:
 //
 //   - Map keys at every level MUST NOT contain "." (dots are reserved
-//     for dotted-path CLI addressing like `charly bundle add a.b.c`).
+//     for dotted-path CLI addressing like `charly fleet add a.b.c`).
 //   - Every explicit pod deploy must declare `box:` (ValidateDeployRequiresBox).
 //
 // Errors include the offending path so the user sees exactly which entry needs
 // to be fixed.
-func ValidateDeploymentTree(deploy map[string]BundleNode) error {
+func ValidateDeploymentTree(deploy map[string]FleetNode) error {
 	if deploy == nil {
 		return nil
 	}
@@ -58,7 +58,7 @@ func ValidateDeploymentTree(deploy map[string]BundleNode) error {
 // affected deploy and injects the field, inferring the value from
 // the deploy key (`<base>` for `<base>/<instance>` keys; the key
 // itself otherwise).
-func ValidateDeployRequiresBox(deploy map[string]BundleNode) error {
+func ValidateDeployRequiresBox(deploy map[string]FleetNode) error {
 	for name, node := range deploy {
 		// An iterate: benchmark (the former kind:score) composes its scored
 		// subject via plan `include:` steps + the iterate.sandbox, NOT a single
@@ -74,7 +74,7 @@ func ValidateDeployRequiresBox(deploy map[string]BundleNode) error {
 			continue
 		}
 		target := node.Target
-		// Only an explicit pod-target (a `pod` node, or a `bundle` that inferred pod
+		// Only an explicit pod-target (a `pod` node, or a `fleet` that inferred pod
 		// from a box) is box-required. An EMPTY target is a group / per-host overlay
 		// entry (no workload), never a pod-leaf — in node-form a real pod always
 		// carries its box (the target is inferred FROM the box), so an empty target
@@ -83,7 +83,7 @@ func ValidateDeployRequiresBox(deploy map[string]BundleNode) error {
 			continue
 		}
 		if node.Image == "" {
-			// A bundle GROUP / venue (no own workload) carries members but no
+			// A fleet GROUP / venue (no own workload) carries members but no
 			// box of its own — its member nodes each declare their box and are
 			// validated as folded top-level entries. Only a LEAF pod-workload
 			// (no members) must declare box.
@@ -101,7 +101,7 @@ func ValidateDeployRequiresBox(deploy map[string]BundleNode) error {
 
 // ValidateDeploymentChildren recurses ValidateDeploymentName over node's
 // nested-deployment children.
-func ValidateDeploymentChildren(path string, node *BundleNode) error {
+func ValidateDeploymentChildren(path string, node *FleetNode) error {
 	if node == nil || len(node.Children) == 0 {
 		return nil
 	}
@@ -121,7 +121,7 @@ func ValidateDeploymentChildren(path string, node *BundleNode) error {
 }
 
 // ValidateDeploymentName rejects a deploy-tree key containing ".", reserved
-// for dotted-path CLI addressing (`charly bundle add a.b.c`).
+// for dotted-path CLI addressing (`charly fleet add a.b.c`).
 func ValidateDeploymentName(name, parentPath string) error {
 	full := name
 	if parentPath != "" {
@@ -134,7 +134,7 @@ func ValidateDeploymentName(name, parentPath string) error {
 		// advice for an entry a writer bug produced (nothing to manually rename; the fix is the
 		// writer). Kept source-agnostic: names the constraint, not a remedy that only fits one case.
 		return fmt.Errorf(
-			"deployment key %q contains '.' — the character is reserved for dotted-path addressing (charly bundle add a.b.c), never a literal deploy-tree key",
+			"deployment key %q contains '.' — the character is reserved for dotted-path addressing (charly fleet add a.b.c), never a literal deploy-tree key",
 			full,
 		)
 	}

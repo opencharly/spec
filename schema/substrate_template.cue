@@ -43,7 +43,7 @@
 }
 
 // #ResolvedPod is the resolve-to-envelope form of a `pod:` template — a box +
-// sidecar + plan bundle. The kernel reads it (currently the include-spliced
+// sidecar + plan fleet. The kernel reads it (currently the include-spliced
 // Plan), never spec.Pod.
 #ResolvedPod: {
 	box?: #CandyRef @go(Box)

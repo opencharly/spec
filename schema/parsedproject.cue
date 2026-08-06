@@ -11,7 +11,7 @@
 // #ParsedNode — one decomposed reserved-word node: its name, kind discriminator, the opaque
 // entity body (the complete kind value as JSON, materialized per-kind by the host), and any
 // sub-entity member children (deployable kinds only). The recursive Children mirror the
-// deploy tree's member nesting the host folds into uf.Bundle.
+// deploy tree's member nesting the host folds into uf.Fleet.
 #ParsedNode: {
 	name!: string @go(Name)
 	disc!: string @go(Disc)

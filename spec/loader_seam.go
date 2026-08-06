@@ -33,9 +33,9 @@ type Threaded struct {
 	Primaries        map[string]string // pluginPrimaryFor: verb word → scalar-sugar primary field
 	// DeployTraits is the substrate word → DECLARED #DeployTraits map (K1-LOADER RELOCATION): the
 	// descent stamp reads THIS registry-derived DATA snapshot instead of querying the provider
-	// registry live, so the venue-hop descent stamp (loaderkit.StampBundleDescents) is registry-free
+	// registry live, so the venue-hop descent stamp (loaderkit.StampFleetDescents) is registry-free
 	// and can run plugin-side. The host fills it (deployTraitsFor per recognized kind/substrate word)
-	// exactly as the former live stampBundleDescents did; a word absent from the map resolves to the
+	// exactly as the former live stampFleetDescents did; a word absent from the map resolves to the
 	// external-in-place default, matching deployTraitsFor's nil-for-unrecognized-word semantics.
 	DeployTraits map[string]*DeployTraits
 	// ExternalDeploySubstrates is the EXACT set of words for which the host's registry-live
@@ -104,7 +104,7 @@ type ProjectWalker interface {
 
 // MaterializedProject accumulates the kind-decoded ENTITY maps ONE document's or ONE discovered
 // node's fold produces — the SAME fields charly-core's *UnifiedFile carries for this purpose
-// (Box/Candy/Bundle/PluginKinds); the host copies them in before a Materializer call and back out
+// (Box/Candy/Fleet/PluginKinds); the host copies them in before a Materializer call and back out
 // after (cheap map-header copies — maps are reference types, so this is NOT a deep copy).
 //
 // The 5 standalone-substrate-TEMPLATE kinds (vm/pod/k8s/local/android) do NOT get their own
@@ -121,7 +121,7 @@ type ProjectWalker interface {
 // STATE crossing ONLY the compiled-in typed Materializer seam below — never marshaled, because the
 // loader plugin is bootstrap-critical and ALWAYS compiled-in (see the package doc above). A live
 // `cue exp gengotypes` spike on this exact shape (all fields already-portable
-// map[string]json.RawMessage / map[string]BundleNode / map[string]map[string]json.RawMessage —
+// map[string]json.RawMessage / map[string]FleetNode / map[string]map[string]json.RawMessage —
 // zero disjunctions, zero open tails) would generate a faithful plain struct per the CAN/CANNOT
 // quick reference in /charly-internals:go — CUE-sourcing it is NOT precluded by shape. It stays
 // hand-written here instead because it is not a wire type at all: it never crosses a real
@@ -133,7 +133,7 @@ type ProjectWalker interface {
 type MaterializedProject struct {
 	Box         map[string]json.RawMessage
 	Candy       map[string]json.RawMessage
-	Bundle      map[string]BundleNode
+	Fleet      map[string]FleetNode
 	PluginKinds map[string]map[string]json.RawMessage
 }
 
@@ -149,9 +149,9 @@ type MaterializeSeams struct {
 	// (no error) means the registry has no provider for pn.Disc — the Materializer applies its OWN
 	// not-found policy from there, using Threaded + the callbacks below.
 	DecodeEntity func(pn ParsedNode, acc *MaterializedProject) (found bool, err error)
-	// BuildBundleEntity folds pn as a deploy-substrate entity into acc.Bundle — the fallback for a
+	// BuildFleetEntity folds pn as a deploy-substrate entity into acc.Fleet — the fallback for a
 	// RECOGNIZED (Threaded.DeploySubstrates) but not-yet-connected external deploy substrate word.
-	BuildBundleEntity func(pn ParsedNode, acc *MaterializedProject) error
+	BuildFleetEntity func(pn ParsedNode, acc *MaterializedProject) error
 	// InKindConnectPass reports whether the loader is inside the re-entrant connect-declared-kind
 	// pre-pass (a nested load triggered by connecting a plugin) — a still-unconnected declared kind
 	// is silently deferred (skip, no error) during this pass.
@@ -297,11 +297,11 @@ type ProjectLoader interface {
 	// ApplyCueDefaults fills schema-declared defaults into an already-RESOLVED entity by unifying
 	// its marshaled form with #<Kind> and decoding back (K1 unit 2 relocation).
 	ApplyCueDefaults(kind string, out any) error
-	// ResolveMergedDeployTree returns the top-level Bundle (deploy-node) map — the merged project
+	// ResolveMergedDeployTree returns the top-level Fleet (deploy-node) map — the merged project
 	// charly.yml + per-host operator overlay, ready for dotted-path traversal — the host-side
 	// merged-tree read the check host seams (deployNodePluginContext + check_venue_resolve) need.
 	// It is the merged-tree sibling of LoadUnified: LoadUnified returns the PROJECT-only tree
-	// (loadmodel.go Bundle has no overlay field), so a caller that needs the per-host operator
+	// (loadmodel.go Fleet has no overlay field), so a caller that needs the per-host operator
 	// overlay merged in routes through THIS seam instead. The merge LOGIC (the loaderkit
 	// project+overlay projection+merge) stays in the ONE copy in sdk/loaderkit
 	// (loaderkit.ResolveMergedTreeViaExecutor); the host reaches it through this compiled-in seam
@@ -310,7 +310,7 @@ type ProjectLoader interface {
 	// (the SAME in-proc reverse-channel path ExecutorForInvoke uses for Invoke) so the seam
 	// signature stays spec-typed — the plugin-side impl retrieves it via sdk.ExecutorFromContext.
 	// Compiled-in only (the loader is bootstrap-critical), no wire envelope.
-	ResolveMergedDeployTree(ctx context.Context, dir string) (map[string]BundleNode, error)
+	ResolveMergedDeployTree(ctx context.Context, dir string) (map[string]FleetNode, error)
 	// MaterializeLoadedProject replays the whole-project per-document/per-namespace MATERIALIZE +
 	// root-wins MERGE over a walk envelope, driving loaderkit's kind-blind orchestration with the
 	// host-supplied per-node seams — so charly core reaches materialize WITHOUT importing loaderkit
@@ -343,35 +343,35 @@ type ProjectLoader interface {
 	// host reaches it through this seam — the dominant shared choke point across charly's scan call sites.
 	FinalizeScannedCandies(scanned map[string]ScannedCandy, initCfg *InitConfig) map[string]CandyReader
 
-	// -- K1 unit 3a: bundle/resource-member kind-decode SUPPORT helpers (node_bundle.go/
+	// -- K1 unit 3a: fleet/resource-member kind-decode SUPPORT helpers (node_fleet.go/
 	// node_normalize.go) — pure functions of a discriminator word + the registry-derived Threaded
 	// snapshot (never a live registry query), consumed by the TRUE clause-M dispatch
-	// (provider_kind_invoke.go) and its BuildBundleEntity fallback. DATA-driven via t.DeploySubstrates
+	// (provider_kind_invoke.go) and its BuildFleetEntity fallback. DATA-driven via t.DeploySubstrates
 	// / t.DeployTraits (the SAME snapshot loaderThreaded() already fills for the parse), never a
 	// kind-word switch.
 
 	// IsResourceDisc reports whether a discriminator names a deploy-substrate kind (the markers of a
-	// bundle member / bundle-shaped node) — the CUE-derived #ResourceKind vocab, OR a recognized
+	// fleet member / fleet-shaped node) — the CUE-derived #ResourceKind vocab, OR a recognized
 	// external deploy substrate word (t.DeploySubstrates).
 	IsResourceDisc(d string, t Threaded) bool
-	// BundleTargetForDisc maps a node discriminator to the BundleNode Target — DATA-driven via
+	// FleetTargetForDisc maps a node discriminator to the FleetNode Target — DATA-driven via
 	// t.DeployTraits: a word with no declared deploy traits is TARGETLESS (e.g. group).
-	BundleTargetForDisc(d string, t Threaded) string
-	// SetBundleCrossRef sets the deploy's cross-ref from a scalar discriminator value — DATA-driven
+	FleetTargetForDisc(d string, t Threaded) string
+	// SetFleetCrossRef sets the deploy's cross-ref from a scalar discriminator value — DATA-driven
 	// via t.DeployTraits' ImageBacked trait (image-backed → dn.Image; otherwise → dn.From). A
 	// targetless word (no declared traits) sets neither.
-	SetBundleCrossRef(dn *BundleNode, disc, ref string, t Threaded)
+	SetFleetCrossRef(dn *FleetNode, disc, ref string, t Threaded)
 	// IsStandaloneResourceKind reports whether disc names one of the substrate kinds that are BOTH a
 	// standalone TEMPLATE and a deploy — DATA-driven via t.DeployTraits (same fact
-	// BundleTargetForDisc/SetBundleCrossRef resolve against).
+	// FleetTargetForDisc/SetFleetCrossRef resolve against).
 	IsStandaloneResourceKind(disc string, t Threaded) bool
 	// FoldStandaloneTemplateReply folds a standalone-template kind's echoed reply JSON into acc's
 	// generic PluginKinds[disc][name] map — the C2-substrate TEMPLATE fold arm, GENERIC by
 	// construction (no per-kind-word switch).
 	FoldStandaloneTemplateReply(disc, name string, replyJSON json.RawMessage, acc *MaterializedProject) error
 
-	// -- K1 unit 3b: the entity-body assembly + bundle/resource-member tree-builder mechanism
-	// (node_build.go/node_bundle.go/node_normalize.go) — operates on ParsedNode (the wire-safe
+	// -- K1 unit 3b: the entity-body assembly + fleet/resource-member tree-builder mechanism
+	// (node_build.go/node_fleet.go/node_normalize.go) — operates on ParsedNode (the wire-safe
 	// parsed-entity shape), never *genericNode (charly core's host-internal reconstruction, which
 	// stays core solely for the TRUE clause-M dispatch's bootstrap-critical candy/box routing).
 
@@ -384,22 +384,22 @@ type ProjectLoader interface {
 	// EntityBodyJSON returns a node's kind-value mapping as canonical JSON, generically — with NO
 	// concrete-kind Go type.
 	EntityBodyJSON(pn ParsedNode) (json.RawMessage, error)
-	// BuildBundleNode recursively builds a BundleNode from a bundle/resource node.
-	BuildBundleNode(pn ParsedNode, t Threaded) (*BundleNode, error)
+	// BuildFleetNode recursively builds a FleetNode from a fleet/resource node.
+	BuildFleetNode(pn ParsedNode, t Threaded) (*FleetNode, error)
 	// BuildResourceMemberChildren decodes pn's RESOURCE-MEMBER entity children into a
-	// name→*BundleNode map via the SAME BuildBundleNode recursion — the SINGLE source of truth for
+	// name→*FleetNode map via the SAME BuildFleetNode recursion — the SINGLE source of truth for
 	// authored member-tree decode.
-	BuildResourceMemberChildren(pn ParsedNode, t Threaded) (map[string]*BundleNode, error)
-	// BuildBundleNodeInto builds pn into a BundleNode and registers it in acc's Bundle map — the
+	BuildResourceMemberChildren(pn ParsedNode, t Threaded) (map[string]*FleetNode, error)
+	// BuildFleetNodeInto builds pn into a FleetNode and registers it in acc's Fleet map — the
 	// fallback for a recognized-but-not-yet-connected external deploy substrate word
-	// (MaterializeSeams.BuildBundleEntity's implementation).
-	BuildBundleNodeInto(pn ParsedNode, t Threaded, acc *MaterializedProject) error
+	// (MaterializeSeams.BuildFleetEntity's implementation).
+	BuildFleetNodeInto(pn ParsedNode, t Threaded, acc *MaterializedProject) error
 	// IsDeployShape reports whether a substrate node is a DEPLOY (vs a standalone template).
 	IsDeployShape(pn ParsedNode) bool
 	// DecodeStandaloneTemplateJSON canonicalizes pn (a substrate TEMPLATE node) to the JSON the
 	// host threads to the substrate plugin, GENERICALLY — with NO concrete-kind Go type.
 	DecodeStandaloneTemplateJSON(pn ParsedNode, t Threaded) (json.RawMessage, error)
-	// ResourceChildren returns pn's children whose discriminator is itself a resource/bundle kind
+	// ResourceChildren returns pn's children whose discriminator is itself a resource/fleet kind
 	// (the CUE-derived #ResourceKind vocab).
 	ResourceChildren(pn ParsedNode) []ParsedNode
 
@@ -517,7 +517,7 @@ type CandyRefs struct {
 	BakePlugin    []CandyRefEntry
 }
 
-// ScannedCandy bundles one candy's full scan result — the two resolved envelope views plus the
+// ScannedCandy fleets one candy's full scan result — the two resolved envelope views plus the
 // rich pre-qualification refs.
 //
 // SDD classification: same non-wire, same-process pipeline-state rationale as CandyRefs above (one

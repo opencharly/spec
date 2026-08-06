@@ -323,7 +323,7 @@ func (s ApkPackageSpec) EffectiveArch() string {
 }
 
 // ---------------------------------------------------------------------------
-// Deploy (BundleNode) — the pure tree/classification predicates. WalkPreOrder /
+// Deploy (FleetNode) — the pure tree/classification predicates. WalkPreOrder /
 // WalkPostOrder reach package-main's sortedNestedKeys and stay free functions.
 // ---------------------------------------------------------------------------
 
@@ -332,7 +332,7 @@ func (c Deploy) IsDisposable() bool {
 	return (c.Disposable != nil && *c.Disposable) || c.IsEphemeral()
 }
 
-// IsGroup reports whether this is a GROUP bundle — no workload cross-ref but
+// IsGroup reports whether this is a GROUP fleet — no workload cross-ref but
 // with sibling members (the cross-deployment subject+driver shape).
 func (c Deploy) IsGroup() bool {
 	return c.Target == "" && len(c.Members) > 0

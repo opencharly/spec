@@ -220,7 +220,7 @@ func writeVocab(dir, out string) error {
 	}
 	// AuthoringVerbs — the AUTHORABLE #Op field vocabulary: every #Op field MINUS
 	// the runtime-derived fields that are never authored (origin is OCI-label
-	// reporting state; venue is stamped from a step's bundle-tree position;
+	// reporting state; venue is stamped from a step's fleet-tree position;
 	// intent_do is stamped from the step keyword). The #Step arms forbid venue +
 	// intent_do, and origin is yaml:"-" in Go — none is an authoring surface.
 	authoringVerbs := excludeFrom(opFields, opRuntimeDerivedFields)
@@ -250,7 +250,7 @@ func writeVocab(dir, out string) error {
 
 // opRuntimeDerivedFields are the #Op fields that are NEVER authored — excluded
 // from AuthoringVerbs. origin is OCI-label reporting state (yaml:"-"); venue is
-// stamped from a step's bundle-tree position; intent_do is stamped from the step
+// stamped from a step's fleet-tree position; intent_do is stamped from the step
 // keyword; plugin/plugin_input are the INTERNAL wire pair the parse-time desugar
 // rewrites every `<word>: <input>` sugar key into (authoring them is a hard load
 // error); command is the internal rehydration target the command plugin's
@@ -274,7 +274,7 @@ func excludeFrom(vals []string, exclude []string) []string {
 }
 
 // nodeDiscriminators returns the kind keywords — the concrete discriminator key
-// of each arm of the #Node disjunction (box / candy / bundle / …), sorted.
+// of each arm of the #Node disjunction (box / candy / fleet / …), sorted.
 func nodeDiscriminators(schema cue.Value) ([]string, error) {
 	node := schema.LookupPath(cue.ParsePath("#Node"))
 	if node.Err() != nil {
@@ -410,7 +410,7 @@ func sortedKeys(m map[string]bool) []string {
 	return out
 }
 
-// vocabSets bundles every CUE-derived word list renderVocab emits.
+// vocabSets fleets every CUE-derived word list renderVocab emits.
 type vocabSets struct {
 	kinds          []string
 	resourceKinds  []string

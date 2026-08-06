@@ -26,7 +26,7 @@ func (d Diagnostics) HasErrors() bool {
 // envelope (S3b, #DeployTargetDispatchRequest.opts_json) uses on BOTH sides:
 // charly core (unified_targets.go's Add/Update) builds this BEFORE marshaling
 // into OptsJSON — never marshal a raw EmitOpts directly — and
-// candy/plugin-bundle decodes OptsJSON directly into a LifecycleOpts, so no
+// candy/plugin-fleet decodes OptsJSON directly into a LifecycleOpts, so no
 // plugin-side conversion is needed at all.
 func LifecycleOptsFromEmit(o EmitOpts) LifecycleOpts {
 	return LifecycleOpts{
