@@ -1,6 +1,6 @@
 package spec
 
-// MaterializeProjectSeams fleets the host-coupled leaf legs the kind-blind whole-project MATERIALIZE
+// MaterializeProjectSeams gathers the host-coupled leaf legs the kind-blind whole-project MATERIALIZE
 // orchestration (loaderkit.MaterializeLoadedProject) calls out to. Each is registry-/host-/bootstrap-
 // coupled and CANNOT run kind-blind inside loaderkit; the host wrapper (charly's
 // hostMaterializeProjectSeams) is the sole constructor and always populates every field. A nil field

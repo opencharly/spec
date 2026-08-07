@@ -19,8 +19,8 @@ import "encoding/json"
 // legacy `images:` / `deployments.images.*` nesting is gone — all target
 // kinds (host / vm / pod / k8s) live under the single `deployment:` map.
 type FleetConfig struct {
-	Provides *ProvidesConfig       `yaml:"provides,omitempty" json:"provides,omitempty"`
-	Fleet   map[string]FleetNode `yaml:"deploy" json:"deploy"`
+	Provides *ProvidesConfig      `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Fleet    map[string]FleetNode `yaml:"deploy" json:"deploy"`
 	// Sidecar carries the project's sidecar-template library as OPAQUE bodies
 	// (the raw PluginKinds["sidecar"] map). candy/plugin-sidecar's OpResolve merges
 	// these UNDER each deploy node's own overrides; the kernel reads no fields

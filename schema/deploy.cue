@@ -78,14 +78,14 @@
 
 	// target is DERIVED from the node's discriminator kind + cross-ref at load
 	// (buildFleetNode/inferFleetTarget) — NOT authored in node-form. Optional
-	// here so #Check's arms can pin it; the #FleetValue arm (node.cue) rejects an
+	// here so #Check's arms can pin it; the #DeployValue arm (node.cue) rejects an
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
 	target?: ("pod" | "vm" | "k8s" | "local" | "android") @go(Target,type=string) // loader-DERIVED (yaml:"-")
 
 	// member_of + inside are loader-DERIVED runtime fields (never authored;
-	// rejected by #FleetValue): member_of marks a folded sibling-member entry,
+	// rejected by #DeployValue): member_of marks a folded sibling-member entry,
 	// inside names the venue a nested resource deploys into. Generated for the Go
 	// tree-walker, forbidden in authoring.
 	member_of?: string @go(MemberOf)
@@ -100,7 +100,7 @@
 	// Cutover H): the substrate plugin stamps it at OpLoad (via kit.StampDescent) so
 	// the deploy chain (AppendHopForFlatPath) descends generically BY TRANSPORT,
 	// never by switching on the substrate kind word. charly-written state, never
-	// authored (rejected by #FleetValue).
+	// authored (rejected by #DeployValue).
 	descent?: #DescentDescriptor @go(Descent,optional=nillable)
 
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
@@ -202,7 +202,7 @@
 // and the ephemeral⇒disposable promotion — are enforced in GO at load time
 // (loaderkit.ValidateCheckBeds + the ephemeral validator beside it), which is the
 // SINGLE source of truth for the actual fleet-form beds (a node-form check bed
-// is a `fleet:` node validated via #FleetValue=#Deploy, so the disjunction was
+// is a `fleet:` node validated via #DeployValue=#Deploy, so the disjunction was
 // only ever applied to the legacy root-shape `check:` collection). Relaxing it to
 // the alias removes that divergent parallel spec and lets gengotypes emit a real
 // Check struct instead of an empty `struct{}`.

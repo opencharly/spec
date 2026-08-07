@@ -1174,7 +1174,7 @@ type LabelSecretEntry struct {
 // #LabelSkillEntry — one skill baked into ai.opencharly.skill (the migration of the vestigial
 // ai.opencharly.skill doc-pointer URL into the actual definitions — an image now carries its
 // composed candies' skills, readable directly via ExtractMetadata / `charly box labels` /
-// `charly bundle from-box`, with no external fetch). family+name+content required (an entry
+// `charly fleet from-box`, with no external fetch). family+name+content required (an entry
 // without content is not a readable skill); the JSON label wire form of the authoring #Skill
 // (CollectSkills projects authoring → wire).
 type LabelSkillEntry struct {
@@ -3838,14 +3838,14 @@ type Deploy struct {
 
 	// target is DERIVED from the node's discriminator kind + cross-ref at load
 	// (buildFleetNode/inferFleetTarget) — NOT authored in node-form. Optional
-	// here so #Check's arms can pin it; the #FleetValue arm (node.cue) rejects an
+	// here so #Check's arms can pin it; the #DeployValue arm (node.cue) rejects an
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
 	Target string `yaml:"target,omitempty" json:"target,omitempty"`
 
 	// member_of + inside are loader-DERIVED runtime fields (never authored;
-	// rejected by #FleetValue): member_of marks a folded sibling-member entry,
+	// rejected by #DeployValue): member_of marks a folded sibling-member entry,
 	// inside names the venue a nested resource deploys into. Generated for the Go
 	// tree-walker, forbidden in authoring.
 	MemberOf string `yaml:"member_of,omitempty" json:"member_of,omitempty"`
@@ -3861,7 +3861,7 @@ type Deploy struct {
 	// Cutover H): the substrate plugin stamps it at OpLoad (via kit.StampDescent) so
 	// the deploy chain (AppendHopForFlatPath) descends generically BY TRANSPORT,
 	// never by switching on the substrate kind word. charly-written state, never
-	// authored (rejected by #FleetValue).
+	// authored (rejected by #DeployValue).
 	Descent *DescentDescriptor `yaml:"descent,omitempty" json:"descent,omitempty"`
 
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
@@ -4083,7 +4083,7 @@ type DeployProbes struct {
 // and the ephemeral⇒disposable promotion — are enforced in GO at load time
 // (loaderkit.ValidateCheckBeds + the ephemeral validator beside it), which is the
 // SINGLE source of truth for the actual fleet-form beds (a node-form check bed
-// is a `fleet:` node validated via #FleetValue=#Deploy, so the disjunction was
+// is a `fleet:` node validated via #DeployValue=#Deploy, so the disjunction was
 // only ever applied to the legacy root-shape `check:` collection). Relaxing it to
 // the alias removes that divergent parallel spec and lets gengotypes emit a real
 // Check struct instead of an empty `struct{}`.
@@ -7400,7 +7400,7 @@ type ResolvedSidecarVolume struct {
 // command:marketplace) synthesizes plugins/<family>/skills/<name>/SKILL.md + references/*.md from
 // these entities; CollectSkills (sdk/deploykit) projects the composed candies' skills into the
 // `ai.opencharly.skill` OCI label so a built image is self-describing (readable via
-// `charly box labels` / `charly bundle from-box`, no external fetch).
+// `charly box labels` / `charly fleet from-box`, no external fetch).
 //
 // owner is the candy/concept-candy entity name that owns this skill — the build-time association
 // that decides which images carry it (CollectSkills filters by owner ∈ composed candy chain).

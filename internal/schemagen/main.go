@@ -274,7 +274,7 @@ func excludeFrom(vals []string, exclude []string) []string {
 }
 
 // nodeDiscriminators returns the kind keywords — the concrete discriminator key
-// of each arm of the #Node disjunction (box / candy / fleet / …), sorted.
+// of each arm of the #Node disjunction (box / candy / deploy / …), sorted.
 func nodeDiscriminators(schema cue.Value) ([]string, error) {
 	node := schema.LookupPath(cue.ParsePath("#Node"))
 	if node.Err() != nil {
@@ -410,7 +410,7 @@ func sortedKeys(m map[string]bool) []string {
 	return out
 }
 
-// vocabSets fleets every CUE-derived word list renderVocab emits.
+// vocabSets gathers every CUE-derived word list renderVocab emits.
 type vocabSets struct {
 	kinds          []string
 	resourceKinds  []string

@@ -118,7 +118,7 @@
 // the COMPLETE #Deploy minus the structural nested/peer maps + the derived target —
 // all loader-derived from tree position, so authoring any of them is a closed-schema
 // rejection (`run: charly migrate`). The substrate kind at the EDGE supplies the
-// target; from:/image: supply the cross-ref (EDGE-INHERIT cutover B; was #FleetValue).
+// target; from:/image: supply the cross-ref (EDGE-INHERIT cutover B; was #DeployValue).
 #DeployValue: #Deploy & {nested?: _|_, peer?: _|_, target?: _|_, member_of?: _|_, inside?: _|_, descent?: _|_}
 
 // ---------------------------------------------------------------------------

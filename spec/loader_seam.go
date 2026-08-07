@@ -133,7 +133,7 @@ type ProjectWalker interface {
 type MaterializedProject struct {
 	Box         map[string]json.RawMessage
 	Candy       map[string]json.RawMessage
-	Fleet      map[string]FleetNode
+	Fleet       map[string]FleetNode
 	PluginKinds map[string]map[string]json.RawMessage
 }
 
@@ -517,7 +517,7 @@ type CandyRefs struct {
 	BakePlugin    []CandyRefEntry
 }
 
-// ScannedCandy fleets one candy's full scan result — the two resolved envelope views plus the
+// ScannedCandy gathers one candy's full scan result — the two resolved envelope views plus the
 // rich pre-qualification refs.
 //
 // SDD classification: same non-wire, same-process pipeline-state rationale as CandyRefs above (one

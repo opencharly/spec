@@ -43,8 +43,8 @@ type UnifiedFile struct {
 	// Candy is the generic kind-keyed LAYER map: name → opaque marshaled InlineCandy.
 	Candy map[string]json.RawMessage `yaml:"candy,omitempty" json:"candy,omitempty"`
 	// Fleet is the flat name-keyed deploy map (the canonical `deploy:` surface).
-	Fleet   map[string]FleetNode `yaml:"deploy,omitempty" json:"deploy,omitempty"`
-	Provides *ProvidesConfig       `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Fleet    map[string]FleetNode `yaml:"deploy,omitempty" json:"deploy,omitempty"`
+	Provides *ProvidesConfig      `yaml:"provides,omitempty" json:"provides,omitempty"`
 
 	// PluginKinds holds entities of KINDS contributed by plugins (a kind the core has no typed
 	// map for). NAME-KEYED: kind word → entity NAME → canonical body (opaque JSON). Built-in

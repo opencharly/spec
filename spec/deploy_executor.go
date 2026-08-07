@@ -2,7 +2,7 @@ package spec
 
 // deploy_executor.go — the InstallPlan IR's EXECUTION contract (P4 "IR E-envelope"):
 // the DeployExecutor interface every host-side executor implements, the BuilderRunOpts
-// it carries, and the EmitOpts cross-cutting toggle fleet. These live in spec (not
+// it carries, and the EmitOpts cross-cutting toggle set. These live in spec (not
 // deploykit) because they are part of the E-envelope an out-of-process deploy/step
 // plugin resolves against — EmitOpts.ParentExec threads a DeployExecutor through the
 // nested-deploy tree, and the executor IMPLEMENTATIONS (sdk/kit) implement THIS
@@ -205,7 +205,7 @@ type BuilderRunOpts struct {
 // EmitOpts carries cross-cutting toggles passed by command-line flags.
 // Gates are checked per-step by the target; target-specific options (the
 // container target's registry auth, the host target's --assume-yes, --dry-run)
-// are fleetdverb here too.
+// are gathered here too.
 type EmitOpts struct {
 	DryRun               bool
 	FormatJSON           bool // print IR as JSON on stdout instead of table
