@@ -1171,6 +1171,36 @@ type LabelSecretEntry struct {
 	Env string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
+// #LabelSkillEntry — one skill baked into ai.opencharly.skill (the migration of the vestigial
+// ai.opencharly.skill doc-pointer URL into the actual definitions — an image now carries its
+// composed candies' skills, readable directly via ExtractMetadata / `charly box labels` /
+// `charly bundle from-box`, with no external fetch). family+name+content required (an entry
+// without content is not a readable skill); the JSON label wire form of the authoring #Skill
+// (CollectSkills projects authoring → wire).
+type LabelSkillEntry struct {
+	Family string `yaml:"family,omitempty" json:"family"`
+
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Content string `yaml:"content,omitempty" json:"content"`
+
+	References []LabelSkillReference `yaml:"references,omitempty" json:"references,omitempty"`
+
+	Triggers []string `yaml:"triggers,omitempty" json:"triggers,omitempty"`
+
+	Category string `yaml:"category,omitempty" json:"category,omitempty"`
+}
+
+type LabelSkillReference struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Content string `yaml:"content,omitempty" json:"content"`
+}
+
 // #BoxMetadata — the OCI-label metadata hub. NEVER whole-marshaled (ExtractMetadata builds it
 // field-by-field), so its own tags are wire-irrelevant. Deploy-only fields (Tunnel/DNS/
 // AcmeEmail/Engine) are fed by MergeDeployOntoMetadata, never baked. PortProto RESHAPED
@@ -1233,7 +1263,7 @@ type BoxMetadata struct {
 
 	PortRelay []int `yaml:"port_relay,omitempty" json:"port_relay,omitempty"`
 
-	Skill string `yaml:"skill,omitempty" json:"skill,omitempty"`
+	Skills []LabelSkillEntry `yaml:"skills,omitempty" json:"skills,omitempty"`
 
 	Status string `yaml:"status,omitempty" json:"status,omitempty"`
 
@@ -1398,6 +1428,8 @@ type BakedLabelSet struct {
 
 	PortRelay []int `yaml:"port_relay,omitempty" json:"port_relay,omitempty"`
 
+	Skills []LabelSkillEntry `yaml:"skills,omitempty" json:"skills,omitempty"`
+
 	Secret []LabelSecretEntry `yaml:"secret,omitempty" json:"secret,omitempty"`
 
 	EnvProvide map[string]string `yaml:"env_provide,omitempty" json:"env_provide,omitempty"`
@@ -1425,8 +1457,6 @@ type BakedLabelSet struct {
 	EnvCandy map[string]string `yaml:"env_candy,omitempty" json:"env_candy,omitempty"`
 
 	PathAppend []string `yaml:"path_append,omitempty" json:"path_append,omitempty"`
-
-	Skill string `yaml:"skill,omitempty" json:"skill,omitempty"`
 
 	Status string `yaml:"status,omitempty" json:"status,omitempty"`
 
@@ -4516,6 +4546,31 @@ type GpuProbeReply struct {
 	MemlockHard uint64 `yaml:"memlock_hard,omitempty" json:"memlock_hard,omitempty"`
 }
 
+// CUE schema for the `hook` KIND — a first-class HARNESS hook entity (the migration of the
+// superproject's .claude/hooks/* gate scripts into candy config). A `hook:` node is a sibling
+// top-level entity in candy/charly-hooks/charly.yml, carrying the script CONTENT inline.
+//
+// This is the HARNESS hook (the Claude Code PreToolUse/PrePush git-discipline gates), DISTINCT
+// from the candy lifecycle `hook:` field (#CandyHook {post_enable, pre_remove}): the kind word
+// `hook` lives on the kind-word spine while the lifecycle field lives inside a `candy:` body —
+// different namespaces, no parse conflict (the U0 spike exercises a file carrying both).
+//
+// trigger/matcher absent ⇒ an AUX file (e.g. gitcmd.py, gate_test.py) emitted to .claude/hooks/
+// but not wired into settings.json. The generator enforces: matcher required iff trigger present.
+type Hook struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Content string `yaml:"content,omitempty" json:"content"`
+
+	Trigger string `yaml:"trigger,omitempty" json:"trigger,omitempty"`
+
+	Matcher string `yaml:"matcher,omitempty" json:"matcher,omitempty"`
+
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+}
+
 type Init struct {
 	CandyFields []string `yaml:"candy_field,omitempty" json:"candy_field,omitempty"`
 
@@ -5054,6 +5109,65 @@ type Local struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+}
+
+// CUE schema for the `marketplace` KIND — the single harness/marketplace config entity per repo
+// (the migration of plugins/.claude-plugin/marketplace.json + profiles.json + the harness wiring
+// into candy config). A `marketplace:` node is a top-level entity in a candy-dir file (e.g.
+// candy/charly-marketplace/charly.yml), discovered by the recursive `candy/` walk.
+//
+// families: one entry per plugin family (the plugins/ directory name). The generator emits
+// plugins/<family>/.claude-plugin/plugin.json + .codex-plugin/plugin.json, plugins/<family>/.mcp.json
+// (when mcp_servers is non-empty), the aggregated plugins/.claude-plugin/marketplace.json and
+// plugins/profiles.json, and the .claude/settings.json plugin-owned keys.
+type Marketplace struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Version string `yaml:"version,omitempty" json:"version"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Families map[string]MarketplaceFamily `yaml:"families,omitempty" json:"families"`
+
+	Settings MarketplaceSettings `yaml:"settings,omitempty" json:"settings,omitempty"`
+}
+
+type MarketplaceSettings struct {
+	// enabled_plugins — the .claude/settings.json enabledPlugins charly-* entries (each
+	// "charly-<family>@<name>"); empty ⇒ enable every declared family.
+	EnabledPlugins []string `yaml:"enabled_plugins,omitempty" json:"enabled_plugins,omitempty"`
+
+	// source_path — extraKnownMarketplaces.<name>.source.path (default ./plugins).
+	SourcePath string `yaml:"source_path,omitempty" json:"source_path,omitempty"`
+
+	// hooks — the hook entity names to wire into settings.json hooks.<trigger>.
+	Hooks []string `yaml:"hooks,omitempty" json:"hooks,omitempty"`
+}
+
+type MarketplaceFamily struct {
+	Category string `yaml:"category,omitempty" json:"category,omitempty"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Keywords []string `yaml:"keywords,omitempty" json:"keywords,omitempty"`
+
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+
+	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
+
+	McpServers []MarketplaceMCPServer `yaml:"mcp_servers,omitempty" json:"mcp_servers,omitempty"`
+}
+
+type MarketplaceMCPServer struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Url string `yaml:"url,omitempty" json:"url,omitempty"`
+
+	Command string `yaml:"command,omitempty" json:"command,omitempty"`
+
+	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
 }
 
 // #MergeRequest — the host resolves the box (image ref + merge limits + engine) and
@@ -7274,6 +7388,54 @@ type ResolvedSidecarVolume struct {
 	VolumeName string `yaml:"volume_name,omitempty" json:"volume_name"`
 
 	ContainerPath string `yaml:"container_path,omitempty" json:"container_path"`
+}
+
+// CUE schema for the `skill` KIND — a first-class harness skill entity (the migration of the
+// plugins/ skill corpus into candy configs). A `skill:` node is a sibling top-level entity in a
+// candy's charly.yml (ParseDoc iterates every top-level node, each with its own single kind
+// discriminator), so a candy file stacks its `candy:` node plus the `skill:` nodes it owns.
+//
+// The FULL skill definition is INLINE: every metadata field plus the markdown content as a block
+// scalar — nothing is fetched from elsewhere. The marketplace generator (candy/plugin-marketplace,
+// command:marketplace) synthesizes plugins/<family>/skills/<name>/SKILL.md + references/*.md from
+// these entities; CollectSkills (sdk/deploykit) projects the composed candies' skills into the
+// `ai.opencharly.skill` OCI label so a built image is self-describing (readable via
+// `charly box labels` / `charly bundle from-box`, no external fetch).
+//
+// owner is the candy/concept-candy entity name that owns this skill — the build-time association
+// that decides which images carry it (CollectSkills filters by owner ∈ composed candy chain).
+// family is the marketplace family (the plugins/ directory name) the generator groups by.
+//
+// type: "agent" marks a sub-agent definition (the former plugins/<family>/agents/*.md) — one
+// unified doc kind, same lifecycle; model/tools carry the agent frontmatter fields.
+type Skill struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Family string `yaml:"family,omitempty" json:"family"`
+
+	Owner string `yaml:"owner,omitempty" json:"owner"`
+
+	Description string `yaml:"description,omitempty" json:"description"`
+
+	Content string `yaml:"content,omitempty" json:"content"`
+
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+
+	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty"`
+
+	References []SkillReference `yaml:"references,omitempty" json:"references,omitempty"`
+
+	Triggers []string `yaml:"triggers,omitempty" json:"triggers,omitempty"`
+
+	Category string `yaml:"category,omitempty" json:"category,omitempty"`
+}
+
+type SkillReference struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Content string `yaml:"content,omitempty" json:"content"`
 }
 
 // #PortMapping — one published port's structured runtime mapping (host IP/port ->
