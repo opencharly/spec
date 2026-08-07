@@ -151,7 +151,7 @@ type ProvidedCapability struct {
 	InputDef string `protobuf:"bytes,3,opt,name=input_def,json=inputDef,proto3" json:"input_def,omitempty"`
 	// set ONLY for class="step" (F3): the plugin-declared install-step contract
 	StepContract *StepContract `protobuf:"bytes,4,opt,name=step_contract,json=stepContract,proto3" json:"step_contract,omitempty"`
-	// set ONLY for class="kind" (F5): the kind decodes a STRUCTURAL entity (a spec.Deploy member tree -> uf.Bundle) rather than a FLAT body (-> uf.PluginKinds)
+	// set ONLY for class="kind" (F5): the kind decodes a STRUCTURAL entity (a spec.Deploy member tree -> uf.Fleet) rather than a FLAT body (-> uf.PluginKinds)
 	Structural bool `protobuf:"varint,5,opt,name=structural,proto3" json:"structural,omitempty"`
 	// set ONLY for class="deploy" (F6): the substrate brings its OWN host-side venue lifecycle (PrepareVenue/Start/Stop/...) served over the lifecycle Ops; the host registers a wire-backed substrateLifecycle for it
 	Lifecycle bool `protobuf:"varint,6,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`

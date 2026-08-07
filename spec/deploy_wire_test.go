@@ -52,7 +52,7 @@ func TestEmitOpts_RawMarshalRoundTripFailsWithParentExec(t *testing.T) {
 // TestLifecycleOptsFromEmit_SurvivesTheWireRegardlessOfParentExec proves the FIX: projecting
 // EmitOpts through LifecycleOptsFromEmit before marshaling round-trips correctly even when
 // ParentExec/ParentNode are live/non-nil — reproducing exactly the nested-child-deploy shape
-// (charly/unified_targets.go's pluginDeployTarget.Add, dispatched to candy/plugin-bundle) that
+// (charly/unified_targets.go's pluginDeployTarget.Add, dispatched to candy/plugin-fleet) that
 // crashed with `json: cannot unmarshal object into Go struct field EmitOpts.ParentExec of type
 // spec.DeployExecutor` before this fix.
 func TestLifecycleOptsFromEmit_SurvivesTheWireRegardlessOfParentExec(t *testing.T) {
@@ -61,7 +61,7 @@ func TestLifecycleOptsFromEmit_SurvivesTheWireRegardlessOfParentExec(t *testing.
 		AssumeYes: true, Verify: true, Pull: true, SkipIncompatible: true,
 		BuilderImageOverride: "fedora.fedora-builder",
 		ParentExec:           fakeParentExec{}, // the field that must NEVER cross the wire
-		ParentNode:           &BundleNode{},
+		ParentNode:           &FleetNode{},
 	}
 	b, err := json.Marshal(LifecycleOptsFromEmit(o))
 	if err != nil {

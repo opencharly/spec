@@ -444,7 +444,7 @@ func ResolveNewestLocalCalVer(engine, short string) (string, error) {
 // the engine resolves it locally first (matching any single local tag) or errors.
 // (P14: relocated from charly/shell.go's resolveShellImageRef, which now delegates here — R3,
 // single source for every caller: candy/plugin-box's `merge` command plus charly core's own
-// bundle_add/config_image/ensure_image/remote_image/pod_lifecycle_resolve/update_deploy_dispatch.)
+// fleet_add/config_image/ensure_image/remote_image/pod_lifecycle_resolve/update_deploy_dispatch.)
 func ResolveShellImageRef(registry, name, tag string) string {
 	if tag == "" {
 		// Try local CalVer resolution. Best-effort: if nothing local matches, fall back to a

@@ -83,7 +83,7 @@ protocol: {
 					"name":   "structural"
 					"type":   "bool"
 					"number": 5
-					"doc":    "set ONLY for class=\"kind\" (F5): the kind decodes a STRUCTURAL entity (a spec.Deploy member tree -\u003e uf.Bundle) rather than a FLAT body (-\u003e uf.PluginKinds)"
+					"doc":    "set ONLY for class=\"kind\" (F5): the kind decodes a STRUCTURAL entity (a spec.Deploy member tree -\u003e uf.Fleet) rather than a FLAT body (-\u003e uf.PluginKinds)"
 				},
 				{
 					"name":   "lifecycle"

@@ -14,7 +14,7 @@ import (
 // function has ZERO core-only dependency (pure sdk/kit + sdk/spec) and now has TWO callers that
 // must construct the byte-identical executor from the same descriptor: the host (still
 // re-materializing it for --verify / subsequent dispatch calls on the same target) and
-// candy/plugin-bundle (materializing its OWN executor for the substrate's Execute call, immediately
+// candy/plugin-fleet (materializing its OWN executor for the substrate's Execute call, immediately
 // after driving that same substrate's OpPrepareVenue). R3 — one function, not a duplicate in each
 // package.
 func VenueFromDescriptor(d spec.VenueDescriptor) (spec.DeployExecutor, error) {
@@ -59,12 +59,12 @@ func ContainerChainFromDescriptor(engine, containerName string) spec.DeployExecu
 //
 // The bed-regression fix this promotion serves (FIX ROUND, S3b follow-up): a NESTED external
 // deploy's ancestor executor (deploykit.RootExecutorForDeployNode's "ssh" result, threaded core-
-// side as spec.EmitOpts.ParentExec via the ancestor-chain walk in charly/bundle_add_cmd.go's
+// side as spec.EmitOpts.ParentExec via the ancestor-chain walk in charly/fleet_add_cmd.go's
 // deriveChildExecutorForPath) is ALWAYS a plain ShellExecutor/*SSHExecutor for a single hop into a
 // vm guest — never a NestedExecutor — so it round-trips through this exact pair of functions.
 // charly/unified_targets.go's pluginDeployTarget.Add uses this to convert that live ancestor
 // executor into venue_json BEFORE dispatch, since a live Go interface value cannot itself cross
-// the []byte wire to candy/plugin-bundle (mirrors candy/plugin-bundle's OWN identically-shaped
+// the []byte wire to candy/plugin-fleet (mirrors candy/plugin-fleet's OWN identically-shaped
 // former venueDescriptorFromExecutor, now deleted — R3, one function for both directions' callers).
 //
 // The "container" arm (K1-unblock W3 Unit B) recognizes the ONE enumerable *NestedExecutor shape

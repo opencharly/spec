@@ -51,7 +51,7 @@ func MergeUnified(dst, src *UnifiedFile, srcDir string) {
 	// mergeDistroMap/mergeBuilderMap/mergeInitMap/mergeResourceMap/mergeTargetMap calls
 	// are subsumed by this one generic merge.
 	MergePluginKindsMap(&dst.PluginKinds, src.PluginKinds)
-	mergeDeployMaps(&dst.Bundle, src.Bundle)
+	mergeDeployMaps(&dst.Fleet, src.Fleet)
 	if dst.Provides == nil && src.Provides != nil {
 		dst.Provides = src.Provides
 	}
@@ -80,12 +80,12 @@ func mergeRawTemplateMap(dst *map[string]json.RawMessage, src map[string]json.Ra
 // Field-singular cutover: replaces the legacy mergeDeployments which
 // took *DeploymentsSection wrappers. Provides now lives at UnifiedFile
 // root and is merged separately by MergeUnified.
-func mergeDeployMaps(dst *map[string]BundleNode, src map[string]BundleNode) {
+func mergeDeployMaps(dst *map[string]FleetNode, src map[string]FleetNode) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]BundleNode)
+		*dst = make(map[string]FleetNode)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {

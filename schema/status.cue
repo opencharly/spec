@@ -60,7 +60,7 @@
 // HostBuild("status-substrate"). single=true selects the pod-scoped detail path (box+instance);
 // otherwise the full multi-substrate fan-out (include_all mirrors --all). The declared nested tree
 // (formerly resolved here via `nested`) is now resolved PLUGIN-SIDE (candy/plugin-status's own
-// buildStatusRootsTree, K5) directly off the resolved-project envelope + deploykit.LoadBundleConfig
+// buildStatusRootsTree, K5) directly off the resolved-project envelope + deploykit.LoadFleetConfig
 // — no host round-trip, so this request carries no nested flag anymore.
 #StatusSubstrateRequest: {
 	single?:      bool   @go(Single)
@@ -71,7 +71,7 @@
 
 // #StatusNestedNode — one pre-resolved node of the DECLARED nested tree, now built PLUGIN-SIDE
 // (candy/plugin-status/nested_tree.go, K5) directly from the resolved-project envelope +
-// deploykit.LoadBundleConfig/MergeDeployConfigs/ClassifyTarget/ResolveDeployChain — all sdk-portable,
+// deploykit.LoadFleetConfig/MergeDeployConfigs/ClassifyTarget/ResolveDeployChain — all sdk-portable,
 // so this is no longer a host-computed wire payload; it stays a CUE def only because
 // #StatusNestedNode is self-recursive and the plugin still needs the generated Go type. key is the
 // declared child key (the Image cell). match_keys index the flat rows; for a ROOT node key itself is
@@ -101,7 +101,7 @@
 // pod/vm/k8s/local/android). The host passes the scalar inputs a sdk-only candy cannot derive:
 // the engine binary name (engine_bin), the run mode, the quadlet dir (pod's quadlet-description
 // enrichment + enabled-but-not-running append), include_all (--all), and — on the single path —
-// box+instance. NO deploy-cone (BundleConfig/UnifiedFile) crosses this seam: the deploy
+// box+instance. NO deploy-cone (FleetConfig/UnifiedFile) crosses this seam: the deploy
 // enrichment stays host-side until K5, applied to the live rows this reply returns. vm/k8s/android
 // are deferred to K5 (their collectors are deploy-cone-coupled); the plugin returns no rows for
 // those words until then.

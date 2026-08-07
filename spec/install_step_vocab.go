@@ -302,7 +302,7 @@ func (s *OpStep) Reverse() []ReverseOp {
 		}}
 	case s.Op.Mkdir != "":
 		// Directories aren't auto-removed (might contain other files);
-		// only record paths for manual inspection via `charly bundle status`.
+		// only record paths for manual inspection via `charly fleet status`.
 		return nil
 	}
 	return nil
@@ -581,7 +581,7 @@ func (s *ShellSnippetStep) Reverse() []ReverseOp {
 // rpmfusion-free.repo to /etc/yum.repos.d/). Distinct from
 // SystemPackagesStep's PhasePrepare because the compiler often synthesizes
 // these from `cmd:` tasks that happen to install a -release.rpm — we want
-// them tracked separately so `charly bundle del` can reverse them precisely.
+// them tracked separately so `charly fleet del` can reverse them precisely.
 type RepoChangeStep struct {
 	Format    string // "rpm" | "deb" | "pac"
 	File      string // absolute path of the repo file
@@ -641,7 +641,7 @@ func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
 
 // Reverse returns no STATIC ledger ops — Android teardown ops are DYNAMIC, recorded
 // from the deploy:android plugin's OpExecute reply (the uninstall reverse ops) at
-// deploy time, replayed at `charly bundle del` like any external deploy substrate.
+// deploy time, replayed at `charly fleet del` like any external deploy substrate.
 func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 
 // ---------------------------------------------------------------------------
@@ -764,10 +764,10 @@ func (s *RebootStep) Reverse() []ReverseOp { return nil }
 //     → Invoke(OpExecute) WITH the live DeployExecutor on the go-plugin broker (the E3b
 //     reverse channel), so the plugin runs its deploy-context effect (RunSystem/RunUser) on
 //     the real venue and RETURNS its teardown ReverseOps which the host records into the
-//     ledger (record-and-replay — only recorded ops are reversed at `charly bundle del`).
+//     ledger (record-and-replay — only recorded ops are reversed at `charly fleet del`).
 //     This is the deploy-context counterpart of the build-context OpEmit leg (tasks.go
 //     invokeVerbBuildEmit), reusing the SAME spec.DeployReply / ReverseOp wire as the
-//     external deploy TARGET (candy/plugin-bundle/deploy_target.go, S3b — was charly
+//     external deploy TARGET (candy/plugin-fleet/deploy_target.go, S3b — was charly
 //     core's deploy_target_external.go before the deploy-dispatch cluster moved) — R3.
 //   - EmitOCI (a BUILD venue — the pod-overlay Containerfile): Invoke(OpEmit) via the
 //     SHARED invokeVerbBuildEmit, splicing the plugin's Containerfile FRAGMENT verbatim

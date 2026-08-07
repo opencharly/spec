@@ -1,5 +1,5 @@
 // CUE schema for the `deploy` AND `check` kinds. Both validate ONE
-// BundleNode (charly/deploy.go): a `deploy:` map entry, or a `kind: check`
+// FleetNode (charly/deploy.go): a `deploy:` map entry, or a `kind: check`
 // bed (disposable:true + usually iterate:/plan:). #Deploy is the base node;
 // #Check narrows it to the bed invariants. CLOSED. Shared defs REFERENCED, not
 // redefined (R3): #Step/#Op/#Security/#InstallOpts/#Duration/#CalVer/
@@ -77,15 +77,15 @@
 	description?: string & !=""
 
 	// target is DERIVED from the node's discriminator kind + cross-ref at load
-	// (buildBundleNode/inferBundleTarget) — NOT authored in node-form. Optional
-	// here so #Check's arms can pin it; the #BundleValue arm (node.cue) rejects an
+	// (buildFleetNode/inferFleetTarget) — NOT authored in node-form. Optional
+	// here so #Check's arms can pin it; the #DeployValue arm (node.cue) rejects an
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
 	target?: ("pod" | "vm" | "k8s" | "local" | "android") @go(Target,type=string) // loader-DERIVED (yaml:"-")
 
 	// member_of + inside are loader-DERIVED runtime fields (never authored;
-	// rejected by #BundleValue): member_of marks a folded sibling-member entry,
+	// rejected by #DeployValue): member_of marks a folded sibling-member entry,
 	// inside names the venue a nested resource deploys into. Generated for the Go
 	// tree-walker, forbidden in authoring.
 	member_of?: string @go(MemberOf)
@@ -100,7 +100,7 @@
 	// Cutover H): the substrate plugin stamps it at OpLoad (via kit.StampDescent) so
 	// the deploy chain (AppendHopForFlatPath) descends generically BY TRANSPORT,
 	// never by switching on the substrate kind word. charly-written state, never
-	// authored (rejected by #BundleValue).
+	// authored (rejected by #DeployValue).
 	descent?: #DescentDescriptor @go(Descent,optional=nillable)
 
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
@@ -194,15 +194,15 @@
 	peer?: {[=~"^[^.]+$"]: #Deploy} @go(Members,type=map[string]*Deploy)
 }
 
-// #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same BundleNode
+// #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same FleetNode
 // Go struct), so it is a plain reference (R3 — no field duplication; stays CLOSED
 // because #Deploy is closed). The bed-mode invariants the former `& (A|B|C)`
 // disjunction expressed — disposable required + bed-legal target ∈ {pod,vm,local,
 // android} for the deterministic/ephemeral modes, the iterate AI-benchmark mode,
 // and the ephemeral⇒disposable promotion — are enforced in GO at load time
 // (loaderkit.ValidateCheckBeds + the ephemeral validator beside it), which is the
-// SINGLE source of truth for the actual bundle-form beds (a node-form check bed
-// is a `bundle:` node validated via #BundleValue=#Deploy, so the disjunction was
+// SINGLE source of truth for the actual fleet-form beds (a node-form check bed
+// is a `fleet:` node validated via #DeployValue=#Deploy, so the disjunction was
 // only ever applied to the legacy root-shape `check:` collection). Relaxing it to
 // the alias removes that divergent parallel spec and lets gengotypes emit a real
 // Check struct instead of an empty `struct{}`.
@@ -249,7 +249,7 @@
 	// sibling of ssh_port. Validation-only (the Go type is hand-mirrored, @go(-)).
 	port_forwards?: {[string]: int}
 	// ephemeral persists the FINAL/K5 unit 6a cross-substrate ephemeral-instance lifecycle
-	// state (candy/plugin-bundle/ephemeral.go's RegisterEphemeralLifecycle /
+	// state (candy/plugin-fleet/ephemeral.go's RegisterEphemeralLifecycle /
 	// persistEphemeralRuntime) — machine-written, so EVERY field is optional to tolerate
 	// legacy/partial entries (an ephemeral registered before a field existed, or interrupted
 	// mid-write never has a required-field gap to violate). Mirrors spec.EphemeralRuntime
@@ -266,7 +266,7 @@
 		status?:           string
 		instance_name?:    string
 		// deploy_address is the CLI-addressable deploy identity (the dotted tree path for a
-		// nested deploy — `charly bundle del <deploy_address>`), DISTINCT from the dc.Bundle
+		// nested deploy — `charly fleet del <deploy_address>`), DISTINCT from the dc.Fleet
 		// map key this entry is stored under (a dot-sanitized "vm:<domain-id>" form — see
 		// spec.ValidateDeploymentName + sdk/vmshared.VmDomainIdentity). RCA #2,
 		// FINAL/K5 unit 6a.
@@ -547,7 +547,7 @@
 // Exactly one of Deploy / Template / Box / Candy is set, matching Shape.
 #StandaloneLoad: {
 	shape!: string @go(Shape) // "deploy" | "template" | "candy-image" | "candy-layer"
-	deploy?:   #Deploy @go(Deploy,optional=nillable)   // Shape=="deploy": the full pre-decoded BundleNode
+	deploy?:   #Deploy @go(Deploy,optional=nillable)   // Shape=="deploy": the full pre-decoded FleetNode
 	template?: bytes   @go(Template,type=RawBody)      // Shape=="template": the pre-decoded typed template value's JSON
 	box?:      #Box    @go(Box,optional=nillable)      // Shape=="candy-image": the pre-decoded IMAGE (spec.Box)
 	candy?:    #Candy  @go(Candy,optional=nillable)    // Shape=="candy-layer": the pre-decoded LAYER (spec.Candy)
@@ -624,7 +624,7 @@
 // #SaveDeployStateInput holds the deployment parameters SaveDeployState persists to charly.yml
 // (promoted from sdk/deploykit — #55 import-purity, Cone V value-vocabulary; the SaveDeployState
 // FUNCTION stays in deploykit). Every field is a spec/stdlib type. The deploy candies
-// (plugin-deploy-pod, plugin-bundle) pass it DIRECTLY to deploykit.SaveDeployState plugin-side
+// (plugin-deploy-pod, plugin-fleet) pass it DIRECTLY to deploykit.SaveDeployState plugin-side
 // (#55 K4 — no host seam carries it across the wire anymore; the fields are ephemeral
 // in-operation, never persisted as-is — the node-form marshal writes only the resulting entry).
 #SaveDeployStateInput: {

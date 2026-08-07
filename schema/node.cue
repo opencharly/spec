@@ -34,7 +34,7 @@
 
 // #ResourceKind — the DEPLOYABLE kinds: the kinds that nest a sub-ENTITY (resource)
 // child (a deploy-into / alongside member), so a `<name>: {<kind>:…, <child>:
-// {<resource-kind>:…}}` node is a bundle-shaped node. Every OTHER kind admits only
+// {<resource-kind>:…}}` node is a fleet-shaped node. Every OTHER kind admits only
 // data + step children. The loader (node_parse.go) classifies a resource child against
 // this set; schemagen emits it as spec.ResourceKinds so the Go side derives the
 // deployable vocabulary from this ONE CUE source instead of a hand list. (node.cue's
@@ -74,7 +74,7 @@
 #Image:      #Box & ({base: string & !=""} | {from: string & !=""})
 #CandyValue: (*#Candy | #Image) @go(-)
 // EDGE-INHERIT cutover B: a substrate kind is BOTH the template entity AND the deploy
-// (the eliminated `bundle:` role folds in). The value is the disjunction
+// (the eliminated `fleet:` role folds in). The value is the disjunction
 // `#Template | #Deploy`, routed by SHAPE in the loader (a template carries its own
 // config — source:/composition; a deploy carries from:/image: + the deploy config).
 // The RDD spike proved `cue vet` resolves this disjunction unambiguously even with
@@ -109,16 +109,16 @@
 // … (the canonical types the plugins' Invoke and the host decode into). For `group` the plugin
 // (candy/plugin-group) decodes its scalar VALUE into the core spec.Deploy (#Deploy, kept via
 // cue_kind_deploy.go) and attaches the host-threaded authored members; for the substrates
-// candy/plugin-substrate ECHOES the host-pre-decoded canonical node (deploy BundleNode or
+// candy/plugin-substrate ECHOES the host-pre-decoded canonical node (deploy FleetNode or
 // per-substrate template), and candy/plugin-candy ECHOES the host-pre-decoded box⊻layer node
-// (candyIsImage + buildCandy → spec.Box / spec.Candy) — the host folds into uf.Bundle /
+// (candyIsImage + buildCandy → spec.Box / spec.Candy) — the host folds into uf.Fleet /
 // uf.Pod / uf.VM / … (substrate) and uf.Box / uf.Candy (candy).
 
 // #DeployValue — the AUTHORED deploy shape (the disjunct under each substrate arm):
 // the COMPLETE #Deploy minus the structural nested/peer maps + the derived target —
 // all loader-derived from tree position, so authoring any of them is a closed-schema
 // rejection (`run: charly migrate`). The substrate kind at the EDGE supplies the
-// target; from:/image: supply the cross-ref (EDGE-INHERIT cutover B; was #BundleValue).
+// target; from:/image: supply the cross-ref (EDGE-INHERIT cutover B; was #DeployValue).
 #DeployValue: #Deploy & {nested?: _|_, peer?: _|_, target?: _|_, member_of?: _|_, inside?: _|_, descent?: _|_}
 
 // ---------------------------------------------------------------------------

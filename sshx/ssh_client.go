@@ -11,7 +11,7 @@ package sshx
 // github.com/opencharly/spec/spec (ssh_target.go); this file reuses it via
 // spec.SSHTarget.
 //
-// The executor used by `charly bundle add vm:<name>` (deploy_executor_ssh.go)
+// The executor used by `charly fleet add vm:<name>` (deploy_executor_ssh.go)
 // keeps shelling out to the system `ssh` binary — that path wants the user's
 // ~/.ssh/config, ControlMaster, agent forwarding, etc. This is a parallel,
 // narrower client just for in-process port forwarding.

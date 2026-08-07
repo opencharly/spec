@@ -8,7 +8,7 @@
 // command:marketplace) synthesizes plugins/<family>/skills/<name>/SKILL.md + references/*.md from
 // these entities; CollectSkills (sdk/deploykit) projects the composed candies' skills into the
 // `ai.opencharly.skill` OCI label so a built image is self-describing (readable via
-// `charly box labels` / `charly bundle from-box`, no external fetch).
+// `charly box labels` / `charly fleet from-box`, no external fetch).
 //
 // owner is the candy/concept-candy entity name that owns this skill — the build-time association
 // that decides which images carry it (CollectSkills filters by owner ∈ composed candy chain).

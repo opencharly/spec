@@ -6,14 +6,14 @@ package spec
 // #DeployCompileRequest (the sanctioned VmJSON/PodConfigJSON idiom), so CUE never decodes it at the
 // wire. Its WIRE form is the 4 host-computed SCALARS below (MachineVenue/Distro/GlibcVersion/
 // BuilderImage); the remaining fields (BuilderContext/ActiveInitName/ActiveInit) are `json:"-"`
-// IN-PROCESS-ONLY — populated PLUGIN-SIDE after the HostContextJSON decode (candy/plugin-bundle's
+// IN-PROCESS-ONLY — populated PLUGIN-SIDE after the HostContextJSON decode (candy/plugin-fleet's
 // preresolveBuilderContexts over the reverse channel + the rp.Init active-init resolve), never
 // crossing. The `cue exp gengotypes` spike is the SDD arbiter: it CANNOT express the `json:"-"`
 // intent (it emits `,omitempty`, which would wrongly serialize the in-process fields into the wire
 // blob) and it embeds the already-hand spec.BuilderPreresolved (opaque map[string]any Context) — so
 // hand-written is SPIKE-JUSTIFIED per the SDD mandate, mirroring its child BuilderPreresolved.
 // sdk/deploykit keeps a `type HostContext = spec.HostContext` forwarder so the deploy-compile
-// mechanism (BuildDeployPlan + the compile helpers) + candy/plugin-bundle compile unchanged.
+// mechanism (BuildDeployPlan + the compile helpers) + candy/plugin-fleet compile unchanged.
 type HostContext struct {
 	// MachineVenue selects compilation mode (P9): false (zero value) → compile for a
 	// CONTAINER image build (the pod overlay / OCI target); true → compile for a MACHINE
@@ -52,7 +52,7 @@ type HostContext struct {
 
 	// ActiveInitName/ActiveInit carry the MachineVenue's preresolved active init system —
 	// resolved ONCE per whole-deploy compile plugin-side off the resolved-project envelope's
-	// rp.Init (candy/plugin-bundle/compile.go). compileServiceSteps reads these instead of
+	// rp.Init (candy/plugin-fleet/compile.go). compileServiceSteps reads these instead of
 	// re-deriving the active init per-candy or guessing via a container-oriented auto-detect
 	// heuristic (which cannot disambiguate a machine venue's init from a plain custom-exec
 	// service entry — proven live 2026-07-20). Nil/empty for a direct BuildDeployPlan caller /
