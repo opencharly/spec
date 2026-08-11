@@ -51,7 +51,7 @@ type DeployContext struct {
 }
 
 // UnifiedDeployTarget is the unified contract all five deploy methods
-// (local, vm, pod, k8s, android) implement uniformly. Each method corresponds
+// (local, vm, pod, kubernetes, android) implement uniformly. Each method corresponds
 // to an `charly fleet …` subcommand, so the dispatcher in ResolveTarget
 // (charly/unified_targets.go) can route purely on target.Kind() without
 // per-cmd switches. Every method dispatches through the ONE generic
@@ -61,14 +61,14 @@ type UnifiedDeployTarget interface {
 	// "arch-vm", "sway-pod"). Unique within a charly.yml.
 	Name() string
 
-	// Kind returns one of "host" | "vm" | "pod" | "k8s".
+	// Kind returns one of "host" | "vm" | "pod" | "kubernetes".
 	// Drives ledger keying ("<kind>:<name>") and command dispatch.
 	Kind() string
 
 	// Executor returns the DeployExecutor this target will use for
 	// shell operations. For host → ShellExecutor; for vm →
-	// SSHExecutor; for pod → a podman-exec wrapper; for k8s → a nop
-	// executor that errors on invocation (k8s operates via
+	// SSHExecutor; for pod → a podman-exec wrapper; for kubernetes → a nop
+	// executor that errors on invocation (kubernetes operates via
 	// kubectl/Kustomize, not shell ops).
 	//
 	// Exposing the executor on the interface lets parent targets in
@@ -96,10 +96,10 @@ type UnifiedDeployTarget interface {
 }
 
 // LifecycleTarget extends UnifiedDeployTarget for live-runtime targets
-// (host, vm, pod). K8s does NOT implement this: its cluster lifecycle
+// (host, vm, pod). Kubernetes does NOT implement this: its cluster lifecycle
 // is kubectl-managed outside charly. Commands that require a live runtime
 // (charly start/stop/status/logs/shell/rebuild) assert the interface and
-// error uniformly on k8s targets.
+// error uniformly on kubernetes targets.
 type LifecycleTarget interface {
 	UnifiedDeployTarget
 

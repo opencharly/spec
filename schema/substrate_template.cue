@@ -1,11 +1,11 @@
 // substrate_template.cue — the OpResolve envelopes for the local + android +
-// pod + k8s + vm substrate-template de-type (Cutover I; SDD conversion, per the
+// pod + kubernetes + vm substrate-template de-type (Cutover I; SDD conversion, per the
 // standing operator directive: a hand-written wire struct not yet CUE-sourced is
 // conversion-in-progress, never a sanctioned exception). candy/plugin-substrate
-// projects an authored local:/android:/pod:/k8s:/vm: TEMPLATE into a Resolved*
+// projects an authored local:/android:/pod:/kubernetes:/vm: TEMPLATE into a Resolved*
 // envelope the kernel consumes without importing the concrete spec.Local /
-// spec.Android / spec.Pod / spec.K8s / spec.Vm. Written out explicitly (not
-// embedding the authoring kind schemas #Local/#Android/#Pod/#K8s, whose
+// spec.Android / spec.Pod / spec.Kubernetes / spec.Vm. Written out explicitly (not
+// embedding the authoring kind schemas #Local/#Android/#Pod/#Kubernetes, whose
 // required/optional field sets differ from the resolved envelope's — e.g.
 // #Local's `candy` is REQUIRED, ResolvedLocal's is OPTIONAL) so every field's
 // state is independently auditable against the former hand type. Plain
@@ -64,23 +64,23 @@
 	resolved?: #ResolvedPod @go(Resolved,optional=nillable)
 }
 
-// #ResolvedK8s is the resolve-to-envelope form of a `k8s:` cluster template.
-// The kernel reads only KubeconfigContext (the deploy preresolver); the full
-// cluster model rides opaquely in Raw and is decoded by candy/plugin-k8sgen,
+// #ResolvedKubernetes is the resolve-to-envelope form of a `kubernetes:` cluster
+// template. The kernel reads only KubeconfigContext (the deploy preresolver); the
+// full cluster model rides opaquely in Raw and is decoded by candy/plugin-k8sgen,
 // never the kernel.
-#ResolvedK8s: {
+#ResolvedKubernetes: {
 	kubeconfig_context?: string @go(KubeconfigContext)
 	raw?: bytes @go(Raw,type=RawBody)
 }
 
-// #K8sResolveInput carries one opaque k8s cluster template body to project.
-#K8sResolveInput: {
-	k8s!: bytes @go(K8s,type=RawBody)
+// #KubernetesResolveInput carries one opaque kubernetes cluster template body to project.
+#KubernetesResolveInput: {
+	kubernetes!: bytes @go(Kubernetes,type=RawBody)
 }
 
-// #K8sResolveReply wraps the resolved k8s cluster template.
-#K8sResolveReply: {
-	resolved?: #ResolvedK8s @go(Resolved,optional=nillable)
+// #KubernetesResolveReply wraps the resolved kubernetes cluster template.
+#KubernetesResolveReply: {
+	resolved?: #ResolvedKubernetes @go(Resolved,optional=nillable)
 }
 
 // #LocalResolveInput / #AndroidResolveInput carry one opaque template body to
@@ -108,7 +108,7 @@
 	local?:   #LocalResolveInput   @go(Local,optional=nillable)
 	android?: #AndroidResolveInput @go(Android,optional=nillable)
 	pod?:     #PodResolveInput     @go(Pod,optional=nillable)
-	k8s?:     #K8sResolveInput     @go(K8s,optional=nillable)
+	kubernetes?: #KubernetesResolveInput @go(Kubernetes,optional=nillable)
 	vm?:      #VmResolveInput      @go(Vm,optional=nillable)
 }
 

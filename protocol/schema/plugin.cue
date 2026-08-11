@@ -176,7 +176,7 @@ protocol: {
 				the SINGLE plugin-declared source for "how does this substrate behave in the deploy chain",
 				so the kernel consults it BY TRAIT (off node.Descent) — never by switching on the kind word.
 				Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-				local=shell+machine_venue; k8s=shell+image_context+leaf_only; android=parent; zero value =
+				local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 				external-in-place. Empty/absent for every non-kind (or non-substrate kind) capability.
 				"""
 			"fields": [
@@ -196,7 +196,7 @@ protocol: {
 					"name":   "image_context"
 					"type":   "bool"
 					"number": 3
-					"doc":    "the substrate composes over an image build context (pod overlay, k8s manifests)"
+					"doc":    "the substrate composes over an image build context (pod overlay, kubernetes manifests)"
 				},
 				{
 					"name":   "machine_venue"
@@ -214,7 +214,7 @@ protocol: {
 					"name":   "leaf_only"
 					"type":   "bool"
 					"number": 6
-					"doc":    "the substrate is a deploy-chain LEAF — it cannot be descended into (k8s)"
+					"doc":    "the substrate is a deploy-chain LEAF — it cannot be descended into (kubernetes)"
 				},
 				{
 					"name":   "bracketed_lifecycle"
@@ -226,7 +226,7 @@ protocol: {
 					"name":   "bed_target"
 					"type":   "bool"
 					"number": 8
-					"doc":    "the substrate is a valid kind:check bed target (pod/vm/local/android); k8s and unknown words are not"
+					"doc":    "the substrate is a valid kind:check bed target (pod/vm/local/android); kubernetes and unknown words are not"
 				},
 				{
 					"name":   "supports_ephemeral"

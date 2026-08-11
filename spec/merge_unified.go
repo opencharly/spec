@@ -45,7 +45,7 @@ func MergeUnified(dst, src *UnifiedFile, srcDir string) {
 	// PluginKinds carries every plugin-extracted kind — the build vocabulary
 	// (distro/builder/init/resource), the Calamares target, sidecar/agent/module/
 	// package-group, AND (K1 unit-1 follow-up) the 5 standalone-substrate-TEMPLATE kinds
-	// vm/pod/k8s/local/android (formerly 5 separate mergeRawTemplateMap calls into dedicated
+	// vm/pod/kubernetes/local/android (formerly 5 separate mergeRawTemplateMap calls into dedicated
 	// fields — now subsumed here too, since they fold into PluginKinds[disc][name] like every
 	// other templated kind) — merged once here (root-wins, name-keyed override). The former
 	// mergeDistroMap/mergeBuilderMap/mergeInitMap/mergeResourceMap/mergeTargetMap calls

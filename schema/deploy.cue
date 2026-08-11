@@ -11,26 +11,26 @@
 // "how does this substrate behave in the deploy chain", so the kernel consults the traits off
 // node.Descent BY TRAIT — never by switching on the substrate kind word (the boundary law).
 // Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; k8s=shell+image_context+leaf_only; android=parent; zero value =
+// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 // external-in-place. Not authored — charly-written state stamped at load.
 #DeployTraits: {
 	// venue: how commands physically execute in this substrate's venue:
 	//   container — podman/docker exec into the container by name (pod).
 	//   ssh       — an ssh hop into the guest (vm).
-	//   shell     — the substrate's own root executor runs on the host (local; k8s host-side).
+	//   shell     — the substrate's own root executor runs on the host (local; kubernetes host-side).
 	//   parent    — reached via the parent's venue, no own executor (android).
 	//   none      — external-in-place (zero value / group).
 	venue?: ("container" | "ssh" | "shell" | "parent" | "none") @go(Venue, type=string)
 	// image_backed: the substrate runs a baked OCI image (pod).
 	image_backed?: bool @go(ImageBacked)
-	// image_context: the substrate composes over an image build context (pod overlay, k8s manifests).
+	// image_context: the substrate composes over an image build context (pod overlay, kubernetes manifests).
 	image_context?: bool @go(ImageContext)
 	// machine_venue: the substrate is a full machine with a system init (host/vm/local) — its
 	// services render as systemd units, not a container init.
 	machine_venue?: bool @go(MachineVenue)
 	// exclusive_venue: the substrate holds an exclusive host-resource lease boundary (vm).
 	exclusive_venue?: bool @go(ExclusiveVenue)
-	// leaf_only: the substrate is a deploy-chain LEAF — it cannot be descended into (k8s).
+	// leaf_only: the substrate is a deploy-chain LEAF — it cannot be descended into (kubernetes).
 	leaf_only?: bool @go(LeafOnly)
 	// bracketed_lifecycle: the substrate's Start/Stop accept direct-mode CLI opts (env/port/
 	// volume/bind/no-auto-detect on Start, unmount on Stop) AND need the Q1 resource-arbiter
@@ -38,15 +38,15 @@
 	// lifecycle + resource claim (vm, via `charly vm start`/`stop`) leaves this false.
 	bracketed_lifecycle?: bool @go(BracketedLifecycle)
 	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local/android run a
-	// disposable check bed; k8s (leaf_only) does not. validateCheckBeds reads this instead of
+	// disposable check bed; kubernetes (leaf_only) does not. validateCheckBeds reads this instead of
 	// switching on the substrate word (the boundary-law incomplete-seam gate).
 	bed_target?: bool @go(BedTarget)
 	// supports_ephemeral: the substrate's Add/Del path wires the ephemeral register/teardown seam
-	// (TTL timer + charly.yml persistence) — vm only today; pod/k8s reject `ephemeral: true` until
+	// (TTL timer + charly.yml persistence) — vm only today; pod/kubernetes reject `ephemeral: true` until
 	// their Add/Del wire the same seam. validateEphemeral reads this instead of a substrate switch.
 	supports_ephemeral?: bool @go(SupportsEphemeral)
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
-	// only (pod/k8s have no backing chains). validateEphemeral reads this instead of a word switch.
+	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	supports_from_snapshot?: bool @go(SupportsFromSnapshot)
 }
 
@@ -62,7 +62,7 @@
 	//   none           — shares the parent venue; no hop (local, android).
 	//   container-exec — enter the container by name (pod; podman/docker per engine).
 	//   ssh            — an ssh hop into the guest (vm).
-	//   reject         — unreachable via the deploy chain (k8s → use kubectl).
+	//   reject         — unreachable via the deploy chain (kubernetes → use kubectl).
 	transport: "none" | "container-exec" | "ssh" | "reject"
 	// host_rooted: the substrate's own ROOT executor runs directly on the host
 	// (local), so the check runner uses rootExecutorForDeployNode, not a container chain.
@@ -82,7 +82,7 @@
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
-	target?: ("pod" | "vm" | "k8s" | "local" | "android") @go(Target,type=string) // loader-DERIVED (yaml:"-")
+	target?: ("pod" | "vm" | "kubernetes" | "local" | "android") @go(Target,type=string) // loader-DERIVED (yaml:"-")
 
 	// member_of + inside are loader-DERIVED runtime fields (never authored;
 	// rejected by #DeployValue): member_of marks a folded sibling-member entry,
@@ -104,9 +104,9 @@
 	descent?: #DescentDescriptor @go(Descent,optional=nillable)
 
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
-	// k8s:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
-	//   from  — inherit a SAME-kind template by name (vm/k8s/local/android deploys).
-	//   image — the box/OCI artifact a pod/k8s/android RUNS (the former `box:`).
+	// kubernetes:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
+	//   from  — inherit a SAME-kind template by name (vm/kubernetes/local/android deploys).
+	//   image — the box/OCI artifact a pod/kubernetes/android RUNS (the former `box:`).
 	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
 	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
 	// (source:) OR a deploy (from:) under ONE arm — the disjunction #Vm|#Deploy.
@@ -168,7 +168,7 @@
 	ram?:       #VmSize
 	disk_size?: #VmSize @go(DiskSize)
 
-	kubernetes?: #K8sDeploy @go(Kubernetes,optional=nillable)
+	deploy?: #KubernetesDeploy @go(Deploy,optional=nillable)
 
 	resources?: #DeployResources @go(Resources,optional=nillable)
 	expose?:    #DeployExpose    @go(Expose,optional=nillable)
@@ -304,13 +304,13 @@
 	access?:     "single-writer" | "many-readers" | "many-writers"
 	path?:       string & =~"^/"
 }
-#K8sDeploy: {
+#KubernetesDeploy: {
 	namespace?: #EntityRef
 	workload?:  "Deployment" | "StatefulSet" | "DaemonSet" | "Pod" | "Job" | "CronJob"
-	patches?: [...#K8sPatch]
+	patches?: [...#KubernetesPatch]
 	raw?: [...string]
 }
-#K8sPatch: {
+#KubernetesPatch: {
 	target: {
 		kind?:      string & !=""
 		name?:      string & !=""
@@ -571,13 +571,13 @@
 	install_interval?: string @go(InstallInterval)
 }
 
-// #K8sDeployVenue is the preresolved deploy:k8s substrate payload the host's
-// k8s deploy preresolver produces in DeployVenue.Substrate and the
-// candy/plugin-kube deploy:k8s provider decodes.
-#K8sDeployVenue: {
+// #KubernetesDeployVenue is the preresolved deploy:kubernetes substrate payload the host's
+// kubernetes deploy preresolver produces in DeployVenue.Substrate and the
+// candy/plugin-kube deploy:kubernetes provider decodes.
+#KubernetesDeployVenue: {
 	overlay_path!: string @go(OverlayPath) // <root>/overlays/<inst> — the `kubectl apply -k` argument
 	tree_root?:    string @go(TreeRoot)    // <root> = .opencharly/k8s/<name> — removed at teardown
-	kube_context?: string @go(KubeContext) // kind:k8s template's kubeconfig_context → `kubectl --context` (empty → current-context)
+	kube_context?: string @go(KubeContext) // kind:kubernetes template's kubeconfig_context → `kubectl --context` (empty → current-context)
 	deploy_name?:  string @go(DeployName)  // for plugin-side log messages
 }
 

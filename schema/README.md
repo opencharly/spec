@@ -1,6 +1,6 @@
 # sdk/schema — the single-source CUE schema
 
-Every `charly.yml` shape (box / candy / fleet / vm / k8s / deploy / …) is defined
+Every `charly.yml` shape (box / candy / fleet / vm / kubernetes / deploy / …) is defined
 ONCE here, in package-less `*.cue` files. These files are the single source of
 truth for two consumers:
 

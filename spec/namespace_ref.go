@@ -5,7 +5,7 @@ import "strings"
 // namespace_ref.go — the generic Go-inspired hierarchical-namespace-ref VOCAB
 // (the `import:` statement's qualified-ref grammar: `ns.member`, `a.b.c`). Pure
 // string predicates with a wide, non-loader-cone consumer set (config.go's
-// resolveBoxRef/pullNamespacedBox family, k8s_deploy_preresolve.go, refs.go) —
+// resolveBoxRef/pullNamespacedBox family, the plugin-side substrate preresolvers) —
 // legal for any charly package to import, same rationale as ref_parse.go.
 
 // SplitNamespaceRef splits a qualified ref on its FIRST `.` into (namespace,

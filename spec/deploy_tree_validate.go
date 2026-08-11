@@ -51,8 +51,8 @@ func ValidateDeploymentTree(deploy map[string]FleetNode) error {
 // ref ONLY from this field.
 //
 // Scope: target: pod (or empty — pod is the default). target: vm
-// uses `vm:`, target: local is candy-driven, target: k8s
-// CLUSTER definitions live in the `k8s:` section (not deploy:).
+// uses `vm:`, target: local is candy-driven, target: kubernetes
+// CLUSTER definitions live in the `kubernetes:` section (not deploy:).
 //
 // Remediation: `charly migrate` (idempotent) walks every
 // affected deploy and injects the field, inferring the value from

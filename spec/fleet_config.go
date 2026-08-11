@@ -17,7 +17,7 @@ import "encoding/json"
 //
 // Schema v4: the top-level map key is `deployment:` (singular, flat). The
 // legacy `images:` / `deployments.images.*` nesting is gone — all target
-// kinds (host / vm / pod / k8s) live under the single `deployment:` map.
+// kinds (host / vm / pod / kubernetes) live under the single `deployment:` map.
 type FleetConfig struct {
 	Provides *ProvidesConfig      `yaml:"provides,omitempty" json:"provides,omitempty"`
 	Fleet    map[string]FleetNode `yaml:"deploy" json:"deploy"`

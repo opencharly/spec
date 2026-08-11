@@ -107,12 +107,12 @@ type ProjectWalker interface {
 // (Box/Candy/Fleet/PluginKinds); the host copies them in before a Materializer call and back out
 // after (cheap map-header copies — maps are reference types, so this is NOT a deep copy).
 //
-// The 5 standalone-substrate-TEMPLATE kinds (vm/pod/k8s/local/android) do NOT get their own
+// The 5 standalone-substrate-TEMPLATE kinds (vm/pod/kubernetes/local/android) do NOT get their own
 // dedicated fields here — they fold into PluginKinds[disc][name] like every other templated kind
 // (distro/builder/init/sidecar/resource/agent already do), so foldStandaloneTemplateReply
 // (charly/node_normalize.go) needs NO per-kind-word switch to pick a destination field: the
 // generic write `acc.PluginKinds[disc][name] = replyJSON` IS the fold, for any disc. charly-core's
-// UnifiedFile.VM()/.Pod()/.K8s()/.Local()/.Android() are now DERIVED accessor methods reading
+// UnifiedFile.VM()/.Pod()/.Kubernetes()/.Local()/.Android() are now DERIVED accessor methods reading
 // PluginKinds, mirroring the established Distros()/Builders()/Inits() pattern — not stored fields
 // — so there is nothing left to copy for them either.
 //
