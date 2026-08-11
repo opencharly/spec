@@ -369,7 +369,7 @@ func (x *CLISubcommand) GetHidden() bool {
 // the SINGLE plugin-declared source for "how does this substrate behave in the deploy chain",
 // so the kernel consults it BY TRAIT (off node.Descent) — never by switching on the kind word.
 // Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; k8s=shell+image_context+leaf_only; android=parent; zero value =
+// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 // external-in-place. Empty/absent for every non-kind (or non-substrate kind) capability.
 type DeployTraits struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -377,17 +377,17 @@ type DeployTraits struct {
 	Venue string `protobuf:"bytes,1,opt,name=venue,proto3" json:"venue,omitempty"`
 	// the substrate runs a baked OCI image (pod)
 	ImageBacked bool `protobuf:"varint,2,opt,name=image_backed,json=imageBacked,proto3" json:"image_backed,omitempty"`
-	// the substrate composes over an image build context (pod overlay, k8s manifests)
+	// the substrate composes over an image build context (pod overlay, kubernetes manifests)
 	ImageContext bool `protobuf:"varint,3,opt,name=image_context,json=imageContext,proto3" json:"image_context,omitempty"`
 	// the substrate is a full machine with a system init (host/vm/local) — services render as systemd units, not a container init
 	MachineVenue bool `protobuf:"varint,4,opt,name=machine_venue,json=machineVenue,proto3" json:"machine_venue,omitempty"`
 	// the substrate holds an exclusive host-resource lease boundary (vm)
 	ExclusiveVenue bool `protobuf:"varint,5,opt,name=exclusive_venue,json=exclusiveVenue,proto3" json:"exclusive_venue,omitempty"`
-	// the substrate is a deploy-chain LEAF — it cannot be descended into (k8s)
+	// the substrate is a deploy-chain LEAF — it cannot be descended into (kubernetes)
 	LeafOnly bool `protobuf:"varint,6,opt,name=leaf_only,json=leafOnly,proto3" json:"leaf_only,omitempty"`
 	// the substrate's Start/Stop accept direct-mode CLI opts AND need the Q1 resource-arbiter claim bracketed around the dispatch (pod); a substrate that manages its own venue lifecycle + resource claim (vm) leaves this false
 	BracketedLifecycle bool `protobuf:"varint,7,opt,name=bracketed_lifecycle,json=bracketedLifecycle,proto3" json:"bracketed_lifecycle,omitempty"`
-	// the substrate is a valid kind:check bed target (pod/vm/local/android); k8s and unknown words are not
+	// the substrate is a valid kind:check bed target (pod/vm/local/android); kubernetes and unknown words are not
 	BedTarget bool `protobuf:"varint,8,opt,name=bed_target,json=bedTarget,proto3" json:"bed_target,omitempty"`
 	// the substrate's Add/Del path wires the ephemeral register/teardown seam (TTL timer + charly.yml persistence) — vm only today
 	SupportsEphemeral bool `protobuf:"varint,9,opt,name=supports_ephemeral,json=supportsEphemeral,proto3" json:"supports_ephemeral,omitempty"`

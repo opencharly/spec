@@ -516,7 +516,7 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 //     `# opencharly:begin <Marker>` fence; for fish, a per-candy drop-in at
 //     ~/.config/fish/conf.d/charly-<candy>.fish (no fence needed, file IS the
 //     unit). UseDropin discriminates the two paths.
-//   - the external k8s substrate: does not consume the InstallPlan IR at all
+//   - the external kubernetes substrate: does not consume the InstallPlan IR at all
 //     (the host generates a Kustomize tree separately — no shell snippet).
 type ShellSnippetStep struct {
 	CandyName   string   // candy this snippet belongs to (also Marker source)
@@ -678,7 +678,7 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 //     siblings (system-packages/builder/op) on the same seam.
 //     A distro with no localpkg-capable format (LocalPkg==nil) renders nothing; the
 //     candy's own COPY/curl `cmd:` task is the fallback there.
-//   - the android / k8s substrates (external) SKIP it (no Arch package surface).
+//   - the android / kubernetes substrates (external) SKIP it (no Arch package surface).
 //
 // The PKGBUILD location is resolved at EMIT time (not compile time), so the
 // step carries only the author's hint (`PkgbuildRef`) plus the candy's source
@@ -730,7 +730,7 @@ func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 // Only a rebootable venue acts on it: the external vm deploy reboots the guest over SSH
 // (the host's RunHostStep RebootStep handler, gated on the rebootable-venue flag the vm
 // substrate sets) and waits for the boot_id to change. OCITarget / PodDeployTarget have
-// no machine to reboot at build time and skip it (the external k8s substrate does not
+// no machine to reboot at build time and skip it (the external kubernetes substrate does not
 // consume the IR at all); the external local deploy refuses to reboot the host venue
 // unattended (skip + note). Mirrors the ApkInstallStep "only one target executes" pattern.
 type RebootStep struct {

@@ -21,19 +21,19 @@ package spec
 
 // --- top-level entity types ---
 type (
-	BoxConfig   = Box
-	CandyYAML   = Candy
-	VmSpec      = Vm
-	FleetNode   = Deploy
-	LocalSpec   = Local
-	PodSpec     = Pod
-	K8sSpec     = K8s
-	AndroidSpec = Android
-	SidecarDef  = Sidecar
-	ResourceDef = Resource
-	DistroDef   = Distro
-	BuilderDef  = Builder
-	InitDef     = Init
+	BoxConfig      = Box
+	CandyYAML      = Candy
+	VmSpec         = Vm
+	FleetNode      = Deploy
+	LocalSpec      = Local
+	PodSpec        = Pod
+	KubernetesSpec = Kubernetes
+	AndroidSpec    = Android
+	SidecarDef     = Sidecar
+	ResourceDef    = Resource
+	DistroDef      = Distro
+	BuilderDef     = Builder
+	InitDef        = Init
 )
 
 // --- candy sub-types ---

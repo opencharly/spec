@@ -49,11 +49,11 @@ type ProvidedCapability struct {
 	// Lifecycle is set ONLY for Class=="deploy" (F6): the substrate brings its OWN host-side
 	// venue lifecycle (PrepareVenue/Start/Stop/Status/Rebuild/...) served over the lifecycle Ops,
 	// so the host registers a wire-backed substrateLifecycle for it. false for every other
-	// class/deploy (local/android/k8s keep the generic host-venue behaviour).
+	// class/deploy (local/android/kubernetes keep the generic host-venue behaviour).
 	Lifecycle bool
 	// Preresolve is set ONLY for Class=="deploy" (F6): the substrate declares a host-side
 	// PRERESOLVE step (OpPreresolve) the host runs before apply, shipping the opaque result in
-	// DeployVenue.Substrate — the wire-backed generalization of the in-core k8s/android
+	// DeployVenue.Substrate — the wire-backed generalization of the in-core kubernetes/android
 	// preresolvers. false for every other class/deploy.
 	Preresolve bool
 	// Validates is set ONLY for Class=="kind" (F7/C8): the kind serves a deep OpValidate check

@@ -9,7 +9,7 @@
 // BuilderConfig / InitSystem / InitDef / CandyCaps — the 6 json:"-" fields of buildkit.ResolvedBox)
 // and all LIVE state (container snapshots, engine truth, live executors) are EXCLUDED by design and
 // stay host / verb-probe. Most of the envelope is ALREADY CUE-sourced (spec.Deploy, ParsedProject,
-// DeploymentStatus, ResolvedK8s/Android); this file adds exactly TWO new views — #ResolvedBoxView +
+// DeploymentStatus, ResolvedKubernetes/Android); this file adds exactly TWO new views — #ResolvedBoxView +
 // #CandyView — composed with the existing #Deploy tree.
 //
 // Package-less; concatenated into the spec compilation unit. NOT an authoring kind (never in
@@ -222,7 +222,7 @@
 	distro?: {[string]: _} @go(Distro,type=map[string]*ResolvedDistro)
 	builder?: {[string]: _} @go(Builder,type=map[string]*Builder)
 	init?: {[string]: _} @go(Init,type=map[string]*ResolvedInit)
-	// kind templates (validate localtemplates + check-include pod/vm arms + status k8s/adb enumeration).
+	// kind templates (validate localtemplates + check-include pod/vm arms + status kubernetes/adb enumeration).
 	templates?: #ProjectTemplates @go(Templates,optional=nillable)
 	// kind:agent catalog (the harness AI-CLI pick — plugin-check reads it off this envelope; charly feature list-agent).
 	agent_bodies?: {[string]: bytes} @go(AgentBodies,type=map[string]RawBody)
@@ -283,15 +283,15 @@
 	primaries?: {[string]: string} @go(Primaries)
 }
 
-// #ProjectTemplates — the bare pod:/vm:/local:/k8s:/android: template maps carried as OPAQUE payloads
-// (the uf.Pod/VM/Local/K8s/Android raw bytes, verbatim). The host projector stays KIND-BLIND — it
+// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android: template maps carried as OPAQUE payloads
+// (the uf.Pod/VM/Local/Kubernetes/Android raw bytes, verbatim). The host projector stays KIND-BLIND — it
 // copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Pod/…
 // would violate the boundary law + trip TestNoConcreteKindInKernel). The CONSUMING PLUGINS
-// (validate localtemplates, check-include pod/vm arms, status k8s/adb) decode a RawBody into the
+// (validate localtemplates, check-include pod/vm arms, status kubernetes/adb) decode a RawBody into the
 // concrete spec kind type themselves — a plugin MAY know kinds, the kernel may not.
 #ProjectTemplates: {
 	local?: {[string]: bytes} @go(Local,type=map[string]RawBody)
-	k8s?: {[string]: bytes} @go(K8s,type=map[string]RawBody)
+	kubernetes?: {[string]: bytes} @go(Kubernetes,type=map[string]RawBody)
 	pod?: {[string]: bytes} @go(Pod,type=map[string]RawBody)
 	vm?: {[string]: bytes} @go(VM,type=map[string]RawBody)
 	android?: {[string]: bytes} @go(Android,type=map[string]RawBody)

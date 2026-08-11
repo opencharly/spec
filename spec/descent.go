@@ -40,7 +40,7 @@ func StampDescent(node *Deploy, traitsFor func(word string) *DeployTraits) {
 // switching on a substrate kind word. It copies the declared traits verbatim (the consult
 // sites read them off node.Descent) and computes transport + host_rooted:
 //
-//	leaf_only            → reject          (k8s: a deploy-chain leaf, unreachable via exec)
+//	leaf_only            → reject          (kubernetes: a deploy-chain leaf, unreachable via exec)
 //	venue == container   → container-exec  (pod: podman/docker exec by name)
 //	venue == ssh         → ssh             (vm: an ssh hop into the guest)
 //	otherwise            → none            (shell/parent/none share the parent venue)
@@ -72,7 +72,7 @@ func DescentFromTraits(t *DeployTraits) *DescentDescriptor {
 		d.Transport = "none"
 	}
 	// host_rooted: the substrate's own ROOT executor runs directly on the host (local:
-	// venue==shell, not a leaf). k8s (shell + leaf_only) is a chain leaf, never descended,
+	// venue==shell, not a leaf). kubernetes (shell + leaf_only) is a chain leaf, never descended,
 	// so its host_rooted is irrelevant and left false.
 	d.HostRooted = t != nil && t.Venue == "shell" && !t.LeafOnly
 	return d

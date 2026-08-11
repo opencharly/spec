@@ -52,7 +52,7 @@ import (
 //	                          NestedExecutor with JumpSSH on top.
 //	target: host            → no hop (host nodes share the parent
 //	                          venue).
-//	target: k8s             → error (k8s manifests are leaves; not
+//	target: kubernetes      → error (kubernetes manifests are leaves; not
 //	                          traversable as exec targets).
 //
 // Returns clear errors with available-name hints when a segment fails
@@ -199,7 +199,7 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.FleetNode, flatP
 		}, nil
 
 	case "reject":
-		return nil, fmt.Errorf("k8s targets cannot be reached via the deploy chain (use kubectl)")
+		return nil, fmt.Errorf("kubernetes targets cannot be reached via the deploy chain (use kubectl)")
 	}
 	return nil, fmt.Errorf("unknown descent transport %q on node %q", node.Descent.Transport, flatPath)
 }

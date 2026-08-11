@@ -50,7 +50,7 @@ func FleetDelArgv(name string) []string {
 // DeriveDeploymentName turns "quay.io/myorg/openclaw:v1" → "openclaw" and
 // "registry.example.com/path/foo" → "foo" — the shared default-name derivation for a
 // source-less `charly fleet from-box` deploy (both the pod path, candy/plugin-fleet/from_box_pod.go,
-// and the k8s path, candy/plugin-fleet/deploy_from_box.go — R3, one function, two callers).
+// and the kubernetes path, candy/plugin-fleet/deploy_from_box.go — R3, one function, two callers).
 func DeriveDeploymentName(imageRef string) string {
 	// Strip tag.
 	ref := imageRef

@@ -71,7 +71,7 @@ func PathLeaf(path string) string {
 }
 
 // ClassifyNodeTarget picks the target discriminator for a node. Uses node.Target when non-empty
-// (canonical pod|vm|k8s|local|android, set from the node-form kind by the loader's
+// (canonical pod|vm|kubernetes|local|android, set from the node-form kind by the loader's
 // fleetTargetForDisc). For ref-based deploys with no charly.yml entry, the deploy name itself is
 // the hint: a literal `host`/`local` LEAF → local target; anything else → pod. A pure function of
 // node+path with no LoadUnified/executor dependency.
@@ -137,7 +137,7 @@ func IsContainerVenue(node *FleetNode) bool {
 // ExternalInPlaceVenue reports whether node's stamped venue is an EXTERNAL deploy substrate that
 // applies its workload IN PLACE — local-like: no container image to build, no `charly
 // config`/`charly start`, teardown via `charly fleet del` (replay the recorded reverse ops).
-// local/android/k8s/exampledeploy are in-place (parent/none venues); pod is the one externalized
+// local/android/kubernetes/exampledeploy are in-place (parent/none venues); pod is the one externalized
 // substrate that is NOT in-place (excluded by requiring venue != container implicitly, since
 // parent/none never equals container). Mirrors HostRooted's shape (#55 W3 B2-full) — the
 // plugin-reachable equivalent of the former core-private bedExternalInPlace(target string), which
