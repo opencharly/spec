@@ -49,7 +49,7 @@
 // the ProjectLoader seam) and threaded to the plugin via
 // op.Env (F5); the parser gate admits them because resourceKindSet has them. candy is NOT a
 // resource kind (it nests no deploy members — it is the box⊻layer factory).
-#ResourceKind: ("pod" | "vm" | "k8s" | "local" | "android" | "group") @go(-)
+#ResourceKind: ("pod" | "vm" | "kubernetes" | "local" | "android" | "group") @go(-)
 
 // ---------------------------------------------------------------------------
 // Per-kind node VALUES — the COMPLETE per-kind def, authored INLINE: the kind
@@ -78,7 +78,7 @@
 // `#Template | #Deploy`, routed by SHAPE in the loader (a template carries its own
 // config — source:/composition; a deploy carries from:/image: + the deploy config).
 // The RDD spike proved `cue vet` resolves this disjunction unambiguously even with
-// overlapping fields. @go(-): the Go types come from #Local/#Pod/#Vm/#K8s/#Android +
+// overlapping fields. @go(-): the Go types come from #Local/#Pod/#Vm/#Kubernetes/#Android +
 // #Deploy directly; this value def is validation-only.
 //
 // C2-substrate: these 5 substrate kinds have NO #Node arm anymore (externalized to
@@ -91,12 +91,12 @@
 #LocalValue:   (#Local | #DeployValue) @go(-)
 #PodValue:     (#Pod | #DeployValue) @go(-)
 #VmValue:      (#Vm | #DeployValue) @go(-)
-#K8sValue:     (#K8s | #DeployValue) @go(-)
+#KubernetesValue: (#Kubernetes | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
 // EVERY authoring kind is externalized to a plugin unit — the build-vocabulary kinds
 // (`distro:`/`builder:`/`init:`/`resource:`), the AI-CLI grader `agent:`, the sidecar
 // `sidecar:`, the targetless deploy `group:` (C2-group), the 5 substrate kinds
-// `pod:`/`vm:`/`k8s:`/`local:`/`android:` (C2-substrate), AND the box⊻layer
+// `pod:`/`vm:`/`kubernetes:`/`local:`/`android:` (C2-substrate), AND the box⊻layer
 // factory `candy:` (C2-candy) — so NONE has a #Node arm; such a node passes #NodeDoc as a
 // registered non-core discriminator (the OPEN #Node struct). A plugin with a self-contained served
 // #*Input schema (distro/builder/…/group) is validated by that schema (runPluginKind →
@@ -104,7 +104,7 @@
 // (#Vm/#Deploy/#LibvirtDomain/#Candy/#Box/…) and so cannot be a self-contained plugin schema, are
 // validated HOST-SIDE against the KEPT #<Kind>Value / #CandyValue defs above (runPluginKind →
 // validateKindValueCUE). The core #Distro / #Builder / #Init / #Resource / #Agent /
-// #Sidecar / #Pod / #Vm / #K8s / #Local / #Android / #Deploy / #Candy / #Box defs
+// #Sidecar / #Pod / #Vm / #Kubernetes / #Local / #Android / #Deploy / #Candy / #Box defs
 // (schema/*.cue) are KEPT — they still generate spec.Distro / spec.Vm / spec.Candy / spec.Box /
 // … (the canonical types the plugins' Invoke and the host decode into). For `group` the plugin
 // (candy/plugin-group) decodes its scalar VALUE into the core spec.Deploy (#Deploy, kept via

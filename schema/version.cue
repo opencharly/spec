@@ -28,9 +28,13 @@
 // removal: #Deploy.shell (#DeployShellOverlay) was authorable but had ZERO
 // live consumer — MergeDeployShell, its only would-be merge, never had a
 // production call site anywhere in this repo's history — migrated away by
-// the `stripDeployShellOverlay` reshaper hook. Re-stamped to the merge-time
-// CalVer by the fresh pr-validator.
-#SchemaVersion: #CanonCalVer & "2026.204.1223" @go(-)
+// the `stripDeployShellOverlay` reshaper hook. Bumped again by the
+// k8s→kubernetes full naming cleanup (the deploy substrate kind + cluster-template
+// kind + every #K8s* def + the derived target enum): an authored WIRE-key change
+// (`k8s:` → `kubernetes:`, and the inner deploy-knobs block `kubernetes:` → `deploy:`),
+// migrated by the two rename_key ops in candy/plugin-migrate/migrations.cue.
+// Re-stamped to the merge-time CalVer by the fresh pr-validator.
+#SchemaVersion: #CanonCalVer & "2026.223.1130" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
 // the migration-baseline reset it EQUALS #SchemaVersion — the deleted 47-step chain

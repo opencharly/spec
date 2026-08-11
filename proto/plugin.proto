@@ -77,24 +77,24 @@ message CLISubcommand {
 // the SINGLE plugin-declared source for "how does this substrate behave in the deploy chain",
 // so the kernel consults it BY TRAIT (off node.Descent) — never by switching on the kind word.
 // Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; k8s=shell+image_context+leaf_only; android=parent; zero value =
+// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 // external-in-place. Empty/absent for every non-kind (or non-substrate kind) capability.
 message DeployTraits {
   // "container" | "ssh" | "shell" | "parent" | "none": how commands physically execute in this substrate's venue
   string venue = 1;
   // the substrate runs a baked OCI image (pod)
   bool image_backed = 2;
-  // the substrate composes over an image build context (pod overlay, k8s manifests)
+  // the substrate composes over an image build context (pod overlay, kubernetes manifests)
   bool image_context = 3;
   // the substrate is a full machine with a system init (host/vm/local) — services render as systemd units, not a container init
   bool machine_venue = 4;
   // the substrate holds an exclusive host-resource lease boundary (vm)
   bool exclusive_venue = 5;
-  // the substrate is a deploy-chain LEAF — it cannot be descended into (k8s)
+  // the substrate is a deploy-chain LEAF — it cannot be descended into (kubernetes)
   bool leaf_only = 6;
   // the substrate's Start/Stop accept direct-mode CLI opts AND need the Q1 resource-arbiter claim bracketed around the dispatch (pod); a substrate that manages its own venue lifecycle + resource claim (vm) leaves this false
   bool bracketed_lifecycle = 7;
-  // the substrate is a valid kind:check bed target (pod/vm/local/android); k8s and unknown words are not
+  // the substrate is a valid kind:check bed target (pod/vm/local/android); kubernetes and unknown words are not
   bool bed_target = 8;
   // the substrate's Add/Del path wires the ephemeral register/teardown seam (TTL timer + charly.yml persistence) — vm only today
   bool supports_ephemeral = 9;

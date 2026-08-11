@@ -1854,7 +1854,7 @@ type ResolvedProject struct {
 
 	Init map[string]*ResolvedInit `yaml:"init,omitempty" json:"init,omitempty"`
 
-	// kind templates (validate localtemplates + check-include pod/vm arms + status k8s/adb enumeration).
+	// kind templates (validate localtemplates + check-include pod/vm arms + status kubernetes/adb enumeration).
 	Templates *ProjectTemplates `yaml:"templates,omitempty" json:"templates,omitempty"`
 
 	// kind:agent catalog (the harness AI-CLI pick — plugin-check reads it off this envelope; charly feature list-agent).
@@ -2506,16 +2506,16 @@ type CandySecret struct {
 	Env string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
-// #ProjectTemplates — the bare pod:/vm:/local:/k8s:/android: template maps carried as OPAQUE payloads
-// (the uf.Pod/VM/Local/K8s/Android raw bytes, verbatim). The host projector stays KIND-BLIND — it
+// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android: template maps carried as OPAQUE payloads
+// (the uf.Pod/VM/Local/Kubernetes/Android raw bytes, verbatim). The host projector stays KIND-BLIND — it
 // copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Pod/…
 // would violate the boundary law + trip TestNoConcreteKindInKernel). The CONSUMING PLUGINS
-// (validate localtemplates, check-include pod/vm arms, status k8s/adb) decode a RawBody into the
+// (validate localtemplates, check-include pod/vm arms, status kubernetes/adb) decode a RawBody into the
 // concrete spec kind type themselves — a plugin MAY know kinds, the kernel may not.
 type ProjectTemplates struct {
 	Local map[string]RawBody `yaml:"local,omitempty" json:"local,omitempty"`
 
-	K8s map[string]RawBody `yaml:"k8s,omitempty" json:"k8s,omitempty"`
+	Kubernetes map[string]RawBody `yaml:"kubernetes,omitempty" json:"kubernetes,omitempty"`
 
 	Pod map[string]RawBody `yaml:"pod,omitempty" json:"pod,omitempty"`
 
@@ -3716,14 +3716,14 @@ type CLIModel struct {
 // "how does this substrate behave in the deploy chain", so the kernel consults the traits off
 // node.Descent BY TRAIT — never by switching on the substrate kind word (the boundary law).
 // Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; k8s=shell+image_context+leaf_only; android=parent; zero value =
+// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 // external-in-place. Not authored — charly-written state stamped at load.
 type DeployTraits struct {
 	// venue: how commands physically execute in this substrate's venue:
 	//
 	//	container — podman/docker exec into the container by name (pod).
 	//	ssh       — an ssh hop into the guest (vm).
-	//	shell     — the substrate's own root executor runs on the host (local; k8s host-side).
+	//	shell     — the substrate's own root executor runs on the host (local; kubernetes host-side).
 	//	parent    — reached via the parent's venue, no own executor (android).
 	//	none      — external-in-place (zero value / group).
 	Venue string `yaml:"venue,omitempty" json:"venue,omitempty"`
@@ -3731,7 +3731,7 @@ type DeployTraits struct {
 	// image_backed: the substrate runs a baked OCI image (pod).
 	ImageBacked bool `yaml:"image_backed,omitempty" json:"image_backed,omitempty"`
 
-	// image_context: the substrate composes over an image build context (pod overlay, k8s manifests).
+	// image_context: the substrate composes over an image build context (pod overlay, kubernetes manifests).
 	ImageContext bool `yaml:"image_context,omitempty" json:"image_context,omitempty"`
 
 	// machine_venue: the substrate is a full machine with a system init (host/vm/local) — its
@@ -3741,7 +3741,7 @@ type DeployTraits struct {
 	// exclusive_venue: the substrate holds an exclusive host-resource lease boundary (vm).
 	ExclusiveVenue bool `yaml:"exclusive_venue,omitempty" json:"exclusive_venue,omitempty"`
 
-	// leaf_only: the substrate is a deploy-chain LEAF — it cannot be descended into (k8s).
+	// leaf_only: the substrate is a deploy-chain LEAF — it cannot be descended into (kubernetes).
 	LeafOnly bool `yaml:"leaf_only,omitempty" json:"leaf_only,omitempty"`
 
 	// bracketed_lifecycle: the substrate's Start/Stop accept direct-mode CLI opts (env/port/
@@ -3751,17 +3751,17 @@ type DeployTraits struct {
 	BracketedLifecycle bool `yaml:"bracketed_lifecycle,omitempty" json:"bracketed_lifecycle,omitempty"`
 
 	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local/android run a
-	// disposable check bed; k8s (leaf_only) does not. validateCheckBeds reads this instead of
+	// disposable check bed; kubernetes (leaf_only) does not. validateCheckBeds reads this instead of
 	// switching on the substrate word (the boundary-law incomplete-seam gate).
 	BedTarget bool `yaml:"bed_target,omitempty" json:"bed_target,omitempty"`
 
 	// supports_ephemeral: the substrate's Add/Del path wires the ephemeral register/teardown seam
-	// (TTL timer + charly.yml persistence) — vm only today; pod/k8s reject `ephemeral: true` until
+	// (TTL timer + charly.yml persistence) — vm only today; pod/kubernetes reject `ephemeral: true` until
 	// their Add/Del wire the same seam. validateEphemeral reads this instead of a substrate switch.
 	SupportsEphemeral bool `yaml:"supports_ephemeral,omitempty" json:"supports_ephemeral,omitempty"`
 
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
-	// only (pod/k8s have no backing chains). validateEphemeral reads this instead of a word switch.
+	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	SupportsFromSnapshot bool `yaml:"supports_from_snapshot,omitempty" json:"supports_from_snapshot,omitempty"`
 }
 
@@ -3778,7 +3778,7 @@ type DescentDescriptor struct {
 	//	none           — shares the parent venue; no hop (local, android).
 	//	container-exec — enter the container by name (pod; podman/docker per engine).
 	//	ssh            — an ssh hop into the guest (vm).
-	//	reject         — unreachable via the deploy chain (k8s → use kubectl).
+	//	reject         — unreachable via the deploy chain (kubernetes → use kubectl).
 	Transport string `yaml:"transport,omitempty" json:"transport"`
 
 	// host_rooted: the substrate's own ROOT executor runs directly on the host
@@ -3789,7 +3789,7 @@ type DescentDescriptor struct {
 	//
 	//	container — podman/docker exec into the container by name (pod).
 	//	ssh       — an ssh hop into the guest (vm).
-	//	shell     — the substrate's own root executor runs on the host (local; k8s host-side).
+	//	shell     — the substrate's own root executor runs on the host (local; kubernetes host-side).
 	//	parent    — reached via the parent's venue, no own executor (android).
 	//	none      — external-in-place (zero value / group).
 	Venue string `yaml:"venue,omitempty" json:"venue,omitempty"`
@@ -3797,7 +3797,7 @@ type DescentDescriptor struct {
 	// image_backed: the substrate runs a baked OCI image (pod).
 	ImageBacked bool `yaml:"image_backed,omitempty" json:"image_backed,omitempty"`
 
-	// image_context: the substrate composes over an image build context (pod overlay, k8s manifests).
+	// image_context: the substrate composes over an image build context (pod overlay, kubernetes manifests).
 	ImageContext bool `yaml:"image_context,omitempty" json:"image_context,omitempty"`
 
 	// machine_venue: the substrate is a full machine with a system init (host/vm/local) — its
@@ -3807,7 +3807,7 @@ type DescentDescriptor struct {
 	// exclusive_venue: the substrate holds an exclusive host-resource lease boundary (vm).
 	ExclusiveVenue bool `yaml:"exclusive_venue,omitempty" json:"exclusive_venue,omitempty"`
 
-	// leaf_only: the substrate is a deploy-chain LEAF — it cannot be descended into (k8s).
+	// leaf_only: the substrate is a deploy-chain LEAF — it cannot be descended into (kubernetes).
 	LeafOnly bool `yaml:"leaf_only,omitempty" json:"leaf_only,omitempty"`
 
 	// bracketed_lifecycle: the substrate's Start/Stop accept direct-mode CLI opts (env/port/
@@ -3817,17 +3817,17 @@ type DescentDescriptor struct {
 	BracketedLifecycle bool `yaml:"bracketed_lifecycle,omitempty" json:"bracketed_lifecycle,omitempty"`
 
 	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local/android run a
-	// disposable check bed; k8s (leaf_only) does not. validateCheckBeds reads this instead of
+	// disposable check bed; kubernetes (leaf_only) does not. validateCheckBeds reads this instead of
 	// switching on the substrate word (the boundary-law incomplete-seam gate).
 	BedTarget bool `yaml:"bed_target,omitempty" json:"bed_target,omitempty"`
 
 	// supports_ephemeral: the substrate's Add/Del path wires the ephemeral register/teardown seam
-	// (TTL timer + charly.yml persistence) — vm only today; pod/k8s reject `ephemeral: true` until
+	// (TTL timer + charly.yml persistence) — vm only today; pod/kubernetes reject `ephemeral: true` until
 	// their Add/Del wire the same seam. validateEphemeral reads this instead of a substrate switch.
 	SupportsEphemeral bool `yaml:"supports_ephemeral,omitempty" json:"supports_ephemeral,omitempty"`
 
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
-	// only (pod/k8s have no backing chains). validateEphemeral reads this instead of a word switch.
+	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	SupportsFromSnapshot bool `yaml:"supports_from_snapshot,omitempty" json:"supports_from_snapshot,omitempty"`
 }
 
@@ -3865,10 +3865,10 @@ type Deploy struct {
 	Descent *DescentDescriptor `yaml:"descent,omitempty" json:"descent,omitempty"`
 
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
-	// k8s:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
+	// kubernetes:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
 	//
-	//	from  — inherit a SAME-kind template by name (vm/k8s/local/android deploys).
-	//	image — the box/OCI artifact a pod/k8s/android RUNS (the former `box:`).
+	//	from  — inherit a SAME-kind template by name (vm/kubernetes/local/android deploys).
+	//	image — the box/OCI artifact a pod/kubernetes/android RUNS (the former `box:`).
 	//
 	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
 	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
@@ -3957,7 +3957,7 @@ type Deploy struct {
 
 	DiskSize VmSize `yaml:"disk_size,omitempty" json:"disk_size,omitempty"`
 
-	Kubernetes *K8sDeploy `yaml:"kubernetes,omitempty" json:"kubernetes,omitempty"`
+	Deploy *KubernetesDeploy `yaml:"deploy,omitempty" json:"deploy,omitempty"`
 
 	Resources *DeployResources `yaml:"resources,omitempty" json:"resources,omitempty"`
 
@@ -4016,17 +4016,17 @@ type Iterate struct {
 	MCPEndpoint *string `yaml:"mcp_endpoint,omitempty" json:"mcp_endpoint,omitempty"`
 }
 
-type K8sDeploy struct {
+type KubernetesDeploy struct {
 	Namespace EntityRef `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 
 	Workload string `yaml:"workload,omitempty" json:"workload,omitempty"`
 
-	Patches []K8sPatch `yaml:"patches,omitempty" json:"patches,omitempty"`
+	Patches []KubernetesPatch `yaml:"patches,omitempty" json:"patches,omitempty"`
 
 	Raw []string `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
 
-type K8sPatch struct {
+type KubernetesPatch struct {
 	Target struct {
 		Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
 
@@ -4166,10 +4166,10 @@ type AndroidDeployVenue struct {
 	InstallInterval string `yaml:"install_interval,omitempty" json:"install_interval,omitempty"`
 }
 
-// #K8sDeployVenue is the preresolved deploy:k8s substrate payload the host's
-// k8s deploy preresolver produces in DeployVenue.Substrate and the
-// candy/plugin-kube deploy:k8s provider decodes.
-type K8sDeployVenue struct {
+// #KubernetesDeployVenue is the preresolved deploy:kubernetes substrate payload the host's
+// kubernetes deploy preresolver produces in DeployVenue.Substrate and the
+// candy/plugin-kube deploy:kubernetes provider decodes.
+type KubernetesDeployVenue struct {
 	OverlayPath string `yaml:"overlay_path,omitempty" json:"overlay_path"`
 
 	TreeRoot string `yaml:"tree_root,omitempty" json:"tree_root,omitempty"`
@@ -4829,134 +4829,13 @@ type InitResolveRequest struct {
 	Config *InitResolveInput `yaml:"config,omitempty" json:"config,omitempty"`
 }
 
-type K8s struct {
-	// May be empty (a cluster-policy-only template runs no workload itself).
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Replica *int `yaml:"replica,omitempty" json:"replica,omitempty"`
-
-	Resources *K8sResources `yaml:"resources,omitempty" json:"resources,omitempty"`
-
-	Hostnames []K8sHostname `yaml:"hostnames,omitempty" json:"hostnames,omitempty"`
-
-	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
-
-	AdmissionPolicy string `yaml:"admission_policy,omitempty" json:"admission_policy,omitempty"`
-
-	DefaultNamespace string `yaml:"default_namespace,omitempty" json:"default_namespace,omitempty"`
-
-	Storage K8sStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
-
-	Ingress K8sIngressDefaults `yaml:"ingress,omitempty" json:"ingress,omitempty"`
-
-	GatewayAPI K8sGatewayAPI `yaml:"gateway_api,omitempty" json:"gateway_api,omitempty"`
-
-	Secret K8sSecretsBackend `yaml:"secret,omitempty" json:"secret,omitempty"`
-
-	ImageDefault K8sImagesDefaults `yaml:"image_default,omitempty" json:"image_default,omitempty"`
-
-	PodDefault K8sPodDefaults `yaml:"pod_default,omitempty" json:"pod_default,omitempty"`
-
-	Observability K8sObservability `yaml:"observability,omitempty" json:"observability,omitempty"`
-
-	NetworkPolicy string `yaml:"network_policy,omitempty" json:"network_policy,omitempty"`
-
-	Defaults K8sResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-}
-
-type K8sResources struct {
-	Requests K8sResourceValues `yaml:"requests,omitempty" json:"requests,omitempty"`
-
-	Limits K8sResourceValues `yaml:"limits,omitempty" json:"limits,omitempty"`
-}
-
-type K8sResourceValues struct {
-	CPU string `yaml:"cpu,omitempty" json:"cpu,omitempty"`
-
-	Memory string `yaml:"memory,omitempty" json:"memory,omitempty"`
-}
-
-type K8sHostname struct {
-	Host string `yaml:"host,omitempty" json:"host"`
-
-	TLS bool `yaml:"tls,omitempty" json:"tls,omitempty"`
-
-	Path string `yaml:"path,omitempty" json:"path,omitempty"`
-}
-
-type K8sStorage struct {
-	ClassDefault string `yaml:"class_default,omitempty" json:"class_default,omitempty"`
-
-	ClassCheap string `yaml:"class_cheap,omitempty" json:"class_cheap,omitempty"`
-
-	ClassEncrypted string `yaml:"class_encrypted,omitempty" json:"class_encrypted,omitempty"`
-
-	ClassFast string `yaml:"class_fast,omitempty" json:"class_fast,omitempty"`
-
-	AccessModeDefault string `yaml:"access_mode_default,omitempty" json:"access_mode_default,omitempty"`
-}
-
-type K8sIngressDefaults struct {
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-
-	Class string `yaml:"class,omitempty" json:"class,omitempty"`
-
-	CertIssuer string `yaml:"cert_issuer,omitempty" json:"cert_issuer,omitempty"`
-
-	PathTypeDefault string `yaml:"path_type_default,omitempty" json:"path_type_default,omitempty"`
-}
-
-type K8sGatewayAPI struct {
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-
-	GatewayClass string `yaml:"gateway_class,omitempty" json:"gateway_class,omitempty"`
-}
-
-type K8sSecretsBackend struct {
-	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
-
-	Store string `yaml:"store,omitempty" json:"store,omitempty"`
-
-	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
-}
-
-type K8sImagesDefaults struct {
-	PullPolicy string `yaml:"pull_policy,omitempty" json:"pull_policy,omitempty"`
-
-	PullSecrets []string `yaml:"pull_secrets,omitempty" json:"pull_secrets,omitempty"`
-}
-
-type K8sPodDefaults struct {
-	PriorityClass string `yaml:"priority_class,omitempty" json:"priority_class,omitempty"`
-
-	// Raw Kubernetes Toleration objects (Go []map[string]any) — genuine
-	// passthrough, so each element stays OPEN.
-	Tolerations []map[string]any/* CUE top */ `yaml:"tolerations,omitempty" json:"tolerations,omitempty"`
-
-	NodeSelector map[string]string `yaml:"node_selector,omitempty" json:"node_selector,omitempty"`
-}
-
-type K8sObservability struct {
-	ServiceMonitor bool `yaml:"service_monitor,omitempty" json:"service_monitor,omitempty"`
-
-	ServiceMonitorInterval string `yaml:"service_monitor_interval,omitempty" json:"service_monitor_interval,omitempty"`
-}
-
-type K8sResourceDefaults struct {
-	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
-
-	Annotations map[string]string `yaml:"annotations,omitempty" json:"annotations,omitempty"`
-}
-
-// #K8sGenInput is the pure-generation input the host ships to plugin-k8sgen
+// #KubernetesGenInput is the pure-generation input the caller ships to plugin-k8sgen
 // over OpEmit. Deploy is the deployment node (the former FleetNode =
-// spec.Deploy); Cluster is the kind:k8s cluster template (the former K8sSpec =
-// spec.K8s); Ports / UID / GID are lifted from the image's OCI-label
+// spec.Deploy); Cluster is the kind:kubernetes cluster template (the former KubernetesSpec =
+// spec.Kubernetes); Ports / UID / GID are lifted from the image's OCI-label
 // Capabilities host-side so the plugin needs no access to the package-main
 // BoxMetadata type.
-type K8sGenInput struct {
+type KubernetesGenInput struct {
 	DeploymentName string `yaml:"deployment_name,omitempty" json:"deployment_name"`
 
 	Instance string `yaml:"instance,omitempty" json:"instance"`
@@ -4965,11 +4844,11 @@ type K8sGenInput struct {
 
 	Deploy Deploy `yaml:"deploy,omitempty" json:"deploy"`
 
-	// cluster is the decoded kind:k8s cluster template. After the k8s
+	// cluster is the decoded kind:kubernetes cluster template. After the kubernetes
 	// substrate-value de-type (Cutover K) the KERNEL no longer sets it — it
 	// ships the opaque body in ClusterRaw and the plugin decodes ClusterRaw
-	// into Cluster before generating, so the kernel never types spec.K8s.
-	Cluster K8s `yaml:"cluster,omitempty" json:"cluster,omitempty"`
+	// into Cluster before generating, so the kernel never types spec.Kubernetes.
+	Cluster Kubernetes `yaml:"cluster,omitempty" json:"cluster,omitempty"`
 
 	ClusterRaw RawBody `yaml:"cluster_raw,omitempty" json:"cluster_raw,omitempty"`
 
@@ -4982,12 +4861,133 @@ type K8sGenInput struct {
 	OutputDir string `yaml:"output_dir,omitempty" json:"output_dir"`
 }
 
-// #K8sGenFile is one generated manifest the plugin returns: its RELATIVE path
+type Kubernetes struct {
+	// May be empty (a cluster-policy-only template runs no workload itself).
+	Box string `yaml:"box,omitempty" json:"box"`
+
+	Replica *int `yaml:"replica,omitempty" json:"replica,omitempty"`
+
+	Resources *KubernetesResources `yaml:"resources,omitempty" json:"resources,omitempty"`
+
+	Hostnames []KubernetesHostname `yaml:"hostnames,omitempty" json:"hostnames,omitempty"`
+
+	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
+
+	AdmissionPolicy string `yaml:"admission_policy,omitempty" json:"admission_policy,omitempty"`
+
+	DefaultNamespace string `yaml:"default_namespace,omitempty" json:"default_namespace,omitempty"`
+
+	Storage KubernetesStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Ingress KubernetesIngressDefaults `yaml:"ingress,omitempty" json:"ingress,omitempty"`
+
+	GatewayAPI KubernetesGatewayAPI `yaml:"gateway_api,omitempty" json:"gateway_api,omitempty"`
+
+	Secret KubernetesSecretsBackend `yaml:"secret,omitempty" json:"secret,omitempty"`
+
+	ImageDefault KubernetesImagesDefaults `yaml:"image_default,omitempty" json:"image_default,omitempty"`
+
+	PodDefault KubernetesPodDefaults `yaml:"pod_default,omitempty" json:"pod_default,omitempty"`
+
+	Observability KubernetesObservability `yaml:"observability,omitempty" json:"observability,omitempty"`
+
+	NetworkPolicy string `yaml:"network_policy,omitempty" json:"network_policy,omitempty"`
+
+	Defaults KubernetesResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+}
+
+type KubernetesResources struct {
+	Requests KubernetesResourceValues `yaml:"requests,omitempty" json:"requests,omitempty"`
+
+	Limits KubernetesResourceValues `yaml:"limits,omitempty" json:"limits,omitempty"`
+}
+
+type KubernetesResourceValues struct {
+	CPU string `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+
+	Memory string `yaml:"memory,omitempty" json:"memory,omitempty"`
+}
+
+type KubernetesHostname struct {
+	Host string `yaml:"host,omitempty" json:"host"`
+
+	TLS bool `yaml:"tls,omitempty" json:"tls,omitempty"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+}
+
+type KubernetesStorage struct {
+	ClassDefault string `yaml:"class_default,omitempty" json:"class_default,omitempty"`
+
+	ClassCheap string `yaml:"class_cheap,omitempty" json:"class_cheap,omitempty"`
+
+	ClassEncrypted string `yaml:"class_encrypted,omitempty" json:"class_encrypted,omitempty"`
+
+	ClassFast string `yaml:"class_fast,omitempty" json:"class_fast,omitempty"`
+
+	AccessModeDefault string `yaml:"access_mode_default,omitempty" json:"access_mode_default,omitempty"`
+}
+
+type KubernetesIngressDefaults struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+
+	Class string `yaml:"class,omitempty" json:"class,omitempty"`
+
+	CertIssuer string `yaml:"cert_issuer,omitempty" json:"cert_issuer,omitempty"`
+
+	PathTypeDefault string `yaml:"path_type_default,omitempty" json:"path_type_default,omitempty"`
+}
+
+type KubernetesGatewayAPI struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+
+	GatewayClass string `yaml:"gateway_class,omitempty" json:"gateway_class,omitempty"`
+}
+
+type KubernetesSecretsBackend struct {
+	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
+
+	Store string `yaml:"store,omitempty" json:"store,omitempty"`
+
+	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+}
+
+type KubernetesImagesDefaults struct {
+	PullPolicy string `yaml:"pull_policy,omitempty" json:"pull_policy,omitempty"`
+
+	PullSecrets []string `yaml:"pull_secrets,omitempty" json:"pull_secrets,omitempty"`
+}
+
+type KubernetesPodDefaults struct {
+	PriorityClass string `yaml:"priority_class,omitempty" json:"priority_class,omitempty"`
+
+	// Raw Kubernetes Toleration objects (Go []map[string]any) — genuine
+	// passthrough, so each element stays OPEN.
+	Tolerations []map[string]any/* CUE top */ `yaml:"tolerations,omitempty" json:"tolerations,omitempty"`
+
+	NodeSelector map[string]string `yaml:"node_selector,omitempty" json:"node_selector,omitempty"`
+}
+
+type KubernetesObservability struct {
+	ServiceMonitor bool `yaml:"service_monitor,omitempty" json:"service_monitor,omitempty"`
+
+	ServiceMonitorInterval string `yaml:"service_monitor_interval,omitempty" json:"service_monitor_interval,omitempty"`
+}
+
+type KubernetesResourceDefaults struct {
+	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+
+	Annotations map[string]string `yaml:"annotations,omitempty" json:"annotations,omitempty"`
+}
+
+// #KubernetesGenFile is one generated manifest the plugin returns: its RELATIVE path
 // (under OutputDir/DeploymentName, e.g. "base/deployment.yaml"), the manifest
 // as JSON (the host unmarshals it back to a value, egress-validates, and
 // writes it as YAML), and the egress kind that gates it ("k8s_object" or
 // "kustomization").
-type K8sGenFile struct {
+type KubernetesGenFile struct {
 	RelPath string `yaml:"rel_path,omitempty" json:"rel_path"`
 
 	Doc RawBody `yaml:"doc,omitempty" json:"doc"`
@@ -4995,14 +4995,14 @@ type K8sGenFile struct {
 	EgressKind string `yaml:"egress_kind,omitempty" json:"egress_kind"`
 }
 
-// #K8sGenReply is the pure-generation output: the RELATIVE overlay path the
+// #KubernetesGenReply is the pure-generation output: the RELATIVE overlay path the
 // host joins onto OutputDir/DeploymentName to form the `kubectl apply -k`
 // argument, and the collected manifest files (base resources + base/overlay
 // kustomizations).
-type K8sGenReply struct {
+type KubernetesGenReply struct {
 	OverlayRelPath string `yaml:"overlay_rel_path,omitempty" json:"overlay_rel_path"`
 
-	Files []K8sGenFile `yaml:"files,omitempty" json:"files"`
+	Files []KubernetesGenFile `yaml:"files,omitempty" json:"files"`
 }
 
 // #LoadedDoc — one parsed document of a namespace's flattened file tree (root file OR a flat
@@ -5784,7 +5784,7 @@ type DeployResolveTargetAddReply struct {
 // #EphemeralRegisterRequest/#EphemeralRegisterReply — the host→command:fleet OpEphemeralRegister
 // leg (FINAL/K5 unit 6a): ephemeral_lifecycle.go's cross-substrate ephemeral-instance registration
 // (systemd TTL transient timer + parent-detection + charly.yml persistence) moved to
-// candy/plugin-fleet, the substrate-neutral deploy-lifecycle owner (vm/pod/k8s all register
+// candy/plugin-fleet, the substrate-neutral deploy-lifecycle owner (vm/pod/kubernetes all register
 // through it via deploy_add_shared.go's registerEphemeralIfMarked, which STAYS host-side —
 // candidate-floor sibling of fleet_add_cmd.go — and Invokes this as the FIRST action of every
 // Add). Registration failure is best-effort (logged plugin-side, never fatal to the deploy) —
@@ -5815,19 +5815,19 @@ type EphemeralTeardownRequest struct {
 type EphemeralTeardownReply struct {
 }
 
-// #K8sGenerateKustomizeRequest/#K8sGenerateKustomizeReply — the request/reply shape
+// #KubernetesGenerateKustomizeRequest/#KubernetesGenerateKustomizeReply — the request/reply shape
 // candy/plugin-kube's materializeKustomize (materialize.go) takes/returns. The former
-// "k8s-generate-kustomize" HostBuild seam this type pair used to cross (FINAL/K5 unit 6a) is
+// Kustomize-generate HostBuild seam this type pair used to cross (FINAL/K5 unit 6a) is
 // RETIRED (K5-A item 6): the egress-validated Kustomize GENERATION now runs ENTIRELY
 // plugin-side — verb:k8sgen + verb:egress reached peer-to-peer via InvokeProvider, disk I/O done
 // directly by the plugin, no host round trip left — so this pair now travels as a plain Go
 // function signature (materializeKustomize's params/return), not a wire envelope. Both callers
-// (candy/plugin-kube/preresolve.go's deploy:k8s preresolve, which self-loads the cluster
+// (candy/plugin-kube/preresolve.go's deploy:kubernetes preresolve, which self-loads the cluster
 // template + image ref/capabilities itself now too — K-wave W3a A3-phase-2 — and
 // candy/plugin-fleet/deploy_from_box.go's source-less from-box path) construct it directly.
 // Cluster/Capabilities ride opaque (the established RawBody idiom this file uses throughout for
 // hand-written host-side types with no CUE def — e.g. CapsJSON/ClusterJSON in this very def below).
-type K8sGenerateKustomizeRequest struct {
+type KubernetesGenerateKustomizeRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
 	ImageRef string `yaml:"image_ref,omitempty" json:"image_ref"`
@@ -5841,7 +5841,7 @@ type K8sGenerateKustomizeRequest struct {
 	OutputDir string `yaml:"output_dir,omitempty" json:"output_dir,omitempty"`
 }
 
-type K8sGenerateKustomizeReply struct {
+type KubernetesGenerateKustomizeReply struct {
 	OverlayPath string `yaml:"overlay_path,omitempty" json:"overlay_path"`
 
 	TreeRoot string `yaml:"tree_root,omitempty" json:"tree_root"`
@@ -6382,11 +6382,11 @@ type CheckBedMember struct {
 //   - BOX-VIEW selection (an already-resolved base image, ctx!=nil): box_view + order are
 //     POPULATED host-side (the host projects an ALREADY-RESOLVED base image via
 //     projectResolvedBox) and the plugin trusts them as sent. Retained for any caller that still
-//     resolves the base image host-side; the add_candy-on-pod/k8s path itself now uses the
+//     resolves the base image host-side; the add_candy-on-pod/kubernetes path itself now uses the
 //     ADD-CANDY-ON-BOX shape below.
-//   - ADD-CANDY-ON-BOX selection (compileCandyOnBoxSelection, the add_candy-on-pod/k8s shape, K4
+//   - ADD-CANDY-ON-BOX selection (compileCandyOnBoxSelection, the add_candy-on-pod/kubernetes shape, K4
 //     box-half completion): candy_ref (the add_candy overlay ref) AND base_box_ref (the primary
-//     pod/k8s base image name) are BOTH set — the plugin reads rp.Boxes[base_box_ref] (the SAME
+//     pod/kubernetes base image name) are BOTH set — the plugin reads rp.Boxes[base_box_ref] (the SAME
 //     ResolvedBoxView the primary BOX-REF shape reads, R3) as the COMPILE CONTEXT, resolves the
 //     add_candy's OWN topo order from rp.CandyModels (deploykit.ResolveCandyOrder over
 //     {BareRef(candy_ref)}, widened by extra_candy_refs for a remote overlay), prunes
@@ -6399,7 +6399,7 @@ type CheckBedMember struct {
 //     for a host target — already sdk-portable; the kind:vm provider's own OpResolve leg for a
 //     vm target, mirroring the kind:local OpResolve reuse in node_resolve.go's
 //     lookupLocalTemplate, K4 unit A).
-//   - BOX-REF selection (compileBoxSelection, the primary pod/k8s image shape, K4 unit B
+//   - BOX-REF selection (compileBoxSelection, the primary pod/kubernetes image shape, K4 unit B
 //     box-half): box_ref is set — the plugin reads rp.Boxes[box_ref] (the SAME ResolvedBoxView
 //     hostBuildResolvedProject already computed to BUILD the envelope in the first place — no
 //     re-derivation, R3) directly via deploykit.NewSpecResolvedBox, and resolves the candy topo
@@ -6411,7 +6411,7 @@ type CheckBedMember struct {
 // LoadUnified or the provider-CONNECT registry (verified live, K4 unit B: candy/plugin-fleet's
 // own ALREADY-EXISTING preresolveBuilderContexts, called unconditionally for every OpCompile,
 // already S2-lazy-connects any externalized builder the resolved order+img trigger via
-// exec.InvokeProvider — an exhaustive repo grep found zero target:local/vm or pod/k8s deploy
+// exec.InvokeProvider — an exhaustive repo grep found zero target:local/vm or pod/kubernetes deploy
 // anywhere needing a builder plugin outside the calling project's own candy closure, the one
 // edge S2's Pass-1 project-scan can't cover), so neither needs a new HostBuild kind.
 //
@@ -6470,7 +6470,7 @@ type DeployCompileRequest struct {
 	BoxRef string `yaml:"box_ref,omitempty" json:"box_ref,omitempty"`
 
 	// base_box_ref selects the ADD-CANDY-ON-BOX shape (K4 box-half completion) WHEN set alongside
-	// candy_ref: the primary pod/k8s base image's own name, read from rp.Boxes[base_box_ref] as the
+	// candy_ref: the primary pod/kubernetes base image's own name, read from rp.Boxes[base_box_ref] as the
 	// COMPILE CONTEXT the candy_ref overlay compiles against — replacing the former host-side
 	// buildkit.ResolveBox(baseImg) + scanCandiesForRef. Absent for every other shape (a standalone
 	// candy_ref with NO base_box_ref stays the CANDY shape, synthetic-box compiled).
@@ -6928,7 +6928,7 @@ type DeployTargetRebuildOpts struct {
 // ResolveTarget proxy (unified_targets.go) constructs this per call from data alone — it never
 // holds a *grpcProvider or any core-private registry object, so the type is free to live
 // entirely on the wire. `word` is the resolved deploy-substrate provider word (e.g. "pod"/"vm"/
-// "local"/"k8s"/"android") the plugin dispatches the ACTUAL substrate leg to, via its own
+// "local"/"kubernetes"/"android") the plugin dispatches the ACTUAL substrate leg to, via its own
 // sdk.Executor.InvokeProvider — core never talks to the substrate provider directly once this
 // lands. `has_lifecycle` is the ONE piece of substrate metadata core must resolve itself (the
 // registered-provider's own `lifecycle` flag lives on the core-private *grpcProvider) — it gates
@@ -6986,7 +6986,7 @@ type DeployTargetDispatchRequest struct {
 
 	// venue_json is the ALREADY-MATERIALIZED spec.VenueDescriptor for this deploy. Two distinct
 	// producers set it: (a) core, when this dispatch is a NESTED non-lifecycle child (a
-	// `local:`/`android:`/`k8s:` deploy under a vm/pod, tree position) — Add flattens the
+	// `local:`/`android:`/`kubernetes:` deploy under a vm/pod, tree position) — Add flattens the
 	// live ancestor executor (EmitOpts.ParentExec) into this field via kit.DescriptorFromExecutor
 	// BEFORE the very first "add" dispatch, since that live value cannot itself cross the wire
 	// (FIX ROUND, S3b follow-up — its absence on "add" was the R10 bed regression: every nested
@@ -7464,7 +7464,7 @@ type ToolStatus struct {
 }
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
-// deployment substrate (pod / vm / k8s / local / android). kind discriminates the
+// deployment substrate (pod / vm / kubernetes / local / android). kind discriminates the
 // substrate; nested carries multi-hop children (RECURSIVE self-reference, populated
 // by the nested overlay); source records provenance (libvirt|ledger|adb|tree|podman).
 type DeploymentStatus struct {
@@ -7555,11 +7555,11 @@ type StatusSubstrateReply struct {
 // #SubstrateStatusRequest — the per-substrate COLLECTOR request the host sends to the substrate
 // plugin's OpStatusCollect (P14a: the cleanly-movable collectors — pod live + local + the probes —
 // relocated into candy/plugin-substrate, served on the kind provider's Invoke by word
-// pod/vm/k8s/local/android). The host passes the scalar inputs a sdk-only candy cannot derive:
+// pod/vm/kubernetes/local/android). The host passes the scalar inputs a sdk-only candy cannot derive:
 // the engine binary name (engine_bin), the run mode, the quadlet dir (pod's quadlet-description
 // enrichment + enabled-but-not-running append), include_all (--all), and — on the single path —
 // box+instance. NO deploy-cone (FleetConfig/UnifiedFile) crosses this seam: the deploy
-// enrichment stays host-side until K5, applied to the live rows this reply returns. vm/k8s/android
+// enrichment stays host-side until K5, applied to the live rows this reply returns. vm/kubernetes/android
 // are deferred to K5 (their collectors are deploy-cone-coupled); the plugin returns no rows for
 // those words until then.
 type SubstrateStatusRequest struct {
@@ -7654,24 +7654,24 @@ type PodResolveReply struct {
 	Resolved *ResolvedPod `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
-// #ResolvedK8s is the resolve-to-envelope form of a `k8s:` cluster template.
-// The kernel reads only KubeconfigContext (the deploy preresolver); the full
-// cluster model rides opaquely in Raw and is decoded by candy/plugin-k8sgen,
+// #ResolvedKubernetes is the resolve-to-envelope form of a `kubernetes:` cluster
+// template. The kernel reads only KubeconfigContext (the deploy preresolver); the
+// full cluster model rides opaquely in Raw and is decoded by candy/plugin-k8sgen,
 // never the kernel.
-type ResolvedK8s struct {
+type ResolvedKubernetes struct {
 	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
 
 	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
 
-// #K8sResolveInput carries one opaque k8s cluster template body to project.
-type K8sResolveInput struct {
-	K8s RawBody `yaml:"k8s,omitempty" json:"k8s"`
+// #KubernetesResolveInput carries one opaque kubernetes cluster template body to project.
+type KubernetesResolveInput struct {
+	Kubernetes RawBody `yaml:"kubernetes,omitempty" json:"kubernetes"`
 }
 
-// #K8sResolveReply wraps the resolved k8s cluster template.
-type K8sResolveReply struct {
-	Resolved *ResolvedK8s `yaml:"resolved,omitempty" json:"resolved,omitempty"`
+// #KubernetesResolveReply wraps the resolved kubernetes cluster template.
+type KubernetesResolveReply struct {
+	Resolved *ResolvedKubernetes `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
 // #LocalResolveInput / #AndroidResolveInput carry one opaque template body to
@@ -7702,7 +7702,7 @@ type SubstrateTemplateResolveRequest struct {
 
 	Pod *PodResolveInput `yaml:"pod,omitempty" json:"pod,omitempty"`
 
-	K8s *K8sResolveInput `yaml:"k8s,omitempty" json:"k8s,omitempty"`
+	Kubernetes *KubernetesResolveInput `yaml:"kubernetes,omitempty" json:"kubernetes,omitempty"`
 
 	Vm *VmResolveInput `yaml:"vm,omitempty" json:"vm,omitempty"`
 }

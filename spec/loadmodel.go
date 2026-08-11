@@ -124,16 +124,16 @@ func (uf *UnifiedFile) SetCandy(name string, il *InlineCandy) {
 	uf.Candy[name] = EncodeInlineCandy(il)
 }
 
-// VM/Pod/K8s/Local/Android are DERIVED accessors over uf.PluginKinds[disc] — the 5
+// VM/Pod/Kubernetes/Local/Android are DERIVED accessors over uf.PluginKinds[disc] — the 5
 // standalone-substrate-TEMPLATE kinds fold into PluginKinds generically (no per-kind-word
 // switch). Each returns the opaque name→body map for its kind (nil when none configured); the
 // kernel never decodes the bodies itself — consuming PLUGINS decode a body into the concrete
 // kind they need.
-func (uf *UnifiedFile) VM() map[string]json.RawMessage      { return uf.PluginKinds["vm"] }
-func (uf *UnifiedFile) Pod() map[string]json.RawMessage     { return uf.PluginKinds["pod"] }
-func (uf *UnifiedFile) K8s() map[string]json.RawMessage     { return uf.PluginKinds["k8s"] }
-func (uf *UnifiedFile) Local() map[string]json.RawMessage   { return uf.PluginKinds["local"] }
-func (uf *UnifiedFile) Android() map[string]json.RawMessage { return uf.PluginKinds["android"] }
+func (uf *UnifiedFile) VM() map[string]json.RawMessage         { return uf.PluginKinds["vm"] }
+func (uf *UnifiedFile) Pod() map[string]json.RawMessage        { return uf.PluginKinds["pod"] }
+func (uf *UnifiedFile) Kubernetes() map[string]json.RawMessage { return uf.PluginKinds["kubernetes"] }
+func (uf *UnifiedFile) Local() map[string]json.RawMessage      { return uf.PluginKinds["local"] }
+func (uf *UnifiedFile) Android() map[string]json.RawMessage    { return uf.PluginKinds["android"] }
 
 // CheckBeds returns the disposable R10 beds keyed by name. In the unified node-form model a bed
 // IS a `disposable: true` fleet, so the bed set is derived directly from the disposable fleets
@@ -185,10 +185,10 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 	return c
 }
 
-// ProjectTemplates decodes the uf.Local/K8s/Pod/VM/Android raw template maps (map[string]json.RawMessage)
+// ProjectTemplates decodes the uf.Local/Kubernetes/Pod/VM/Android raw template maps (map[string]json.RawMessage)
 // into the resolved kind-template maps validate/check-include/status read. Returns nil when no template
 // kind is present. Recurses into uf.Namespaces, mirroring FillBoxPlans's prefix-accumulation pattern, so a
-// namespace-qualified template ref (`local: <ns>.<tmpl>`, `kind:k8s` entity `<ns>.<name>`, …) is visible in
+// namespace-qualified template ref (`local: <ns>.<tmpl>`, `kind:kubernetes` entity `<ns>.<name>`, …) is visible in
 // the envelope too. Purely ADDITIVE (qualified keys never collide with a bare name, since a bare name can
 // never contain "."), so every existing root-scoped consumer is unaffected.
 //
@@ -197,7 +197,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 func (uf *UnifiedFile) ProjectTemplates() *ProjectTemplates {
 	t := &ProjectTemplates{}
 	fillNamespacedTemplates(uf, "", t, map[*UnifiedFile]bool{})
-	if t.Local == nil && t.K8s == nil && t.Pod == nil && t.VM == nil && t.Android == nil {
+	if t.Local == nil && t.Kubernetes == nil && t.Pod == nil && t.VM == nil && t.Android == nil {
 		return nil
 	}
 	return t
@@ -215,8 +215,8 @@ func (t *ProjectTemplates) ByKind(kind string) map[string]RawBody {
 	switch kind {
 	case "local":
 		return t.Local
-	case "k8s":
-		return t.K8s
+	case "kubernetes":
+		return t.Kubernetes
 	case "pod":
 		return t.Pod
 	case "vm":
@@ -253,7 +253,7 @@ func fillNamespacedTemplates(uf *UnifiedFile, prefix string, t *ProjectTemplates
 		}
 	}
 	cp(uf.Local(), &t.Local)
-	cp(uf.K8s(), &t.K8s)
+	cp(uf.Kubernetes(), &t.Kubernetes)
 	cp(uf.Pod(), &t.Pod)
 	cp(uf.VM(), &t.VM)
 	cp(uf.Android(), &t.Android)

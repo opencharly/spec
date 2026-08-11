@@ -276,7 +276,7 @@
 // #EphemeralRegisterRequest/#EphemeralRegisterReply — the host→command:fleet OpEphemeralRegister
 // leg (FINAL/K5 unit 6a): ephemeral_lifecycle.go's cross-substrate ephemeral-instance registration
 // (systemd TTL transient timer + parent-detection + charly.yml persistence) moved to
-// candy/plugin-fleet, the substrate-neutral deploy-lifecycle owner (vm/pod/k8s all register
+// candy/plugin-fleet, the substrate-neutral deploy-lifecycle owner (vm/pod/kubernetes all register
 // through it via deploy_add_shared.go's registerEphemeralIfMarked, which STAYS host-side —
 // candidate-floor sibling of fleet_add_cmd.go — and Invokes this as the FIRST action of every
 // Add). Registration failure is best-effort (logged plugin-side, never fatal to the deploy) —
@@ -291,7 +291,7 @@
 // #DeployEntityResolveRequest/#DeployEntityResolveReply DELETED (K-wave W3a A3-phase-2): the
 // "deploy-entity-resolve" HostBuild seam died — every kind:<word> caller self-loads the project
 // plugin-side now (sdk/loaderkit.LoadUnifiedViaExecutor, unblocked by W1, plus the new
-// Resolve{K8s,Vm,Android}EntityViaExecutor helpers), and every deploy-tree node lookup collapsed
+// Resolve{Kubernetes,Vm,Android}EntityViaExecutor helpers), and every deploy-tree node lookup collapsed
 // to a direct in-memory map lookup on the SAME tree the caller already resolves via
 // loaderkit.ResolveMergedTreeViaExecutor (the request's own tree_json field was already
 // documented dead weight — "the tree already threaded via req.TreeJSON, could inline at all
@@ -312,27 +312,27 @@
 }
 #EphemeralTeardownReply: {}
 
-// #K8sGenerateKustomizeRequest/#K8sGenerateKustomizeReply — the request/reply shape
+// #KubernetesGenerateKustomizeRequest/#KubernetesGenerateKustomizeReply — the request/reply shape
 // candy/plugin-kube's materializeKustomize (materialize.go) takes/returns. The former
-// "k8s-generate-kustomize" HostBuild seam this type pair used to cross (FINAL/K5 unit 6a) is
+// Kustomize-generate HostBuild seam this type pair used to cross (FINAL/K5 unit 6a) is
 // RETIRED (K5-A item 6): the egress-validated Kustomize GENERATION now runs ENTIRELY
 // plugin-side — verb:k8sgen + verb:egress reached peer-to-peer via InvokeProvider, disk I/O done
 // directly by the plugin, no host round trip left — so this pair now travels as a plain Go
 // function signature (materializeKustomize's params/return), not a wire envelope. Both callers
-// (candy/plugin-kube/preresolve.go's deploy:k8s preresolve, which self-loads the cluster
+// (candy/plugin-kube/preresolve.go's deploy:kubernetes preresolve, which self-loads the cluster
 // template + image ref/capabilities itself now too — K-wave W3a A3-phase-2 — and
 // candy/plugin-fleet/deploy_from_box.go's source-less from-box path) construct it directly.
 // Cluster/Capabilities ride opaque (the established RawBody idiom this file uses throughout for
 // hand-written host-side types with no CUE def — e.g. CapsJSON/ClusterJSON in this very def below).
-#K8sGenerateKustomizeRequest: {
+#KubernetesGenerateKustomizeRequest: {
 	name!:       string @go(Name)
 	image_ref!:  string @go(ImageRef)
 	node!:       #Deploy @go(Node, type=*Deploy)
 	caps!:       bytes  @go(CapsJSON, type=RawBody)    // opaque *Capabilities (spec.BoxMetadata)
-	cluster!:    bytes  @go(ClusterJSON, type=RawBody) // opaque *ResolvedK8s
+	cluster!:    bytes  @go(ClusterJSON, type=RawBody) // opaque *ResolvedKubernetes
 	output_dir?: string @go(OutputDir)
 }
-#K8sGenerateKustomizeReply: {
+#KubernetesGenerateKustomizeReply: {
 	overlay_path!: string @go(OverlayPath)
 	tree_root!:    string @go(TreeRoot)
 }
@@ -785,11 +785,11 @@
 //   - BOX-VIEW selection (an already-resolved base image, ctx!=nil): box_view + order are
 //     POPULATED host-side (the host projects an ALREADY-RESOLVED base image via
 //     projectResolvedBox) and the plugin trusts them as sent. Retained for any caller that still
-//     resolves the base image host-side; the add_candy-on-pod/k8s path itself now uses the
+//     resolves the base image host-side; the add_candy-on-pod/kubernetes path itself now uses the
 //     ADD-CANDY-ON-BOX shape below.
-//   - ADD-CANDY-ON-BOX selection (compileCandyOnBoxSelection, the add_candy-on-pod/k8s shape, K4
+//   - ADD-CANDY-ON-BOX selection (compileCandyOnBoxSelection, the add_candy-on-pod/kubernetes shape, K4
 //     box-half completion): candy_ref (the add_candy overlay ref) AND base_box_ref (the primary
-//     pod/k8s base image name) are BOTH set — the plugin reads rp.Boxes[base_box_ref] (the SAME
+//     pod/kubernetes base image name) are BOTH set — the plugin reads rp.Boxes[base_box_ref] (the SAME
 //     ResolvedBoxView the primary BOX-REF shape reads, R3) as the COMPILE CONTEXT, resolves the
 //     add_candy's OWN topo order from rp.CandyModels (deploykit.ResolveCandyOrder over
 //     {BareRef(candy_ref)}, widened by extra_candy_refs for a remote overlay), prunes
@@ -802,7 +802,7 @@
 //     for a host target — already sdk-portable; the kind:vm provider's own OpResolve leg for a
 //     vm target, mirroring the kind:local OpResolve reuse in node_resolve.go's
 //     lookupLocalTemplate, K4 unit A).
-//   - BOX-REF selection (compileBoxSelection, the primary pod/k8s image shape, K4 unit B
+//   - BOX-REF selection (compileBoxSelection, the primary pod/kubernetes image shape, K4 unit B
 //     box-half): box_ref is set — the plugin reads rp.Boxes[box_ref] (the SAME ResolvedBoxView
 //     hostBuildResolvedProject already computed to BUILD the envelope in the first place — no
 //     re-derivation, R3) directly via deploykit.NewSpecResolvedBox, and resolves the candy topo
@@ -814,7 +814,7 @@
 // LoadUnified or the provider-CONNECT registry (verified live, K4 unit B: candy/plugin-fleet's
 // own ALREADY-EXISTING preresolveBuilderContexts, called unconditionally for every OpCompile,
 // already S2-lazy-connects any externalized builder the resolved order+img trigger via
-// exec.InvokeProvider — an exhaustive repo grep found zero target:local/vm or pod/k8s deploy
+// exec.InvokeProvider — an exhaustive repo grep found zero target:local/vm or pod/kubernetes deploy
 // anywhere needing a builder plugin outside the calling project's own candy closure, the one
 // edge S2's Pass-1 project-scan can't cover), so neither needs a new HostBuild kind.
 //
@@ -864,7 +864,7 @@
 	// change). Absent for the other shapes.
 	box_ref?: string @go(BoxRef)
 	// base_box_ref selects the ADD-CANDY-ON-BOX shape (K4 box-half completion) WHEN set alongside
-	// candy_ref: the primary pod/k8s base image's own name, read from rp.Boxes[base_box_ref] as the
+	// candy_ref: the primary pod/kubernetes base image's own name, read from rp.Boxes[base_box_ref] as the
 	// COMPILE CONTEXT the candy_ref overlay compiles against — replacing the former host-side
 	// buildkit.ResolveBox(baseImg) + scanCandiesForRef. Absent for every other shape (a standalone
 	// candy_ref with NO base_box_ref stays the CANDY shape, synthetic-box compiled).
@@ -1318,7 +1318,7 @@
 // ResolveTarget proxy (unified_targets.go) constructs this per call from data alone — it never
 // holds a *grpcProvider or any core-private registry object, so the type is free to live
 // entirely on the wire. `word` is the resolved deploy-substrate provider word (e.g. "pod"/"vm"/
-// "local"/"k8s"/"android") the plugin dispatches the ACTUAL substrate leg to, via its own
+// "local"/"kubernetes"/"android") the plugin dispatches the ACTUAL substrate leg to, via its own
 // sdk.Executor.InvokeProvider — core never talks to the substrate provider directly once this
 // lands. `has_lifecycle` is the ONE piece of substrate metadata core must resolve itself (the
 // registered-provider's own `lifecycle` flag lives on the core-private *grpcProvider) — it gates
@@ -1361,7 +1361,7 @@
 	tty?:             bool        @go(TTY)
 	// venue_json is the ALREADY-MATERIALIZED spec.VenueDescriptor for this deploy. Two distinct
 	// producers set it: (a) core, when this dispatch is a NESTED non-lifecycle child (a
-	// `local:`/`android:`/`k8s:` deploy under a vm/pod, tree position) — Add flattens the
+	// `local:`/`android:`/`kubernetes:` deploy under a vm/pod, tree position) — Add flattens the
 	// live ancestor executor (EmitOpts.ParentExec) into this field via kit.DescriptorFromExecutor
 	// BEFORE the very first "add" dispatch, since that live value cannot itself cross the wire
 	// (FIX ROUND, S3b follow-up — its absence on "add" was the R10 bed regression: every nested
