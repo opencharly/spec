@@ -1305,11 +1305,14 @@
 
 // #DeployTargetRebuildOpts is the `charly update` rebuild-path opts type — formerly the
 // charly-core RebuildOpts, now CUE-sourced (the UnifiedDeployTarget contract lives in
-// spec/spec/deploy_target_unified.go).
+// spec/spec/deploy_target_unified.go). `tag` pins the image the rebuild re-deploys to
+// (the `charly update --tag` flag); empty = newest local CalVer resolved via the
+// ai.opencharly.version OCI label.
 #DeployTargetRebuildOpts: {
-	rebuild_image?: bool @go(RebuildImage)
-	assume_yes?:    bool @go(AssumeYes)
-	dry_run?:       bool @go(DryRun)
+	rebuild_image?: bool   @go(RebuildImage)
+	assume_yes?:    bool   @go(AssumeYes)
+	dry_run?:       bool   @go(DryRun)
+	tag?:           string @go(Tag)
 }
 
 // #DeployTargetDispatchRequest (S3b) is the ONE generic host→command:fleet envelope every
