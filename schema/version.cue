@@ -34,7 +34,7 @@
 // (`k8s:` → `kubernetes:`, and the inner deploy-knobs block `kubernetes:` → `deploy:`),
 // migrated by the two rename_key ops in candy/plugin-migrate/migrations.cue.
 // Re-stamped to the merge-time CalVer by the fresh pr-validator.
-#SchemaVersion: #CanonCalVer & "2026.223.1130" @go(-)
+#SchemaVersion: #CanonCalVer & "2026.223.1018" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
 // the migration-baseline reset it EQUALS #SchemaVersion — the deleted 47-step chain
