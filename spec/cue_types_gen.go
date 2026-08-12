@@ -2918,6 +2918,13 @@ type InstallStepView struct {
 	PkgbuildRef string `yaml:"pkgbuild_ref,omitempty" json:"pkgbuild_ref,omitempty"`
 
 	ProjectDir string `yaml:"project_dir,omitempty" json:"project_dir,omitempty"`
+
+	// ExtractStep — a candy's `extract:` entry materialized onto a machine venue.
+	ExtractSource string `yaml:"extract_source,omitempty" json:"extract_source,omitempty"`
+
+	ExtractPath string `yaml:"extract_path,omitempty" json:"extract_path,omitempty"`
+
+	ExtractDest string `yaml:"extract_dest,omitempty" json:"extract_dest,omitempty"`
 }
 
 // #ReverseOp is a single teardown action. Serialized into the ledger so

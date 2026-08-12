@@ -140,6 +140,11 @@ func StepToView(step InstallStep) InstallStepView {
 		// contract StepFromView reconstructs from (the authoritative flip). ReverseOps set
 		// above carry the dynamically-recorded teardown ops.
 		v.Payload = s.Payload
+	case *ExtractStep:
+		v.ExtractSource = s.Source
+		v.ExtractPath = s.Path
+		v.ExtractDest = s.Dest
+		v.CandyName = s.CandyName
 	}
 	return v
 }
@@ -270,6 +275,13 @@ func StepFromView(v InstallStepView) (InstallStep, error) {
 			CandyName:    v.CandyName,
 			ResolvedUser: v.ResolvedUser,
 			Distros:      v.Distros,
+		}, nil
+	case StepKindExtract:
+		return &ExtractStep{
+			Source:    v.ExtractSource,
+			Path:      v.ExtractPath,
+			Dest:      v.ExtractDest,
+			CandyName: v.CandyName,
 		}, nil
 	}
 	// EXTERNAL (plugin-contributed) step kind (F3): "external:<word>" — no compiled-in case.

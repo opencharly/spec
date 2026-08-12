@@ -100,6 +100,7 @@ const (
 	StepKindLocalPkgInstall StepKind = "LocalPkgInstall"
 	StepKindReboot          StepKind = "Reboot"
 	StepKindExternalPlugin  StepKind = "ExternalPlugin"
+	StepKindExtract         StepKind = "Extract"
 )
 
 // ---------------------------------------------------------------------------

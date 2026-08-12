@@ -125,6 +125,12 @@ func TestStepView_RoundTrip(t *testing.T) {
 			ResolvedUser: "root",
 			Distros:      []string{"fedora:43"},
 		}},
+		{"Extract", &ExtractStep{
+			Source:    "higress-registry.cn-hangzhou.cr.aliyuncs.com/higress/all-in-one:2.2.1",
+			Path:      "/usr/local/bin/envoy",
+			Dest:      "/usr/local/bin/envoy",
+			CandyName: "agentteams-higress",
+		}},
 	}
 
 	// Every kind in AllStepKinds must be covered — otherwise the round-trip gate has a
