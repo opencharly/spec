@@ -486,6 +486,11 @@
 	// LocalPkgInstallStep.
 	pkgbuild_ref?: string @go(PkgbuildRef)
 	project_dir?:  string @go(ProjectDir)
+
+	// ExtractStep — a candy's `extract:` entry materialized onto a machine venue.
+	extract_source?: string @go(ExtractSource) // OCI image ref to extract from
+	extract_path?:   string @go(ExtractPath)   // path in the source image (file or dir)
+	extract_dest?:   string @go(ExtractDest)   // absolute destination path on the venue
 }
 
 // #DeployVenue is the venue descriptor the host puts in op.Env for an external

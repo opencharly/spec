@@ -746,6 +746,57 @@ func (s *RebootStep) RequiresGate() Gate { return GateNone }
 func (s *RebootStep) Reverse() []ReverseOp { return nil }
 
 // ---------------------------------------------------------------------------
+// ExtractStep — a candy's `extract:` entries materialized onto a MACHINE venue.
+// ---------------------------------------------------------------------------
+
+// ExtractStep materializes a candy's `extract:` entries (FROM <source> AS
+// <candy>-extract-<i> + COPY --from=... in the Containerfile build) onto a
+// MACHINE venue (target:local / target:vm), where the built image filesystem
+// is never used — the install plan executes over the venue's own filesystem.
+// The step runs on the HOST (podman pull → create → cp → rm, charly's own
+// machinery), tars the extracted content, ships it into the venue via PutFile,
+// and extracts it in place — the venue-agnostic analog of the BuilderStep
+// host-engine pattern (RunVenueBuilderStep).
+//
+// COPY semantics are replicated exactly: when Path is a DIRECTORY its
+// contents are extracted into Dest (Dest is a directory); when Path is a FILE
+// the file lands at Dest (Dest is the file path). Ownership is NOT handled
+// here — the candy's own plan steps chown the extracted paths (the
+// agentteams-higress candy chowns /etc/certs /etc/istio /var/lib/istio
+// /var/log/proxy to uid 1000), mirroring the build where COPY --chown is
+// explicit per entry.
+//
+// Compiled ONLY for machine venues (hostCtx.MachineVenue): the OCI/pod
+// targets emit the Containerfile extract stages directly and never see this
+// step. Like BuilderStep it is a HOST-ENGINE kind — the walk routes it to
+// RunHostStep, which dispatches it to the class:step plugin's OpExecute with
+// the injected image resolve/ensure closures.
+type ExtractStep struct {
+	Source    string // OCI image ref to extract from (e.g. "higress-registry.cn-hangzhou.cr.aliyuncs.com/higress/all-in-one:2.2.1")
+	Path      string // path in the source image (a file or a directory)
+	Dest      string // absolute destination path on the venue
+	CandyName string // owning candy (provenance + the ledger CandyRecord key)
+}
+
+func (s *ExtractStep) Kind() StepKind { return StepKindExtract }
+
+// Scope is system — extract lands in system locations (/usr/local/bin, /app, /opt, /var).
+func (s *ExtractStep) Scope() Scope { return ScopeSystem }
+
+// Venue is host-native — the podman extract runs on the HOST (like the aur
+// builder), then the content is shipped to the target and extracted in place.
+func (s *ExtractStep) Venue() Venue       { return VenueHostNative }
+func (s *ExtractStep) RequiresGate() Gate { return GateNone }
+
+// Reverse returns no ledger ops — the extracted content is the candy's own
+// install surface (a system-level install, like a package), removed (if ever)
+// by the operator, not by deploy teardown. Mirrors LocalPkgInstallStep's
+// empty Reverse: the dest may be a file OR a directory, and the existing
+// rm-file reverse kinds cannot express both (rm -f fails on a dir; the
+// recursive kind runs as the deploy user, who cannot remove system paths).
+func (s *ExtractStep) Reverse() []ReverseOp { return nil }
+
+// ---------------------------------------------------------------------------
 // ExternalPluginStep — a `run: plugin: <verb>` step served by an OUT-OF-PROCESS
 // plugin, executed at DEPLOY via the E3b ExecutorService reverse channel.
 // ---------------------------------------------------------------------------
@@ -840,13 +891,14 @@ const ExternalStepKindPrefix = "external:"
 // IsExternalStepKind reports whether k is an external (plugin-contributed) step kind.
 func IsExternalStepKind(k StepKind) bool { return strings.HasPrefix(string(k), ExternalStepKindPrefix) }
 
-// AllStepKinds is the fixed InstallStep IR vocabulary — the 13 compiled-in concrete
+// AllStepKinds is the fixed InstallStep IR vocabulary — the 14 compiled-in concrete
 // step kinds (external:<word> kinds are dynamic and not listed).
 var AllStepKinds = []StepKind{
 	StepKindSystemPackages, StepKindBuilder, StepKindOp, StepKindFile,
 	StepKindServicePackaged, StepKindServiceCustom, StepKindShellHook,
 	StepKindShellSnippet, StepKindRepoChange, StepKindApkInstall,
 	StepKindLocalPkgInstall, StepKindReboot, StepKindExternalPlugin,
+	StepKindExtract,
 }
 
 // PluginEmitStepWords maps a builtin InstallStep kind to the lowercase-hyphenated class:step plugin
@@ -872,4 +924,5 @@ var PluginEmitStepWords = map[StepKind]string{
 	StepKindBuilder:         "builder",
 	StepKindLocalPkgInstall: "local-pkg-install",
 	StepKindOp:              "op",
+	StepKindExtract:         "extract",
 }
