@@ -115,6 +115,14 @@
 
 	data_image!: bool @go(DataImage) // true = FROM scratch, no runtime, no init, no services
 
+	// OCI entrypoint/cmd baked into the image's OCI config (final Containerfile
+	// ENTRYPOINT/CMD). Empty by default — normal images carry no baked command and
+	// the deploy-time init injects it; declared only when something spawns the image
+	// directly from its OCI config (e.g. an embedded controller spawning child
+	// agents) with no charly deploy in the loop.
+	entrypoint?: [...(string & !="")] @go(Entrypoint, type=[]string)
+	cmd?:        [...(string & !="")] @go(Cmd, type=[]string)
+
 	// Derived fields.
 	is_external_base!: bool   @go(IsExternalBase) // true if base is external OCI image
 	full_tag!:         string @go(FullTag)        // registry/name:tag

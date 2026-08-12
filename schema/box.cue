@@ -99,6 +99,18 @@
 	bootc?:      bool // image is bootc-bootable (for `charly vm build` → qcow2)
 	readiness?:  #Readiness @go(Readiness,optional=nillable)
 
+	// OCI entrypoint/cmd baked into the image's OCI config (emitted as the final
+	// Containerfile ENTRYPOINT/CMD directives). OPT-IN and empty by default: a normal
+	// charly image bakes no command and the deploy-time init (supervisord/systemd)
+	// is injected instead. Declare these ONLY when something spawns the image
+	// directly from its baked OCI config with no charly deploy in the loop — e.g. an
+	// embedded controller (like AgentTeams) spawning child manager/worker containers
+	// through a runtime socket. `cmd: []` clears the base image's inherited default
+	// command; a declared entrypoint with no `cmd:` is auto-cleared at emission, so
+	// the entrypoint runs bare.
+	entrypoint?: [...(string & !="")] @go(Entrypoint, type=[]string)
+	cmd?:        [...(string & !="")] @go(Cmd, type=[]string)
+
 	jobs?:            int & >=1 @go(,type=*int)
 	podman_jobs?:     int & >=0 @go(PodmanJobs,type=*int) // 0 = auto (min(NCPU, cap))
 	podman_jobs_cap?: int & >=1 @go(PodmanJobsCap,type=*int)
