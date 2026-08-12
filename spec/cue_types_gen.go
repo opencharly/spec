@@ -994,6 +994,19 @@ type Box struct {
 
 	Readiness *Readiness `yaml:"readiness,omitempty" json:"readiness,omitempty"`
 
+	// OCI entrypoint/cmd baked into the image's OCI config (emitted as the final
+	// Containerfile ENTRYPOINT/CMD directives). OPT-IN and empty by default: a normal
+	// charly image bakes no command and the deploy-time init (supervisord/systemd)
+	// is injected instead. Declare these ONLY when something spawns the image
+	// directly from its baked OCI config with no charly deploy in the loop — e.g. an
+	// embedded controller (like AgentTeams) spawning child manager/worker containers
+	// through a runtime socket. `cmd: []` clears the base image's inherited default
+	// command; a declared entrypoint with no `cmd:` is auto-cleared at emission, so
+	// the entrypoint runs bare.
+	Entrypoint []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
+
+	Cmd []string `yaml:"cmd,omitempty" json:"cmd,omitempty"`
+
 	Jobs *int `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
 	PodmanJobs *int `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
@@ -1987,6 +2000,13 @@ type ResolvedBoxView struct {
 	Network string `yaml:"network,omitempty" json:"network,omitempty"`
 
 	DataImage bool `yaml:"data_image,omitempty" json:"data_image,omitempty"`
+
+	// OCI entrypoint/cmd baked into the image's OCI config (final Containerfile
+	// ENTRYPOINT/CMD) — carried on the resolved view so the plugin-build resolve
+	// leg (NewSpecResolvedBox) can re-emit them without the live *Candy graph.
+	Entrypoint []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
+
+	Cmd []string `yaml:"cmd,omitempty" json:"cmd,omitempty"`
 
 	IsExternalBase bool `yaml:"is_external_base,omitempty" json:"is_external_base,omitempty"`
 
@@ -5419,6 +5439,15 @@ type ResolvedBox struct {
 	Network string `yaml:"network,omitempty" json:"network"`
 
 	DataImage bool `yaml:"data_image,omitempty" json:"data_image"`
+
+	// OCI entrypoint/cmd baked into the image's OCI config (final Containerfile
+	// ENTRYPOINT/CMD). Empty by default — normal images carry no baked command and
+	// the deploy-time init injects it; declared only when something spawns the image
+	// directly from its OCI config (e.g. an embedded controller spawning child
+	// agents) with no charly deploy in the loop.
+	Entrypoint []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
+
+	Cmd []string `yaml:"cmd,omitempty" json:"cmd,omitempty"`
 
 	// Derived fields.
 	IsExternalBase bool `yaml:"is_external_base,omitempty" json:"is_external_base"`

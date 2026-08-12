@@ -52,6 +52,11 @@
 	auto?:             bool
 	network?:          string
 	data_image?:       bool   @go(DataImage)
+	// OCI entrypoint/cmd baked into the image's OCI config (final Containerfile
+	// ENTRYPOINT/CMD) — carried on the resolved view so the plugin-build resolve
+	// leg (NewSpecResolvedBox) can re-emit them without the live *Candy graph.
+	entrypoint?:       [...(string & !="")] @go(Entrypoint, type=[]string)
+	cmd?:              [...(string & !="")] @go(Cmd, type=[]string)
 	is_external_base?: bool   @go(IsExternalBase)
 	full_tag?:         string @go(FullTag)
 
