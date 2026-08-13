@@ -33,8 +33,15 @@
 // kind + every #K8s* def + the derived target enum): an authored WIRE-key change
 // (`k8s:` → `kubernetes:`, and the inner deploy-knobs block `kubernetes:` → `deploy:`),
 // migrated by the two rename_key ops in candy/plugin-migrate/migrations.cue.
+// Bumped again by the packaging-section cutover (the candy `localpkg:` map →
+// `packaging?: #Packaging` section, the `local_pkg` source-build field removal,
+// and the LocalPkgInstallStep IR → the download leg): an authored WIRE-key
+// change on the candy surface (`localpkg:` → `packaging:`) + the deploy
+// InstallStepView wire (pkgbuild_ref/project_dir → package_name/version),
+// migrated by the remove_key/rename_key ops in candy/plugin-migrate/migrations.cue
+// when the spec submodule pointer is bumped (step 3 of the cross-repo cutover).
 // Re-stamped to the merge-time CalVer by the fresh pr-validator.
-#SchemaVersion: #CanonCalVer & "2026.223.1018" @go(-)
+#SchemaVersion: #CanonCalVer & "2026.225.1508" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
 // the migration-baseline reset it EQUALS #SchemaVersion — the deleted 47-step chain

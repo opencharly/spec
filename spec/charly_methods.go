@@ -191,9 +191,9 @@ func (d *Distro) PrimaryFormat() string {
 	return ""
 }
 
-// LocalPkgFormat picks the format whose local_pkg block to build the charly
-// toolchain from: the caller's primary format, then the distro's own
-// PrimaryFormat, then any localpkg-capable format (deterministic).
+// LocalPkgFormat picks the format whose local_pkg block drives the charly
+// package INSTALL (the download leg): the caller's primary format, then the
+// distro's own PrimaryFormat, then any localpkg-capable format (deterministic).
 func (d *Distro) LocalPkgFormat(primaryFormat string) (string, *LocalPkg) {
 	if d == nil {
 		return "", nil

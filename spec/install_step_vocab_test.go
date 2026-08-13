@@ -8,7 +8,7 @@ import "testing"
 // apk) — a pure spec.LocalPkgInstallStep test with zero charly-core
 // dependency, and no prior duplicate found anywhere in the tree.
 func TestLocalPkgInstallStepIR(t *testing.T) {
-	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", CandyName: "charly"}
+	s := &LocalPkgInstallStep{PackageName: "charly", Version: "2026.225.1200", CandyName: "charly"}
 	if s.Kind() != StepKindLocalPkgInstall {
 		t.Errorf("Kind() = %q, want %q", s.Kind(), StepKindLocalPkgInstall)
 	}

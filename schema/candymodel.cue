@@ -75,7 +75,15 @@
 
 	// --- package surface (resolved) ---
 	top_packages?: [...string] @go(TopPackages)
+	// Deprecated: the localpkg source-build map is being replaced by the
+	// `packaging:` section (Packaging). Kept until the sdk's localpkg
+	// replacement (Phase 0b) migrates the consumers off it.
 	localpkg?: {[string]: string} @go(LocalPkg)
+	// packaging — the candy's `packaging:` section (the single source of truth
+	// for distro package metadata + variants). Carried on the build model so the
+	// specCandyAdapter can implement CandyReader.Packaging() — the deploy-plan
+	// compiler reads it to emit a LocalPkgInstallStep (PackageName = packaging.name).
+	packaging?: #Packaging @go(Packaging,optional=nillable)
 	format_sections?: {[string]: #PackageSection} @go(FormatSections)
 	tag_sections?: {[string]: #TagPkgConfig} @go(TagSections)
 

@@ -227,6 +227,15 @@ type EmitOpts struct {
 	// submodule let a bed skip building the rpm and fail only later, at an unrelated live check.
 	DevLocalPkg bool
 
+	// LocalPkgBuild is the dev-local-pkg build context: the in-development binary +
+	// plugins + CalVer + arch + charly.yml the executor uses to build the
+	// in-development package via the `charly generate-packages` plugin (the
+	// `--dev-local-pkg` build path). Populated by the check-bed runner (charly
+	// core) when DevLocalPkg is set; nil → the executor discovers defaults
+	// (os.Executable(), runtime.GOARCH, `<binary> version`, the baked plugins dir,
+	// `<CandyDir>/charly.yml`).
+	LocalPkgBuild *LocalPkgBuildContext
+
 	// ParentExec is the DeployExecutor of the parent deployment in a
 	// nested tree. Non-nil iff this target is dispatched as a child of
 	// another — FleetAddCmd's tree walker builds the chain root-first
@@ -250,6 +259,27 @@ type EmitOpts struct {
 	// Path is the dotted-path identifier of this node (e.g.
 	// "stack.web.db"). Used for logging + ledger keying.
 	Path string
+}
+
+// LocalPkgBuildContext is the dev-local-pkg build context: the in-development
+// binary + plugins + CalVer + arch + charly.yml the executor uses to build the
+// in-development package via the `charly generate-packages` plugin. Every field
+// is optional — the executor discovers a default when one is empty (see
+// EmitOpts.LocalPkgBuild).
+type LocalPkgBuildContext struct {
+	// Binary is the in-development charly binary to package (default:
+	// os.Executable()).
+	Binary string
+	// PluginsDir is the dir of in-development plugin binaries + .providers to
+	// package (default: the baked plugins dir /usr/lib/charly/plugins/).
+	PluginsDir string
+	// CalVer is the in-development release CalVer (default: `<Binary> version`).
+	CalVer string
+	// Arch is the target GOARCH name (default: runtime.GOARCH).
+	Arch string
+	// CandyYAML is the charly candy's charly.yml — the `--candy` input the
+	// plugin reads the packaging section from (default: `<CandyDir>/charly.yml`).
+	CandyYAML string
 }
 
 // ContextOrDefault returns opts' context if one's attached, or a background context.

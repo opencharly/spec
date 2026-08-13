@@ -121,10 +121,9 @@ func StepToView(step InstallStep) InstallStepView {
 		v.CandyName = s.CandyName
 		v.CandyDir = s.CandyDir
 	case *LocalPkgInstallStep:
-		v.PkgbuildRef = s.PkgbuildRef
+		v.PackageName = s.PackageName
+		v.Version = s.Version
 		v.CandyName = s.CandyName
-		v.CandyDir = s.CandyDir
-		v.ProjectDir = s.ProjectDir
 		v.Format = s.Format
 		v.LocalPkg = s.LocalPkg
 	case *RebootStep:
@@ -260,10 +259,9 @@ func StepFromView(v InstallStepView) (InstallStep, error) {
 		}, nil
 	case StepKindLocalPkgInstall:
 		return &LocalPkgInstallStep{
-			PkgbuildRef: v.PkgbuildRef,
+			PackageName: v.PackageName,
+			Version:     v.Version,
 			CandyName:   v.CandyName,
-			CandyDir:    v.CandyDir,
-			ProjectDir:  v.ProjectDir,
 			Format:      v.Format,
 			LocalPkg:    v.LocalPkg,
 		}, nil

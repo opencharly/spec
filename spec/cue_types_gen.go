@@ -2264,7 +2264,16 @@ type CandyModel struct {
 	// --- package surface (resolved) ---
 	TopPackages []string `yaml:"top_packages,omitempty" json:"top_packages,omitempty"`
 
+	// Deprecated: the localpkg source-build map is being replaced by the
+	// `packaging:` section (Packaging). Kept until the sdk's localpkg
+	// replacement (Phase 0b) migrates the consumers off it.
 	LocalPkg map[string]string `yaml:"localpkg,omitempty" json:"localpkg,omitempty"`
+
+	// packaging — the candy's `packaging:` section (the single source of truth
+	// for distro package metadata + variants). Carried on the build model so the
+	// specCandyAdapter can implement CandyReader.Packaging() — the deploy-plan
+	// compiler reads it to emit a LocalPkgInstallStep (PackageName = packaging.name).
+	Packaging *Packaging `yaml:"packaging,omitempty" json:"packaging,omitempty"`
 
 	FormatSections map[string]PackageSection `yaml:"format_sections,omitempty" json:"format_sections,omitempty"`
 
@@ -2445,6 +2454,35 @@ type CandyData struct {
 	Volume string `yaml:"volume,omitempty" json:"volume"`
 
 	Dest string `yaml:"dest,omitempty" json:"dest,omitempty"`
+}
+
+// #Packaging — the native-package metadata section (candy `packaging:`): the
+// common fields (name/description/maintainer/…) + a `variants:` map (named
+// plugin-set variants → `charly-<variant>` packages) + a per-format map
+// (`formats.<fmt>`: deps + the format's default variant). CLOSED. The per-format
+// keys use the nFPM format names (deb/rpm/apk/archlinux/ipk/msix).
+type Packaging struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Description string `yaml:"description,omitempty" json:"description"`
+
+	Maintainer string `yaml:"maintainer,omitempty" json:"maintainer"`
+
+	Homepage string `yaml:"homepage,omitempty" json:"homepage,omitempty"`
+
+	License string `yaml:"license,omitempty" json:"license,omitempty"`
+
+	Section string `yaml:"section,omitempty" json:"section,omitempty"`
+
+	Priority string `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// variants — the named plugin-set variants. The format's `default_variant`
+	// (or the variant named "default" when unset) packages as the plain `charly`
+	// package; every other named variant packages as `charly-<variant>`.
+	Variants map[string]*PackagingVariant `yaml:"variants,omitempty" json:"variants,omitempty"`
+
+	// formats — per-format (nFPM name) dependency + default-variant metadata.
+	Formats map[string]*PackagingFormat `yaml:"formats,omitempty" json:"formats,omitempty"`
 }
 
 // #PackageSection — a generic format-specific package section (rpm/deb/pac/aur). Raw carries the
@@ -2914,10 +2952,13 @@ type InstallStepView struct {
 	// ApkInstallStep.
 	ApkPackages []ApkPackageSpec `yaml:"apk_packages,omitempty" json:"apk_packages,omitempty"`
 
-	// LocalPkgInstallStep.
-	PkgbuildRef string `yaml:"pkgbuild_ref,omitempty" json:"pkgbuild_ref,omitempty"`
+	// LocalPkgInstallStep — the deploy-time executor downloads the published
+	// package from the distro repo (the download leg) instead of building from
+	// source, so the IR carries the package reference (name + version) rather
+	// than the old source-dir anchors (pkgbuild_ref/project_dir).
+	PackageName string `yaml:"package_name,omitempty" json:"package_name,omitempty"`
 
-	ProjectDir string `yaml:"project_dir,omitempty" json:"project_dir,omitempty"`
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 
 	// ExtractStep — a candy's `extract:` entry materialized onto a machine venue.
 	ExtractSource string `yaml:"extract_source,omitempty" json:"extract_source,omitempty"`
@@ -2962,18 +3003,15 @@ type ArtifactView struct {
 	Chown bool `yaml:"chown,omitempty" json:"chown,omitempty"`
 }
 
+// #LocalPkg — the local_pkg INSTALL machinery only (the source-build fields
+// pkg_glob/source_sentinel/build_template/dep_builder were removed with the
+// pkg/ source-build cutover: the `charly generate-packages` plugin builds the
+// package now, so the deploy-time + image-build paths only INSTALL the published
+// package via install_template/download_template).
 type LocalPkg struct {
-	PkgGlob string `yaml:"pkg_glob,omitempty" json:"pkg_glob"`
-
-	SourceSentinel string `yaml:"source_sentinel,omitempty" json:"source_sentinel"`
-
-	BuildTemplate string `yaml:"build_template,omitempty" json:"build_template"`
-
 	InstallTemplate string `yaml:"install_template,omitempty" json:"install_template"`
 
 	Probe string `yaml:"probe,omitempty" json:"probe"`
-
-	DepBuilder string `yaml:"dep_builder,omitempty" json:"dep_builder,omitempty"`
 
 	DownloadTemplate string `yaml:"download_template,omitempty" json:"download_template,omitempty"`
 }
@@ -3189,12 +3227,13 @@ type Candy struct {
 
 	Apk []ApkPackageSpec `yaml:"apk,omitempty" json:"apk,omitempty"`
 
-	// localpkg maps a native package FORMAT to a bundled source dir; a scalar
-	// form is rejected by Go. Closed to the three known formats.
-	// localpkg Go field is `LocalPkg map[string]string` (a per-format → source-dir
-	// map); pin name + shape (gengotypes would emit an inline struct named
-	// `Localpkg`).
-	LocalPkg map[string]string `yaml:"localpkg,omitempty" json:"localpkg,omitempty"`
+	// packaging — the native-package metadata for this candy: the SINGLE source
+	// of truth the `charly generate-packages` plugin (sdk/packagekit) reads to
+	// build distro packages (deb/rpm/apk/archlinux/ipk/msix). Any candy may
+	// declare it (kind-blind); the charly candy's charly.yml carries the real
+	// section. Replaces the old `localpkg:` source-dir map — the plugin builds
+	// from the released binary + plugins, not from a bundled source tree.
+	Packaging *Packaging `yaml:"packaging,omitempty" json:"packaging,omitempty"`
 
 	// --- networking / routing ---
 	// PortSpec: a plain int OR a "proto:port" string (proto ∈ http/https/tcp/…);
@@ -3303,6 +3342,38 @@ type CandyRoute struct {
 	Host string `yaml:"host,omitempty" json:"host"`
 
 	Port int `yaml:"port,omitempty" json:"port"`
+}
+
+// #PackagingVariant — one named plugin-set variant.
+type PackagingVariant struct {
+	Description string `yaml:"description,omitempty" json:"description"`
+
+	// plugins — the default-plugin words this variant ships at
+	// /usr/lib/charly/plugins/ (a subset of the released plugin tarball).
+	Plugins []string `yaml:"plugins,omitempty" json:"plugins"`
+}
+
+// #PackagingFormat — per-format (nFPM name) packaging metadata.
+type PackagingFormat struct {
+	Depends []string `yaml:"depends,omitempty" json:"depends,omitempty"`
+
+	// optdepends — the Arch `optdepend = <pkg>: <desc>` map (nFPM does not emit
+	// optdepends; sdk/packagekit post-processes the .pkg.tar.zst to inject them).
+	OptDepends map[string]string `yaml:"optdepends,omitempty" json:"optdepends,omitempty"`
+
+	Recommends []string `yaml:"recommends,omitempty" json:"recommends,omitempty"`
+
+	Suggests []string `yaml:"suggests,omitempty" json:"suggests,omitempty"`
+
+	// default_variant — the variant name packaged as the plain `charly` package
+	// for this format (defaults to "default" when unset).
+	DefaultVariant string `yaml:"default_variant,omitempty" json:"default_variant,omitempty"`
+
+	// publisher — the msix Publisher display name (msix-specific).
+	Publisher string `yaml:"publisher,omitempty" json:"publisher,omitempty"`
+
+	// properties — the msix Properties (msix-specific).
+	Properties map[string]string `yaml:"properties,omitempty" json:"properties,omitempty"`
 }
 
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
