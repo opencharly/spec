@@ -30,9 +30,10 @@ func (d *ResolvedDistro) PrimaryFormat() string {
 	return ""
 }
 
-// LocalPkgFormat picks the format whose local_pkg block builds the charly
-// toolchain: the caller's primary format, then PrimaryFormat, then any
-// localpkg-capable format (mirrors spec.Distro.LocalPkgFormat).
+// LocalPkgFormat picks the format whose local_pkg block drives the charly
+// package INSTALL (the download leg): the caller's primary format, then
+// PrimaryFormat, then any localpkg-capable format (mirrors
+// spec.Distro.LocalPkgFormat).
 func (d *ResolvedDistro) LocalPkgFormat(primaryFormat string) (string, *LocalPkg) {
 	if d == nil {
 		return "", nil

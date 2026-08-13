@@ -44,7 +44,7 @@ func TestStepView_RoundTrip(t *testing.T) {
 			Phase:           PhaseInstall,
 			Artifacts:       []ArtifactRef{{ContainerPath: "/work/.pixi", HostPath: "/home/u/.pixi", Chown: true}},
 			RawStageContext: map[string]any{"packages": []any{"numpy"}},
-			LocalPkg:        &LocalPkg{PkgGlob: "*.pkg.tar.zst", InstallTemplate: "pacman -U", Probe: "command -v pacman"},
+			LocalPkg:        &LocalPkg{InstallTemplate: "pacman -U", Probe: "command -v pacman"},
 			BuilderDef:      &BuilderDef{ManylinuxFix: "auditwheel repair"},
 		}},
 		{"Op", &OpStep{
@@ -111,12 +111,11 @@ func TestStepView_RoundTrip(t *testing.T) {
 			CandyDir:  "/proj/candy/myapp",
 		}},
 		{"LocalPkgInstall", &LocalPkgInstallStep{
-			PkgbuildRef: "pkg/arch",
+			PackageName: "charly",
+			Version:     "2026.225.1200",
 			CandyName:   "charly",
-			CandyDir:    "/proj/candy/charly",
-			ProjectDir:  "/proj",
 			Format:      "pac",
-			LocalPkg:    &LocalPkg{PkgGlob: "*.pkg.tar.zst", SourceSentinel: "PKGBUILD", BuildTemplate: "makepkg", InstallTemplate: "pacman -U", Probe: "command -v pacman"},
+			LocalPkg:    &LocalPkg{InstallTemplate: "pacman -U", Probe: "command -v pacman", DownloadTemplate: "https://opencharly.github.io/charly-arch/${ARCH}/charly-${ARCH}.pkg.tar.zst"},
 		}},
 		{"Reboot", &RebootStep{CandyName: "nvidia-open-dkms"}},
 		{"ExternalPlugin", &ExternalPluginStep{

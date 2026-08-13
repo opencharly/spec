@@ -72,16 +72,13 @@
 	package?: [...#PackageItem]
 	distro?: {[string]: #DistroPackages} @go(Distro,type=map[string]*DistroPackages)
 	apk?: [...#CandyApk] @go(Apk,type=[]ApkPackageSpec)
-	// localpkg maps a native package FORMAT to a bundled source dir; a scalar
-	// form is rejected by Go. Closed to the three known formats.
-	// localpkg Go field is `LocalPkg map[string]string` (a per-format → source-dir
-	// map); pin name + shape (gengotypes would emit an inline struct named
-	// `Localpkg`).
-	localpkg?: {
-		pac?: string & !=""
-		rpm?: string & !=""
-		deb?: string & !=""
-	} @go(LocalPkg,type=map[string]string)
+	// packaging — the native-package metadata for this candy: the SINGLE source
+	// of truth the `charly generate-packages` plugin (sdk/packagekit) reads to
+	// build distro packages (deb/rpm/apk/archlinux/ipk/msix). Any candy may
+	// declare it (kind-blind); the charly candy's charly.yml carries the real
+	// section. Replaces the old `localpkg:` source-dir map — the plugin builds
+	// from the released binary + plugins, not from a bundled source tree.
+	packaging?: #Packaging @go(Packaging,optional=nillable)
 
 	// --- networking / routing ---
 	// PortSpec: a plain int OR a "proto:port" string (proto ∈ http/https/tcp/…);
@@ -145,6 +142,52 @@
 // ---------------------------------------------------------------------------
 // Candy sub-shapes (#Candy-prefixed to avoid cross-kind collisions). Each CLOSED.
 // ---------------------------------------------------------------------------
+
+// #Packaging — the native-package metadata section (candy `packaging:`): the
+// common fields (name/description/maintainer/…) + a `variants:` map (named
+// plugin-set variants → `charly-<variant>` packages) + a per-format map
+// (`formats.<fmt>`: deps + the format's default variant). CLOSED. The per-format
+// keys use the nFPM format names (deb/rpm/apk/archlinux/ipk/msix).
+#Packaging: {
+	name:        string & !=""
+	description: string & !=""
+	maintainer:  string & !=""
+	homepage?:   string & !=""
+	license?:    string & !=""
+	section?:    string & !=""
+	priority?:   string & !=""
+	// variants — the named plugin-set variants. The format's `default_variant`
+	// (or the variant named "default" when unset) packages as the plain `charly`
+	// package; every other named variant packages as `charly-<variant>`.
+	variants?: {[string]: #PackagingVariant} @go(Variants,type=map[string]*PackagingVariant)
+	// formats — per-format (nFPM name) dependency + default-variant metadata.
+	formats?: {[string]: #PackagingFormat} @go(Formats,type=map[string]*PackagingFormat)
+}
+
+// #PackagingVariant — one named plugin-set variant.
+#PackagingVariant: {
+	description: string & !=""
+	// plugins — the default-plugin words this variant ships at
+	// /usr/lib/charly/plugins/ (a subset of the released plugin tarball).
+	plugins: [...(string & !="")]
+}
+
+// #PackagingFormat — per-format (nFPM name) packaging metadata.
+#PackagingFormat: {
+	depends?:    [...(string & !="")]
+	// optdepends — the Arch `optdepend = <pkg>: <desc>` map (nFPM does not emit
+	// optdepends; sdk/packagekit post-processes the .pkg.tar.zst to inject them).
+	optdepends?: {[string]: string} @go(OptDepends,type=map[string]string)
+	recommends?: [...(string & !="")]
+	suggests?:   [...(string & !="")]
+	// default_variant — the variant name packaged as the plain `charly` package
+	// for this format (defaults to "default" when unset).
+	default_variant?: string & !="" @go(DefaultVariant)
+	// publisher — the msix Publisher display name (msix-specific).
+	publisher?: string & !="" @go(Publisher)
+	// properties — the msix Properties (msix-specific).
+	properties?: {[string]: string} @go(Properties,type=map[string]string)
+}
 
 // ServiceEntry (spec). use_packaged XOR exec is a Go cross-field
 // rule (mixed-entry polymorphism allows the SAME name twice: one packaged form,
