@@ -23,6 +23,10 @@ type CandyReader interface {
 	Shell() *Shell
 	TopPackages() []string
 	FormatSection(name string) *PackageSection
+	// Deprecated: the localpkg source-build map is being replaced by the
+	// `packaging:` section (Packaging()). Kept until the sdk's localpkg
+	// replacement (Phase 0b) migrates the consumers off it.
+	LocalPkg(format string) string
 	// Packaging returns the candy's `packaging:` section (the single source of
 	// truth for distro package metadata + variants). Nil when the candy declares
 	// none — the deploy-plan compiler then emits no LocalPkgInstallStep for it.
@@ -108,6 +112,10 @@ type CandyReader interface {
 	Secret() []CandySecret
 	Port() ([]string, error)
 	PortSpecs() []PortSpec
+	// Deprecated: the localpkg source-build map is being replaced by the
+	// `packaging:` section (Packaging()). Kept until the sdk's localpkg
+	// replacement (Phase 0b) migrates the consumers off it.
+	LocalPkgFormats() []string
 	HasEnvAccepts() bool
 	HasEnvProvides() bool
 	HasEnvRequires() bool
