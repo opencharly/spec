@@ -43,13 +43,14 @@
 	rule:  string & !=""
 }
 
+// #LocalPkg — the local_pkg INSTALL machinery only (the source-build fields
+// pkg_glob/source_sentinel/build_template/dep_builder were removed with the
+// pkg/ source-build cutover: the `charly generate-packages` plugin builds the
+// package now, so the deploy-time + image-build paths only INSTALL the published
+// package via install_template/download_template).
 #LocalPkg: {
-	pkg_glob:           string & !="" @go(PkgGlob)
-	source_sentinel:    string & !="" @go(SourceSentinel)
-	build_template:     string & !="" @go(BuildTemplate)
 	install_template:   string & !="" @go(InstallTemplate)
 	probe:              string & !=""
-	dep_builder?:       string @go(DepBuilder)
 	download_template?: string @go(DownloadTemplate)
 }
 

@@ -483,9 +483,12 @@
 	// ApkInstallStep.
 	apk_packages?: [...#CandyApk] @go(ApkPackages,type=[]ApkPackageSpec)
 
-	// LocalPkgInstallStep.
-	pkgbuild_ref?: string @go(PkgbuildRef)
-	project_dir?:  string @go(ProjectDir)
+	// LocalPkgInstallStep — the deploy-time executor downloads the published
+	// package from the distro repo (the download leg) instead of building from
+	// source, so the IR carries the package reference (name + version) rather
+	// than the old source-dir anchors (pkgbuild_ref/project_dir).
+	package_name?: string @go(PackageName)
+	version?:      string @go(Version)
 
 	// ExtractStep — a candy's `extract:` entry materialized onto a machine venue.
 	extract_source?: string @go(ExtractSource) // OCI image ref to extract from

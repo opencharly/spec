@@ -645,23 +645,28 @@ func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
 func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 
 // ---------------------------------------------------------------------------
-// LocalPkgInstallStep — build a bundled PKGBUILD on the host (makepkg) and
-// install the resulting `.pkg.tar.zst` onto a pac-based deploy target.
+// LocalPkgInstallStep — install the published charly package from the distro
+// repo onto a deploy target (the download leg).
 // ---------------------------------------------------------------------------
 //
 // LocalPkgInstallStep is the IR form of a candy's `localpkg:` field — a
-// pointer at a bundled Arch PKGBUILD directory (relative to the candy dir or
-// the project root). It is the proper-package counterpart of the charly candy's
-// ad-hoc curl-a-binary `cmd:` task: on an Arch/CachyOS DEPLOY target the
-// package is built from the repo's bundled PKGBUILD on the HOST (`makepkg`),
-// the resulting artifact is transferred to the target, and `pacman -U`-installed
-// — so `charly` lands as the tracked `opencharly-git` package at /usr/bin/charly rather
-// than an untracked binary at /usr/local/bin/charly.
+// reference to the published native package (name + version) the deploy-time
+// executor DOWNLOADS from the distro's package repo (the `download_template`)
+// and installs via the `install_template`. It is the proper-package counterpart
+// of the charly candy's ad-hoc curl-a-binary `cmd:` task: on an Arch/CachyOS
+// DEPLOY target the published `.pkg.tar.zst` is downloaded from the distro repo
+// and `pacman -U`-installed — so `charly` lands as the tracked `charly` package
+// at /usr/bin/charly rather than an untracked binary at /usr/local/bin/charly.
+//
+// (The old source-build form — PkgbuildRef/CandyDir/ProjectDir anchors for a
+// bundled PKGBUILD built on the host via makepkg — was removed with the pkg/
+// source-build cutover: the `charly generate-packages` plugin builds the
+// package now, so the deploy-time path only INSTALLS the published package.)
 //
 // Like ApkInstallStep, the step is compiled REGARDLESS of target and each
 // DeployTarget decides whether to execute or skip:
 //   - the external local deploy (Arch/CachyOS host) and external vm deploy (Arch/CachyOS
-//     guest) EXECUTE it via the RunHostStep host-engine leg (build on host → transfer →
+//     guest) EXECUTE it via the RunHostStep host-engine leg (download → transfer →
 //     pacman -U on the target).
 //   - On a NON-pac deploy target the executor records a clean skip (a Fedora /
 //     Debian host has no pacman; the candy's own `cmd:` task curls the binary
@@ -679,17 +684,13 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 //     A distro with no localpkg-capable format (LocalPkg==nil) renders nothing; the
 //     candy's own COPY/curl `cmd:` task is the fallback there.
 //   - the android / kubernetes substrates (external) SKIP it (no Arch package surface).
-//
-// The PKGBUILD location is resolved at EMIT time (not compile time), so the
-// step carries only the author's hint (`PkgbuildRef`) plus the candy's source
-// dir + the deploy project dir for the walk-up search. When no PKGBUILD is
-// found the step is a no-op (the candy's existing curl/COPY task is the
-// fallback).
 type LocalPkgInstallStep struct {
-	PkgbuildRef string // the layer's `localpkg:` value (e.g. "pkg/arch") — a hint, resolved at emit
-	CandyName   string
-	CandyDir    string // layer source dir — one anchor for the relative PKGBUILD search
-	ProjectDir  string // the deploy project dir (os.Getwd() at deploy time) — the other anchor
+	// PackageName is the published package name (e.g. "charly") the deploy-time
+	// executor downloads from the distro repo.
+	PackageName string
+	// Version is the release CalVer (e.g. "2026.225.1200") to download.
+	Version   string
+	CandyName string
 
 	// Format is the package-format name whose `local_pkg:` config drives this
 	// step (e.g. "pac"). "" when the target distro declares no localpkg-capable
@@ -697,13 +698,12 @@ type LocalPkgInstallStep struct {
 	Format string
 
 	// LocalPkg is the format's localpkg contract resolved from the embedded build vocabulary (charly/charly.yml) at
-	// compile time (DistroDef.LocalPkgFormat). It carries the build/install
-	// templates, package glob, source-dir sentinel, and probe command — so the
-	// executor renders every package-manager command from config instead of
-	// hardcoding build/install/glob literals. The install command auto-resolves
-	// the package's dependencies from the target's repos (pacman -U / dnf
-	// install / apt-get install), so there is no dep-closure builder. Nil when
-	// Format == "".
+	// compile time (DistroDef.LocalPkgFormat). It carries the install/download
+	// templates and probe command — so the executor renders every package-manager
+	// command from config instead of hardcoding install/glob literals. The install
+	// command auto-resolves the package's dependencies from the target's repos
+	// (pacman -U / dnf install / apt-get install), so there is no dep-closure
+	// builder. Nil when Format == "".
 	LocalPkg *LocalPkg
 }
 
@@ -712,13 +712,14 @@ func (s *LocalPkgInstallStep) Kind() StepKind { return StepKindLocalPkgInstall }
 // Scope is system — installing a pacman package mutates global package state.
 func (s *LocalPkgInstallStep) Scope() Scope { return ScopeSystem }
 
-// Venue is host-native — makepkg runs on the host (like the aur builder), then
-// the artifact is shipped to the target and installed via pacman.
+// Venue is host-native — the download + install runs host-side (the executor
+// downloads the published package and ships it to the target), then the target
+// installs it via pacman.
 func (s *LocalPkgInstallStep) Venue() Venue       { return VenueHostNative }
 func (s *LocalPkgInstallStep) RequiresGate() Gate { return GateNone }
 
 // Reverse returns no ledger ops — the package is the deploy substrate's own
-// pacman-tracked package, removed (if ever) via `pacman -R opencharly-git` by
+// pacman-tracked package, removed (if ever) via `pacman -R charly` by
 // the operator, not by deploy teardown. Mirrors ApkInstallStep's empty Reverse.
 func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 
