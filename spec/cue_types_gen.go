@@ -4122,6 +4122,13 @@ type KubernetesDeploy struct {
 	Patches []KubernetesPatch `yaml:"patches,omitempty" json:"patches,omitempty"`
 
 	Raw []string `yaml:"raw,omitempty" json:"raw,omitempty"`
+
+	// helm_charts — chart releases the kustomize/helm venues install alongside the
+	// generated workload. The k8sgen emitter translates each entry into a kustomize
+	// `helmCharts:` overlay entry (chart→name, release→releaseName, values_files→
+	// valuesFile); the vm/pod/local venues install the same releases via
+	// `step:helm-release`. Field set confirmed by the Unit 1 schema spike.
+	Helm_charts []HelmChart `yaml:"helm_charts,omitempty" json:"helm_charts,omitempty"`
 }
 
 type KubernetesPatch struct {
@@ -4134,6 +4141,20 @@ type KubernetesPatch struct {
 	} `yaml:"target,omitempty" json:"target"`
 
 	Patch string `yaml:"patch,omitempty" json:"patch"`
+}
+
+type HelmChart struct {
+	Repo string `yaml:"repo,omitempty" json:"repo,omitempty"`
+
+	Chart string `yaml:"chart,omitempty" json:"chart"`
+
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+
+	Release string `yaml:"release,omitempty" json:"release"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	Values_files []string `yaml:"values_files,omitempty" json:"values_files,omitempty"`
 }
 
 type DeployResources struct {

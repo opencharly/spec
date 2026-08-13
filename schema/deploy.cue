@@ -309,6 +309,20 @@
 	workload?:  "Deployment" | "StatefulSet" | "DaemonSet" | "Pod" | "Job" | "CronJob"
 	patches?: [...#KubernetesPatch]
 	raw?: [...string]
+	// helm_charts — chart releases the kustomize/helm venues install alongside the
+	// generated workload. The k8sgen emitter translates each entry into a kustomize
+	// `helmCharts:` overlay entry (chart→name, release→releaseName, values_files→
+	// valuesFile); the vm/pod/local venues install the same releases via
+	// `step:helm-release`. Field set confirmed by the Unit 1 schema spike.
+	helm_charts?: [...#HelmChart]
+}
+#HelmChart: {
+	repo?:         string
+	chart!:        string
+	version?:      string
+	release!:      string
+	namespace?:    string
+	values_files?: [...string]
 }
 #KubernetesPatch: {
 	target: {
