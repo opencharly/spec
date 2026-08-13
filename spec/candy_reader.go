@@ -23,7 +23,10 @@ type CandyReader interface {
 	Shell() *Shell
 	TopPackages() []string
 	FormatSection(name string) *PackageSection
-	LocalPkg(format string) string
+	// Packaging returns the candy's `packaging:` section (the single source of
+	// truth for distro package metadata + variants). Nil when the candy declares
+	// none — the deploy-plan compiler then emits no LocalPkgInstallStep for it.
+	Packaging() *Packaging
 	TagSection(tag string) *TagPkgConfig
 	HasFile(filename string) bool
 
@@ -105,7 +108,6 @@ type CandyReader interface {
 	Secret() []CandySecret
 	Port() ([]string, error)
 	PortSpecs() []PortSpec
-	LocalPkgFormats() []string
 	HasEnvAccepts() bool
 	HasEnvProvides() bool
 	HasEnvRequires() bool
