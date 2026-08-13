@@ -689,8 +689,13 @@ type LocalPkgInstallStep struct {
 	// executor downloads from the distro repo.
 	PackageName string
 	// Version is the release CalVer (e.g. "2026.225.1200") to download.
-	Version   string
+	Version string
+	// CandyName is the candy that declared the packaging section.
 	CandyName string
+	// CandyDir is the candy's source dir — the anchor for the candy's charly.yml
+	// (the `--candy` input the dev-local-pkg build passes to `charly
+	// generate-packages`). Set at compile time from the candy's SourceDir.
+	CandyDir string
 
 	// Format is the package-format name whose `local_pkg:` config drives this
 	// step (e.g. "pac"). "" when the target distro declares no localpkg-capable

@@ -2264,7 +2264,16 @@ type CandyModel struct {
 	// --- package surface (resolved) ---
 	TopPackages []string `yaml:"top_packages,omitempty" json:"top_packages,omitempty"`
 
+	// Deprecated: the localpkg source-build map is being replaced by the
+	// `packaging:` section (Packaging). Kept until the sdk's localpkg
+	// replacement (Phase 0b) migrates the consumers off it.
 	LocalPkg map[string]string `yaml:"localpkg,omitempty" json:"localpkg,omitempty"`
+
+	// packaging — the candy's `packaging:` section (the single source of truth
+	// for distro package metadata + variants). Carried on the build model so the
+	// specCandyAdapter can implement CandyReader.Packaging() — the deploy-plan
+	// compiler reads it to emit a LocalPkgInstallStep (PackageName = packaging.name).
+	Packaging *Packaging `yaml:"packaging,omitempty" json:"packaging,omitempty"`
 
 	FormatSections map[string]PackageSection `yaml:"format_sections,omitempty" json:"format_sections,omitempty"`
 
@@ -2445,6 +2454,35 @@ type CandyData struct {
 	Volume string `yaml:"volume,omitempty" json:"volume"`
 
 	Dest string `yaml:"dest,omitempty" json:"dest,omitempty"`
+}
+
+// #Packaging — the native-package metadata section (candy `packaging:`): the
+// common fields (name/description/maintainer/…) + a `variants:` map (named
+// plugin-set variants → `charly-<variant>` packages) + a per-format map
+// (`formats.<fmt>`: deps + the format's default variant). CLOSED. The per-format
+// keys use the nFPM format names (deb/rpm/apk/archlinux/ipk/msix).
+type Packaging struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Description string `yaml:"description,omitempty" json:"description"`
+
+	Maintainer string `yaml:"maintainer,omitempty" json:"maintainer"`
+
+	Homepage string `yaml:"homepage,omitempty" json:"homepage,omitempty"`
+
+	License string `yaml:"license,omitempty" json:"license,omitempty"`
+
+	Section string `yaml:"section,omitempty" json:"section,omitempty"`
+
+	Priority string `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// variants — the named plugin-set variants. The format's `default_variant`
+	// (or the variant named "default" when unset) packages as the plain `charly`
+	// package; every other named variant packages as `charly-<variant>`.
+	Variants map[string]*PackagingVariant `yaml:"variants,omitempty" json:"variants,omitempty"`
+
+	// formats — per-format (nFPM name) dependency + default-variant metadata.
+	Formats map[string]*PackagingFormat `yaml:"formats,omitempty" json:"formats,omitempty"`
 }
 
 // #PackageSection — a generic format-specific package section (rpm/deb/pac/aur). Raw carries the
@@ -3298,35 +3336,6 @@ type Plugin struct {
 // #PluginCapability — a "<class>:<word>" capability string. class ∈ the closed
 // ProviderClass set; word is lowercase-hyphenated.
 type PluginCapability string
-
-// #Packaging — the native-package metadata section (candy `packaging:`): the
-// common fields (name/description/maintainer/…) + a `variants:` map (named
-// plugin-set variants → `charly-<variant>` packages) + a per-format map
-// (`formats.<fmt>`: deps + the format's default variant). CLOSED. The per-format
-// keys use the nFPM format names (deb/rpm/apk/archlinux/ipk/msix).
-type Packaging struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Description string `yaml:"description,omitempty" json:"description"`
-
-	Maintainer string `yaml:"maintainer,omitempty" json:"maintainer"`
-
-	Homepage string `yaml:"homepage,omitempty" json:"homepage,omitempty"`
-
-	License string `yaml:"license,omitempty" json:"license,omitempty"`
-
-	Section string `yaml:"section,omitempty" json:"section,omitempty"`
-
-	Priority string `yaml:"priority,omitempty" json:"priority,omitempty"`
-
-	// variants — the named plugin-set variants. The format's `default_variant`
-	// (or the variant named "default" when unset) packages as the plain `charly`
-	// package; every other named variant packages as `charly-<variant>`.
-	Variants map[string]*PackagingVariant `yaml:"variants,omitempty" json:"variants,omitempty"`
-
-	// formats — per-format (nFPM name) dependency + default-variant metadata.
-	Formats map[string]*PackagingFormat `yaml:"formats,omitempty" json:"formats,omitempty"`
-}
 
 // RouteYAML — generic service-route metadata (traefik / tunnel).
 type CandyRoute struct {
