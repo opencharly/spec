@@ -57,13 +57,15 @@
 	// faithfully) and carried here so the specCandyAdapter matches the live *Candy
 	// byte-exactly — the candy-graph composition (ExpandCandy/ResolveCandyOrder) and the
 	// pixi-bound intermediate detection both gate on these. has_content does NOT count plan
-	// steps or the description, so a pure-composition candy (e.g. agent-forwarding: candy:
+	// steps, so a pure-composition candy (e.g. agent-forwarding: candy:
 	// [gnupg,direnv,ssh-client], only a check plan) has has_content=false. Such a candy is
-	// still admitted to the candy graph when it carries a spec — a plan or a description —
-	// so that spec bakes into the ai.opencharly.description label (ADE: every candy's plan
-	// is runnable acceptance); it contributes nothing to the build. Only a composing candy
-	// that is BOTH content-free AND spec-free is skipped, as a pure grouping node. The
-	// admission predicate is deploykit's layerEntersOrder.
+	// still admitted to the candy graph when it carries a PLAN, so that plan bakes into the
+	// ai.opencharly.description label (ADE: every candy's plan is runnable acceptance); it
+	// contributes nothing to the build, since has_content=false implies empty RunOps. A
+	// content-free composing candy with no plan is skipped, as a pure grouping node.
+	// Admission is deliberately NOT keyed to the description: ADE makes a description
+	// mandatory on every candy, so that would admit every composing candy unconditionally.
+	// The admission predicate is deploykit's layerEntersOrder.
 	has_content?:        bool @go(HasContent)
 	has_install_files?: bool @go(HasInstallFiles)
 
