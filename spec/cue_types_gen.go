@@ -2238,11 +2238,15 @@ type CandyModel struct {
 	// verdicts, computed HOST-SIDE (the live Candy has the env/ports/route/volumes/aliases/
 	// libvirt/init fields + the fs-probe caches the envelope CandyModel cannot recompute
 	// faithfully) and carried here so the specCandyAdapter matches the live *Candy
-	// byte-exactly — the candy-graph composition (ExpandCandy/ResolveCandyOrder: a composing
-	// candy with no content is skipped) and the pixi-bound intermediate detection both gate
-	// on these. A pure-composition candy (e.g. agent-forwarding: candy: [gnupg,direnv,
-	// ssh-client], only a check plan) has has_content=false, so it is correctly EXCLUDED
-	// from the candy graph — matching the pre-move core render.
+	// byte-exactly — the candy-graph composition (ExpandCandy/ResolveCandyOrder) and the
+	// pixi-bound intermediate detection both gate on these. has_content does NOT count plan
+	// steps or the description, so a pure-composition candy (e.g. agent-forwarding: candy:
+	// [gnupg,direnv,ssh-client], only a check plan) has has_content=false. Such a candy is
+	// still admitted to the candy graph when it carries a spec — a plan or a description —
+	// so that spec bakes into the ai.opencharly.description label (ADE: every candy's plan
+	// is runnable acceptance); it contributes nothing to the build. Only a composing candy
+	// that is BOTH content-free AND spec-free is skipped, as a pure grouping node. The
+	// admission predicate is deploykit's layerEntersOrder.
 	HasContent bool `yaml:"has_content,omitempty" json:"has_content,omitempty"`
 
 	HasInstallFiles bool `yaml:"has_install_files,omitempty" json:"has_install_files,omitempty"`
