@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -172,18 +173,53 @@ func TestTempIsHeld_ReleasesOnProcessDeath(t *testing.T) {
 
 // --- the $TMPDIR-vs-hardcoded-/tmp cutover ---
 
-// TestSweepStaleTemps_HonoursTMPDIR is the environment-INDEPENDENT gate for the hardcoded temp
-// root. The two sweep tests above already discriminate, but only when the ambient environment
-// happens to export TMPDIR — they are red on a $TMPDIR host and green without it, so on a default
-// runner they prove nothing about this defect. This one sets TMPDIR itself, so it fails on the
-// pre-fix body wherever it runs.
+// altTempRoot returns an absolute temp root guaranteed NOT to live under /tmp, and registers its
+// removal. Both tests below need one, and NEITHER may build it with t.TempDir().
+//
+// t.TempDir() resolves through os.MkdirTemp(os.Getenv("GOTMPDIR"), …) — Go 1.26
+// testing.(*common).TempDir, testing.go:1460 — so it consults GOTMPDIR, never the TMPDIR the
+// tests are about, and it resolves BEFORE the t.Setenv("TMPDIR", …) that follows it. With
+// GOTMPDIR unset that root is /tmp/Test…/001/: scaffolding sitting inside the very directory
+// the pre-fix hardcode looks at. TestOpenedFilesByAnyProcess_HonoursTMPDIR therefore PASSED on
+// the pre-fix body in that environment, and only looked discriminating on a host that exports
+// GOTMPDIR. Its sibling escaped by accident of the pre-fix glob being non-recursive, not by
+// construction. One shared root removes both accidents.
+//
+// The package directory is the root a Go test can rely on being outside /tmp: `go test` runs
+// each test binary with its working directory set to the package's source directory. Symlinks
+// are resolved because openedFilesByAnyProcess compares against /proc/<pid>/fd readlink targets,
+// which the kernel reports fully resolved.
+func altTempRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp(".", "spec-proc-tmproot-")
+	if err != nil {
+		t.Fatalf("creating an alternate temp root in the package dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("resolving %s: %v", dir, err)
+	}
+	if root, err = filepath.Abs(root); err != nil {
+		t.Fatalf("absolutising %s: %v", dir, err)
+	}
+	if strings.HasPrefix(root, "/tmp/") {
+		t.Fatalf("the alternate temp root %s is itself under /tmp — this checkout cannot host the premise of the $TMPDIR tests, which is a root the pre-fix hardcode does NOT cover; they would pass without discriminating", root)
+	}
+	return root
+}
+
+// TestSweepStaleTemps_HonoursTMPDIR is the gate for the hardcoded temp root in the sweeper. The
+// two sweep tests above discriminate only when the ambient environment happens to export TMPDIR
+// — red on a $TMPDIR host, green without it — so on a default runner they say nothing about this
+// defect. This one sets TMPDIR itself, over a root altTempRoot() places outside /tmp.
 //
 // The defect: every creator resolves through os.TempDir() (`proc.MkdirTempHeld("", …)`,
 // `os.MkdirTemp("", …)`), which honours $TMPDIR, while the sweeper globbed a hardcoded "/tmp" —
 // so on such a host it scanned a directory no temp had ever been created in and reaped nothing.
 // Measured on one: 201 stale `charly-localpkg-` trees under $TMPDIR, zero under /tmp.
 func TestSweepStaleTemps_HonoursTMPDIR(t *testing.T) {
-	tmpdir := t.TempDir()
+	tmpdir := altTempRoot(t)
 	t.Setenv("TMPDIR", tmpdir)
 
 	// Created the way every real creator creates: an empty dir argument, resolved through
@@ -214,8 +250,10 @@ func TestSweepStaleTemps_HonoursTMPDIR(t *testing.T) {
 // fail to reap there, it loses a liveness guard.
 //
 // This process's own descriptor is visible in /proc/self/fd, so the assertion is deterministic.
+// The root comes from altTempRoot() and must: built with t.TempDir() this test PASSES on the
+// pre-fix body whenever GOTMPDIR is unset — see altTempRoot's comment.
 func TestOpenedFilesByAnyProcess_HonoursTMPDIR(t *testing.T) {
-	tmpdir := t.TempDir()
+	tmpdir := altTempRoot(t)
 	t.Setenv("TMPDIR", tmpdir)
 
 	f, err := os.CreateTemp("", sweepableTestPrefix)
