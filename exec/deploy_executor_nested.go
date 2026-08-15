@@ -402,13 +402,20 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 
 // wrapWithJump rewrites a script so it executes inside the nested
 // environment when run by the parent executor. The return value is a
-// single bash invocation (parent's shell) that internally invokes the
+// single command line for the PARENT's shell, which internally invokes the
 // child shell with the script fed via stdin.
+//
+// That line must be POSIX sh, not bash: the parent is bash only when it is a
+// ShellExecutor or SSHExecutor. When the parent is itself a NestedExecutor,
+// the parent's shell is whatever nestedShellProbe selected one level up — `sh`
+// on a busybox intermediate — so a bashism in the emitted line would break the
+// hop above this one. Everything emitted here (heredocs, `{ … } >`, quoting) is
+// POSIX-portable for that reason.
 //
 // Heredoc-delim uniqueness across nesting depths: the delim is
 // derived by counting how many `CHARLY_NESTED_SCRIPT_EOF` tokens already
 // appear in the inner script. A 3-deep chain stacks three heredocs,
-// each needing a DIFFERENT terminator — otherwise the OUTERMOST bash
+// each needing a DIFFERENT terminator — otherwise the OUTERMOST shell
 // terminates its heredoc on the first occurrence (the innermost
 // open) and the trailing closing delims are interpreted as
 // commands. The count-and-suffix approach guarantees each level uses
@@ -430,9 +437,11 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 // not found" (exit 127), which reads as an infra failure rather than a missing
 // interpreter. `sh` is the one interpreter guaranteed present on every base, so
 // it runs the probe and `exec`s bash when bash exists — a bash-bearing base is
-// therefore unaffected (it still gets real bash, verified against a Fedora
-// image reporting BASH_VERSION 5.3.0), while a busybox base degrades to sh
-// instead of failing to start. The `exec` replaces the probe shell so no extra
+// therefore unaffected (it still gets real bash — verified on a Fedora image by
+// reading `$0`, which reports `bash` on the hand-off and `sh` on the fallback;
+// NOT $BASH_VERSION, which bash exports even when invoked as sh and so cannot
+// witness the branch), while a busybox base degrades to sh instead of failing to
+// start. The `exec` replaces the probe shell so no extra
 // process sits between the jump and the script.
 //
 // The probe is emitted at a DIFFERENT quoting depth per jump kind, because the

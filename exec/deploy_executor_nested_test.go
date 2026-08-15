@@ -471,14 +471,25 @@ func writeTransportStub(t *testing.T, dir, name, body string) {
 //
 // Both directions are pinned:
 //   - the script actually runs on the far side (NESTED_SCRIPT_RAN), and
-//   - the bash hand-off survives on a bash-bearing far side (INTERP=bash),
-//     so the busybox fix did not silently downgrade every jump to sh.
+//   - the probe took its BASH branch (TOOK=bash-branch), so the busybox fix did
+//     not silently downgrade every jump to sh.
+//
+// The second assertion needs care, and an earlier version of it was VACUOUS.
+// Reading $BASH_VERSION on the far side cannot distinguish the branches on a
+// host where /bin/sh IS bash: bash invoked as sh still exports BASH_VERSION, so
+// "handed off to bash" and "fell back to sh" produce the identical observation
+// and the assertion holds even when the probe is forced down `exec sh`. The
+// discriminator has to be something only the bash BRANCH can produce, so this
+// test puts a marking `bash` on the far side's PATH: reaching it proves
+// `command -v bash` succeeded and `exec bash` ran. The ssh stub's login shell is
+// invoked by ABSOLUTE path so it cannot pick the marker up first and pre-set it.
 func TestWrapWithJump_SurvivesTransportReparse(t *testing.T) {
 	bashPath, err := exec.LookPath("bash")
 	if err != nil {
-		// bash IS the parent shell this package emits into; without it the
-		// emitted line has no defined meaning, so this is a failure, not a skip.
-		t.Fatalf("bash not found — the emitted jump line is a bash line: %v", err)
+		// The stubs model the parent shell and the remote login shell as bash,
+		// matching the real-sshd corroboration; without it there is nothing to
+		// run the emitted line, so this is a failure, not a skip.
+		t.Fatalf("bash not found — the transport stubs need a real bash: %v", err)
 	}
 
 	// Hermetic: no --env flags leaking from the developer's environ into the
@@ -519,16 +530,27 @@ while [ $# -gt 0 ]; do
   esac
 done
 shift
-exec bash -c "$*"
+exec `+bashPath+` -c "$*"
+`)
+
+	// The far side's `bash`, marked. The probe reaches this ONLY by taking its
+	// bash branch (`command -v bash` succeeded, `exec bash` ran); the sh
+	// fallback never touches it. It exports the marker and hands off to the real
+	// bash by absolute path, so there is no PATH recursion.
+	writeTransportStub(t, binDir, "bash", `#!/bin/sh
+PROBE_TOOK=bash-branch
+export PROBE_TOOK
+exec `+bashPath+` "$@"
 `)
 
 	// Root mode escalates through sudo; the stub keeps the test unprivileged
 	// while preserving the argv shape sudo passes on.
 	writeTransportStub(t, binDir, "sudo", "#!/bin/sh\nexec \"$@\"\n")
 
-	// The far-side script reports that it ran AND which interpreter it landed in.
+	// The far-side script reports that it ran AND which branch of the probe got
+	// it there. NOT $BASH_VERSION — see the vacuity note in the doc comment.
 	const inner = `echo NESTED_SCRIPT_RAN
-if [ -n "${BASH_VERSION:-}" ]; then echo INTERP=bash; else echo INTERP=sh; fi`
+echo "TOOK=${PROBE_TOOK:-sh-branch}"`
 
 	for _, tc := range []struct {
 		name string
@@ -572,8 +594,8 @@ exec "$@"
 				t.Errorf("far-side script never ran over the %s transport:\n--- output ---\n%s\n--- emitted ---\n%s",
 					tc.name, out, line)
 			}
-			if !strings.Contains(string(out), "INTERP=bash") {
-				t.Errorf("bash hand-off lost over the %s transport (a bash-bearing far side must still get bash):\n--- output ---\n%s\n--- emitted ---\n%s",
+			if !strings.Contains(string(out), "TOOK=bash-branch") {
+				t.Errorf("probe did not take its bash branch over the %s transport (a bash-bearing far side must still get bash):\n--- output ---\n%s\n--- emitted ---\n%s",
 					tc.name, out, line)
 			}
 		})

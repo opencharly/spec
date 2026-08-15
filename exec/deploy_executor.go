@@ -294,7 +294,7 @@ func fmtOctal(mode uint32) string {
 }
 
 // deployShellQuote wraps a string in single-quotes for safe embedding in a
-// bash script. Handles embedded single quotes via the standard
+// POSIX shell script (bash included). Handles embedded single quotes via the standard
 // 'foo'\”bar' trick.
 // (FU-13: folded onto spec.ShellQuote — the behaviourally identical POSIX single-quoter, proven by
 // TestShellSingleQuoters_CanonicalPOSIX, that core already shares with the plugins/check path; the
