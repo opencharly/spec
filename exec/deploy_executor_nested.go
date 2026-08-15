@@ -698,8 +698,12 @@ func buildContainerEnvFlags() string {
 	return strings.Join(flags, " ")
 }
 
-// escapeTokens wraps each token in single quotes for safe embedding in
-// a bash line. Empty input returns a nil slice so strings.Join yields
+// escapeTokens wraps each token in single quotes for safe embedding in a
+// POSIX shell line. Not "a bash line": its only caller is wrapWithJump, whose
+// emitted line runs in the PARENT's shell — which is `sh` when the parent is
+// itself a NestedExecutor over a busybox intermediate. Single-quoting is POSIX,
+// so the transform is correct either way; the sibling quoter is
+// deployShellQuote. Empty input returns a nil slice so strings.Join yields
 // "" rather than " ".
 func escapeTokens(tokens []string) []string {
 	if len(tokens) == 0 {

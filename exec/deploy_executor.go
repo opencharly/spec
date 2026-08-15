@@ -23,8 +23,9 @@ import (
 // exec / ssh / virsh) prepended to every primitive.
 //
 // The interface is narrow but carries one identity method — Venue() —
-// that answers the question "where does bash actually run when I call
-// RunSystem?". Ledger files live on that venue's filesystem, so the
+// that answers the question "where does the script actually run when I call
+// RunSystem?" (the interpreter itself is venue-dependent: bash on the host and
+// over SSHExecutor, run-time-selected inside the target under NestedExecutor). Ledger files live on that venue's filesystem, so the
 // venue string is how install_ledger.go picks the right install
 // database without a global constant.
 

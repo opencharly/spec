@@ -212,8 +212,10 @@ func TestSSHExecutor_Venue(t *testing.T) {
 // TestNestedExecutor_ThreeLevelNesting_DelimitersUnique verifies the
 // heredoc delim collision fix: at 3 levels of nesting (outer → mid →
 // inner), each wrap layer must use a DIFFERENT delim or the outer
-// bash terminates its heredoc on the first occurrence and the
-// trailing closing delims become bare commands → exit 127.
+// shell terminates its heredoc on the first occurrence and the
+// trailing closing delims become bare commands → exit 127. (The outer shell is
+// not necessarily bash — see wrapWithJump; heredoc handling is POSIX, so the
+// collision and the fix are the same either way.)
 func TestNestedExecutor_ThreeLevelNesting_DelimitersUnique(t *testing.T) {
 	innerJump := NestedJump{Kind: JumpPodmanExec, Target: "deepest"}
 	midJump := NestedJump{Kind: JumpPodmanExec, Target: "middle"}
