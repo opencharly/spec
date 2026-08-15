@@ -414,6 +414,33 @@ func TestResolveBuiltImageRef_SameArtifactNeverRefuses(t *testing.T) {
 	}
 }
 
+// TestResolveBuiltImageRef_TiedKeysDoNotRefuse pins the election/newest-build tiebreak SYMMETRY.
+// Two DISTINCT images sharing a creation second with no CalVer tag to separate them tie on every
+// recency key. The election's last resort is ascending ref; if newestBuild picked descending, the
+// two would name different refs, and RefuseIfStale — which compares refs, not keys — would refuse
+// a pair where neither is newer than the other. Distinct builds do share a second under parallel
+// load, so this was reachable rather than theoretical.
+//
+// Fails with the descending tiebreak: the guard refuses with two refs it cannot rank.
+func TestResolveBuiltImageRef_TiedKeysDoNotRefuse(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	lbl := map[string]string{spec.LabelBox: "twin-app", spec.LabelVersion: "2026.215.1207"}
+	ListLocalImages = func(string) ([]LocalImageInfo, error) {
+		return []LocalImageInfo{
+			{ID: "one", Created: tAug15, Names: []string{"ghcr.io/opencharly/twin-app:check-a-2026.227.1000"}, Labels: lbl},
+			{ID: "two", Created: tAug15, Names: []string{"ghcr.io/opencharly/twin-app:check-b-2026.227.1000"}, Labels: lbl},
+		}, nil
+	}
+	got, err := ResolveBuiltImageRef("podman", "twin-app")
+	if err != nil {
+		t.Fatalf("refused two artifacts that tie on every recency key — neither is newer: %v", err)
+	}
+	if want := "ghcr.io/opencharly/twin-app:check-a-2026.227.1000"; got != want {
+		t.Fatalf("resolve = %q, want %q (the election's ascending-ref last resort)", got, want)
+	}
+}
+
 // TestResolveBuiltImageRef_RefusesWhenOrderUnknown pins the deliberate answer to "what if the
 // ordering cannot be established": refuse, do not pass. Permissive-on-unknown is exactly what made
 // the first guard blind, so an engine that reports no creation time gets an explicit error naming

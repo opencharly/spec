@@ -139,7 +139,9 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 			byKey[key] = info
 			order = append(order, key)
 		}
-		// Tag refs: podman uses "Names", docker uses "RepoTags". Merge + dedup.
+		// Tag refs: podman uses "Names". The "RepoTags" fallback below is the docker INSPECT shape;
+		// `docker images --format json` emits neither (measured), so it is dead for that command and
+		// live only for a caller feeding this parser inspect-shaped rows. Merge + dedup.
 		var refs []string
 		if names, ok := raw["Names"].([]any); ok {
 			for _, n := range names {
@@ -183,7 +185,16 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 			info.Size = int64(sz)
 		}
 		// Created (unix seconds), same shape as Size: identical across rows for one id, decoded as
-		// float64 by json.Unmarshal into map[string]any. podman and docker both emit it.
+		// float64 by json.Unmarshal into map[string]any.
+		//
+		// PODMAN emits it (measured: 427/427 rows). DOCKER does NOT — `docker images --format json`
+		// emits `CreatedAt`/`CreatedSince` and no numeric `Created` (measured: 0/3 rows). That is
+		// not a gap this field introduces: docker's output from that command is JSON-LINES rather
+		// than the JSON ARRAY this parser unmarshals, and carries no `Names`, no `RepoTags` and no
+		// `Labels` either, so the whole path is already degenerate upstream of recency. The
+		// consequence is the RIGHT one rather than an accident: with no creation time, the
+		// resolution reports OrderKnown=false and a build-scope verdict REFUSES instead of
+		// guessing — which is exactly the behaviour a degenerate engine path should get.
 		if cr, ok := raw["Created"].(float64); ok {
 			info.Created = int64(cr)
 		}
@@ -436,7 +447,13 @@ func newestBuild(cands []resolverCandidate) (resolverCandidate, bool) {
 		// re-run against this ref — so the choice must be deterministic rather than
 		// iteration-order-dependent, even though every tie candidate is byte-identical content.
 		if c.created == best.created {
-			if cmp := compareCalVerKey(c.tagCalVer, best.tagCalVer); cmp > 0 || (cmp == 0 && c.ref > best.ref) {
+			// Ascending ref, MATCHING the election's own last resort (`cands[i].ref < cands[j].ref`).
+			// The two must agree: when every recency key ties, a descending pick here would name a
+			// different ref than the election chose, and RefuseIfStale — which compares refs, not
+			// keys — would refuse two artifacts neither of which is newer than the other. Distinct
+			// images DO share a creation second under parallel builds, so that spurious refusal was
+			// reachable, not theoretical.
+			if cmp := compareCalVerKey(c.tagCalVer, best.tagCalVer); cmp > 0 || (cmp == 0 && c.ref < best.ref) {
 				best = c
 			}
 		}
