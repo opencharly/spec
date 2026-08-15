@@ -366,31 +366,7 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 	// prefer-the-exact-name tiebreak could never fire. Preferring the base at sort time
 	// was too weak anyway — it only broke exact CalVer ties, so a sibling deployment's
 	// alias with a NEWER tag-CalVer won outright.
-	sort.SliceStable(cands, func(i, j int) bool {
-		// Primary: label-CalVer descending (label > tag, always).
-		if c := compareCalVerKey(cands[i].labelCalVer, cands[j].labelCalVer); c != 0 {
-			return c > 0
-		}
-		// Tiebreaker: creation time descending — the newest BUILD.
-		//
-		// This REPLACES a tag-CalVer tiebreak that was not total over the tags charly mints, and
-		// the difference is not academic: `--tag` REPLACES the CalVer tag, so every bed build
-		// carries `check-<bed>-<calver>`, which ExtractCalVerTag reports as empty. With the label
-		// tied (one content version across every build of one source tree) and the tag key empty
-		// for all of them, the ordering fell to the lexicographic last resort below and elected
-		// the OLDEST local build. That was diagnosed once already, for the live path, in
-		// candy/plugin-check/live_image.go — which routed AROUND this resolver instead of fixing
-		// it, so the flaw survived here.
-		if cands[i].created != cands[j].created && cands[i].created != 0 && cands[j].created != 0 {
-			return cands[i].created > cands[j].created
-		}
-		// Tertiary: tag-CalVer descending. Distinct builds CAN share a creation second under
-		// parallel load, and where both carry a plain CalVer tag it breaks that tie meaningfully.
-		if c := compareCalVerKey(cands[i].tagCalVer, cands[j].tagCalVer); c != 0 {
-			return c > 0
-		}
-		return cands[i].ref < cands[j].ref
-	})
+	sort.SliceStable(cands, func(i, j int) bool { return moreRecent(cands[i], cands[j]) })
 
 	// If the top candidate has NEITHER a label-CalVer NOR a tag-CalVer AND
 	// there are multiple distinct repositories among the candidates, that's a
@@ -438,27 +414,45 @@ func newestBuild(cands []resolverCandidate) (resolverCandidate, bool) {
 		if c.created == 0 {
 			return resolverCandidate{}, false
 		}
-		if i == 0 || c.created > best.created {
+		if i == 0 || moreRecent(c, best) {
 			best = c
-			continue
-		}
-		// Equal creation times: prefer the higher tag-CalVer, then the greater ref. Refs on ONE
-		// image id tie here by construction (same artifact, many tags), and the operator is told to
-		// re-run against this ref — so the choice must be deterministic rather than
-		// iteration-order-dependent, even though every tie candidate is byte-identical content.
-		if c.created == best.created {
-			// Ascending ref, MATCHING the election's own last resort (`cands[i].ref < cands[j].ref`).
-			// The two must agree: when every recency key ties, a descending pick here would name a
-			// different ref than the election chose, and RefuseIfStale — which compares refs, not
-			// keys — would refuse two artifacts neither of which is newer than the other. Distinct
-			// images DO share a creation second under parallel builds, so that spurious refusal was
-			// reachable, not theoretical.
-			if cmp := compareCalVerKey(c.tagCalVer, best.tagCalVer); cmp > 0 || (cmp == 0 && c.ref < best.ref) {
-				best = c
-			}
 		}
 	}
 	return best, len(cands) > 0
+}
+
+// moreRecent is THE recency comparator — the single definition of "a is a more recent build than
+// b", used by BOTH the election's sort and newestBuild's scan.
+//
+// Sharing it is not tidiness, it is the fix for a defect the split caused. Each side used to
+// define its own last resort — the election ascending by ref, newestBuild descending — and for two
+// DISTINCT images tying on every recency key they therefore named DIFFERENT refs. RefuseIfStale
+// compares refs, not keys, so the guard refused a pair in which neither was newer than the other.
+// Two definitions of one order can always re-diverge; one definition cannot.
+//
+// The keys, in order:
+//  1. label-CalVer (the content-derived ai.opencharly.version) — the PRIMARY key, unchanged;
+//  2. CREATION TIME — the only build-recency key TOTAL over the tags charly mints, since
+//     `charly box build --tag` REPLACES the CalVer tag and a bed tag parses as no CalVer at all.
+//     Ordering by the tag tied every bed-built candidate and fell through to the last resort,
+//     electing the OLDEST build — diagnosed once already for the live path in
+//     candy/plugin-check/live_image.go, which routed AROUND this resolver instead of fixing it;
+//  3. tag-CalVer — distinct builds CAN share a creation second under parallel load, and where both
+//     carry a plain CalVer tag it breaks that tie meaningfully;
+//  4. the ref itself, ascending — an arbitrary but DETERMINISTIC last resort. Arbitrary is fine
+//     here precisely because both callers share it: whatever it picks, they agree, so an
+//     all-keys tie can never read as "one of these is newer".
+func moreRecent(a, b resolverCandidate) bool {
+	if c := compareCalVerKey(a.labelCalVer, b.labelCalVer); c != 0 {
+		return c > 0
+	}
+	if a.created != b.created && a.created != 0 && b.created != 0 {
+		return a.created > b.created
+	}
+	if c := compareCalVerKey(a.tagCalVer, b.tagCalVer); c != 0 {
+		return c > 0
+	}
+	return a.ref < b.ref
 }
 
 // ResolveBuiltImageRef resolves like ResolveLocalImageRef and then REFUSES the resolution when the
