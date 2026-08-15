@@ -33,9 +33,11 @@ import (
 //    }
 //
 // When the child calls RunSystem("pacman -Sy"), NestedExecutor passes
-// it to the parent as "podman exec -i mychild sudo bash -c 'pacman
-// -Sy'". The parent's SSHExecutor ships that one line through ssh,
-// and the in-guest podman lands it inside the child container.
+// it to the parent as one `podman exec -i mychild sudo <shell-probe>`
+// line with "pacman -Sy" fed on stdin (the probe picks the child's
+// interpreter at run time — see jumpShell). The parent's SSHExecutor
+// ships that one line through ssh, and the in-guest podman lands it
+// inside the child container.
 //
 // Composition stacks arbitrarily: container-in-vm-in-container is
 // NestedExecutor{Parent: NestedExecutor{Parent: localExec, Jump: …},
@@ -107,6 +109,40 @@ const nestedSSHLogLevel = "LogLevel=ERROR"
 // busybox bases before the script is read.
 const nestedShellProbe = `sh -c 'if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi'`
 
+// jumpShell returns the far-side interpreter for one jump, at the quoting depth
+// that jump's TRANSPORT requires. The two depths are deliberately different and
+// are NOT interchangeable — collapsing them back into one string reintroduces a
+// real, live-reproduced breakage:
+//
+//   - podman/docker exec — the emitted line is parsed ONCE, by the parent shell,
+//     and the resulting argv reaches the engine verbatim (`sh`, `-c`,
+//     `if command -v bash …`). exec(2) never re-parses, so the probe is written
+//     exactly as the target must receive it.
+//
+//   - ssh — the emitted line is parsed by the parent shell AND THEN AGAIN on the
+//     far side. ssh(1) does not forward its remote-command arguments as argv: it
+//     JOINS them with single spaces into one string and hands that string to the
+//     remote login shell. By then the parent shell has already consumed the
+//     probe's quotes, so a bare probe arrives as the unprotected text
+//     `sh -c if command -v bash …; then exec bash; else exec sh; fi` and the
+//     remote shell dies with `syntax error near unexpected token 'then'` (exit 2)
+//     before the script is read. ONE extra quoting layer survives the parent's
+//     parse and re-materializes the probe for the remote one.
+//
+// TestWrapWithJump_SurvivesTransportReparse pins both depths by running the
+// emitted line through transport stubs that model each hand-off, so a
+// "simplification" back to a single form fails the suite rather than the fleet.
+func jumpShell(kind JumpKind, asRoot bool) string {
+	shell := nestedShellProbe
+	if asRoot {
+		shell = "sudo " + nestedShellProbe
+	}
+	if kind == JumpSSH {
+		return deployShellQuote(shell)
+	}
+	return shell
+}
+
 func nestedSSHLogArgs() []string { return []string{"-o", nestedSSHLogLevel} }
 
 func nestedSSHLogFlags() string { return strings.Join(escapeTokens(nestedSSHLogArgs()), " ") + " " }
@@ -148,10 +184,11 @@ func (n *NestedExecutor) Venue() string {
 }
 
 // run is the shared body of RunSystem/RunUser: it wraps the script for this
-// executor's jump (asRoot bakes `sudo bash` into the jump), then hands the single
-// wrapped shell line to the parent's RunUser — NOT RunSystem — because entering a
-// container or ssh session already carries its own root-escalation semantics; we
-// don't want `sudo ssh sudo bash` triple-escalation.
+// executor's jump (asRoot bakes `sudo` in front of the far-side shell probe —
+// see jumpShell), then hands the single wrapped shell line to the parent's
+// RunUser — NOT RunSystem — because entering a container or ssh session already
+// carries its own root-escalation semantics; we don't want a
+// `sudo ssh … sudo …` triple-escalation.
 func (n *NestedExecutor) run(ctx context.Context, script string, asRoot bool, opts spec.EmitOpts) error {
 	wrapped, err := n.prepareJump(script, asRoot)
 	if err != nil {
@@ -163,7 +200,9 @@ func (n *NestedExecutor) run(ctx context.Context, script string, asRoot bool, op
 	return n.Parent.RunUser(ctx, wrapped, opts)
 }
 
-// RunSystem routes a bash script through the jump as root.
+// RunSystem routes a POSIX-shell script through the jump as root. The far-side
+// interpreter is bash wherever bash exists and sh on a busybox base — the script
+// body must not assume bashisms (see jumpShell / nestedShellProbe).
 func (n *NestedExecutor) RunSystem(ctx context.Context, script string, opts spec.EmitOpts) error {
 	return n.run(ctx, script, true /*root*/, opts)
 }
@@ -395,11 +434,14 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 // image reporting BASH_VERSION 5.3.0), while a busybox base degrades to sh
 // instead of failing to start. The `exec` replaces the probe shell so no extra
 // process sits between the jump and the script.
+//
+// The probe is emitted at a DIFFERENT quoting depth per jump kind, because the
+// container engines deliver real argv while ssh(1) joins its remote-command
+// arguments into one string that the remote login shell re-parses. jumpShell owns
+// that asymmetry and documents why it cannot be collapsed.
 func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
-	shell := nestedShellProbe
-	if asRoot {
-		shell = "sudo " + nestedShellProbe
-	}
+	// Quoting depth is transport-specific — see jumpShell.
+	shell := jumpShell(jump.Kind, asRoot)
 
 	// Choose a heredoc delimiter that does NOT already appear in the
 	// inner script. For a non-nested call (script has zero inner

@@ -2,6 +2,9 @@ package exec
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -435,5 +438,144 @@ func TestNestedExecutorGetFile_StagesRedirectOnParent(t *testing.T) {
 	// Parent.GetFile must pull exactly the parent-side stage path once.
 	if len(rec.getFilePaths) != 1 || !strings.HasPrefix(rec.getFilePaths[0], "/tmp/charly-nested-get-") {
 		t.Errorf("Parent.GetFile not called once with the parent stage path; got %v", rec.getFilePaths)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Transport fidelity: the emitted line must survive the hand-off that carries it
+// ---------------------------------------------------------------------------
+
+// writeTransportStub writes an executable stub into dir and returns nothing; the
+// caller puts dir at the front of PATH so the emitted jump line resolves to it.
+func writeTransportStub(t *testing.T, dir, name, body string) {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
+		t.Fatalf("write stub %s: %v", name, err)
+	}
+}
+
+// TestWrapWithJump_SurvivesTransportReparse is the transport-level counterpart to
+// the string assertions above: it EXECUTES the emitted line through stubs that
+// model how each transport actually delivers the far-side command, instead of
+// pattern-matching the text.
+//
+// This is the assertion a strings.Contains cannot express. The ssh subtest passes
+// the `command -v bash` / `exec sh` text checks while being completely broken,
+// because ssh(1) does NOT forward its remote-command arguments as argv — it joins
+// them with single spaces into one string that the remote login shell re-parses.
+// The parent shell has already stripped the probe's quotes by then, so an
+// unquoted probe reaches the far side as bare text and dies with
+// `syntax error near unexpected token 'then'` (exit 2) before the script is read.
+// Reproduced against a real sshd; the stub reproduces it identically.
+//
+// Both directions are pinned:
+//   - the script actually runs on the far side (NESTED_SCRIPT_RAN), and
+//   - the bash hand-off survives on a bash-bearing far side (INTERP=bash),
+//     so the busybox fix did not silently downgrade every jump to sh.
+func TestWrapWithJump_SurvivesTransportReparse(t *testing.T) {
+	bashPath, err := exec.LookPath("bash")
+	if err != nil {
+		// bash IS the parent shell this package emits into; without it the
+		// emitted line has no defined meaning, so this is a failure, not a skip.
+		t.Fatalf("bash not found — the emitted jump line is a bash line: %v", err)
+	}
+
+	// Hermetic: no --env flags leaking from the developer's environ into the
+	// container-jump line (the stubs would have to model them too).
+	for _, k := range containerEnvPropagationKeys {
+		t.Setenv(k, "")
+	}
+
+	binDir := t.TempDir()
+
+	// `podman exec -i [--env K=V …] <name> <cmd> [args…]`: the engine receives
+	// real argv and hands it straight to exec(2) inside the container — there is
+	// NO second parse. Modelled by dropping podman's own flags and exec'ing the
+	// remaining argv unchanged.
+	writeTransportStub(t, binDir, "podman", `#!/bin/sh
+[ "$1" = exec ] && shift
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -i|-t|-it) shift ;;
+    --env) shift 2 ;;
+    *) break ;;
+  esac
+done
+shift
+exec "$@"
+`)
+
+	// ssh(1): local options and the destination are consumed locally, then the
+	// REMAINING ARGUMENTS ARE JOINED WITH SPACES into one string handed to the
+	// remote login shell, which parses it a second time. `"$*"` is exactly that
+	// join; `bash -c` is the remote login shell.
+	writeTransportStub(t, binDir, "ssh", `#!/bin/sh
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o|-p) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+shift
+exec bash -c "$*"
+`)
+
+	// Root mode escalates through sudo; the stub keeps the test unprivileged
+	// while preserving the argv shape sudo passes on.
+	writeTransportStub(t, binDir, "sudo", "#!/bin/sh\nexec \"$@\"\n")
+
+	// The far-side script reports that it ran AND which interpreter it landed in.
+	const inner = `echo NESTED_SCRIPT_RAN
+if [ -n "${BASH_VERSION:-}" ]; then echo INTERP=bash; else echo INTERP=sh; fi`
+
+	for _, tc := range []struct {
+		name string
+		jump NestedJump
+		root bool
+	}{
+		{"podman", NestedJump{Kind: JumpPodmanExec, Target: "mybox"}, false},
+		{"podman-root", NestedJump{Kind: JumpPodmanExec, Target: "mybox"}, true},
+		{"docker", NestedJump{Kind: JumpDockerExec, Target: "mybox"}, false},
+		{"ssh", NestedJump{Kind: JumpSSH, Target: "user@127.0.0.1:2222"}, false},
+		{"ssh-root", NestedJump{Kind: JumpSSH, Target: "user@127.0.0.1:2222"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.jump.Kind == JumpDockerExec {
+				// docker takes the same argv-delivery path as podman.
+				writeTransportStub(t, binDir, "docker", `#!/bin/sh
+[ "$1" = exec ] && shift
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -i|-t|-it) shift ;;
+    --env) shift 2 ;;
+    *) break ;;
+  esac
+done
+shift
+exec "$@"
+`)
+			}
+			line, err := wrapWithJump(tc.jump, inner, tc.root)
+			if err != nil {
+				t.Fatalf("wrapWithJump: %v", err)
+			}
+			cmd := exec.Command(bashPath, "-c", line)
+			cmd.Env = append(os.Environ(), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("the emitted jump line did not survive the %s transport: %v\n--- output ---\n%s\n--- emitted ---\n%s",
+					tc.name, err, out, line)
+			}
+			if !strings.Contains(string(out), "NESTED_SCRIPT_RAN") {
+				t.Errorf("far-side script never ran over the %s transport:\n--- output ---\n%s\n--- emitted ---\n%s",
+					tc.name, out, line)
+			}
+			if !strings.Contains(string(out), "INTERP=bash") {
+				t.Errorf("bash hand-off lost over the %s transport (a bash-bearing far side must still get bash):\n--- output ---\n%s\n--- emitted ---\n%s",
+					tc.name, out, line)
+			}
+		})
 	}
 }
