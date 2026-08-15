@@ -55,11 +55,17 @@
 	// verdicts, computed HOST-SIDE (the live Candy has the env/ports/route/volumes/aliases/
 	// libvirt/init fields + the fs-probe caches the envelope CandyModel cannot recompute
 	// faithfully) and carried here so the specCandyAdapter matches the live *Candy
-	// byte-exactly — the candy-graph composition (ExpandCandy/ResolveCandyOrder: a composing
-	// candy with no content is skipped) and the pixi-bound intermediate detection both gate
-	// on these. A pure-composition candy (e.g. agent-forwarding: candy: [gnupg,direnv,
-	// ssh-client], only a check plan) has has_content=false, so it is correctly EXCLUDED
-	// from the candy graph — matching the pre-move core render.
+	// byte-exactly — the candy-graph composition (ExpandCandy/ResolveCandyOrder) and the
+	// pixi-bound intermediate detection both gate on these. has_content does NOT count plan
+	// steps, so a pure-composition candy (e.g. agent-forwarding: candy:
+	// [gnupg,direnv,ssh-client], only a check plan) has has_content=false. Such a candy is
+	// still admitted to the candy graph when it carries a PLAN, so that plan bakes into the
+	// ai.opencharly.description label (ADE: every candy's plan is runnable acceptance); it
+	// contributes nothing to the build, since has_content=false implies empty RunOps. A
+	// content-free composing candy with no plan is skipped, as a pure grouping node.
+	// Admission is deliberately NOT keyed to the description: ADE makes a description
+	// mandatory on every candy, so that would admit every composing candy unconditionally.
+	// The admission predicate is deploykit's layerEntersOrder.
 	has_content?:        bool @go(HasContent)
 	has_install_files?: bool @go(HasInstallFiles)
 
