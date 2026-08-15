@@ -201,18 +201,56 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 // Returns `spec.ErrImageNotLocal` when nothing matches. An ambiguous result
 // across multiple repos with the same highest CalVer tag surfaces as an
 // explicit error asking for a full ref.
+//
+// This is the LENIENT form: it elects a ref and says nothing about what it passed over. A verb
+// that pronounces a VERDICT on the artifact (`charly check box`, `charly box feature run`,
+// `charly box labels`) must call ResolveBuiltImageRef instead, which refuses to elect an image
+// older than the newest local build.
 func ResolveLocalImageRef(engine, input string) (string, error) {
+	res, err := ResolveLocalImage(engine, input)
+	if err != nil {
+		return "", err
+	}
+	return res.Ref, nil
+}
+
+// LocalImageResolution is the COMPLETE answer to "which local image does this reference name?":
+// the ref the ordering elects (Ref) plus the newest local BUILD carrying the same short name
+// (NewestBuildRef). The two diverge whenever the ordering's PRIMARY key — the content-derived
+// `ai.opencharly.version` label — elects an image that is not the most recently built one, which
+// is exactly the shape that makes a build-scope verdict certify the wrong artifact. The lenient
+// ResolveLocalImageRef keeps only Ref; a verb that PRONOUNCES on an artifact resolves through
+// ResolveBuiltImageRef instead, which refuses that divergence.
+type LocalImageResolution struct {
+	// Ref is the elected reference — what ResolveLocalImageRef returns.
+	Ref string
+	// NewestBuildRef is the candidate ref carrying the highest build-tag CalVer across BOTH
+	// candidate families (label-identified AND name-identified), so a build whose
+	// `ai.opencharly.box` label disagrees with its own repo name is still counted. Empty when no
+	// candidate carries a CalVer build tag at all (every ref is a deploy alias or a float).
+	NewestBuildRef string
+	// Pinned reports that the input named a full ref or an explicit tag: the operator stated
+	// which artifact they meant, so no election happened and nothing is ambiguous.
+	Pinned bool
+}
+
+// ResolveLocalImage is ResolveLocalImageRef's full-answer form — same election, same errors, plus
+// the newest-build ref the election may have passed over. Every caller that only needs the elected
+// ref goes through ResolveLocalImageRef; the build-scope verdict verbs go through
+// ResolveBuiltImageRef. Both are thin wrappers over this one body (R3 — one resolution, one
+// candidate gather, one ordering).
+func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 	if LooksLikeFullRef(input) {
 		if !LocalImageExists(engine, input) {
-			return "", fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
+			return LocalImageResolution{}, fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
 		}
-		return input, nil
+		return LocalImageResolution{Ref: input, NewestBuildRef: input, Pinned: true}, nil
 	}
 	shortName, requestedTag := splitShortTaggedImage(input)
 
 	images, err := ListLocalImages(engine)
 	if err != nil {
-		return "", err
+		return LocalImageResolution{}, err
 	}
 
 	var labelCands, nameCands []resolverCandidate
@@ -272,7 +310,7 @@ func ResolveLocalImageRef(engine, input string) (string, error) {
 		cands = nameCands
 	}
 	if len(cands) == 0 {
-		return "", fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
+		return LocalImageResolution{}, fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
 	}
 
 	// Sort newest-first. The label-CalVer (the content-derived
@@ -309,11 +347,83 @@ func ResolveLocalImageRef(engine, input string) (string, error) {
 		for i, c := range cands {
 			refs[i] = c.ref
 		}
-		return "", fmt.Errorf("ambiguous short name %q in local storage; candidates: %s. Re-run with a full ref",
+		return LocalImageResolution{}, fmt.Errorf("ambiguous short name %q in local storage; candidates: %s. Re-run with a full ref",
 			input, strings.Join(refs, ", "))
 	}
 
-	return cands[0].ref, nil
+	// The newest-BUILD probe spans BOTH families, not just the elected one. The families split on
+	// the `ai.opencharly.box` label, and a build whose label disagrees with its own repo name
+	// (the namespaced-label defect this cutover fixes at the emitter) lands in the OTHER family —
+	// which the election discards wholesale. Spanning both is what makes the staleness visible on
+	// storage that still holds such images.
+	all := make([]resolverCandidate, 0, len(labelCands)+len(nameCands))
+	all = append(all, labelCands...)
+	all = append(all, nameCands...)
+	return LocalImageResolution{
+		Ref:            cands[0].ref,
+		NewestBuildRef: newestBuildRef(all),
+		Pinned:         requestedTag != "",
+	}, nil
+}
+
+// newestBuildRef returns the candidate ref with the highest build-tag CalVer, or "" when no
+// candidate carries one. The build tag is the per-build `YYYY.DDD.HHMM` timestamp, so this is
+// literally "the most recently built artifact among these" — independent of the content-derived
+// label CalVer the election orders by.
+func newestBuildRef(cands []resolverCandidate) string {
+	best := ""
+	bestCalVer := ""
+	for _, c := range cands {
+		if c.tagCalVer == "" {
+			continue
+		}
+		if best == "" || compareCalVerKey(c.tagCalVer, bestCalVer) > 0 {
+			best, bestCalVer = c.ref, c.tagCalVer
+		}
+	}
+	return best
+}
+
+// ResolveBuiltImageRef resolves like ResolveLocalImageRef and then REFUSES the resolution when the
+// elected image is not the newest local BUILD of that short name.
+//
+// It is the resolver for every verb that pronounces a VERDICT on a built artifact — `charly check
+// box`, `charly box feature run`, `charly box labels`. Those verbs answer "what is in the image I
+// just built", and the election cannot answer that on its own: its PRIMARY key is the
+// content-derived `ai.opencharly.version` label, so an image built from a differently-versioned
+// source tree outranks a newer build regardless of when either was produced. A green verdict
+// against the older artifact is the worst failure this system has — it looks exactly like a
+// passing one — so the ambiguity is surfaced as an error and the operator names the artifact.
+//
+// A full ref or an explicit `<name>:<tag>` states the intent and passes through untouched, which
+// is why the R10 bed sequence (which builds and then checks `<image>:<run-tag>`) never reaches
+// this guard.
+func ResolveBuiltImageRef(engine, input string) (string, error) {
+	res, err := ResolveLocalImage(engine, input)
+	if err != nil {
+		return "", err
+	}
+	if err := res.RefuseIfStale(input); err != nil {
+		return "", err
+	}
+	return res.Ref, nil
+}
+
+// RefuseIfStale returns a `spec.ErrStaleLocalImage`-wrapped error when the elected ref is older
+// (by build tag) than the newest local build of the same short name. Pinned resolutions never
+// refuse: the operator already said which artifact they meant.
+func (r LocalImageResolution) RefuseIfStale(input string) error {
+	if r.Pinned || r.NewestBuildRef == "" || r.NewestBuildRef == r.Ref {
+		return nil
+	}
+	if compareCalVerKey(ExtractCalVerTag(r.NewestBuildRef), ExtractCalVerTag(r.Ref)) <= 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: %q resolves to %s, but %s is a newer local build of the same box. "+
+		"A build-scope verdict on the older artifact would certify the wrong image, so charly refuses to choose for you. "+
+		"Re-run naming the artifact you mean — `%s:%s` for the newest build, or any full ref",
+		spec.ErrStaleLocalImage, input, r.Ref, r.NewestBuildRef,
+		refRepoName(r.NewestBuildRef), ExtractCalVerTag(r.NewestBuildRef))
 }
 
 // splitShortTaggedImage separates the standard registry-less `name:tag` form.

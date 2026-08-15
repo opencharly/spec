@@ -8,6 +8,8 @@ package container
 // these bodies).
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/opencharly/spec/spec"
@@ -240,5 +242,154 @@ func TestRefRepoName(t *testing.T) {
 		if got := refRepoName(tc.ref); got != tc.want {
 			t.Errorf("refRepoName(%q) = %q, want %q", tc.ref, got, tc.want)
 		}
+	}
+}
+
+// --- the stale-build-election guard (charly#check-box-target-image) ---
+
+// staleReproStorage reproduces the MEASURED local storage of the incident (2026-08-15, day 227,
+// host `podman images` capture) that made `charly check box fedora-nonfree` print
+// `Image: ghcr.io/opencharly/fedora-nonfree:2026.216.1908` and report `5 passed, 0 failed`
+// against a plan that predated the candy edit under test.
+//
+// The two families and why they split:
+//   - the OLD images carry `ai.opencharly.box=fedora-nonfree` (built when the box was named
+//     unqualified) — they form the LABEL family;
+//   - the FRESH build carries `ai.opencharly.box=fedora.fedora-nonfree`, because the render used
+//     to label with the Generator's namespace-qualified map key while tagging the ref with the
+//     leaf name — so it lands in the NAME family;
+//   - the election takes the label family whole and DISCARDS the name family, so the newest build
+//     is invisible and the newest OLD tag (2026.216.1908) wins.
+func staleReproStorage() []LocalImageInfo {
+	return []LocalImageInfo{
+		{ID: "old", Names: []string{
+			"ghcr.io/opencharly/fedora-nonfree:2026.216.1516",
+			"ghcr.io/opencharly/fedora-nonfree:2026.216.1908",
+		}, Labels: map[string]string{spec.LabelBox: "fedora-nonfree", spec.LabelVersion: "2026.144.1443"}},
+		{ID: "fresh", Names: []string{
+			"ghcr.io/opencharly/fedora-nonfree:2026.227.0835",
+			"ghcr.io/opencharly/fedora-nonfree:2026.227.0836",
+		}, Labels: map[string]string{spec.LabelBox: "fedora.fedora-nonfree", spec.LabelVersion: "2026.227.0830"}},
+	}
+}
+
+// TestResolveBuiltImageRef_RefusesStaleElection is the regression gate for the incident: a verb
+// that pronounces a verdict on a built artifact must REFUSE rather than certify an image older
+// than the newest local build. Fails without the guard (ResolveBuiltImageRef would return the
+// 2026.216.1908 ref with a nil error, exactly as ResolveLocalImageRef still does below).
+func TestResolveBuiltImageRef_RefusesStaleElection(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	ListLocalImages = func(string) ([]LocalImageInfo, error) { return staleReproStorage(), nil }
+
+	got, err := ResolveBuiltImageRef("podman", "fedora-nonfree")
+	if err == nil {
+		t.Fatalf("ResolveBuiltImageRef(fedora-nonfree) = %q, nil — want a refusal: %s is a newer local build",
+			got, "ghcr.io/opencharly/fedora-nonfree:2026.227.0836")
+	}
+	if !errors.Is(err, spec.ErrStaleLocalImage) {
+		t.Fatalf("error %v does not wrap spec.ErrStaleLocalImage", err)
+	}
+	// The message must name BOTH refs — the one it would have certified and the one the operator
+	// almost certainly meant — plus a runnable re-invocation. A refusal the operator cannot act
+	// on is only marginally better than the silent pass it replaces.
+	for _, want := range []string{
+		"ghcr.io/opencharly/fedora-nonfree:2026.216.1908",
+		"ghcr.io/opencharly/fedora-nonfree:2026.227.0836",
+		"fedora-nonfree:2026.227.0836",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal %q does not mention %q", err.Error(), want)
+		}
+	}
+}
+
+// TestResolveLocalImageRef_LenientFormStillElects pins the deliberate split: the lenient resolver
+// (every consumption path — deploy, vm build, builder bootstrap) keeps its existing election and
+// its existing ordering. The guard is a property of the VERDICT verbs, not a change to resolution.
+func TestResolveLocalImageRef_LenientFormStillElects(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	ListLocalImages = func(string) ([]LocalImageInfo, error) { return staleReproStorage(), nil }
+
+	got, err := ResolveLocalImageRef("podman", "fedora-nonfree")
+	if err != nil {
+		t.Fatalf("ResolveLocalImageRef(fedora-nonfree): %v", err)
+	}
+	if want := "ghcr.io/opencharly/fedora-nonfree:2026.216.1908"; got != want {
+		t.Fatalf("lenient resolve = %q, want %q (unchanged election)", got, want)
+	}
+}
+
+// TestResolveBuiltImageRef_PinnedInputPassesThrough covers the escape hatch AND the reason the R10
+// bed sequence is untouched by the guard: the bed builds `<image> --tag <run-tag>` and then checks
+// `<image>:<run-tag>`, an explicit pin, so the guard never fires there.
+func TestResolveBuiltImageRef_PinnedInputPassesThrough(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	ListLocalImages = func(string) ([]LocalImageInfo, error) { return staleReproStorage(), nil }
+
+	// An explicit tag on the OLDER image: the operator said which artifact they meant.
+	got, err := ResolveBuiltImageRef("podman", "fedora-nonfree:2026.216.1908")
+	if err != nil {
+		t.Fatalf("ResolveBuiltImageRef(pinned older tag): %v", err)
+	}
+	if want := "ghcr.io/opencharly/fedora-nonfree:2026.216.1908"; got != want {
+		t.Fatalf("pinned resolve = %q, want %q", got, want)
+	}
+	// And the newest build resolves by its own tag, which is what the refusal tells you to run.
+	got, err = ResolveBuiltImageRef("podman", "fedora-nonfree:2026.227.0836")
+	if err != nil {
+		t.Fatalf("ResolveBuiltImageRef(pinned newest tag): %v", err)
+	}
+	if want := "ghcr.io/opencharly/fedora-nonfree:2026.227.0836"; got != want {
+		t.Fatalf("pinned resolve = %q, want %q", got, want)
+	}
+}
+
+// TestResolveBuiltImageRef_ConsistentLabelsElectNewestBuild proves the guard does NOT fire once
+// the emitter labels every build with the box's LEAF name (the render fix in
+// sdk/deploykit.buildBakedMetadata): one family, the fresh build's higher content-derived
+// label-CalVer wins outright, and `charly check box fedora-nonfree` just works.
+func TestResolveBuiltImageRef_ConsistentLabelsElectNewestBuild(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	ListLocalImages = func(string) ([]LocalImageInfo, error) {
+		imgs := staleReproStorage()
+		imgs[1].Labels[spec.LabelBox] = "fedora-nonfree" // what the fixed render emits
+		return imgs, nil
+	}
+
+	got, err := ResolveBuiltImageRef("podman", "fedora-nonfree")
+	if err != nil {
+		t.Fatalf("ResolveBuiltImageRef(fedora-nonfree) with consistent labels: %v", err)
+	}
+	if want := "ghcr.io/opencharly/fedora-nonfree:2026.227.0836"; got != want {
+		t.Fatalf("resolve = %q, want %q (the newest build)", got, want)
+	}
+}
+
+// TestResolveBuiltImageRef_SiblingAliasIsNotANewerBuild guards the guard: a sibling deployment's
+// `<deploy-name>:<calver>` alias must not read as "a newer build of this box". The alias is named
+// for the OTHER deployment, so it is never a candidate for this short name and cannot trigger a
+// refusal — otherwise every bed host would refuse every untagged verdict.
+func TestResolveBuiltImageRef_SiblingAliasIsNotANewerBuild(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	const labelCV = "2026.209.1500"
+	ListLocalImages = func(string) ([]LocalImageInfo, error) {
+		return []LocalImageInfo{
+			{ID: "base", Names: []string{"ghcr.io/opencharly/check-pod:2026.216.2119"},
+				Labels: map[string]string{spec.LabelBox: "check-pod", spec.LabelVersion: labelCV}},
+			{ID: "sib", Names: []string{"ghcr.io/opencharly/check-preempt-arbiter-pod:2026.216.2124"},
+				Labels: map[string]string{spec.LabelBox: "check-pod", spec.LabelVersion: labelCV}},
+		}, nil
+	}
+	got, err := ResolveBuiltImageRef("podman", "check-pod")
+	if err != nil {
+		t.Fatalf("ResolveBuiltImageRef(check-pod): %v", err)
+	}
+	if want := "ghcr.io/opencharly/check-pod:2026.216.2119"; got != want {
+		t.Fatalf("resolve = %q, want %q", got, want)
 	}
 }
