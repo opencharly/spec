@@ -176,13 +176,18 @@ func TestTempIsHeld_ReleasesOnProcessDeath(t *testing.T) {
 // altTempRoot returns an absolute temp root guaranteed NOT to live under /tmp, and registers its
 // removal. Both tests below take their root from here, and neither may build it with t.TempDir().
 //
-// t.TempDir() and os.TempDir() read DIFFERENT variables. os.TempDir() roots at $TMPDIR, else
-// /tmp. t.TempDir() roots at $GOTMPDIR — Go 1.26 testing.makeTempDir is
-// os.MkdirTemp(os.Getenv("GOTMPDIR"), pattern), testing.go:1460 — falling back to os.TempDir()
-// only when GOTMPDIR is empty. So the governing condition for these tests is not "is TMPDIR set"
-// but "does t.TempDir() land outside /tmp", and with BOTH variables unset — the stock CI default
-// — it does not: the root is /tmp/Test…/001/, scaffolding inside the very directory the pre-fix
-// hardcode looks at, which the pre-fix strings.HasPrefix(tgt, "/tmp/") accepts.
+// t.TempDir() and os.TempDir() sit on a PRECEDENCE CHAIN, not on independent variables.
+// t.TempDir() roots at $GOTMPDIR when it is set; when it is not it falls back to os.TempDir(),
+// which reads $TMPDIR, else /tmp. os.TempDir() reads only $TMPDIR, else /tmp. (Go 1.26
+// testing.makeTempDir is os.MkdirTemp(os.Getenv("GOTMPDIR"), pattern), testing.go:1460.) The two
+// can diverge only when GOTMPDIR is set, and then only if it names a different directory; with
+// GOTMPDIR unset they always agree, because t.TempDir() DOES read TMPDIR, transitively, through
+// that fallback.
+//
+// The governing condition for these tests is therefore not "is TMPDIR set" but "does t.TempDir()
+// land outside /tmp". With BOTH variables unset — the stock CI default — it does not: the root
+// is /tmp/Test…/001/, scaffolding inside the very directory the pre-fix hardcode looks at, which
+// the pre-fix strings.HasPrefix(tgt, "/tmp/") accepts.
 //
 // Measured on the pre-fix body (bbb3c6a2), plain `go test`, all four combinations:
 //
