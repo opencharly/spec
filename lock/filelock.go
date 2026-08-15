@@ -59,7 +59,7 @@ func AcquireFileLock(path string, blocking bool) (release func() error, err erro
 	// decorative for every caller: the ONE caller needing content (candy/plugin-box's
 	// build-activity lock) overwrites the file with its build CalVer immediately after acquiring,
 	// and the ONE reader (candy/plugin-clean's retention floor) reads only that. For the other
-	// twelve call sites the line was read by nothing — while teaching every human who opened the
+	// eleven external call sites the line was read by nothing — while teaching every human who opened
 	// file that this is a PIDFILE lock whose staleness must be reasoned about. It is not: the
 	// kernel releases an flock when the holder dies, so the file's PRESENCE proves nothing and its
 	// ABSENCE proves nothing. `ps` is the only discriminator, and the pid line misled three
