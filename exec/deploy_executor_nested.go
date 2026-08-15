@@ -100,6 +100,13 @@ type NestedJump struct {
 
 const nestedSSHLogLevel = "LogLevel=ERROR"
 
+// nestedShellProbe is the interpreter invoked on the far side of a jump. It is
+// `sh` running a bash probe rather than a bare `bash`, so the jump starts on
+// every base: `sh` exists everywhere, and it hands off to bash wherever bash is
+// installed. See wrapWithJump's doc comment for why a hardcoded bash breaks
+// busybox bases before the script is read.
+const nestedShellProbe = `sh -c 'if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi'`
+
 func nestedSSHLogArgs() []string { return []string{"-o", nestedSSHLogLevel} }
 
 func nestedSSHLogFlags() string { return strings.Join(escapeTokens(nestedSSHLogArgs()), " ") + " " }
@@ -376,10 +383,22 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 // session-socket lookup (libvirt: verbs find their socket at
 // $XDG_RUNTIME_DIR/libvirt/libvirt-sock) and for any Wayland/X11
 // verb that consults DISPLAY / WAYLAND_DISPLAY.
+//
+// Shell selection across bases: the nested shell is chosen AT RUN TIME inside
+// the target rather than hardcoded to bash, because busybox bases (Alpine)
+// ship no bash at all — `podman exec <alpine> bash` fails before the script is
+// ever read, with the OCI runtime's "attempted to invoke a command that was
+// not found" (exit 127), which reads as an infra failure rather than a missing
+// interpreter. `sh` is the one interpreter guaranteed present on every base, so
+// it runs the probe and `exec`s bash when bash exists — a bash-bearing base is
+// therefore unaffected (it still gets real bash, verified against a Fedora
+// image reporting BASH_VERSION 5.3.0), while a busybox base degrades to sh
+// instead of failing to start. The `exec` replaces the probe shell so no extra
+// process sits between the jump and the script.
 func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
-	shell := "bash"
+	shell := nestedShellProbe
 	if asRoot {
-		shell = "sudo bash"
+		shell = "sudo " + nestedShellProbe
 	}
 
 	// Choose a heredoc delimiter that does NOT already appear in the

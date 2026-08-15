@@ -65,8 +65,48 @@ func TestWrapWithJump_PodmanRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
 	}
-	if !strings.Contains(out, "sudo bash") {
-		t.Errorf("root mode missing sudo bash: %s", out)
+	// Root mode escalates via sudo, and the escalation must wrap the shell
+	// PROBE (not a bare bash) so the jump still starts on a busybox base.
+	if !strings.Contains(out, "sudo sh -c") {
+		t.Errorf("root mode missing sudo escalation: %s", out)
+	}
+	if !strings.Contains(out, "exec bash") {
+		t.Errorf("root mode lost the bash hand-off: %s", out)
+	}
+}
+
+// TestWrapWithJump_ShellProbeNotHardcodedBash guards the busybox-base
+// regression: a hardcoded `bash` on the far side of a jump fails before the
+// script is read on any base without bash (Alpine), surfacing as the OCI
+// runtime's "attempted to invoke a command that was not found" (exit 127).
+// The emitted command must invoke `sh` and hand off to bash conditionally.
+func TestWrapWithJump_ShellProbeNotHardcodedBash(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		jump NestedJump
+	}{
+		{"podman", NestedJump{Kind: JumpPodmanExec, Target: "mybox"}},
+		{"docker", NestedJump{Kind: JumpDockerExec, Target: "mybox"}},
+		{"ssh", NestedJump{Kind: JumpSSH, Target: "user@host.invalid"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := wrapWithJump(tc.jump, "true", false)
+			if err != nil {
+				t.Fatalf("wrap: %v", err)
+			}
+			if !strings.Contains(out, "command -v bash") {
+				t.Errorf("shell is not probed — a base without bash cannot start: %s", out)
+			}
+			if !strings.Contains(out, "exec sh") {
+				t.Errorf("no sh fallback for a busybox base: %s", out)
+			}
+			// The jump must not invoke bash directly as the interpreter.
+			for _, bad := range []string{"'mybox' bash", "host.invalid bash"} {
+				if strings.Contains(out, bad) {
+					t.Errorf("interpreter is hardcoded bash (%q): %s", bad, out)
+				}
+			}
+		})
 	}
 }
 
