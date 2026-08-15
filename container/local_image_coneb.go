@@ -366,7 +366,7 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 	// prefer-the-exact-name tiebreak could never fire. Preferring the base at sort time
 	// was too weak anyway — it only broke exact CalVer ties, so a sibling deployment's
 	// alias with a NEWER tag-CalVer won outright.
-	sort.SliceStable(cands, func(i, j int) bool { return moreRecent(cands[i], cands[j]) })
+	sort.SliceStable(cands, func(i, j int) bool { return electionOrder(cands[i], cands[j]) })
 
 	// If the top candidate has NEITHER a label-CalVer NOR a tag-CalVer AND
 	// there are multiple distinct repositories among the candidates, that's a
@@ -414,41 +414,57 @@ func newestBuild(cands []resolverCandidate) (resolverCandidate, bool) {
 		if c.created == 0 {
 			return resolverCandidate{}, false
 		}
-		if i == 0 || moreRecent(c, best) {
+		if i == 0 || buildOrder(c, best) {
 			best = c
 		}
 	}
 	return best, len(cands) > 0
 }
 
-// moreRecent is THE recency comparator — the single definition of "a is a more recent build than
-// b", used by BOTH the election's sort and newestBuild's scan.
+// electionOrder and buildOrder are the TWO orderings this file needs, and they must stay
+// DIFFERENT in their primary key. Deduplicating them into one comparator is not R3 — it is
+// deleting the difference the guard is built on:
 //
-// Sharing it is not tidiness, it is the fix for a defect the split caused. Each side used to
-// define its own last resort — the election ascending by ref, newestBuild descending — and for two
-// DISTINCT images tying on every recency key they therefore named DIFFERENT refs. RefuseIfStale
-// compares refs, not keys, so the guard refused a pair in which neither was newer than the other.
-// Two definitions of one order can always re-diverge; one definition cannot.
+//   - electionOrder answers "which artifact does this NAME mean". Its primary key is the
+//     content-derived label (ai.opencharly.version), because a short name refers to a box's
+//     content, not to whatever was compiled most recently.
+//   - buildOrder answers "which of these was BUILT most recently". Its primary key is creation
+//     time, the only recency key total over the tags charly mints.
 //
-// The keys, in order:
-//  1. label-CalVer (the content-derived ai.opencharly.version) — the PRIMARY key, unchanged;
-//  2. CREATION TIME — the only build-recency key TOTAL over the tags charly mints, since
-//     `charly box build --tag` REPLACES the CalVer tag and a bed tag parses as no CalVer at all.
-//     Ordering by the tag tied every bed-built candidate and fell through to the last resort,
-//     electing the OLDEST build — diagnosed once already for the live path in
-//     candy/plugin-check/live_image.go, which routed AROUND this resolver instead of fixing it;
-//  3. tag-CalVer — distinct builds CAN share a creation second under parallel load, and where both
-//     carry a plain CalVer tag it breaks that tie meaningfully;
-//  4. the ref itself, ascending — an arbitrary but DETERMINISTIC last resort. Arbitrary is fine
-//     here precisely because both callers share it: whatever it picks, they agree, so an
-//     all-keys tie can never read as "one of these is newer".
-func moreRecent(a, b resolverCandidate) bool {
+// RefuseIfStale exists precisely because those two answers can disagree: an image built from a
+// differently-versioned source tree outranks a newer build on content, and certifying it is the
+// defect this whole cutover removes. Sharing one comparator made cands[0] identically the maximum
+// buildOrder returns, so NewestBuildRef == Ref always and the guard became a tautology — green,
+// because every refusal test at the time used the two-family split where the scanned set is wider.
+// TestResolveBuiltImageRef_SingleFamilyStaleElectionRefuses is the gate for that.
+//
+// What they DO share is the deterministic tail, and sharing it is the real R3 here: when every
+// meaningful key ties, both must land on the SAME candidate, or the two orderings name different
+// refs and RefuseIfStale — which compares refs, not keys — refuses a pair in which neither is
+// newer. That was a live defect before the tail was unified.
+func electionOrder(a, b resolverCandidate) bool {
 	if c := compareCalVerKey(a.labelCalVer, b.labelCalVer); c != 0 {
 		return c > 0
 	}
 	if a.created != b.created && a.created != 0 && b.created != 0 {
 		return a.created > b.created
 	}
+	return orderTail(a, b)
+}
+
+// buildOrder ranks by BUILD recency alone — deliberately blind to the content label, so it can
+// contradict the election and give RefuseIfStale something real to compare.
+func buildOrder(a, b resolverCandidate) bool {
+	if a.created != b.created && a.created != 0 && b.created != 0 {
+		return a.created > b.created
+	}
+	return orderTail(a, b)
+}
+
+// orderTail is the shared deterministic last resort: tag-CalVer descending (distinct builds CAN
+// share a creation second under parallel load, and where both carry a plain CalVer tag it breaks
+// that tie meaningfully), then the ref ascending. Arbitrary is fine; DISAGREEING is not.
+func orderTail(a, b resolverCandidate) bool {
 	if c := compareCalVerKey(a.tagCalVer, b.tagCalVer); c != 0 {
 		return c > 0
 	}

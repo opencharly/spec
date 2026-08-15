@@ -414,6 +414,50 @@ func TestResolveBuiltImageRef_SameArtifactNeverRefuses(t *testing.T) {
 	}
 }
 
+// TestResolveBuiltImageRef_SingleFamilyStaleElectionRefuses is the scenario the guard's own doc
+// comment names, and the one no other test covered: ONE label family, no name/label split, where
+// the election's PRIMARY key (the content-derived ai.opencharly.version) elects an image that is
+// NOT the most recently built.
+//
+// That gap let a regression through green. When the election and newestBuild were refactored to
+// share ONE comparator, they shared its PRIMARY key too — so cands[0] became identically the max
+// newestBuild returns, NewestBuildRef == Ref always, and RefuseIfStale had nothing to compare. The
+// guard became a tautology. Every existing refusal test survived because they all use the
+// two-family split, where newestBuild scans the WIDER union and can still differ.
+//
+// The two orderings must therefore stay DIFFERENT in their primary key — the election answers
+// "which artifact does this name mean" (content version), newestBuild answers "which was built
+// most recently" (creation time) — and only their deterministic tail is shared.
+func TestResolveBuiltImageRef_SingleFamilyStaleElectionRefuses(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	// ONE family: both carry the same ai.opencharly.box, so no split is doing the work here.
+	// The HIGHER content version is the OLDER build — a sibling worktree on a newer source tree
+	// built first, then this tree built something newer from older sources.
+	ListLocalImages = func(string) ([]LocalImageInfo, error) {
+		return []LocalImageInfo{
+			{ID: "highlabel-older", Created: tAug14, Names: []string{"ghcr.io/opencharly/web:2026.227.0830"},
+				Labels: map[string]string{spec.LabelBox: "web", spec.LabelVersion: "2026.227.0830"}},
+			{ID: "lowlabel-newer", Created: tAug15b, Names: []string{"ghcr.io/opencharly/web:2026.144.1443"},
+				Labels: map[string]string{spec.LabelBox: "web", spec.LabelVersion: "2026.144.1443"}},
+		}, nil
+	}
+
+	got, err := ResolveBuiltImageRef("podman", "web")
+	if err == nil {
+		t.Fatalf("ResolveBuiltImageRef(web) = %q, nil — want a REFUSAL. The election picked the higher "+
+			"CONTENT version while a NEWER BUILD exists; if newestBuild shares the election's primary key "+
+			"it agrees by construction and the guard can never fire", got)
+	}
+	if !errors.Is(err, spec.ErrStaleLocalImage) {
+		t.Fatalf("error %v does not wrap spec.ErrStaleLocalImage", err)
+	}
+	// It must name the NEWER BUILD as the artifact to re-run against, not the higher content version.
+	if !strings.Contains(err.Error(), "ghcr.io/opencharly/web:2026.144.1443") {
+		t.Fatalf("refusal %q does not name the newest BUILD", err.Error())
+	}
+}
+
 // TestResolveBuiltImageRef_TiedKeysDoNotRefuse pins the election/newest-build tiebreak SYMMETRY.
 // Two DISTINCT images sharing a creation second with no CalVer tag to separate them tie on every
 // recency key. The election's last resort is ascending ref; if newestBuild picked descending, the
