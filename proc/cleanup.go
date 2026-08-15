@@ -141,7 +141,27 @@ func InstallSignalHandler() {
 	})
 }
 
-// sweepablePatterns lists `/tmp/<prefix>*` glob roots for stale temps.
+// sweepRoots returns the directories SweepStaleTemps scans and openedFilesByAnyProcess filters
+// held descriptors by. os.TempDir() FIRST, because that is what every creator resolves through:
+// `proc.MkdirTempHeld("", …)` and `os.MkdirTemp("", …)` both honour $TMPDIR, so a sweeper that
+// globbed a hardcoded "/tmp" scanned a directory no temp had been created in — on a $TMPDIR host
+// the sweep reaped NOTHING, silently, which is the leak it exists to prevent. Measured on one
+// such host: 201 stale `charly-localpkg-` trees under $TMPDIR, zero under /tmp.
+//
+// "/tmp" is scanned as well when $TMPDIR points elsewhere. Leftovers created before the variable
+// was set live there and would otherwise be stranded permanently; the per-entry guards (same uid,
+// older than the safety floor, not open, not flock-held) are identical for both roots, so the
+// extra root only ever reaps what the sweep already had license to reap.
+func sweepRoots() []string {
+	root := filepath.Clean(os.TempDir())
+	roots := []string{root}
+	if root != "/tmp" {
+		roots = append(roots, "/tmp")
+	}
+	return roots
+}
+
+// sweepablePatterns lists `<temp-root>/<prefix>*` glob roots for stale temps.
 // Each prefix matches both files (`os.CreateTemp`) and directories
 // (`os.MkdirTemp`). Patterns that SHOULD persist across charly invocations
 // (e.g. `charly-tunnel-*.sock` for long-lived SSH forwards declared in
@@ -177,43 +197,51 @@ func SweepStaleTemps() {
 	uid := os.Getuid()
 	heldPaths := openedFilesByAnyProcess()
 
-	for _, prefix := range sweepablePatterns {
-		matches, _ := filepath.Glob("/tmp/" + prefix + "*")
-		for _, p := range matches {
-			info, err := os.Lstat(p)
-			if err != nil {
-				continue
+	for _, root := range sweepRoots() {
+		for _, prefix := range sweepablePatterns {
+			matches, _ := filepath.Glob(filepath.Join(root, prefix+"*"))
+			for _, p := range matches {
+				info, err := os.Lstat(p)
+				if err != nil {
+					continue
+				}
+				if statUid(info) != uid {
+					continue // not our temp
+				}
+				if time.Since(info.ModTime()) < sweepSafetyFloor {
+					continue // too recent — concurrent charly may still need it
+				}
+				if heldPaths[p] {
+					continue // a process has it open
+				}
+				if TempIsHeld(p) {
+					// A live operation holds this temp (temphold.go). Both guards above
+					// answer "stale" for a running build — a stage tree's root mtime is
+					// frozen at creation because the writes land in its subdirectories, and
+					// a build process holds the tree as its CWD, which /proc/<pid>/fd cannot
+					// see. This probe asks about liveness directly, and the kernel drops the
+					// lock when the holder dies, so a killed build's leftovers are still
+					// swept on the next invocation.
+					continue
+				}
+				_ = os.RemoveAll(p)
 			}
-			if statUid(info) != uid {
-				continue // not our temp
-			}
-			if time.Since(info.ModTime()) < sweepSafetyFloor {
-				continue // too recent — concurrent charly may still need it
-			}
-			if heldPaths[p] {
-				continue // a process has it open
-			}
-			if TempIsHeld(p) {
-				// A live operation holds this temp (temphold.go). Both guards above
-				// answer "stale" for a running build — a stage tree's root mtime is
-				// frozen at creation because the writes land in its subdirectories, and
-				// a build process holds the tree as its CWD, which /proc/<pid>/fd cannot
-				// see. This probe asks about liveness directly, and the kernel drops the
-				// lock when the holder dies, so a killed build's leftovers are still
-				// swept on the next invocation.
-				continue
-			}
-			_ = os.RemoveAll(p)
 		}
 	}
 }
 
-// openedFilesByAnyProcess returns the set of /tmp/* paths currently
+// openedFilesByAnyProcess returns the set of temp-root paths currently
 // held by any running process the caller can read about. Walks
 // /proc/<pid>/fd/* symlinks. Best-effort: missing/restricted /proc
 // entries are silently skipped.
+//
+// It filters by the SAME sweepRoots() the sweep scans, and must: this is the sweep's guard (a),
+// and while it filtered a hardcoded "/tmp" on a $TMPDIR host it recorded nothing, so every temp
+// looked unheld. That is the more dangerous half of the hardcode — the sweep does not merely
+// fail to reap, it loses a liveness guard for anything it does reach.
 func openedFilesByAnyProcess() map[string]bool {
 	out := map[string]bool{}
+	roots := sweepRoots()
 	procEntries, err := os.ReadDir("/proc")
 	if err != nil {
 		return out
@@ -235,8 +263,11 @@ func openedFilesByAnyProcess() map[string]bool {
 			if err != nil {
 				continue
 			}
-			if strings.HasPrefix(tgt, "/tmp/") {
-				out[tgt] = true
+			for _, root := range roots {
+				if strings.HasPrefix(tgt, root+string(os.PathSeparator)) {
+					out[tgt] = true
+					break
+				}
 			}
 		}
 	}

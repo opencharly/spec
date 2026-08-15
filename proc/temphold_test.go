@@ -169,3 +169,66 @@ func TestTempIsHeld_ReleasesOnProcessDeath(t *testing.T) {
 		t.Fatal("TempIsHeld() = true after the holder was SIGKILLed — the hold would leak and the sweep could never reap an abandoned temp again")
 	}
 }
+
+// --- the $TMPDIR-vs-hardcoded-/tmp cutover ---
+
+// TestSweepStaleTemps_HonoursTMPDIR is the environment-INDEPENDENT gate for the hardcoded temp
+// root. The two sweep tests above already discriminate, but only when the ambient environment
+// happens to export TMPDIR — they are red on a $TMPDIR host and green without it, so on a default
+// runner they prove nothing about this defect. This one sets TMPDIR itself, so it fails on the
+// pre-fix body wherever it runs.
+//
+// The defect: every creator resolves through os.TempDir() (`proc.MkdirTempHeld("", …)`,
+// `os.MkdirTemp("", …)`), which honours $TMPDIR, while the sweeper globbed a hardcoded "/tmp" —
+// so on such a host it scanned a directory no temp had ever been created in and reaped nothing.
+// Measured on one: 201 stale `charly-localpkg-` trees under $TMPDIR, zero under /tmp.
+func TestSweepStaleTemps_HonoursTMPDIR(t *testing.T) {
+	tmpdir := t.TempDir()
+	t.Setenv("TMPDIR", tmpdir)
+
+	// Created the way every real creator creates: an empty dir argument, resolved through
+	// os.TempDir() — which now means tmpdir.
+	dir, err := os.MkdirTemp("", sweepableTestPrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(dir) != filepath.Clean(tmpdir) {
+		t.Fatalf("os.MkdirTemp landed in %s, want a child of %s — the premise of this test is that creators honour $TMPDIR", dir, tmpdir)
+	}
+	RegisterTempCleanup(dir)
+	defer UnregisterTempCleanup(dir)
+	backdate(t, dir)
+
+	SweepStaleTemps()
+
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		_ = os.RemoveAll(dir)
+		t.Fatalf("SweepStaleTemps() left %s behind (stat err = %v) — the sweep scanned a hardcoded /tmp while the creator honoured $TMPDIR, so on such a host it reaps nothing at all", dir, err)
+	}
+}
+
+// TestOpenedFilesByAnyProcess_HonoursTMPDIR covers the more dangerous half of the same hardcode.
+// openedFilesByAnyProcess is the sweep's guard (a) — "some process has this open" — and it
+// filtered /proc/<pid>/fd targets by a hardcoded "/tmp/" prefix. On a $TMPDIR host it therefore
+// recorded NOTHING, so every temp the sweep did reach looked unheld: the sweep does not merely
+// fail to reap there, it loses a liveness guard.
+//
+// This process's own descriptor is visible in /proc/self/fd, so the assertion is deterministic.
+func TestOpenedFilesByAnyProcess_HonoursTMPDIR(t *testing.T) {
+	tmpdir := t.TempDir()
+	t.Setenv("TMPDIR", tmpdir)
+
+	f, err := os.CreateTemp("", sweepableTestPrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+	}()
+
+	held := openedFilesByAnyProcess()
+	if !held[f.Name()] {
+		t.Fatalf("openedFilesByAnyProcess() did not record %s as held — the fd filter used a hardcoded /tmp prefix, so on a $TMPDIR host the sweep's liveness guard sees nothing and a LIVE temp reads as unheld", f.Name())
+	}
+}
