@@ -28,7 +28,8 @@ import (
 // The classification is BY EVIDENCE, never by correlation: exit-125 is podman's own
 // structured error exit (the PRIMARY signal); the stderr signatures below are the
 // SECONDARY discriminator for the non-125 manifestations (e.g. the 127 passwd-setup
-// case). A genuine in-container "command not found" (bash ran, the command is absent)
+// case). A genuine in-container "command not found" (the far-side shell started — bash
+// or, on a busybox base, sh — and the command is absent)
 // prints "…: command not found" and matches NO signature → it stays an ordinary check
 // result. The table is the single source of truth, exercised by infra_classify_test.go.
 

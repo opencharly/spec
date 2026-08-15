@@ -23,8 +23,9 @@ import (
 // exec / ssh / virsh) prepended to every primitive.
 //
 // The interface is narrow but carries one identity method — Venue() —
-// that answers the question "where does bash actually run when I call
-// RunSystem?". Ledger files live on that venue's filesystem, so the
+// that answers the question "where does the script actually run when I call
+// RunSystem?" (the interpreter itself is venue-dependent: bash on the host and
+// over SSHExecutor, run-time-selected inside the target under NestedExecutor). Ledger files live on that venue's filesystem, so the
 // venue string is how install_ledger.go picks the right install
 // database without a global constant.
 
@@ -294,7 +295,7 @@ func fmtOctal(mode uint32) string {
 }
 
 // deployShellQuote wraps a string in single-quotes for safe embedding in a
-// bash script. Handles embedded single quotes via the standard
+// POSIX shell script (bash included). Handles embedded single quotes via the standard
 // 'foo'\”bar' trick.
 // (FU-13: folded onto spec.ShellQuote — the behaviourally identical POSIX single-quoter, proven by
 // TestShellSingleQuoters_CanonicalPOSIX, that core already shares with the plugins/check path; the

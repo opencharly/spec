@@ -65,15 +65,23 @@ type DeployExecutor interface {
 	// Not a URL — don't parse it; just compare.
 	Venue() string
 
-	// RunSystem executes a bash script with root privileges. On the
+	// RunSystem executes a shell script with root privileges. On the
 	// host, this is `sudo bash -s <<<script`; on the VM target, it's
 	// `ssh <user>@<host> sudo bash -s <<<script`. The script body runs
 	// with set -e semantics at the caller's discretion.
+	//
+	// The interpreter is NOT guaranteed to be bash. Those two implementations
+	// pin bash, but NestedExecutor selects the far-side interpreter at run time
+	// inside the target and degrades to `sh` on a base that ships no bash (see
+	// exec.nestedShellProbe). A script body handed to this interface must
+	// therefore be POSIX sh — a bashism runs on the host and silently fails
+	// inside a busybox container or guest.
 	RunSystem(ctx context.Context, script string, opts EmitOpts) error
 
-	// RunUser executes a bash script as the invoking user (no sudo).
+	// RunUser executes a shell script as the invoking user (no sudo).
 	// On the host, it's `bash -s <<<script`; on VM, `ssh <user>@<host>
 	// bash -s <<<script` where <user> is the unprivileged guest user.
+	// Same interpreter caveat as RunSystem — write POSIX sh.
 	RunUser(ctx context.Context, script string, opts EmitOpts) error
 
 	// RunBuilder invokes the multi-stage builder image (podman run
@@ -100,7 +108,7 @@ type DeployExecutor interface {
 	// operator after deploy completion.
 	GetFile(ctx context.Context, remotePath string, asRoot bool, opts EmitOpts) ([]byte, error)
 
-	// RunCapture executes a single shell command (or short bash script) on
+	// RunCapture executes a single shell command (or short POSIX-sh script) on
 	// the venue and returns stdout/stderr/exit/err separately. Used by the
 	// declarative test runner (testrun.go) to probe target state without
 	// the streamed-output ergonomics of RunSystem/RunUser. No root
