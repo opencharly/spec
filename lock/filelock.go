@@ -59,16 +59,19 @@ func AcquireFileLock(path string, blocking bool) (release func() error, err erro
 	// decorative for every caller: the ONE caller needing content (candy/plugin-box's
 	// build-activity lock) overwrites the file with its build CalVer immediately after acquiring,
 	// and the ONE reader (candy/plugin-clean's retention floor) reads only that. For the other
-	// twelve other ACQUISITION SITES the line was read by nothing. That framing is named on
-	// purpose: eleven call sites name AcquireFileLock directly, and two more acquire through the
-	// wrappers below (AcquireImageBuildLock from candy/plugin-build, AcquireVmDomainLock from
-	// candy/plugin-check) without ever naming it — so no grep on this identifier reaches them.
-	// A lock acquired through a wrapper carried the line just the same, which is why the
-	// population the claim is about is acquisitions, not direct calls. While teaching every human who opened
-	// file that this is a PIDFILE lock whose staleness must be reasoned about. It is not: the
-	// kernel releases an flock when the holder dies, so the file's PRESENCE proves nothing and its
-	// ABSENCE proves nothing. `ps` is the only discriminator, and the pid line misled three
-	// separate readers into reaching for the file instead.
+	// twelve ACQUISITION SITES the line was read by nothing — while teaching every human who
+	// opened the file that this is a PIDFILE lock whose staleness must be reasoned about.
+	//
+	// It is not: the kernel releases an flock when the holder dies, so the file's PRESENCE proves
+	// nothing and its ABSENCE proves nothing. `ps` is the only discriminator, and the pid line
+	// misled three separate readers into reaching for the file instead.
+	//
+	// "Acquisition sites" is a named framing, chosen on purpose: eleven sites call
+	// AcquireFileLock directly, and two more acquire through the wrappers below
+	// (AcquireImageBuildLock from candy/plugin-build, AcquireVmDomainLock from
+	// candy/plugin-check) without ever naming it, so no grep on this identifier reaches them.
+	// A lock taken through a wrapper carried the line just the same, which is why the population
+	// this claim is about is acquisitions rather than direct calls.
 	_ = f.Truncate(0)
 	return func() error {
 		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
