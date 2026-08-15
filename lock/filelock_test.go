@@ -10,9 +10,10 @@ import (
 // coverage: there is no before/after to compare, because the behaviour they pin was never
 // asserted anywhere. A reviewer looking for a failing-then-passing pair will not find one.
 //
-// Between them they gate the two halves of one change — the line that was deleted and the
-// line that was deliberately kept — because those halves fail in opposite directions and a
-// single test cannot see both.
+// They gate the two halves of one change — the line deleted and the line deliberately kept,
+// which fail in opposite directions so no single test sees both — plus the CONTRACT the
+// deletion depends on (a caller writing after acquiring keeps its bytes) and the fact that
+// the flock is taken at all, without which the content assertions are vacuous.
 
 // TestAcquireFileLock_WritesNothing pins the DELETED half: a lock file carries no content of
 // its own. It previously carried "pid=%d", which nothing read and which taught every human
@@ -78,11 +79,19 @@ func TestAcquireFileLock_TruncatesStaleContent(t *testing.T) {
 	}
 }
 
-// TestAcquireFileLock_CallerContentSurvives pins the one caller that DOES use the file's
-// content: candy/plugin-box writes its build CalVer immediately after acquiring, and
-// candy/plugin-clean's retention floor reads it back. Deleting the pid write must not
-// disturb that, and the truncate must not run after it.
-func TestAcquireFileLock_CallerContentSurvives(t *testing.T) {
+// TestAcquireFileLock_WriteAfterAcquireSurvives is NOT a third assertion in a list — it is
+// the LICENCE for the deletion, and it is the case where all the risk lives.
+//
+// Removing the pid write is safe only because the one caller that needs the file's content
+// writes its own AFTER acquiring: candy/plugin-box records its build CalVer there, and
+// candy/plugin-clean's retention floor reads it back. Every other caller wanted nothing.
+//
+// So the fix removes something twelve callers did not need, and the entire risk sits with the
+// ONE that did — which is exactly where the coverage has to be strongest. Until this test
+// existed, that safety rested on two people having read box.go:373-377. Now the PACKAGE
+// guarantees writers are unaffected, so the deletion survives a fourteenth call site
+// appearing with nobody re-reading anything.
+func TestAcquireFileLock_WriteAfterAcquireSurvives(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "build-activity.lock")
 	const want = "2026.227.2300\n"
 
