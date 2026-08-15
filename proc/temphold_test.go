@@ -174,16 +174,29 @@ func TestTempIsHeld_ReleasesOnProcessDeath(t *testing.T) {
 // --- the $TMPDIR-vs-hardcoded-/tmp cutover ---
 
 // altTempRoot returns an absolute temp root guaranteed NOT to live under /tmp, and registers its
-// removal. Both tests below need one, and NEITHER may build it with t.TempDir().
+// removal. Both tests below take their root from here, and neither may build it with t.TempDir().
 //
-// t.TempDir() resolves through os.MkdirTemp(os.Getenv("GOTMPDIR"), …) — Go 1.26
-// testing.(*common).TempDir, testing.go:1460 — so it consults GOTMPDIR, never the TMPDIR the
-// tests are about, and it resolves BEFORE the t.Setenv("TMPDIR", …) that follows it. With
-// GOTMPDIR unset that root is /tmp/Test…/001/: scaffolding sitting inside the very directory
-// the pre-fix hardcode looks at. TestOpenedFilesByAnyProcess_HonoursTMPDIR therefore PASSED on
-// the pre-fix body in that environment, and only looked discriminating on a host that exports
-// GOTMPDIR. Its sibling escaped by accident of the pre-fix glob being non-recursive, not by
-// construction. One shared root removes both accidents.
+// t.TempDir() and os.TempDir() read DIFFERENT variables. os.TempDir() roots at $TMPDIR, else
+// /tmp. t.TempDir() roots at $GOTMPDIR — Go 1.26 testing.makeTempDir is
+// os.MkdirTemp(os.Getenv("GOTMPDIR"), pattern), testing.go:1460 — falling back to os.TempDir()
+// only when GOTMPDIR is empty. So the governing condition for these tests is not "is TMPDIR set"
+// but "does t.TempDir() land outside /tmp", and with BOTH variables unset — the stock CI default
+// — it does not: the root is /tmp/Test…/001/, scaffolding inside the very directory the pre-fix
+// hardcode looks at, which the pre-fix strings.HasPrefix(tgt, "/tmp/") accepts.
+//
+// Measured on the pre-fix body (bbb3c6a2), plain `go test`, all four combinations:
+//
+//	TMPDIR   GOTMPDIR   SweepStaleTemps_HonoursTMPDIR   OpenedFilesByAnyProcess_HonoursTMPDIR
+//	set      set        FAIL                            FAIL
+//	unset    set        FAIL                            FAIL
+//	unset    unset      FAIL                            PASS   <- vacuous on a stock runner
+//	set      unset      FAIL                            FAIL
+//
+// Only OpenedFilesByAnyProcess_HonoursTMPDIR was defective, and only in row three.
+// SweepStaleTemps_HonoursTMPDIR discriminates in all four — but via the pre-fix glob being
+// non-recursive, a property unrelated to what it asserts, which would go vacuous the day the
+// sweep learned to recurse. Rooting both here makes both structural rather than incidental; the
+// 2x2 above is FAIL in all eight cells with this helper in place, so nothing was weakened.
 //
 // The package directory is the root a Go test can rely on being outside /tmp: `go test` runs
 // each test binary with its working directory set to the package's source directory. Symlinks
@@ -212,7 +225,8 @@ func altTempRoot(t *testing.T) string {
 // TestSweepStaleTemps_HonoursTMPDIR is the gate for the hardcoded temp root in the sweeper. The
 // two sweep tests above discriminate only when the ambient environment happens to export TMPDIR
 // — red on a $TMPDIR host, green without it — so on a default runner they say nothing about this
-// defect. This one sets TMPDIR itself, over a root altTempRoot() places outside /tmp.
+// defect. This one sets TMPDIR itself, over a root altTempRoot() places outside /tmp. It fails on
+// the pre-fix body in all four TMPDIR/GOTMPDIR combinations (see altTempRoot).
 //
 // The defect: every creator resolves through os.TempDir() (`proc.MkdirTempHeld("", …)`,
 // `os.MkdirTemp("", …)`), which honours $TMPDIR, while the sweeper globbed a hardcoded "/tmp" —
@@ -250,8 +264,9 @@ func TestSweepStaleTemps_HonoursTMPDIR(t *testing.T) {
 // fail to reap there, it loses a liveness guard.
 //
 // This process's own descriptor is visible in /proc/self/fd, so the assertion is deterministic.
-// The root comes from altTempRoot() and must: built with t.TempDir() this test PASSES on the
-// pre-fix body whenever GOTMPDIR is unset — see altTempRoot's comment.
+// The root comes from altTempRoot() and must: built with t.TempDir() this test PASSED on the
+// pre-fix body whenever BOTH TMPDIR and GOTMPDIR were unset — the stock CI default — so it was
+// vacuous exactly where it mattered most. See altTempRoot's comment for the 2x2.
 func TestOpenedFilesByAnyProcess_HonoursTMPDIR(t *testing.T) {
 	tmpdir := altTempRoot(t)
 	t.Setenv("TMPDIR", tmpdir)
