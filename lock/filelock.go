@@ -59,7 +59,12 @@ func AcquireFileLock(path string, blocking bool) (release func() error, err erro
 	// decorative for every caller: the ONE caller needing content (candy/plugin-box's
 	// build-activity lock) overwrites the file with its build CalVer immediately after acquiring,
 	// and the ONE reader (candy/plugin-clean's retention floor) reads only that. For the other
-	// ten other external call sites the line was read by nothing — while teaching every human who opened
+	// twelve other ACQUISITION SITES the line was read by nothing. That framing is named on
+	// purpose: eleven call sites name AcquireFileLock directly, and two more acquire through the
+	// wrappers below (AcquireImageBuildLock from candy/plugin-build, AcquireVmDomainLock from
+	// candy/plugin-check) without ever naming it — so no grep on this identifier reaches them.
+	// A lock acquired through a wrapper carried the line just the same, which is why the
+	// population the claim is about is acquisitions, not direct calls. While teaching every human who opened
 	// file that this is a PIDFILE lock whose staleness must be reasoned about. It is not: the
 	// kernel releases an flock when the holder dies, so the file's PRESENCE proves nothing and its
 	// ABSENCE proves nothing. `ps` is the only discriminator, and the pid line misled three
