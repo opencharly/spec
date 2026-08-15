@@ -246,37 +246,41 @@ func TestRefRepoName(t *testing.T) {
 }
 
 // --- the stale-build-election guard (charly#check-box-target-image) ---
+//
+// Creation times below are unix seconds; only their ORDER matters. Every fixture sets one on
+// every image, because a candidate without one now makes the ordering unknown by design.
 
-// staleReproStorage reproduces the MEASURED local storage of the incident (2026-08-15, day 227,
-// host `podman images` capture) that made `charly check box fedora-nonfree` print
+const (
+	tAug14  = 1786000000 // oldest
+	tAug15  = 1786100000
+	tAug15b = 1786200000 // newest
+)
+
+// staleReproStorage reproduces the MEASURED local storage of the original incident (2026-08-15,
+// day 227) that made `charly check box fedora-nonfree` print
 // `Image: ghcr.io/opencharly/fedora-nonfree:2026.216.1908` and report `5 passed, 0 failed`
 // against a plan that predated the candy edit under test.
 //
-// The two families and why they split:
-//   - the OLD images carry `ai.opencharly.box=fedora-nonfree` (built when the box was named
-//     unqualified) — they form the LABEL family;
-//   - the FRESH build carries `ai.opencharly.box=fedora.fedora-nonfree`, because the render used
-//     to label with the Generator's namespace-qualified map key while tagging the ref with the
-//     leaf name — so it lands in the NAME family;
-//   - the election takes the label family whole and DISCARDS the name family, so the newest build
-//     is invisible and the newest OLD tag (2026.216.1908) wins.
+// The two families split because the emitter labelled a namespaced build with the qualified box
+// key while tagging the ref with the leaf name, so the fresh build fell into the NAME family —
+// which the election discards wholesale when the label family is non-empty.
 func staleReproStorage() []LocalImageInfo {
 	return []LocalImageInfo{
-		{ID: "old", Names: []string{
+		{ID: "old", Created: tAug14, Names: []string{
 			"ghcr.io/opencharly/fedora-nonfree:2026.216.1516",
 			"ghcr.io/opencharly/fedora-nonfree:2026.216.1908",
 		}, Labels: map[string]string{spec.LabelBox: "fedora-nonfree", spec.LabelVersion: "2026.144.1443"}},
-		{ID: "fresh", Names: []string{
+		{ID: "fresh", Created: tAug15, Names: []string{
 			"ghcr.io/opencharly/fedora-nonfree:2026.227.0835",
 			"ghcr.io/opencharly/fedora-nonfree:2026.227.0836",
 		}, Labels: map[string]string{spec.LabelBox: "fedora.fedora-nonfree", spec.LabelVersion: "2026.227.0830"}},
 	}
 }
 
-// TestResolveBuiltImageRef_RefusesStaleElection is the regression gate for the incident: a verb
-// that pronounces a verdict on a built artifact must REFUSE rather than certify an image older
-// than the newest local build. Fails without the guard (ResolveBuiltImageRef would return the
-// 2026.216.1908 ref with a nil error, exactly as ResolveLocalImageRef still does below).
+// TestResolveBuiltImageRef_RefusesStaleElection is the regression gate for the original incident:
+// a verb that pronounces a verdict on a built artifact must REFUSE rather than certify an image
+// older than the newest local build. The label-family split keeps the election on the OLD image
+// while the newest build sits in the discarded family.
 func TestResolveBuiltImageRef_RefusesStaleElection(t *testing.T) {
 	orig := ListLocalImages
 	defer func() { ListLocalImages = orig }()
@@ -284,19 +288,16 @@ func TestResolveBuiltImageRef_RefusesStaleElection(t *testing.T) {
 
 	got, err := ResolveBuiltImageRef("podman", "fedora-nonfree")
 	if err == nil {
-		t.Fatalf("ResolveBuiltImageRef(fedora-nonfree) = %q, nil — want a refusal: %s is a newer local build",
-			got, "ghcr.io/opencharly/fedora-nonfree:2026.227.0836")
+		t.Fatalf("ResolveBuiltImageRef(fedora-nonfree) = %q, nil — want a refusal", got)
 	}
 	if !errors.Is(err, spec.ErrStaleLocalImage) {
 		t.Fatalf("error %v does not wrap spec.ErrStaleLocalImage", err)
 	}
-	// The message must name BOTH refs — the one it would have certified and the one the operator
-	// almost certainly meant — plus a runnable re-invocation. A refusal the operator cannot act
-	// on is only marginally better than the silent pass it replaces.
+	// Both refs named, plus a runnable re-invocation. A refusal the operator cannot act on is only
+	// marginally better than the silent pass it replaces.
 	for _, want := range []string{
 		"ghcr.io/opencharly/fedora-nonfree:2026.216.1908",
 		"ghcr.io/opencharly/fedora-nonfree:2026.227.0836",
-		"fedora-nonfree:2026.227.0836",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("refusal %q does not mention %q", err.Error(), want)
@@ -304,9 +305,151 @@ func TestResolveBuiltImageRef_RefusesStaleElection(t *testing.T) {
 	}
 }
 
+// bedTagStorage is the shape that defeated the FIRST version of this guard, reproduced from the
+// live host that exposed it: three distinct builds of one box, every one carrying a bed tag
+// (`charly box build --tag` REPLACES the CalVer tag rather than adding to it), so every candidate
+// has an EMPTY tag-CalVer and one content-stable label version.
+//
+// Ordering by the tag ties all three and falls through to a lexicographic last resort, which
+// elects the OLDEST. Live consequence, measured: `check box docs-site-app` certified an image ~17
+// hours old, green, exit 0 — the very incident this cutover exists to prevent, sailing past the
+// guard because `newestBuildRef` returned "" and the guard read that as "nothing to worry about".
+func bedTagStorage() []LocalImageInfo {
+	lbl := map[string]string{spec.LabelBox: "docs-site-app", spec.LabelVersion: "2026.215.1207"}
+	return []LocalImageInfo{
+		{ID: "b", Created: tAug15, Names: []string{"ghcr.io/opencharly/docs-site-app:check-docs-2026.227.0846"}, Labels: lbl},
+		{ID: "a", Created: tAug14, Names: []string{"ghcr.io/opencharly/docs-site-app:check-docs-2026.226.1543"}, Labels: lbl},
+		{ID: "c", Created: tAug15b, Names: []string{"ghcr.io/opencharly/docs-site-app:check-docs-2026.227.1227"}, Labels: lbl},
+	}
+}
+
+// TestResolveBuiltImageRef_BedTaggedElectsNewest is the gate for the blindness. Every candidate is
+// bed-tagged, so NO tag-CalVer exists to order by; creation time does, and the election must land
+// on the newest build rather than the lexicographically-first ref.
+//
+// Fails without the fix in BOTH halves at once: the election returns the 08-14 ref, and the guard
+// does not refuse it either.
+func TestResolveBuiltImageRef_BedTaggedElectsNewest(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	ListLocalImages = func(string) ([]LocalImageInfo, error) { return bedTagStorage(), nil }
+
+	got, err := ResolveBuiltImageRef("podman", "docs-site-app")
+	if err != nil {
+		t.Fatalf("ResolveBuiltImageRef(docs-site-app): %v", err)
+	}
+	if want := "ghcr.io/opencharly/docs-site-app:check-docs-2026.227.1227"; got != want {
+		t.Fatalf("resolve = %q, want %q (the newest build; every candidate is bed-tagged so only creation time orders them)", got, want)
+	}
+}
+
+// TestResolveBuiltImageRef_BedTaggedFreshBuildIsNotRefused is the MIRROR case, and the one that
+// made the first guard actively misdirect: a fresh bed-tagged build alongside an older plain-CalVer
+// build. Ordering by the tag put the CalVer-tagged OLD image first (an empty tag-CalVer sorts
+// last), so the guard refused a correct election and told the operator to re-run against the STALE
+// image — worse than no guard at all.
+func TestResolveBuiltImageRef_BedTaggedFreshBuildIsNotRefused(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	lbl := map[string]string{spec.LabelBox: "check-agent-box", spec.LabelVersion: "2026.199.1330"}
+	ListLocalImages = func(string) ([]LocalImageInfo, error) {
+		return []LocalImageInfo{
+			{ID: "old", Created: tAug14, Names: []string{"ghcr.io/opencharly/check-agent-box:2026.216.1908"}, Labels: lbl},
+			{ID: "fresh", Created: tAug15b, Names: []string{"ghcr.io/opencharly/check-agent-box:check-agent-pod-2026.227.1300"}, Labels: lbl},
+		}, nil
+	}
+
+	got, err := ResolveBuiltImageRef("podman", "check-agent-box")
+	if err != nil {
+		t.Fatalf("ResolveBuiltImageRef(check-agent-box) refused a CORRECT election: %v", err)
+	}
+	if want := "ghcr.io/opencharly/check-agent-box:check-agent-pod-2026.227.1300"; got != want {
+		t.Fatalf("resolve = %q, want %q (the fresh bed-tagged build)", got, want)
+	}
+}
+
+// TestResolveBuiltImageRef_BedTaggedFreshBuildIsNotMisdirected is the OTHER face of the mirror
+// case. Where the previous test shares one label version and the tag-ordered guard silently
+// certified the OLD image, here the fresh build carries a HIGHER content version: the election
+// correctly picks the fresh one, but a tag-ordered "newest build" can only see the old CalVer-
+// tagged candidate — so the guard refused a CORRECT election and told the operator to re-run
+// against the STALE image. A guard that points at the artifact it exists to keep you away from is
+// worse than no guard, which is why both faces are gated.
+func TestResolveBuiltImageRef_BedTaggedFreshBuildIsNotMisdirected(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	ListLocalImages = func(string) ([]LocalImageInfo, error) {
+		return []LocalImageInfo{
+			{ID: "old", Created: tAug14, Names: []string{"ghcr.io/opencharly/check-agent-box:2026.216.1908"},
+				Labels: map[string]string{spec.LabelBox: "check-agent-box", spec.LabelVersion: "2026.199.1330"}},
+			{ID: "fresh", Created: tAug15b, Names: []string{"ghcr.io/opencharly/check-agent-box:check-agent-pod-2026.227.1300"},
+				Labels: map[string]string{spec.LabelBox: "check-agent-box", spec.LabelVersion: "2026.227.0830"}},
+		}, nil
+	}
+	got, err := ResolveBuiltImageRef("podman", "check-agent-box")
+	if err != nil {
+		t.Fatalf("refused a CORRECT election (and would have pointed at the stale image): %v", err)
+	}
+	if want := "ghcr.io/opencharly/check-agent-box:check-agent-pod-2026.227.1300"; got != want {
+		t.Fatalf("resolve = %q, want %q", got, want)
+	}
+}
+
+// TestResolveBuiltImageRef_SameArtifactNeverRefuses pins the simplification creation time made
+// possible: many tags on ONE image id are one artifact, so there is no older/newer to arbitrate
+// and the guard must stay silent. Without the id check this refuses a box against itself.
+func TestResolveBuiltImageRef_SameArtifactNeverRefuses(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	ListLocalImages = func(string) ([]LocalImageInfo, error) {
+		return []LocalImageInfo{
+			{ID: "one", Created: tAug15, Names: []string{
+				"ghcr.io/opencharly/docs-site-app:check-docs-2026.227.1227",
+				"ghcr.io/opencharly/docs-site-app:check-docs-2026.227.1242",
+			}, Labels: map[string]string{spec.LabelBox: "docs-site-app", spec.LabelVersion: "2026.215.1207"}},
+		}, nil
+	}
+	if _, err := ResolveBuiltImageRef("podman", "docs-site-app"); err != nil {
+		t.Fatalf("refused two tags on ONE image id — they are the same artifact: %v", err)
+	}
+}
+
+// TestResolveBuiltImageRef_RefusesWhenOrderUnknown pins the deliberate answer to "what if the
+// ordering cannot be established": refuse, do not pass. Permissive-on-unknown is exactly what made
+// the first guard blind, so an engine that reports no creation time gets an explicit error naming
+// the reason rather than a silent verdict.
+func TestResolveBuiltImageRef_RefusesWhenOrderUnknown(t *testing.T) {
+	orig := ListLocalImages
+	defer func() { ListLocalImages = orig }()
+	lbl := map[string]string{spec.LabelBox: "docs-site-app", spec.LabelVersion: "2026.215.1207"}
+	ListLocalImages = func(string) ([]LocalImageInfo, error) {
+		return []LocalImageInfo{
+			{ID: "a", Created: tAug14, Names: []string{"ghcr.io/opencharly/docs-site-app:check-docs-2026.226.1543"}, Labels: lbl},
+			{ID: "b", Created: 0, Names: []string{"ghcr.io/opencharly/docs-site-app:check-docs-2026.227.0846"}, Labels: lbl},
+		}, nil
+	}
+	err := ResolveBuiltImageRef2Err(t)
+	if err == nil {
+		t.Fatal("no refusal when the ordering could not be established")
+	}
+	if !errors.Is(err, spec.ErrStaleLocalImage) {
+		t.Fatalf("error %v does not wrap spec.ErrStaleLocalImage", err)
+	}
+	if !strings.Contains(err.Error(), "could not establish") {
+		t.Fatalf("refusal %q does not say the ordering is unknown — the operator cannot tell this apart from a staleness refusal", err.Error())
+	}
+}
+
+// ResolveBuiltImageRef2Err is a tiny helper keeping the unknown-order test readable.
+func ResolveBuiltImageRef2Err(t *testing.T) error {
+	t.Helper()
+	_, err := ResolveBuiltImageRef("podman", "docs-site-app")
+	return err
+}
+
 // TestResolveLocalImageRef_LenientFormStillElects pins the deliberate split: the lenient resolver
-// (every consumption path — deploy, vm build, builder bootstrap) keeps its existing election and
-// its existing ordering. The guard is a property of the VERDICT verbs, not a change to resolution.
+// (every consumption path — deploy, vm build, builder bootstrap) shares the election, including its
+// creation-time ordering, but never refuses.
 func TestResolveLocalImageRef_LenientFormStillElects(t *testing.T) {
 	orig := ListLocalImages
 	defer func() { ListLocalImages = orig }()
@@ -317,7 +460,7 @@ func TestResolveLocalImageRef_LenientFormStillElects(t *testing.T) {
 		t.Fatalf("ResolveLocalImageRef(fedora-nonfree): %v", err)
 	}
 	if want := "ghcr.io/opencharly/fedora-nonfree:2026.216.1908"; got != want {
-		t.Fatalf("lenient resolve = %q, want %q (unchanged election)", got, want)
+		t.Fatalf("lenient resolve = %q, want %q (unchanged election, no refusal)", got, want)
 	}
 }
 
@@ -329,7 +472,6 @@ func TestResolveBuiltImageRef_PinnedInputPassesThrough(t *testing.T) {
 	defer func() { ListLocalImages = orig }()
 	ListLocalImages = func(string) ([]LocalImageInfo, error) { return staleReproStorage(), nil }
 
-	// An explicit tag on the OLDER image: the operator said which artifact they meant.
 	got, err := ResolveBuiltImageRef("podman", "fedora-nonfree:2026.216.1908")
 	if err != nil {
 		t.Fatalf("ResolveBuiltImageRef(pinned older tag): %v", err)
@@ -337,20 +479,11 @@ func TestResolveBuiltImageRef_PinnedInputPassesThrough(t *testing.T) {
 	if want := "ghcr.io/opencharly/fedora-nonfree:2026.216.1908"; got != want {
 		t.Fatalf("pinned resolve = %q, want %q", got, want)
 	}
-	// And the newest build resolves by its own tag, which is what the refusal tells you to run.
-	got, err = ResolveBuiltImageRef("podman", "fedora-nonfree:2026.227.0836")
-	if err != nil {
-		t.Fatalf("ResolveBuiltImageRef(pinned newest tag): %v", err)
-	}
-	if want := "ghcr.io/opencharly/fedora-nonfree:2026.227.0836"; got != want {
-		t.Fatalf("pinned resolve = %q, want %q", got, want)
-	}
 }
 
-// TestResolveBuiltImageRef_ConsistentLabelsElectNewestBuild proves the guard does NOT fire once
-// the emitter labels every build with the box's LEAF name (the render fix in
-// sdk/deploykit.buildBakedMetadata): one family, the fresh build's higher content-derived
-// label-CalVer wins outright, and `charly check box fedora-nonfree` just works.
+// TestResolveBuiltImageRef_ConsistentLabelsElectNewestBuild proves the guard does NOT fire once the
+// emitter labels every build with the box's LEAF name (the sdk render fix): one family, the fresh
+// build's higher content-derived label-CalVer wins outright.
 func TestResolveBuiltImageRef_ConsistentLabelsElectNewestBuild(t *testing.T) {
 	orig := ListLocalImages
 	defer func() { ListLocalImages = orig }()
@@ -379,9 +512,9 @@ func TestResolveBuiltImageRef_SiblingAliasIsNotANewerBuild(t *testing.T) {
 	const labelCV = "2026.209.1500"
 	ListLocalImages = func(string) ([]LocalImageInfo, error) {
 		return []LocalImageInfo{
-			{ID: "base", Names: []string{"ghcr.io/opencharly/check-pod:2026.216.2119"},
+			{ID: "base", Created: tAug14, Names: []string{"ghcr.io/opencharly/check-pod:2026.216.2119"},
 				Labels: map[string]string{spec.LabelBox: "check-pod", spec.LabelVersion: labelCV}},
-			{ID: "sib", Names: []string{"ghcr.io/opencharly/check-preempt-arbiter-pod:2026.216.2124"},
+			{ID: "sib", Created: tAug15b, Names: []string{"ghcr.io/opencharly/check-preempt-arbiter-pod:2026.216.2124"},
 				Labels: map[string]string{spec.LabelBox: "check-pod", spec.LabelVersion: labelCV}},
 		}, nil
 	}
@@ -391,5 +524,18 @@ func TestResolveBuiltImageRef_SiblingAliasIsNotANewerBuild(t *testing.T) {
 	}
 	if want := "ghcr.io/opencharly/check-pod:2026.216.2119"; got != want {
 		t.Fatalf("resolve = %q, want %q", got, want)
+	}
+}
+
+// TestParseLocalImagesJSON_Created proves the ordering key is actually READ off the engine rows —
+// the whole fix rests on it, and a silently-absent field would make every resolve "order unknown".
+func TestParseLocalImagesJSON_Created(t *testing.T) {
+	js := []byte(`[{"Id":"aaa","Created":1786797320,"Names":["ghcr/foo:2026.001.0001"],"Labels":{}}]`)
+	imgs, err := ParseLocalImagesJSON(js)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(imgs) != 1 || imgs[0].Created != 1786797320 {
+		t.Fatalf("Created not parsed: %+v", imgs)
 	}
 }

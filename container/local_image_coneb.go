@@ -73,6 +73,17 @@ type LocalImageInfo struct {
 	Names  []string          // Full refs: ["ghcr.io/opencharly/jupyter:latest", ...]
 	Labels map[string]string // OCI labels from the image config
 	Size   int64             // reported storage size in bytes (podman's "Size" field; 0 if absent/unparsed)
+	// Created is the image's creation time (podman/docker "Created", unix seconds; "CreatedAt" is
+	// the RFC3339 rendering of the same instant). 0 when absent/unparsed.
+	//
+	// This is the ONLY build-recency key that is TOTAL over the tags charly mints. `charly box
+	// build --tag <x>` REPLACES the CalVer tag rather than adding to it, so every bed build carries
+	// exactly one tag of the form `check-<bed>-<YYYY.DDD.HHMM>` — which ExtractCalVerTag reports as
+	// EMPTY, because it is not three decimal dot-parts. Ordering by the tag therefore ties every
+	// bed-built candidate and falls through to a meaningless last resort. Creation time does not
+	// tie, needs no tag convention, and costs nothing: it rides the same `images --format json`
+	// rows Size already comes from.
+	Created int64
 }
 
 // ListLocalImages returns all images in the engine's local storage.
@@ -171,6 +182,11 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 		if sz, ok := raw["Size"].(float64); ok {
 			info.Size = int64(sz)
 		}
+		// Created (unix seconds), same shape as Size: identical across rows for one id, decoded as
+		// float64 by json.Unmarshal into map[string]any. podman and docker both emit it.
+		if cr, ok := raw["Created"].(float64); ok {
+			info.Created = int64(cr)
+		}
 	}
 	result := make([]LocalImageInfo, 0, len(order))
 	for _, key := range order {
@@ -224,11 +240,20 @@ func ResolveLocalImageRef(engine, input string) (string, error) {
 type LocalImageResolution struct {
 	// Ref is the elected reference — what ResolveLocalImageRef returns.
 	Ref string
-	// NewestBuildRef is the candidate ref carrying the highest build-tag CalVer across BOTH
-	// candidate families (label-identified AND name-identified), so a build whose
-	// `ai.opencharly.box` label disagrees with its own repo name is still counted. Empty when no
-	// candidate carries a CalVer build tag at all (every ref is a deploy alias or a float).
+	// NewestBuildRef is the ref of the most recently CREATED candidate across BOTH families
+	// (label-identified AND name-identified), so a build whose `ai.opencharly.box` label disagrees
+	// with its own repo name is still counted. Empty only when the ordering could not be
+	// established at all (see OrderKnown).
 	NewestBuildRef string
+	// SameArtifact reports that Ref and NewestBuildRef name the SAME image ID. Many tags on one id
+	// are one artifact — a `--tag` build and a plain CalVer build of identical content share an id
+	// — so there is no older/newer to choose between them and nothing to refuse.
+	SameArtifact bool
+	// OrderKnown reports that every candidate carried a creation time, i.e. that "newest" is a
+	// fact rather than a guess. False means the engine did not report one for some candidate; the
+	// guard then REFUSES rather than passing, because permissive-on-unknown is precisely the shape
+	// that let a stale artifact through before.
+	OrderKnown bool
 	// Pinned reports that the input named a full ref or an explicit tag: the operator stated
 	// which artifact they meant, so no election happened and nothing is ambiguous.
 	Pinned bool
@@ -283,6 +308,8 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 					ref:         n,
 					labelCalVer: labelCalVer,
 					tagCalVer:   ExtractCalVerTag(n),
+					id:          img.ID,
+					created:     img.Created,
 				})
 			}
 			continue
@@ -300,6 +327,8 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 					ref:         name,
 					labelCalVer: labelCalVer,
 					tagCalVer:   ExtractCalVerTag(name),
+					id:          img.ID,
+					created:     img.Created,
 				})
 			}
 		}
@@ -331,7 +360,21 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 		if c := compareCalVerKey(cands[i].labelCalVer, cands[j].labelCalVer); c != 0 {
 			return c > 0
 		}
-		// Tiebreaker: tag-CalVer descending (newest build).
+		// Tiebreaker: creation time descending — the newest BUILD.
+		//
+		// This REPLACES a tag-CalVer tiebreak that was not total over the tags charly mints, and
+		// the difference is not academic: `--tag` REPLACES the CalVer tag, so every bed build
+		// carries `check-<bed>-<calver>`, which ExtractCalVerTag reports as empty. With the label
+		// tied (one content version across every build of one source tree) and the tag key empty
+		// for all of them, the ordering fell to the lexicographic last resort below and elected
+		// the OLDEST local build. That was diagnosed once already, for the live path, in
+		// candy/plugin-check/live_image.go — which routed AROUND this resolver instead of fixing
+		// it, so the flaw survived here.
+		if cands[i].created != cands[j].created && cands[i].created != 0 && cands[j].created != 0 {
+			return cands[i].created > cands[j].created
+		}
+		// Tertiary: tag-CalVer descending. Distinct builds CAN share a creation second under
+		// parallel load, and where both carry a plain CalVer tag it breaks that tie meaningfully.
 		if c := compareCalVerKey(cands[i].tagCalVer, cands[j].tagCalVer); c != 0 {
 			return c > 0
 		}
@@ -359,29 +402,46 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 	all := make([]resolverCandidate, 0, len(labelCands)+len(nameCands))
 	all = append(all, labelCands...)
 	all = append(all, nameCands...)
+	newest, ok := newestBuild(all)
 	return LocalImageResolution{
 		Ref:            cands[0].ref,
-		NewestBuildRef: newestBuildRef(all),
+		NewestBuildRef: newest.ref,
+		SameArtifact:   ok && newest.id != "" && newest.id == cands[0].id,
+		OrderKnown:     ok,
 		Pinned:         requestedTag != "",
 	}, nil
 }
 
-// newestBuildRef returns the candidate ref with the highest build-tag CalVer, or "" when no
-// candidate carries one. The build tag is the per-build `YYYY.DDD.HHMM` timestamp, so this is
-// literally "the most recently built artifact among these" — independent of the content-derived
-// label CalVer the election orders by.
-func newestBuildRef(cands []resolverCandidate) string {
-	best := ""
-	bestCalVer := ""
-	for _, c := range cands {
-		if c.tagCalVer == "" {
+// newestBuild returns the candidate with the greatest creation time — literally "the most
+// recently built artifact among these", independent of the content-derived label CalVer the
+// election orders by and independent of any tag convention.
+//
+// It reports ok=false when ANY candidate is missing a creation time, because a partial ordering
+// is not an ordering: with one unknown the "newest" is a guess, and guessing is what this whole
+// guard exists to stop. The caller turns that into an explicit refusal rather than a silent pass —
+// the previous shape returned "" for unknown and the caller treated "" as "nothing to worry
+// about", which made the guard blind on exactly the builds it most needed to see.
+func newestBuild(cands []resolverCandidate) (resolverCandidate, bool) {
+	var best resolverCandidate
+	for i, c := range cands {
+		if c.created == 0 {
+			return resolverCandidate{}, false
+		}
+		if i == 0 || c.created > best.created {
+			best = c
 			continue
 		}
-		if best == "" || compareCalVerKey(c.tagCalVer, bestCalVer) > 0 {
-			best, bestCalVer = c.ref, c.tagCalVer
+		// Equal creation times: prefer the higher tag-CalVer, then the greater ref. Refs on ONE
+		// image id tie here by construction (same artifact, many tags), and the operator is told to
+		// re-run against this ref — so the choice must be deterministic rather than
+		// iteration-order-dependent, even though every tie candidate is byte-identical content.
+		if c.created == best.created {
+			if cmp := compareCalVerKey(c.tagCalVer, best.tagCalVer); cmp > 0 || (cmp == 0 && c.ref > best.ref) {
+				best = c
+			}
 		}
 	}
-	return best
+	return best, len(cands) > 0
 }
 
 // ResolveBuiltImageRef resolves like ResolveLocalImageRef and then REFUSES the resolution when the
@@ -413,17 +473,28 @@ func ResolveBuiltImageRef(engine, input string) (string, error) {
 // (by build tag) than the newest local build of the same short name. Pinned resolutions never
 // refuse: the operator already said which artifact they meant.
 func (r LocalImageResolution) RefuseIfStale(input string) error {
-	if r.Pinned || r.NewestBuildRef == "" || r.NewestBuildRef == r.Ref {
+	// A pinned input states which artifact the operator meant; there is nothing to arbitrate.
+	if r.Pinned {
 		return nil
 	}
-	if compareCalVerKey(ExtractCalVerTag(r.NewestBuildRef), ExtractCalVerTag(r.Ref)) <= 0 {
+	// The ordering could not be established. Refuse rather than pass: "I could not tell which is
+	// newer" is a fact worth an error, and treating it as "fine" is the exact shape that let a
+	// 17-hour-old image be certified green.
+	if !r.OrderKnown {
+		return fmt.Errorf("%w: %q resolves to %s, but charly could not establish which local build "+
+			"of this box is newest (the container engine reported no creation time for at least one "+
+			"candidate), so it cannot confirm this is the artifact you built. "+
+			"Re-run naming the artifact you mean — `<box>:<tag>` or a full ref",
+			spec.ErrStaleLocalImage, input, r.Ref)
+	}
+	// Same image ID → the two refs are tags on ONE artifact. Nothing older, nothing newer.
+	if r.SameArtifact || r.NewestBuildRef == "" || r.NewestBuildRef == r.Ref {
 		return nil
 	}
 	return fmt.Errorf("%w: %q resolves to %s, but %s is a newer local build of the same box. "+
 		"A build-scope verdict on the older artifact would certify the wrong image, so charly refuses to choose for you. "+
-		"Re-run naming the artifact you mean — `%s:%s` for the newest build, or any full ref",
-		spec.ErrStaleLocalImage, input, r.Ref, r.NewestBuildRef,
-		refRepoName(r.NewestBuildRef), ExtractCalVerTag(r.NewestBuildRef))
+		"Re-run naming the artifact you mean — `%s` for the newest build, or any full ref",
+		spec.ErrStaleLocalImage, input, r.Ref, r.NewestBuildRef, r.NewestBuildRef)
 }
 
 // splitShortTaggedImage separates the standard registry-less `name:tag` form.
@@ -453,6 +524,12 @@ type resolverCandidate struct {
 	ref         string
 	labelCalVer string
 	tagCalVer   string
+	// id is the image ID the ref names. Two refs sharing an id are TAGS ON ONE ARTIFACT — the
+	// staleness guard must never fire between them, because there is no older/newer to choose.
+	id string
+	// created is the image's creation time (unix seconds) — the build-recency key, total over
+	// every tag charly mints. 0 when the engine did not report one.
+	created int64
 }
 
 // compareCalVerKey orders two CalVer strings with "" sorting LAST (lowest
