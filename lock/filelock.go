@@ -51,8 +51,28 @@ func AcquireFileLock(path string, blocking bool) (release func() error, err erro
 		}
 		return nil, fmt.Errorf("flock %s: %w", path, flockErr)
 	}
+	// Truncate but write NOTHING. The truncate is deliberate and is not dead code: O_CREATE|O_RDWR
+	// does not truncate, so without it a re-acquired lock retains the PREVIOUS holder's bytes —
+	// turning an empty file into a stale one, which is worse, because staleness reads as currency.
+	//
+	// Nothing is written because nothing reads it. This previously wrote "pid=%d", which was
+	// decorative for every caller: the ONE caller needing content (candy/plugin-box's
+	// build-activity lock) overwrites the file with its build CalVer immediately after acquiring,
+	// and the ONE reader (candy/plugin-clean's retention floor) reads only that. For the other
+	// twelve ACQUISITION SITES the line was read by nothing — while teaching every human who
+	// opened the file that this is a PIDFILE lock whose staleness must be reasoned about.
+	//
+	// It is not: the kernel releases an flock when the holder dies, so the file's PRESENCE proves
+	// nothing and its ABSENCE proves nothing. `ps` is the only discriminator, and the pid line
+	// misled three separate readers into reaching for the file instead.
+	//
+	// "Acquisition sites" is a named framing, chosen on purpose: eleven sites call
+	// AcquireFileLock directly, and two more acquire through the wrappers below
+	// (AcquireImageBuildLock from candy/plugin-build, AcquireVmDomainLock from
+	// candy/plugin-check) without ever naming it, so no grep on this identifier reaches them.
+	// A lock taken through a wrapper carried the line just the same, which is why the population
+	// this claim is about is acquisitions rather than direct calls.
 	_ = f.Truncate(0)
-	_, _ = fmt.Fprintf(f, "pid=%d\n", os.Getpid())
 	return func() error {
 		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 		return f.Close()
