@@ -18,6 +18,10 @@
 // trait from anything other than this table: not from an account name, not from an image
 // URL, not from a source kind.
 
+// @go(-): vocabulary-only. The traits reach Go as the four generated TABLES
+// (DistroFormats / DistroSSHUnits / DistroInits / DistroIDs), which is all any
+// consumer reads — projecting a `DistroTrait` struct and a `Distros` map as well
+// would add exported contract-module API with zero callers.
 #DistroTrait: {
 	// format is the native package format. The four charly implements.
 	format: "rpm" | "deb" | "pac" | "apk"
@@ -27,10 +31,10 @@
 	// init is the guest's service manager. It selects HOW a service is enabled and
 	// started, never a distro-specific command inline in Go.
 	init: "systemd" | "openrc"
-}
+} @go(-)
 
 #Distros: [string]: #DistroTrait
-#Distros: {
+#Distros: { // @go(-) — see #DistroTrait
 	fedora: {format: "rpm", ssh_unit: "sshd", init: "systemd"}
 	rhel: {format: "rpm", ssh_unit: "sshd", init: "systemd"}
 	centos: {format: "rpm", ssh_unit: "sshd", init: "systemd"}
@@ -51,7 +55,7 @@
 	// Alpine runs OpenRC, not systemd. This row is what makes that a first-class,
 	// enumerable property instead of a branch on the string "alpine".
 	alpine: {format: "apk", ssh_unit: "sshd", init: "openrc"}
-}
+} @go(-)
 
 // #DistroID is the closed id vocabulary, DERIVED from #Distros' own keys so the two can
 // never disagree. A VM source's `distro:` is validated against this.
