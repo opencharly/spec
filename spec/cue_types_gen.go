@@ -4482,6 +4482,21 @@ type DistroResolveReply struct {
 	Resolved *ResolvedDistro `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
+type DistroTrait struct {
+	// format is the native package format. The four charly implements.
+	Format string `yaml:"format,omitempty" json:"format"`
+
+	// ssh_unit is the service name OpenSSH installs. Debian-family ships `ssh`;
+	// everyone else ships `sshd`. Getting this wrong leaves a guest unreachable.
+	Ssh_unit string `yaml:"ssh_unit,omitempty" json:"ssh_unit"`
+
+	// init is the guest's service manager. It selects HOW a service is enabled and
+	// started, never a distro-specific command inline in Go.
+	Init string `yaml:"init,omitempty" json:"init"`
+}
+
+type Distros map[string]DistroTrait
+
 // #CredentialHealth is the credential-store health snapshot. Rendered into the
 // doctor "secret storage" checks by the plugin.
 type CredentialHealth struct {

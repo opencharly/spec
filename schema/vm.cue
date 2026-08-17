@@ -66,15 +66,24 @@
 		checksum?:    #VmChecksum
 		cache?:       string
 		base_user?:   string
-		// distro is OPTIONAL — most cloud_image sources rely on base_user alone
-		// (vmshared.effectiveDistro infers "arch" from base_user=="arch" when
-		// unset). Author it explicitly to opt a pacman-family image (arch/
-		// cachyos/manjaro/endeavouros) into the idempotent `pacman -S --needed`
-		// package-delivery path deterministically, or for a non-Arch image
-		// composePackages/composeRunCmd need to pick the right package name
-		// (openssh-server on debian/ubuntu) / sshd unit name (ssh on debian/
-		// ubuntu) instead of falling through to the Arch/Fedora default.
-		distro?:      string
+		// distro is REQUIRED — but declared `?` here, which is not a contradiction:
+		// CUE carries the CLOSEDNESS (a
+		// misspelled id is a unification conflict); PRESENCE is enforced by the vm kind's
+		// own OpValidate capability (candy/plugin-substrate/validate_vm.go), because the
+		// host's value gate is closedness-only by design. A non-optional field here would
+		// not add enforcement either — it would only make an absent value fail the
+		// applyCueDefaults DECODE with "cannot convert non-concrete value", which is a
+		// worse error in a worse place than the kind plugin's own diagnostic. It selects the guest's
+		// package NAME (openssh vs openssh-server), its package MANAGER
+		// (pacman -S --needed vs the `packages:` key) and its sshd UNIT name
+		// (sshd vs ssh) — three renderings that cannot be guessed from anything
+		// else in the spec. It was optional, with the renderer inferring "arch"
+		// or "alpine" from base_user and otherwise defaulting to Arch/Fedora
+		// conventions; a Debian-family image that omitted it was rendered
+		// `openssh` + `enable --now sshd` and booted with sshd masked and
+		// unreachable. Requiring it makes the omission a validation error at
+		// author time instead of a silent wrong render at boot.
+		distro?:      #DistroID
 		box?:         _|_
 		transport?:   _|_
 		rootfs?:      _|_
@@ -114,7 +123,10 @@
 	} | {
 		kind:           "bootstrap"
 		builder:        string & !=""
-		distro:         string & !=""
+		// Same id space as the cloud_image arm: this value keys the embedded build
+		// vocabulary (vm_build_resolve.go) AND the guest package-manager selection
+		// (candy_select.go), so an unrecognized id is a typo, not an extension point.
+		distro:         #DistroID
 		builder_image?: string
 		rootfs?:        "ext4" | "xfs" | "btrfs"
 		root_size?:     string
