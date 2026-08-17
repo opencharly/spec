@@ -178,6 +178,7 @@ var distroIDToFormat = map[string]string{
 	"manjaro":     "pac",
 	"endeavouros": "pac",
 	"cachyos":     "pac",
+	"alpine":      "apk",
 }
 
 // FormatForDistroID maps an /etc/os-release-style distro ID (or an embedded
