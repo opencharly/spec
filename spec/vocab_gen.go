@@ -34,6 +34,74 @@ var DocDirectives = []string{
 	"version",
 }
 
+// DistroIDs is the CLOSED guest-distro id vocabulary, derived from #Distros' own keys (schema/distro_vocab.cue).
+var DistroIDs = []string{
+	"almalinux",
+	"alpine",
+	"arch",
+	"archarm",
+	"cachyos",
+	"centos",
+	"debian",
+	"endeavouros",
+	"fedora",
+	"manjaro",
+	"rhel",
+	"rocky",
+	"ubuntu",
+}
+
+// DistroFormats is each distro id's native package format (#Distros[id].format). The SINGLE table — hostenv.FormatForDistroID reads it; there is no hand-written Go copy.
+var DistroFormats = map[string]string{
+	"almalinux":   "rpm",
+	"alpine":      "apk",
+	"arch":        "pac",
+	"archarm":     "pac",
+	"cachyos":     "pac",
+	"centos":      "rpm",
+	"debian":      "deb",
+	"endeavouros": "pac",
+	"fedora":      "rpm",
+	"manjaro":     "pac",
+	"rhel":        "rpm",
+	"rocky":       "rpm",
+	"ubuntu":      "deb",
+}
+
+// DistroSSHUnits is each distro id's OpenSSH service name (#Distros[id].ssh_unit) — `ssh` on Debian-family, `sshd` elsewhere. Replaces a hardcoded Go switch.
+var DistroSSHUnits = map[string]string{
+	"almalinux":   "sshd",
+	"alpine":      "sshd",
+	"arch":        "sshd",
+	"archarm":     "sshd",
+	"cachyos":     "sshd",
+	"centos":      "sshd",
+	"debian":      "ssh",
+	"endeavouros": "sshd",
+	"fedora":      "sshd",
+	"manjaro":     "sshd",
+	"rhel":        "sshd",
+	"rocky":       "sshd",
+	"ubuntu":      "ssh",
+}
+
+// DistroInits is each distro id's guest init system (#Distros[id].init) — systemd or openrc. Replaces `if distro == "alpine"` branches.
+var DistroInits = map[string]string{
+	"almalinux":   "systemd",
+	"alpine":      "openrc",
+	"arch":        "systemd",
+	"archarm":     "systemd",
+	"cachyos":     "systemd",
+	"centos":      "systemd",
+	"debian":      "systemd",
+	"endeavouros": "systemd",
+	"fedora":      "systemd",
+	"manjaro":     "systemd",
+	"rhel":        "systemd",
+	"rocky":       "systemd",
+	"ubuntu":      "systemd",
+}
+
 // StepKeywords is the plan-step intent keywords (#Step arms minus #Op fields).
 var StepKeywords = []string{
 	"agent-check",
