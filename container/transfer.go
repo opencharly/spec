@@ -49,6 +49,15 @@ func StreamLoad(save, load *exec.Cmd) error {
 	if err := load.Start(); err != nil {
 		return fmt.Errorf("starting %s: %w", load.Path, err)
 	}
+	// Close the PARENT's copy of the read end, now that the load child has inherited
+	// its own. Without this the pipe never reaches EOF-for-the-writer when the load
+	// side exits early: `save` keeps writing into a pipe the parent still holds open,
+	// blocks once the kernel buffer fills, and `save.Wait()` never returns — a
+	// permanent hang rather than an error. With it, an early load exit gives `save`
+	// EPIPE and the transfer fails loudly, which is the only acceptable outcome for a
+	// primitive every image-delivery path in the tree runs through.
+	// Cmd.Wait also closes this pipe; closing twice is harmless.
+	_ = pipe.Close()
 	if err := save.Start(); err != nil {
 		return fmt.Errorf("starting %s: %w", save.Path, err)
 	}

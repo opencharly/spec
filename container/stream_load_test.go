@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestStreamLoad_PipesPayload asserts the primitive actually MOVES the bytes — the
@@ -60,5 +61,35 @@ func TestStreamLoad_ReportsLoadFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "load failed") {
 		t.Fatalf("error %q does not name the load side", err)
+	}
+}
+
+// TestStreamLoad_EarlyLoadExitDoesNotHang is the regression guard for a HANG, not a
+// wrong result — the failure mode a timeout-less caller can never recover from.
+//
+// save.StdoutPipe() leaves the read end open IN THE PARENT until save.Wait() returns.
+// So if the load side exits before draining, nothing ever gives save an EPIPE: it
+// blocks once the kernel pipe buffer fills, and save.Wait() blocks behind it forever.
+// StreamLoad closes the parent's copy once the load child has inherited its own, which
+// turns that deadlock into a named error.
+//
+// The payload must exceed the pipe buffer (64 KiB on Linux) for the write to block at
+// all; 50 MiB is comfortably past it. Without the fix this test does not fail — it
+// hangs until the go test timeout, which is exactly why it is written with its own
+// deadline instead of a plain call.
+func TestStreamLoad_EarlyLoadExitDoesNotHang(t *testing.T) {
+	done := make(chan error, 1)
+	go func() {
+		save := exec.Command("sh", "-c", "head -c 52428800 /dev/zero")
+		load := exec.Command("sh", "-c", "exit 0") // exits without reading a byte
+		done <- StreamLoad(save, load)
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("StreamLoad returned nil though the load side never read the stream")
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("StreamLoad hung: the load side exited early and save never saw EPIPE")
 	}
 }
