@@ -48,10 +48,25 @@ func TestStreamLoad_LoadStartFailureLeaksNoFDs(t *testing.T) {
 // probe below finds it alive, so this fails. It asserts the process is gone rather than
 // asserting StreamLoad merely returned an error — an error is returned either way.
 func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
+	// `cat` reads stdin, so it exits on EOF rather than after a fixed sleep — the previous
+	// `sleep 30` fixture made this test take 30s to say anything and ignored its stdin
+	// entirely.
+	//
+	// Honest limit, recorded because I first claimed the opposite: this test canNOT
+	// discriminate the Kill/Wait ORDER. Reversing it still passes in ~4ms, because
+	// exec.Cmd.Start's deferred closeDescriptors closes save's write end when Start fails,
+	// so the load side sees EOF and exits either way. What this test DOES discriminate is
+	// the reap existing at all — drop the Kill/Wait block and the child survives the call.
+	// The elapsed bound guards a future regression where the write end stays open.
 	save := exec.Command("/nonexistent/definitely-not-a-binary")
-	load := exec.Command("sleep", "30")
+	load := exec.Command("cat")
 
+	started := time.Now()
 	err := StreamLoad(save, load)
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Fatalf("StreamLoad took %s to return: the load side was Waited on before being "+
+			"Killed, so it blocked reading a pipe nobody will write to", elapsed)
+	}
 	if err == nil {
 		t.Fatal("StreamLoad returned nil though the save side could not start")
 	}
@@ -59,7 +74,10 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 		t.Fatal("the load side never started; this test cannot discriminate")
 	}
 	pid := load.Process.Pid
-	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	// NO t.Cleanup kill here. StreamLoad already Waited this child, so the pid is FREE —
+	// signalling it later is an unscoped kill by a stale identifier, which the OS may have
+	// reassigned to an unrelated process. That is the same class as `pkill -x charly`
+	// matching by name: an identifier that no longer denotes what you think it does.
 
 	// Signal 0 probes liveness without delivering anything. Reaped -> ESRCH.
 	deadline := time.Now().Add(5 * time.Second)

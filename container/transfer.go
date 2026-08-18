@@ -72,8 +72,16 @@ func StreamLoad(save, load *exec.Cmd) error {
 		// The load child is ALREADY RUNNING at this point, so returning here without
 		// reaping it orphans a live process — and for `charly box load` that process is
 		// an exec session inside somebody's deployed container, which nothing will ever
-		// come back for. Kill and Wait, in that order: Wait alone would block forever on
-		// a load side that is patiently reading a pipe no one will write to.
+		// come back for. That part is measured: without this block the child survives the
+		// call.
+		//
+		// The ORDER, however, is defensive rather than load-bearing, and I had claimed
+		// otherwise. I wrote that `Wait` alone would block forever on a load side reading
+		// a pipe nobody will write to, and then measured it: reversing to Wait-then-Kill
+		// still returns in ~4ms. exec.Cmd.Start's deferred closeDescriptors closes save's
+		// write end when Start fails, so the load side gets EOF and exits on its own.
+		// Kill-first is kept because it does not depend on that: a caller that supplies
+		// its own save.Stdout, or a load side ignoring EOF, would hang under the reverse.
 		_ = load.Process.Kill()
 		_ = load.Wait()
 		return fmt.Errorf("starting %s: %w", save.Path, err)
