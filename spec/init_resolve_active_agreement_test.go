@@ -91,6 +91,40 @@ func TestResolveInitSystemAlwaysNamesAnActiveInit(t *testing.T) {
 	}
 }
 
+// TestResolveInitSystemHonorsAViableOverride is the discriminating half. The
+// invariant test above pins that a resolved name is always active — it is
+// satisfied by never honoring the override at all, so it stays green even if the
+// override branch is deleted outright. This one fails in that case.
+//
+// The fixture triggers TWO inits and overrides to the one auto-detect would not
+// pick: supervisord is preferred for container images, so without the override
+// this composition resolves to supervisord. A single-triggered-init fixture
+// cannot tell "override honored" from "auto-detect agreed".
+func TestResolveInitSystemHonorsAViableOverride(t *testing.T) {
+	want := &ResolvedInit{Model: "explicit-def"}
+	ic := &InitConfig{Init: map[string]*ResolvedInit{
+		"systemd":     want,
+		"supervisord": {Model: "supervisord-def"},
+	}}
+	layers := map[string]CandyReader{
+		"c": fakeInitCandy{inits: map[string]bool{"systemd": true, "supervisord": true}},
+	}
+	order := []string{"c"}
+
+	// Control: the fixture only discriminates while auto-detect disagrees with
+	// the override. If the preference rules change, this fails loudly rather than
+	// letting the assertion below silently stop proving anything.
+	if auto, _ := ic.ResolveInitSystem(layers, order, ""); auto != "supervisord" {
+		t.Fatalf("control: ResolveInitSystem(no override) = %q, want supervisord — "+
+			"fixture can no longer discriminate an honored override", auto)
+	}
+
+	name, def := ic.ResolveInitSystem(layers, order, "systemd")
+	if name != "systemd" || def != want {
+		t.Errorf("ResolveInitSystem(viable override) = (%q, %v), want (systemd, %v)", name, def, want)
+	}
+}
+
 func keysOf(m map[string]*ResolvedInit) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
