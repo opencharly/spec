@@ -111,6 +111,12 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	// RUNNING", it read the resulting zombie as a live shell and spun its whole deadline. In
 	// this perturbation nothing Waits the child (that IS the regression), so the entry
 	// necessarily survives as Z until the binary exits. A zombie is not an immortal shell.
+	//
+	// Perturbing this test needs TRIALS, and enough of them. Measured positive control —
+	// reap removed in transfer.go AND the group kill removed below — leaks only ~1 run in 5,
+	// so a 3-run battery misses a real leak 51% of the time and a clean 0,0,0 means almost
+	// nothing. Use >=10 (0/12 clean here against that 1-in-5 control). The kill is
+	// load-bearing, not incidental: removing it alone reintroduces the leak.
 	returned := false
 	t.Cleanup(func() {
 		cancelLoad()
