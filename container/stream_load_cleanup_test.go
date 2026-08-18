@@ -72,11 +72,32 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	save := exec.Command("/nonexistent/definitely-not-a-binary")
 	load := exec.Command("sh", "-c", "while :; do sleep 0.2; done < /dev/null")
 
-	started := time.Now()
-	err := StreamLoad(save, load)
-	if elapsed := time.Since(started); elapsed > 10*time.Second {
-		t.Fatalf("StreamLoad took %s to return: the load side was Waited on before being "+
-			"Killed, so it blocked reading a pipe nobody will write to", elapsed)
+	// Own process group, so the cleanup below can reap the fixture AND its `sleep` children
+	// even when StreamLoad never returns. Without this, every failing run leaks a shell that
+	// loops forever — measured: one was still alive 13 minutes after a run.
+	load.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// StreamLoad runs in a goroutine and the deadline is a select, NOT a time.Since check
+	// after the call. Under the reversed order StreamLoad NEVER RETURNS, so a post-hoc
+	// elapsed test is unreachable code: the previous version's message could not print, and
+	// the run died on `go test`'s default ten-minute timeout with a goroutine dump instead
+	// of failing in ten seconds with the sentence written for it. A guard that cannot fire,
+	// inside the test written to close a guard that could not fail.
+	done := make(chan error, 1)
+	go func() { done <- StreamLoad(save, load) }()
+
+	t.Cleanup(func() {
+		if load.Process != nil {
+			_ = syscall.Kill(-load.Process.Pid, syscall.SIGKILL) // negative pid = the group
+		}
+	})
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("StreamLoad did not return within 10s: the load side was Waited on before " +
+			"being Killed, so it blocked on a process nothing will ever end")
 	}
 	if err == nil {
 		t.Fatal("StreamLoad returned nil though the save side could not start")
