@@ -47,6 +47,16 @@ func StreamLoad(save, load *exec.Cmd) error {
 	save.Stderr = os.Stderr
 
 	if err := load.Start(); err != nil {
+		// Close BOTH ends before returning. save.StdoutPipe() created a pipe PAIR: this
+		// `pipe` is the read end, and the WRITE end lives on save.Stdout. Normally
+		// save.Wait() closes the write end — but save never started here, so nothing
+		// will. Closing only the read end still leaks one descriptor per attempt, and
+		// the venue transfer retries once on a torn overlay, so it is per-attempt.
+		// (Measured: the coverage for this caught exactly that half-fix.)
+		_ = pipe.Close()
+		if w, ok := save.Stdout.(interface{ Close() error }); ok {
+			_ = w.Close()
+		}
 		return fmt.Errorf("starting %s: %w", load.Path, err)
 	}
 	// Close the PARENT's copy of the read end, now that the load child has inherited
@@ -59,6 +69,25 @@ func StreamLoad(save, load *exec.Cmd) error {
 	// Cmd.Wait also closes this pipe; closing twice is harmless.
 	_ = pipe.Close()
 	if err := save.Start(); err != nil {
+		// The load child is ALREADY RUNNING at this point, so returning here without
+		// reaping it orphans a live process — and for `charly box load` that process is
+		// an exec session inside somebody's deployed container, which nothing will ever
+		// come back for. That part is measured: without this block the child survives the
+		// call.
+		//
+		// The ORDER is load-bearing, but only under a condition worth naming exactly,
+		// because I got this wrong twice in opposite directions. Reversing to
+		// Wait-then-Kill is HARMLESS when the load side exits on EOF — exec.Cmd.Start's
+		// deferred closeDescriptors closes save's write end when Start fails, so `cat`,
+		// and a real `podman load`, see EOF and exit either way. It HANGS FOREVER when the
+		// load side does not: one that ignores stdin, or is wedged on the far side of an
+		// exec. `Wait` then blocks on a process nothing will ever end.
+		//
+		// Kill first. It costs nothing in the common case and is the difference between
+		// returning and never returning in the uncommon one. Measured both ways: reversed,
+		// the regression test times out; as written, it returns in ~4ms.
+		_ = load.Process.Kill()
+		_ = load.Wait()
 		return fmt.Errorf("starting %s: %w", save.Path, err)
 	}
 	saveErr := save.Wait()

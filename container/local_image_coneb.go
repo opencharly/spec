@@ -703,3 +703,28 @@ func refRepoName(fullRef string) string {
 	}
 	return repo[lastSlash+1:]
 }
+
+// ResolveDeliverableRef resolves the image an image-DELIVERY verb should ship: an explicit
+// ref that exists locally is used exactly as authored — naming a tag IS the choice — and
+// anything else resolves through the STRICT ResolveBuiltImageRef, which refuses to elect an
+// image older than the newest local build.
+//
+// It exists because both delivery verbs need exactly this and had grown their own copy:
+// `charly vm cp-box` (VM venue) and `charly box load` (container venue). The bodies were
+// structurally identical and their justification comments near-verbatim rewords — in a
+// cutover whose own thesis is that a second venue costs a constructor, not a copy (R3).
+//
+// The strictness is the point, and it is easy to under-rate: delivering a stale artifact is
+// the wrong-artifact class `charly check box` refuses to certify, and it is HARDER to notice
+// at a delivery verb than at a build one, because the load succeeds and the venue simply runs
+// the wrong image.
+func ResolveDeliverableRef(engine, input string) (string, error) {
+	if LocalImageExists(engine, input) {
+		return input, nil
+	}
+	resolved, err := ResolveBuiltImageRef(engine, input)
+	if err != nil {
+		return "", fmt.Errorf("%q is not in %s storage and does not resolve to a local build (build it first: charly box build %s): %w", input, engine, input, err)
+	}
+	return resolved, nil
+}
