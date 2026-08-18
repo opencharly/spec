@@ -97,6 +97,17 @@
 	content?: string
 	extract?: "tar.gz" | "tar.xz" | "tar.zst" | "zip" | "none" | "sh" | ""
 	extract_include?: [...string] @go(ExtractInclude)
+	// unless_exists — capability GATE for an install step: when the named path already
+	// exists in the image, the step is a no-op. It exists because a plan step has no
+	// build-time distro filter (`exclude_distro:` is read by the CHECK runner, never by
+	// the emitter), so a candy whose artifact is supplied by the distro package on SOME
+	// distros and by an upstream archive on the rest had no declarative way to express
+	// "fetch only where the package did not already provide this". Without it the only
+	// recourse was to abandon the verb and hand-roll `curl`, which silently forfeits what
+	// the verb provides: the content-addressed /tmp/downloads cache, the atomic .part
+	// rename, and `cache:` mounts. Detection rather than a distro name, so any distro that
+	// later gains the package is picked up with no edit.
+	unless_exists?: string & !="" @go(UnlessExists)
 	strip_components?: int & >=0 @go(StripComponents,type=int)
 	uninstall?: [...string]
 	comment?: string
