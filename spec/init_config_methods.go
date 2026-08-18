@@ -81,9 +81,28 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]CandyReader, candyOrde
 		return "", nil
 	}
 
-	// Explicit override
+	// ONE filtered-candidate computation, shared with ActiveInit. An init is a
+	// candidate only if a candy triggers it AND its RequiresCapability set is
+	// satisfied, and both rules live in ActiveInit alone — this function applies
+	// neither itself.
+	//
+	// This sharing is load-bearing, not tidiness: EmitInitAssembly enables a
+	// use_packaged: system unit through the image's RESOLVED init only
+	// (`if initName == img.InitSystem`), so correctness depends on the resolved
+	// name always being a key of ActiveInit. While the trigger scan and the
+	// capability filter were written out twice, that invariant held only because
+	// the two copies happened to agree — and the explicit-override branch below
+	// returned before the filter was ever applied, so an override naming an init
+	// whose capability was unmet resolved to a non-key and every system unit in
+	// the image went silently un-enabled.
+	candidates := ic.ActiveInit(layers, candyOrder)
+
+	// Explicit override, honored only when it names a viable candidate. An
+	// override for an init no candy triggers, or whose RequiresCapability is
+	// unmet, falls through to auto-detect rather than resolving to a name that
+	// nothing can enable.
 	if explicit != "" {
-		if def, ok := ic.Init[explicit]; ok {
+		if def, ok := candidates[explicit]; ok {
 			return explicit, def
 		}
 	}
@@ -93,49 +112,19 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]CandyReader, candyOrde
 		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
 
-	// Auto-detect: find the init system that candies trigger
-	initHits := make(map[string]bool)
-	for _, candyName := range candyOrder {
-		layer, ok := layers[candyName]
-		if !ok {
-			continue
-		}
-		for initName := range ic.Init {
-			if layer.HasInit(initName) {
-				initHits[initName] = true
-			}
-		}
-		// port_relay triggers the init system with a relay_template
-		if len(layer.RelayPorts()) > 0 {
-			for initName, def := range ic.Init {
-				if def.RelayTemplate != "" {
-					initHits[initName] = true
-				}
-			}
-		}
-	}
-
-	// Filter by capability requirements
-	for initName := range initHits {
-		def := ic.Init[initName]
-		if !initDefRequirementsMet(def, caps) {
-			delete(initHits, initName)
-		}
-	}
-
 	// For bootc-flavored compositions (preserve_user) prefer systemd over supervisord
-	if caps.PreserveUser && initHits["systemd"] {
-		return "systemd", ic.Init["systemd"]
+	if caps.PreserveUser && candidates["systemd"] != nil {
+		return "systemd", candidates["systemd"]
 	}
 
 	// For container images, prefer supervisord
-	if initHits["supervisord"] {
-		return "supervisord", ic.Init["supervisord"]
+	if def := candidates["supervisord"]; def != nil {
+		return "supervisord", def
 	}
 
 	// Return first remaining init system
-	for initName := range initHits {
-		return initName, ic.Init[initName]
+	for initName, def := range candidates {
+		return initName, def
 	}
 
 	return "", nil
