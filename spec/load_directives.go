@@ -27,9 +27,13 @@ const UnifiedFileName = "charly.yml"
 // Canonical loader DATA, sharing the home of the manifest filename they select: the charly CLI
 // publishes them as the `-C/--dir` and `--repo` flag environments, and every module that spawns a
 // charly child (sdk/deploykit's packaging child) must set or strip the SAME two names, so the
-// contract lives in the one module both sides import rather than as a literal in each. The Kong
-// struct tags in charly/main.go restate the strings only because Go struct tags cannot reference a
-// constant; every non-tag read or write goes through these.
+// contract lives in the one module both sides import rather than as a literal in each.
+//
+// They are the DESTINATION, not yet the whole story: literal spellings still exist in the charly
+// CLI (charly/plugin_command_prescan.go, charly/main_dir_test.go, charly/main_repo_test.go,
+// charly/plugin_command_prescan_repo_test.go) and are converted alongside their consumers in
+// opencharly/charly#309. The Kong struct tags in charly/main.go are the one PERMANENT exception:
+// a Go struct tag is a string literal in the type declaration and cannot reference a constant.
 const (
 	ProjectDirEnv  = "CHARLY_PROJECT_DIR"
 	ProjectRepoEnv = "CHARLY_PROJECT_REPO"
