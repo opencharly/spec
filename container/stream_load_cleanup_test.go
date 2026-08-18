@@ -82,7 +82,6 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	// timeout path this cleanup exists for; it also keeps the Process read inside exec's own
 	// synchronisation instead of racing the goroutine below.
 	ctx, cancelLoad := context.WithCancel(context.Background())
-	t.Cleanup(cancelLoad)
 	load = exec.CommandContext(ctx, load.Path, load.Args[1:]...)
 	load.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	load.Cancel = func() error { return syscall.Kill(-load.Process.Pid, syscall.SIGKILL) }
@@ -96,9 +95,57 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- StreamLoad(save, load) }()
 
+	// The cleanup must satisfy BOTH properties, and the previous two rounds each held one
+	// and broke the other: round 4's kill was reliable but aimed at a stale identifier;
+	// round 5's aimed correctly but only SIGNALLED — cancel closes Done and returns, the
+	// kill lands in exec's watcher goroutine, and the test binary can reach os.Exit first.
+	// Measured then: five of six failing runs leaked an immortal shell.
+	//
+	// Synchronous confirmation without reading load.Process (which is what raced): killing
+	// the group makes StreamLoad's own load.Wait() return, so the goroutine below sends on
+	// `done`. DRAINING that channel IS the proof the child is reaped — by the very call
+	// whose absence this test exists to detect.
+	// `returned` means StreamLoad RETURNED — not that the child is gone. Conflating the two
+	// is what leaked: with the reap removed entirely StreamLoad returns at once, so an early
+	// exit on that flag left the fixture alive (measured: 1 leak in 3 runs). The flag only
+	// tells us whether draining `done` is still needed for the happens-before edge; the
+	// liveness poll below is what actually confirms.
+	returned := false
+	t.Cleanup(func() {
+		cancelLoad()
+		if !returned {
+			select {
+			case <-done: // the group kill let StreamLoad's Wait return
+			case <-time.After(10 * time.Second):
+				t.Errorf("StreamLoad still blocked 10s after cancel")
+				return
+			}
+		}
+		// Past a receive from `done` the goroutine is finished, so reading load.Process here
+		// carries a happens-before edge and does not race Start's write.
+		if load.Process == nil {
+			return
+		}
+		pid := load.Process.Pid
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if err := syscall.Kill(pid, 0); err != nil {
+				return // ESRCH: genuinely gone, confirmed rather than assumed
+			}
+			_ = syscall.Kill(-pid, syscall.SIGKILL)
+			if time.Now().After(deadline) {
+				t.Errorf("fixture pid %d still alive 10s after cancel: this cleanup returned "+
+					"before the child was gone, so a failing run leaks an immortal shell", pid)
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	})
+
 	var err error
 	select {
 	case err = <-done:
+		returned = true
 	case <-time.After(10 * time.Second):
 		t.Fatal("StreamLoad did not return within 10s: the load side was Waited on before " +
 			"being Killed, so it blocked on a process nothing will ever end")
