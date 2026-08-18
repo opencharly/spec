@@ -10,7 +10,7 @@
 
 // Package formats (BoxConfig.Build / BuildFormats). Named #BuildFormat to avoid
 // colliding with distro.cue's #Format (the package-format definition struct).
-#BuildFormat: "rpm" | "deb" | "pac" | "aur" @go(-)
+#BuildFormat: "rpm" | "deb" | "pac" | "aur" | "apk" @go(-)
 
 // Builder build-type slots (BoxConfig.Produce + BoxConfig.Builder keys).
 #BuildType: "pixi" | "npm" | "cargo" | "aur" @go(-)

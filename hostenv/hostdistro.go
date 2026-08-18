@@ -21,6 +21,8 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/opencharly/spec/spec"
 )
 
 // HostDistro identifies the host's distro for BuildDeployPlan.
@@ -159,34 +161,18 @@ func (hd *HostDistro) PrimaryTag() string {
 	return hd.Tags[0]
 }
 
-// distroIDToFormat is the SINGLE distro-OS-ID → package-format table. The host
-// heuristic (FormatHint, no DistroDef in hand) and the config-derived
-// DistroDef.PrimaryFormat fallback both consult it, so the OS-ID → format
-// knowledge lives in exactly one place. Keys are /etc/os-release ID / ID_LIKE
-// values; the embedded distro: vocabulary's distro key (fedora/debian/arch) is
-// the same token, so a resolved DistroDef name resolves here too.
-var distroIDToFormat = map[string]string{
-	"fedora":      "rpm",
-	"rhel":        "rpm",
-	"centos":      "rpm",
-	"rocky":       "rpm",
-	"almalinux":   "rpm",
-	"debian":      "deb",
-	"ubuntu":      "deb",
-	"arch":        "pac",
-	"archarm":     "pac",
-	"manjaro":     "pac",
-	"endeavouros": "pac",
-	"cachyos":     "pac",
-}
-
 // FormatForDistroID maps an /etc/os-release-style distro ID (or an embedded
-// distro: vocabulary key) to its package format via the single distroIDToFormat
-// table. Returns "" for an unknown ID.
-func FormatForDistroID(id string) string { return distroIDToFormat[id] }
+// distro: vocabulary key — the same token space) to its package format.
+//
+// The table is spec.DistroFormats, GENERATED from schema/distro_vocab.cue's #Distros by
+// `task cue:gen`. It was a hand-written Go map here, which duplicated the id space the
+// CUE schema separately declared for a VM source's `distro:` — two lists to keep in
+// step, with no gate, and the SDD rule is that schema-shaped Go is generated rather than
+// transcribed. Returns "" for an unknown ID.
+func FormatForDistroID(id string) string { return spec.DistroFormats[id] }
 
 // FormatHint returns the best-guess format name (rpm/deb/pac) based on the
-// host distro's ID / ID_LIKE, via the single distroIDToFormat table. Used when
+// host distro's ID / ID_LIKE, via the generated spec.DistroFormats table. Used when
 // the caller has no DistroDef in hand (e.g. the synthetic host-adhoc
 // image). For a resolved DistroDef, prefer DistroDef.PrimaryFormat.
 func (hd *HostDistro) FormatHint() string {
