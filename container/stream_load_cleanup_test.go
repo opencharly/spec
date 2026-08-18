@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"syscall"
@@ -95,24 +96,27 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- StreamLoad(save, load) }()
 
-	// The cleanup must satisfy BOTH properties, and the previous two rounds each held one
-	// and broke the other: round 4's kill was reliable but aimed at a stale identifier;
-	// round 5's aimed correctly but only SIGNALLED — cancel closes Done and returns, the
-	// kill lands in exec's watcher goroutine, and the test binary can reach os.Exit first.
-	// Measured then: five of six failing runs leaked an immortal shell.
+	// The cleanup must satisfy two properties, and each earlier round held one and broke the
+	// other: round 4's kill was reliable but aimed at a STALE pid; round 5's aimed correctly
+	// but only SIGNALLED (cancel returns once the kill is queued in exec's watcher goroutine,
+	// which the test binary need not outlive — measured: five of six failing runs leaked);
+	// round 6's was delivered and confirmed, but CONFIRMED IT WRONG, reporting a leak on a
+	// genuine regression run that had not happened.
 	//
-	// Synchronous confirmation without reading load.Process (which is what raced): killing
-	// the group makes StreamLoad's own load.Wait() return, so the goroutine below sends on
-	// `done`. DRAINING that channel IS the proof the child is reaped — by the very call
-	// whose absence this test exists to detect.
-	// `returned` means StreamLoad RETURNED — not that the child is gone. Conflating the two
-	// is what leaked: with the reap removed entirely StreamLoad returns at once, so an early
-	// exit on that flag left the fixture alive (measured: 1 leak in 3 runs). The flag only
-	// tells us whether draining `done` is still needed for the happens-before edge; the
-	// liveness poll below is what actually confirms.
+	// That third failure was caused by the confirmation itself, so this round removes it
+	// rather than correcting it. SIGKILL to a process group is uncatchable: the kernel has
+	// delivered it by the time kill(2) returns, so DELIVERY IS DEATH and there is nothing to
+	// poll for. The poll could only ever restate what the syscall already guaranteed — and
+	// because syscall.Kill(pid, 0) asks "is there a process-table ENTRY", not "is anything
+	// RUNNING", it read the resulting zombie as a live shell and spun its whole deadline. In
+	// this perturbation nothing Waits the child (that IS the regression), so the entry
+	// necessarily survives as Z until the binary exits. A zombie is not an immortal shell.
 	returned := false
 	t.Cleanup(func() {
 		cancelLoad()
+		// Draining `done` is only needed when the call has not returned; it is what lets the
+		// reversed order unblock, and it carries the happens-before edge that makes reading
+		// load.Process below safe against Start's write.
 		if !returned {
 			select {
 			case <-done: // the group kill let StreamLoad's Wait return
@@ -121,25 +125,17 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 				return
 			}
 		}
-		// Past a receive from `done` the goroutine is finished, so reading load.Process here
-		// carries a happens-before edge and does not race Start's write.
 		if load.Process == nil {
 			return
 		}
-		pid := load.Process.Pid
-		deadline := time.Now().Add(10 * time.Second)
-		for {
-			if err := syscall.Kill(pid, 0); err != nil {
-				return // ESRCH: genuinely gone, confirmed rather than assumed
-			}
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
-			if time.Now().After(deadline) {
-				t.Errorf("fixture pid %d still alive 10s after cancel: this cleanup returned "+
-					"before the child was gone, so a failing run leaks an immortal shell", pid)
-				return
-			}
-			time.Sleep(20 * time.Millisecond)
+		// Stale-pid safety, which is round 4's finding and must not regress: once StreamLoad's
+		// Wait has reaped the child the pid is free for REUSE, and group-killing it then is how
+		// a cleanup takes out an unrelated process tree. os.Process reports ErrProcessDone in
+		// exactly that case, so the pid is only signalled while this test still owns it.
+		if errors.Is(load.Process.Signal(syscall.Signal(0)), os.ErrProcessDone) {
+			return
 		}
+		_ = syscall.Kill(-load.Process.Pid, syscall.SIGKILL)
 	})
 
 	var err error
