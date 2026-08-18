@@ -3,6 +3,7 @@ package spec
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,6 +21,51 @@ import (
 // UnifiedFileName is the ONE box/candy manifest filename. Canonical loader DATA; ScanSpec below
 // defaults to it. (sdk/kit keeps the sibling layout constants DefaultBoxDir/DefaultCandyDir.)
 const UnifiedFileName = "charly.yml"
+
+// ProjectDirEnv / ProjectRepoEnv are the environment names that carry charly's PROJECT SCOPE — the
+// two mutually-exclusive answers to "which project's charly.yml is this process operating on".
+// Canonical loader DATA, sharing the home of the manifest filename they select: the charly CLI
+// publishes them as the `-C/--dir` and `--repo` flag environments, and every module that spawns a
+// charly child (sdk/deploykit's packaging child) must set or strip the SAME two names, so the
+// contract lives in the one module both sides import rather than as a literal in each.
+//
+// They are the DESTINATION, not yet the whole story: literal spellings still exist in the charly
+// CLI (charly/plugin_command_prescan.go, charly/main_dir_test.go, charly/main_repo_test.go,
+// charly/plugin_command_prescan_repo_test.go) and are converted alongside their consumers in
+// opencharly/charly#309. The Kong struct tags in charly/main.go are the one PERMANENT exception:
+// a Go struct tag is a string literal in the type declaration and cannot reference a constant.
+const (
+	ProjectDirEnv  = "CHARLY_PROJECT_DIR"
+	ProjectRepoEnv = "CHARLY_PROJECT_REPO"
+)
+
+// ChildProjectEnv returns inherited with BOTH project-scope variables removed, then sets
+// ProjectDirEnv to projectDir when projectDir is non-empty. It is the one implementation of
+// "hand a charly child process a project scope", shared by every module that spawns one.
+//
+// Both names must be handled together, which is the whole reason this is a function rather than
+// two constants each caller filters by hand: they are MUTUALLY EXCLUSIVE in the CLI, so a caller
+// that strips ProjectDirEnv and leaves an inherited ProjectRepoEnv makes the child exit on
+// "--repo and --dir are mutually exclusive" instead of running. Getting one right and the other
+// wrong fails at runtime, not at compile time.
+//
+// Stripping is the default because a child's project scope is almost never the parent's: the
+// packaging child runs under the project owning the candy it packages, and the MCP server's
+// forked charly must reach its own --repo default rather than inherit the caller's directory.
+func ChildProjectEnv(inherited []string, projectDir string) []string {
+	out := make([]string, 0, len(inherited)+1)
+	for _, kv := range inherited {
+		name, _, _ := strings.Cut(kv, "=")
+		if name == ProjectDirEnv || name == ProjectRepoEnv {
+			continue
+		}
+		out = append(out, kv)
+	}
+	if projectDir != "" {
+		out = append(out, ProjectDirEnv+"="+projectDir)
+	}
+	return out
+}
 
 // ImportEntry is one parsed `import:` list item. A flat entry (Namespace == "")
 // merges the referenced file into the current root namespace; a namespaced
