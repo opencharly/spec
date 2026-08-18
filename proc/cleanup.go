@@ -242,35 +242,19 @@ func SweepStaleTemps() {
 func openedFilesByAnyProcess() map[string]bool {
 	out := map[string]bool{}
 	roots := sweepRoots()
-	procEntries, err := os.ReadDir("/proc")
-	if err != nil {
-		return out
-	}
-	for _, pe := range procEntries {
-		if !pe.IsDir() {
-			continue
-		}
-		if !allDigits(pe.Name()) {
-			continue
-		}
-		fdDir := filepath.Join("/proc", pe.Name(), "fd")
-		fds, err := os.ReadDir(fdDir)
+	walkProcFDs(func(_ int, fdPath string) bool {
+		tgt, err := os.Readlink(fdPath)
 		if err != nil {
-			continue
+			return true
 		}
-		for _, fd := range fds {
-			tgt, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
-			if err != nil {
-				continue
-			}
-			for _, root := range roots {
-				if strings.HasPrefix(tgt, root+string(os.PathSeparator)) {
-					out[tgt] = true
-					break
-				}
+		for _, root := range roots {
+			if strings.HasPrefix(tgt, root+string(os.PathSeparator)) {
+				out[tgt] = true
+				break
 			}
 		}
-	}
+		return true
+	})
 	return out
 }
 
