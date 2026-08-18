@@ -157,6 +157,7 @@ var OpFields = []string{
 	"timeout",
 	"to",
 	"uninstall",
+	"unless_exists",
 	"venue",
 	"write",
 }
@@ -207,6 +208,7 @@ var AuthoringVerbs = []string{
 	"timeout",
 	"to",
 	"uninstall",
+	"unless_exists",
 	"write",
 }
 

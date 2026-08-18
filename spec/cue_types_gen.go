@@ -82,6 +82,18 @@ type Op struct {
 
 	ExtractInclude []string `yaml:"extract_include,omitempty" json:"extract_include,omitempty"`
 
+	// unless_exists — capability GATE for an install step: when the named path already
+	// exists in the image, the step is a no-op. It exists because a plan step has no
+	// build-time distro filter (`exclude_distro:` is read by the CHECK runner, never by
+	// the emitter), so a candy whose artifact is supplied by the distro package on SOME
+	// distros and by an upstream archive on the rest had no declarative way to express
+	// "fetch only where the package did not already provide this". Without it the only
+	// recourse was to abandon the verb and hand-roll `curl`, which silently forfeits what
+	// the verb provides: the content-addressed /tmp/downloads cache, the atomic .part
+	// rename, and `cache:` mounts. Detection rather than a distro name, so any distro that
+	// later gains the package is picked up with no edit.
+	UnlessExists string `yaml:"unless_exists,omitempty" json:"unless_exists,omitempty"`
+
 	StripComponents int `yaml:"strip_components,omitempty" json:"strip_components,omitempty"`
 
 	Uninstall []string `yaml:"uninstall,omitempty" json:"uninstall,omitempty"`
