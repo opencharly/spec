@@ -95,7 +95,7 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]CandyReader, candyOrde
 	// returned before the filter was ever applied, so an override naming an init
 	// whose capability was unmet resolved to a non-key and every system unit in
 	// the image went silently un-enabled.
-	candidates := ic.ActiveInit(layers, candyOrder)
+	candidates, caps := ic.activeInitWithCaps(layers, candyOrder)
 
 	// Explicit override, honored only when it names a viable candidate. An
 	// override for an init no candy triggers, or whose RequiresCapability is
@@ -105,11 +105,6 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]CandyReader, candyOrde
 		if def, ok := candidates[explicit]; ok {
 			return explicit, def
 		}
-	}
-
-	caps, _ := AggregateCandyCapabilities(layers, candyOrder)
-	if caps == nil {
-		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
 
 	// For bootc-flavored compositions (preserve_user) prefer systemd over supervisord
@@ -134,8 +129,18 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]CandyReader, candyOrde
 // An image can have multiple active inits (e.g., supervisord + systemd on
 // bootc-flavored compositions).
 func (ic *InitConfig) ActiveInit(layers map[string]CandyReader, candyOrder []string) map[string]*ResolvedInit {
+	result, _ := ic.activeInitWithCaps(layers, candyOrder)
+	return result
+}
+
+// activeInitWithCaps computes the active-init set AND returns the aggregated
+// capabilities it filtered with, so a caller needing both (ResolveInitSystem,
+// for the preserve_user preference) aggregates once rather than twice. The
+// aggregation walks every candy in the order, so a second call is pure
+// duplicated work in a function whose whole point is computing this once.
+func (ic *InitConfig) activeInitWithCaps(layers map[string]CandyReader, candyOrder []string) (map[string]*ResolvedInit, *AggregatedCandyCaps) {
 	if ic == nil {
-		return nil
+		return nil, nil
 	}
 
 	caps, _ := AggregateCandyCapabilities(layers, candyOrder)
@@ -168,7 +173,7 @@ func (ic *InitConfig) ActiveInit(layers map[string]CandyReader, candyOrder []str
 		}
 	}
 
-	return result
+	return result, caps
 }
 
 // initDefRequirementsMet reports whether the init definition's
