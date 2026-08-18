@@ -73,10 +73,7 @@ func TestPIDsHoldingPath_UnheldFileHasNoHolders(t *testing.T) {
 	// Wait until the sibling holder is definitely visible, so this is a real
 	// discrimination rather than a race that passes by arriving early.
 	deadline := time.Now().Add(10 * time.Second)
-	for {
-		if slices.Contains(PIDsHoldingPath(held), cmd.Process.Pid) {
-			break
-		}
+	for !slices.Contains(PIDsHoldingPath(held), cmd.Process.Pid) {
 		if time.Now().After(deadline) {
 			t.Fatal("sibling holder never became visible; test cannot discriminate")
 		}

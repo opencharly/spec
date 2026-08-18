@@ -2,8 +2,6 @@ package proc
 
 import (
 	"os"
-	"path/filepath"
-	"strconv"
 )
 
 // holders.go — "which processes hold this file open?", the kernel-backed answer.
@@ -39,47 +37,21 @@ func PIDsHoldingPath(path string) []int {
 	if err != nil {
 		return nil
 	}
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return nil
-	}
 	self := os.Getpid()
 	var pids []int
-	for _, e := range entries {
-		if !e.IsDir() || !allDigits(e.Name()) {
-			continue
+	walkProcFDs(func(pid int, fdPath string) bool {
+		if pid == self {
+			return false
 		}
-		pid, err := strconv.Atoi(e.Name())
+		fi, err := os.Stat(fdPath)
 		if err != nil {
-			continue
-		}
-		if pid <= 0 || pid == self {
-			continue
-		}
-		if processHoldsFile(pid, target) {
-			pids = append(pids, pid)
-		}
-	}
-	return pids
-}
-
-// processHoldsFile reports whether pid has target open on any descriptor. The
-// comparison is os.SameFile — device+inode — so it is immune to the path-spelling
-// differences that defeat a string match.
-func processHoldsFile(pid int, target os.FileInfo) bool {
-	fdDir := filepath.Join("/proc", strconv.Itoa(pid), "fd")
-	fds, err := os.ReadDir(fdDir)
-	if err != nil {
-		return false
-	}
-	for _, fd := range fds {
-		fi, err := os.Stat(filepath.Join(fdDir, fd.Name()))
-		if err != nil {
-			continue
-		}
-		if os.SameFile(fi, target) {
 			return true
 		}
-	}
-	return false
+		if os.SameFile(fi, target) {
+			pids = append(pids, pid)
+			return false // this pid is answered; move on
+		}
+		return true
+	})
+	return pids
 }
