@@ -52,14 +52,25 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	// `sleep 30` fixture made this test take 30s to say anything and ignored its stdin
 	// entirely.
 	//
-	// Honest limit, recorded because I first claimed the opposite: this test canNOT
-	// discriminate the Kill/Wait ORDER. Reversing it still passes in ~4ms, because
-	// exec.Cmd.Start's deferred closeDescriptors closes save's write end when Start fails,
-	// so the load side sees EOF and exits either way. What this test DOES discriminate is
-	// the reap existing at all — drop the Kill/Wait block and the child survives the call.
-	// The elapsed bound guards a future regression where the write end stays open.
+	// This test discriminates BOTH properties, and getting there took two wrong fixtures:
+	//   - the reap existing at all — drop the Kill/Wait block and the child survives;
+	//   - the reap ORDER — reverse it and this times out instead of returning in ~4ms.
+	//
+	// The second only became observable once the fixture stopped self-terminating. With
+	// `sleep 30` it passed after 30s; with `cat` it passed in 4ms, because EOF arrives
+	// regardless of order. Both made the ordering invisible, and the `cat` result briefly
+	// convinced me the ordering did not matter at all.
+	// The fixture must NOT terminate on its own — that is the probe this test failed twice.
+	// `sleep 30` self-terminates on its own deadline; `cat` self-terminates on EOF, and EOF
+	// arrives regardless of reap order because exec.Cmd.Start's deferred closeDescriptors
+	// closes save's write end when Start fails. Either fixture makes the ORDER unobservable.
+	//
+	// This one reads from /dev/null and loops forever: it ignores the pipe, so no EOF can
+	// reach it, and it has no internal deadline. Now Kill-then-Wait returns promptly while
+	// Wait-then-Kill blocks — which is the property the ordering actually carries, and the
+	// shape a wedged `podman load` on the far side of an exec presents.
 	save := exec.Command("/nonexistent/definitely-not-a-binary")
-	load := exec.Command("cat")
+	load := exec.Command("sh", "-c", "while :; do sleep 0.2; done < /dev/null")
 
 	started := time.Now()
 	err := StreamLoad(save, load)

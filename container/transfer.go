@@ -75,13 +75,17 @@ func StreamLoad(save, load *exec.Cmd) error {
 		// come back for. That part is measured: without this block the child survives the
 		// call.
 		//
-		// The ORDER, however, is defensive rather than load-bearing, and I had claimed
-		// otherwise. I wrote that `Wait` alone would block forever on a load side reading
-		// a pipe nobody will write to, and then measured it: reversing to Wait-then-Kill
-		// still returns in ~4ms. exec.Cmd.Start's deferred closeDescriptors closes save's
-		// write end when Start fails, so the load side gets EOF and exits on its own.
-		// Kill-first is kept because it does not depend on that: a caller that supplies
-		// its own save.Stdout, or a load side ignoring EOF, would hang under the reverse.
+		// The ORDER is load-bearing, but only under a condition worth naming exactly,
+		// because I got this wrong twice in opposite directions. Reversing to
+		// Wait-then-Kill is HARMLESS when the load side exits on EOF — exec.Cmd.Start's
+		// deferred closeDescriptors closes save's write end when Start fails, so `cat`,
+		// and a real `podman load`, see EOF and exit either way. It HANGS FOREVER when the
+		// load side does not: one that ignores stdin, or is wedged on the far side of an
+		// exec. `Wait` then blocks on a process nothing will ever end.
+		//
+		// Kill first. It costs nothing in the common case and is the difference between
+		// returning and never returning in the uncommon one. Measured both ways: reversed,
+		// the regression test times out; as written, it returns in ~4ms.
 		_ = load.Process.Kill()
 		_ = load.Wait()
 		return fmt.Errorf("starting %s: %w", save.Path, err)
