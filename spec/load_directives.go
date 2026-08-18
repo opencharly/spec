@@ -21,6 +21,19 @@ import (
 // defaults to it. (sdk/kit keeps the sibling layout constants DefaultBoxDir/DefaultCandyDir.)
 const UnifiedFileName = "charly.yml"
 
+// ProjectDirEnv / ProjectRepoEnv are the environment names that carry charly's PROJECT SCOPE — the
+// two mutually-exclusive answers to "which project's charly.yml is this process operating on".
+// Canonical loader DATA, sharing the home of the manifest filename they select: the charly CLI
+// publishes them as the `-C/--dir` and `--repo` flag environments, and every module that spawns a
+// charly child (sdk/deploykit's packaging child) must set or strip the SAME two names, so the
+// contract lives in the one module both sides import rather than as a literal in each. The Kong
+// struct tags in charly/main.go restate the strings only because Go struct tags cannot reference a
+// constant; every non-tag read or write goes through these.
+const (
+	ProjectDirEnv  = "CHARLY_PROJECT_DIR"
+	ProjectRepoEnv = "CHARLY_PROJECT_REPO"
+)
+
 // ImportEntry is one parsed `import:` list item. A flat entry (Namespace == "")
 // merges the referenced file into the current root namespace; a namespaced
 // entry mounts the referenced project under Namespace.
