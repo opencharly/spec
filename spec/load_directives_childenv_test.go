@@ -44,3 +44,23 @@ func TestChildProjectEnvEmptyDirLeavesNoScopeAtAll(t *testing.T) {
 		t.Errorf("expected no scope variables, got %v", got)
 	}
 }
+
+// A variable whose NAME merely BEGINS with a scope variable's name is a different variable and
+// must survive. This pins exact-name matching (strings.Cut + ==) against a regression to a bare
+// strings.HasPrefix(kv, ProjectDirEnv), which would silently eat it.
+func TestChildProjectEnvKeepsLookalikeNames(t *testing.T) {
+	in := []string{
+		ProjectDirEnv + "=/parent",
+		ProjectDirEnv + "_LOOKALIKE=keep-me",
+		ProjectRepoEnv + "_SUFFIX=keep-me-too",
+	}
+	got := ChildProjectEnv(in, "/candy/project")
+	for _, want := range []string{ProjectDirEnv + "_LOOKALIKE=keep-me", ProjectRepoEnv + "_SUFFIX=keep-me-too"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("lookalike variable dropped: %q missing from %v", want, got)
+		}
+	}
+	if slices.Contains(got, ProjectDirEnv+"=/parent") {
+		t.Errorf("inherited project dir survived: %v", got)
+	}
+}
