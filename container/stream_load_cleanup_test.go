@@ -1,6 +1,7 @@
 package container
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"syscall"
@@ -44,7 +45,7 @@ func TestStreamLoad_LoadStartFailureLeaksNoFDs(t *testing.T) {
 // `charly box load` that is an exec session inside a deployed container, which nothing ever
 // comes back for.
 //
-// Discriminating: with the Kill/Wait removed, `sleep 30` survives the call and the signal-0
+// Discriminating: with the Kill/Wait removed, the fixture survives the call and the signal-0
 // probe below finds it alive, so this fails. It asserts the process is gone rather than
 // asserting StreamLoad merely returned an error — an error is returned either way.
 func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
@@ -72,10 +73,19 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	save := exec.Command("/nonexistent/definitely-not-a-binary")
 	load := exec.Command("sh", "-c", "while :; do sleep 0.2; done < /dev/null")
 
-	// Own process group, so the cleanup below can reap the fixture AND its `sleep` children
-	// even when StreamLoad never returns. Without this, every failing run leaks a shell that
-	// loops forever — measured: one was still alive 13 minutes after a run.
+	// Own process group so a kill reaches the fixture AND its `sleep` children, and
+	// CommandContext so the kill is CONDITIONAL. An unconditional t.Cleanup kill was wrong
+	// twice over: on the passing path StreamLoad has already Killed and Waited this child,
+	// so the pid is FREE — signalling it is an unscoped kill by a stale identifier, exactly
+	// what the comment further down forbids, widened from one process to a group. The
+	// stdlib invokes Cancel only while the process is still running, which is precisely the
+	// timeout path this cleanup exists for; it also keeps the Process read inside exec's own
+	// synchronisation instead of racing the goroutine below.
+	ctx, cancelLoad := context.WithCancel(context.Background())
+	t.Cleanup(cancelLoad)
+	load = exec.CommandContext(ctx, load.Path, load.Args[1:]...)
 	load.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	load.Cancel = func() error { return syscall.Kill(-load.Process.Pid, syscall.SIGKILL) }
 
 	// StreamLoad runs in a goroutine and the deadline is a select, NOT a time.Since check
 	// after the call. Under the reversed order StreamLoad NEVER RETURNS, so a post-hoc
@@ -85,12 +95,6 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	// inside the test written to close a guard that could not fail.
 	done := make(chan error, 1)
 	go func() { done <- StreamLoad(save, load) }()
-
-	t.Cleanup(func() {
-		if load.Process != nil {
-			_ = syscall.Kill(-load.Process.Pid, syscall.SIGKILL) // negative pid = the group
-		}
-	})
 
 	var err error
 	select {
