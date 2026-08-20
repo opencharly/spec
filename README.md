@@ -38,6 +38,7 @@ program so core depends only on the contract, never on a mechanism kit.
 ## Go-module tags
 
 The current rule is `v0.<YYYYDDD>.<HHMM>` (semver-legal CalVer, leading zeros stripped) — the
-`sdk`-style scheme this module shares. The first 15 tags (2026-08-25 → 2026-08-30) predate the
-rule and were stamped `v2026.225.1508`-style (no `0.` after `v`); they are history, not the
-current format. New tags follow the `v0.<YYYYDDD>.<HHMM>` rule.
+`sdk`-style scheme this module has used since its first tag (`v0.2026210.518`, 2026-07-29). A
+brief interlude (2026-08-13 → 2026-08-19) also minted 15 `v2026.<YYYYDDD>.<HHMM>`-style tags
+(no `0.` after `v`) alongside the `v0.*` ones; those 15 are history, not the current format.
+New tags follow the `v0.<YYYYDDD>.<HHMM>` rule.
