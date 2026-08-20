@@ -1,4 +1,4 @@
-package spec
+package poll
 
 import (
 	"strings"

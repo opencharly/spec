@@ -5,7 +5,7 @@
 // process-group shutdown + remote-launch-command renderers (launch.go). It is
 // a host primitive a plugin physically cannot hold as a shared library, so by
 // #55 Rule 1 it lives in a contained spec slice (deps: os/os-signal/os-exec +
-// spec value types + spec.ShellQuote — stdlib-weight only, Rule-2-free) that
+// spec value types + shellquote.ShellQuote — stdlib-weight only, Rule-2-free) that
 // charly core AND every plugin can import directly, without pulling any
 // mechanism kit. Relocated here from sdk/proclifecycle (cleanup + run) and
 // sdk/kit/process.go (the launch helpers) — a genuinely shared leaf.

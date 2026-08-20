@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/opencharly/spec/poll"
+	"github.com/opencharly/spec/shellquote"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -277,9 +279,9 @@ func (e *SSHExecutor) ResolveHome(ctx context.Context, user string) (string, err
 }
 
 // shellSingleQuoteSSH quotes `s` for safe inclusion in a bash -c script passed via ssh. FU-14
-// folded it onto spec.ShellQuote — the shared POSIX single-quoter (behavioural equivalence proven by
-// TestShellSingleQuoters_CanonicalPOSIX) — so the transform lives ONCE (R3).
-var shellSingleQuoteSSH = spec.ShellQuote
+// folded it onto spec/shellquote.ShellQuote — the shared POSIX single-quoter (behavioural
+// equivalence proven by TestShellSingleQuoters_CanonicalPOSIX) — so the transform lives ONCE (R3).
+var shellSingleQuoteSSH = shellquote.ShellQuote
 
 // WaitForSSH polls the guest's sshd until it accepts connections
 // (bounded by maxWaitSeconds). Returns nil on first successful
@@ -313,11 +315,11 @@ func (e *SSHExecutor) kitSSHArgs() SSHArgs {
 
 // remotePoll builds the PollFunc kit's WaitFor* drive: it wraps the host's readiness-configured
 // pollUntil at the remote cap (kit is stdlib-only and cannot own the readiness/poll subsystem, so the
-// poll policy is injected). kit supplies the ssh probe as the PollCond; core owns the bounds.
+// poll policy is injected). kit supplies the ssh probe as the poll.PollCondition; core owns the bounds.
 func (e *SSHExecutor) remotePoll(label string) PollFunc {
-	return func(ctx context.Context, cond PollCond) error {
-		cfg := spec.ReadinessProvider().WaitCapped(fmt.Sprintf("%s %s:%d", label, e.Host, e.Port), spec.PollRemote, 0)
-		return spec.PollUntil(ctx, cfg, spec.PollCondition(cond))
+	return func(ctx context.Context, cond poll.PollCondition) error {
+		cfg := poll.ReadinessProvider().WaitCapped(fmt.Sprintf("%s %s:%d", label, e.Host, e.Port), poll.PollRemote, 0)
+		return poll.PollUntil(ctx, cfg, cond)
 	}
 }
 

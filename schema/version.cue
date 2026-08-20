@@ -40,8 +40,18 @@
 // InstallStepView wire (pkgbuild_ref/project_dir → package_name/version),
 // migrated by the remove_key/rename_key ops in candy/plugin-migrate/migrations.cue
 // when the spec submodule pointer is bumped (step 3 of the cross-repo cutover).
+// Bumped again by the install_template removal (the strict-cleanup cutover):
+// the legacy top-level `#Format.install_template` / `#Builder.install_template`
+// fields (the (install, container) fallback the resolvers fell back to when
+// `phase:` lacked the cell) are REMOVED — their content migrates into
+// `format.<fmt>.phase.install.container`, the phase: block's single source of
+// truth. Migrated by a structural-reshape Go hook (the nested move
+// format.<fmt>.install_template → format.<fmt>.phase.install.container cannot
+// be expressed as rename_key/move_key ops — see the charly-side migration
+// entry) when the spec submodule pointer is bumped (step 3 of the cross-repo
+// cutover).
 // Re-stamped to the merge-time CalVer by the fresh pr-validator.
-#SchemaVersion: #CanonCalVer & "2026.225.1508" @go(-)
+#SchemaVersion: #CanonCalVer & "2026.232.0520" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
 // the migration-baseline reset it EQUALS #SchemaVersion — the deleted 47-step chain

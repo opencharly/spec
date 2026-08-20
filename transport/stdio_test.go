@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 
 	pb "github.com/opencharly/spec/proto"
+	"github.com/opencharly/spec/shellquote"
 	"github.com/opencharly/spec/spec"
 	"github.com/opencharly/spec/testkit"
 )
@@ -95,7 +96,7 @@ func TestGRPCOverProcessTransports(t *testing.T) {
 				{Transport: "tmux"},
 			}},
 			check: func(t *testing.T, name string, args []string) {
-				remote := "cd " + spec.ShellQuote(remoteOnlyDir) + " && env " + spec.ShellQuote(remoteEnvKey+"=remote") + " 'charly' '__agent-target' 'serve' '--stdio'"
+				remote := "cd " + shellquote.ShellQuote(remoteOnlyDir) + " && env " + shellquote.ShellQuote(remoteEnvKey+"=remote") + " 'charly' '__agent-target' 'serve' '--stdio'"
 				want := []string{"-T", "agent@box", remote}
 				if name != "ssh" || !reflect.DeepEqual(args, want) {
 					t.Fatalf("ssh endpoint = %q %q, want ssh %q", name, args, want)
@@ -185,7 +186,7 @@ func TestGRPCOverRealOpenSSH(t *testing.T) {
 	t.Setenv("HOME", server.Home)
 	remoteDir := t.TempDir()
 	remoteCharly := filepath.Join(t.TempDir(), "charly")
-	remoteScript := "#!/bin/sh\nexec " + spec.ShellQuote(os.Args[0]) + " -test.run=^TestTargetkitHelperProcess$\n"
+	remoteScript := "#!/bin/sh\nexec " + shellquote.ShellQuote(os.Args[0]) + " -test.run=^TestTargetkitHelperProcess$\n"
 	if err := os.WriteFile(remoteCharly, []byte(remoteScript), 0o700); err != nil {
 		t.Fatal(err)
 	}

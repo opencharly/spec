@@ -30,7 +30,6 @@
 #Format: {
 	cache_mount?: [...#CacheMount] @go(CacheMount)
 	section_field?: {[string]: "list" | "list_of_maps"} @go(SectionFields)
-	install_template?:   string    @go(InstallTemplate)
 	uninstall_template?: string    @go(UninstallTemplate)
 	phase?:              #PhaseSet @go(Phases,optional=nillable)
 	validate?: [...#FormatRule]

@@ -50,7 +50,7 @@ import (
 	"strings"
 
 	execc "github.com/opencharly/spec/exec"
-	"github.com/opencharly/spec/spec"
+	"github.com/opencharly/spec/shellquote"
 )
 
 // ReexecOverSSH rewrites os.Args by stripping --host and the client-
@@ -70,7 +70,7 @@ import (
 // caller's OWN CalVer identity (charly-core's CharlyVersion()); wantTTY is
 // whether stdin is a terminal (charly-core's term.IsTerminal(stdin)) — all
 // charly-core-only concerns the caller resolves and threads in, so this
-// function stays pure stdlib+spec.
+// function stays pure stdlib+spec (shellquote/spec slices).
 func ReexecOverSSH(host, identityFile string, options []string, controllerBin, version string, wantTTY bool) int {
 	target, err := resolveHostAlias(host)
 	if err != nil {
@@ -220,9 +220,9 @@ func sshCmdArgsWithEndpoint(target, remoteBinary, identityFile string, options, 
 	for _, option := range options {
 		args = append(args, "-o", option)
 	}
-	remote := spec.ShellQuote(remoteBinary)
+	remote := shellquote.ShellQuote(remoteBinary)
 	for _, arg := range remoteArgv {
-		remote += " " + spec.ShellQuote(arg)
+		remote += " " + shellquote.ShellQuote(arg)
 	}
 	args = append(args, destination, remote)
 	return args, nil

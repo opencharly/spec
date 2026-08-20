@@ -1,23 +1,24 @@
-// matchers.go — the goss-style matcher EVALUATION engine, relocated from
-// github.com/opencharly/sdk/matchers.go (#55 import-purity). The matcher VALUE types
-// (Matcher, MatcherList) already live in this package (union_types.go, #Matcher /
-// #MatcherList); the evaluation logic lives HERE alongside them so the value type and its
-// logic are together (the plan's Rule 2: spec/spec is not yaml-pure — it already holds
-// Matcher's (Un)Marshal logic + calver_parse + port_mapping — so the evaluation engine fits
-// here, dragging only stdlib regexp/strconv/fmt/strings, NO cuelang/grpc/go-plugin). The sdk
-// root re-exports the exported helpers (`var MatchAll = spec.MatchAll`, etc.) so the core
-// check runner + out-of-tree verb plugins compile UNCHANGED; the private matchOne /
-// matchNumeric move here and are exercised by this package's matchers_test.go (a private
-// symbol cannot be reached cross-package, so its tests move with it — the standard Go
+// matchers.go — the goss-style matcher EVALUATION engine, sliced out of the
+// spec contract module's spec/spec catch-all (#55 CHECK-ENGINE cone Option A —
+// the check-verb matcher engine). The matcher VALUE types (Matcher, MatcherList)
+// stay in spec/spec (union_types.go, #Matcher / #MatcherList); the evaluation
+// logic lives HERE in spec/matchers, importing only stdlib regexp/strconv/fmt/
+// strings, NO cuelang/grpc/go-plugin. sdk/kit re-exports the exported helpers
+// (`var MatchAll = matchers.MatchAll`, etc.) so the core check runner + out-of-tree
+// verb plugins compile UNCHANGED; the private matchOne / matchNumeric move here
+// and are exercised by this package's matchers_test.go (a private symbol cannot
+// be reached cross-package, so its tests move with it — the standard Go
 // pattern).
 
-package spec
+package matchers
 
 import (
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/opencharly/spec/spec"
 )
 
 // ---------------------------------------------------------------------------
@@ -37,7 +38,7 @@ import (
 // explicit conversion at every call site.
 //
 // Shared by the core check runner and out-of-tree verb plugins.
-func MatchAll(value string, matchers []Matcher) error {
+func MatchAll(value string, matchers []spec.Matcher) error {
 	for _, m := range matchers {
 		if err := matchOne(value, m); err != nil {
 			return err
@@ -49,7 +50,7 @@ func MatchAll(value string, matchers []Matcher) error {
 // matchOne evaluates a single matcher. The operator set here must stay in
 // lockstep with #MatchOpMap (the CUE matcher-operator authority in _common.cue)
 // — if the schema accepts an op, the runner must handle it.
-func matchOne(value string, m Matcher) error {
+func matchOne(value string, m spec.Matcher) error {
 	switch m.Op {
 	case "equals":
 		want := MatchValueString(m.Value)
@@ -101,7 +102,7 @@ func matchOne(value string, m Matcher) error {
 // kernel-param integers, port counts — anywhere an ordering-aware matcher
 // makes sense. String values with leading/trailing whitespace (like
 // `sysctl -n` output) are trimmed before parsing.
-func matchNumeric(value string, m Matcher) error {
+func matchNumeric(value string, m spec.Matcher) error {
 	wantStr := MatchValueString(m.Value)
 	want, err := strconv.ParseFloat(strings.TrimSpace(wantStr), 64)
 	if err != nil {

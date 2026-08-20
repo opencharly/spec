@@ -1,9 +1,10 @@
 // Package capability (github.com/opencharly/spec/capability, #55 import-purity) holds the
 // plugin capability DESCRIPTOR contract: the ProvidedCapability struct (one capability a
 // plugin serves plus the CUE def that validates its plugin_input — the SDK-facing form of
-// the proto ProvidedCapability), its StepContract (a class="step" plugin's declared
-// install-step Scope/Venue/Gate/Emits), and CLISubcommand (the plain Name+Help authoring
-// form of a class="command" capability's declared CLI child).
+// the proto ProvidedCapability), its StepContract field (a class="step" plugin's declared
+// install-step Scope/Venue/Gate/Emits — the TYPED spec.StepContract, the single canonical
+// form), and CLISubcommand (the plain Name+Help authoring form of a class="command"
+// capability's declared CLI child).
 //
 // It lives in spec — not the sdk root — so that charly core (the host) and every plugin
 // (compiled-in or out-of-process) share ONE descriptor contract without either importing the
@@ -18,12 +19,14 @@
 // CLISubcommand (`type CLISubcommand = capability.CLISubcommand`) so its existing consumers
 // (sdk/schema.go's CLISubcommand alias, sdk/kong_reflect.go's KongSubcommands, and
 // spec/climodel's own TestCLISubcommandFields) compile UNCHANGED. ProvidedCapability +
-// StepContract relocate verbatim from github.com/opencharly/sdk/schema.go; the sdk root
+// CLISubcommand relocate verbatim from github.com/opencharly/sdk/schema.go; the sdk root
 // re-exports them (`type ProvidedCapability = capability.ProvidedCapability`,
-// `type StepContract = capability.StepContract`) so the 92 plugin candy call sites
-// compile UNCHANGED. The proto wire forms (pb.ProvidedCapability / pb.StepContract /
-// pb.CLISubcommand) live in spec/proto and are NOT affected — BuildCapabilities (in the sdk
-// root) marshals these authoring structs into the proto.
+// `type CLISubcommand = capability.CLISubcommand`) so plugin candy call sites compile
+// UNCHANGED. StepContract is NOT re-exported from here — the sdk root re-exports the TYPED
+// spec.StepContract (`type StepContract = spec.StepContract`), the single canonical form
+// (R3 — the loose string form was deleted). The proto wire forms (pb.ProvidedCapability /
+// pb.StepContract / pb.CLISubcommand) live in spec/proto and are NOT affected —
+// BuildCapabilities (in the sdk root) marshals these authoring structs into the proto.
 package capability
 
 import (
@@ -40,8 +43,10 @@ type ProvidedCapability struct {
 	InputDef string // the CUE def for this word's plugin_input, e.g. "#ExternalprobeInput"
 	// StepContract is set ONLY for Class=="step" (F3): the plugin-declared install-step
 	// contract (Scope/Venue/Gate) the host applies to the external step via the open default
-	// arm — no compiled-in case. nil for every other class.
-	StepContract *StepContract
+	// arm — no compiled-in case. nil for every other class. The TYPED spec.StepContract
+	// (Scope/Venue/Gate enums) is the single canonical form — the loose string form was
+	// deleted in the R3 unification (ONE StepContract, not two).
+	StepContract *spec.StepContract
 	// Structural is set ONLY for Class=="kind" (F5): the kind decodes a STRUCTURAL entity —
 	// its OpLoad returns a spec.Deploy member tree the host folds into uf.Fleet — rather than
 	// a FLAT body landed opaquely in uf.PluginKinds (F4). false for every other class/kind.
@@ -111,19 +116,4 @@ type CLISubcommand struct {
 	// grammar struct field. KongSubcommands (sdk) derives it from that tag; a plugin declaring
 	// a catalog by hand sets it directly.
 	Hidden bool
-}
-
-// StepContract is the SDK-facing form of the proto StepContract — a class="step" plugin's
-// declared install-step Scope/Venue/Gate. Reverse is NOT declared (an external step's
-// teardown ops are recorded dynamically from its OpExecute reply).
-type StepContract struct {
-	Scope string // "system" | "user" | "user-profile"
-	Venue int    // 0=host-native, 1=container-builder, 2=skip
-	Gate  string // "" | "allow-repo-changes" | "allow-root-tasks" | "with-services"
-	// Emits declares that the step produces a build-context Containerfile FRAGMENT
-	// (the plugin serves Invoke(OpEmit) → EmitReply.Fragment). The pod-overlay OCITarget
-	// bakes it; false => a deploy-only step (no build fragment — OCITarget skips it, like
-	// apk on an image build). F-STEP-EMIT: the BUILD leg C1 needs to externalize a step
-	// kind whose EmitOCI produces a Containerfile fragment.
-	Emits bool
 }

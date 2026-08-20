@@ -1584,8 +1584,6 @@ type Builder struct {
 
 	RuntimeEnv StrMap `yaml:"runtime_env,omitempty" json:"runtime_env,omitempty"`
 
-	InstallTemplate string `yaml:"install_template,omitempty" json:"install_template,omitempty"`
-
 	ManylinuxFix string `yaml:"manylinux_fix,omitempty" json:"manylinux_fix,omitempty"`
 
 	BuildScript string `yaml:"build_script,omitempty" json:"build_script,omitempty"`
@@ -2281,11 +2279,6 @@ type CandyModel struct {
 
 	// --- package surface (resolved) ---
 	TopPackages []string `yaml:"top_packages,omitempty" json:"top_packages,omitempty"`
-
-	// Deprecated: the localpkg source-build map is being replaced by the
-	// `packaging:` section (Packaging). Kept until the sdk's localpkg
-	// replacement (Phase 0b) migrates the consumers off it.
-	LocalPkg map[string]string `yaml:"localpkg,omitempty" json:"localpkg,omitempty"`
 
 	// packaging — the candy's `packaging:` section (the single source of truth
 	// for distro package metadata + variants). Carried on the build model so the
@@ -3394,6 +3387,41 @@ type PackagingFormat struct {
 	Properties map[string]string `yaml:"properties,omitempty" json:"properties,omitempty"`
 }
 
+// #MCPProvideEntry is a RESOLVED mcp_provide entry — a CandyMCPProvide (the raw baked label
+// form) plus the Source deployment it came from. Shared by charly's DEPLOY-time provides
+// injection AND the out-of-process mcp CHECK verb (candy/plugin-mcp), which both apply
+// PodAwareMCPProvides; it lives in package spec (ONE copy, R3) so it crosses the
+// charly/plugin module boundary. Its GetName/GetSource methods satisfy charly's Named
+// interface structurally (hand-written behavior, not wire shape).
+type MCPProvideEntry struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	URL string `yaml:"url,omitempty" json:"url"`
+
+	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"`
+
+	Source string `yaml:"source,omitempty" json:"source"`
+}
+
+// #EnvProvideEntry is a RESOLVED env-provided entry — the raw authored
+// env_provide name→value entry plus the Source deployment it came from. Its
+// GetName/GetSource methods satisfy charly's Named interface structurally
+// (hand-written behavior, not wire shape).
+type EnvProvideEntry struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Value string `yaml:"value,omitempty" json:"value"`
+
+	Source string `yaml:"source,omitempty" json:"source"`
+}
+
+// #ProvidesConfig holds all resolved provides entries in charly.yml.
+type ProvidesConfig struct {
+	Env []EnvProvideEntry `yaml:"env,omitempty" json:"env,omitempty"`
+
+	MCP []MCPProvideEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
+}
+
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire/render struct, single-sourced
 // here so `task cue:gen` produces the Go struct charly core's registry-coupled floor files
@@ -4051,7 +4079,7 @@ type Deploy struct {
 
 	ForwardGpgAgent *bool `yaml:"forward_gpg_agent,omitempty" json:"forward_gpg_agent,omitempty"`
 
-	ForwardSshAgent *bool `yaml:"forward_ssh_agent,omitempty" json:"forward_ssh_agent,omitempty"`
+	ForwardSSHAgent *bool `yaml:"forward_ssh_agent,omitempty" json:"forward_ssh_agent,omitempty"`
 
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
@@ -4225,6 +4253,68 @@ type DeployProbes struct {
 // the alias removes that divergent parallel spec and lets gengotypes emit a real
 // Check struct instead of an empty `struct{}`.
 type Check Deploy
+
+// #DeployRecord is the top-level entry in deploys/<deploy-id>.json. Lists the
+// image, tag, and the ordered candy set included in this deploy (image candies +
+// add_candy overlays, already topo-sorted).
+type DeployRecord struct {
+	// schema_version is the ledger-format version (the ledger-candy-keys cutover's
+	// CalVer). Empty means a pre-cutover record (json "layer" keys) — the read path
+	// rejects it with a `charly migrate` hint.
+	SchemaVersion string `yaml:"schema_version,omitempty" json:"schema_version,omitempty"`
+
+	DeployID string `yaml:"deploy_id,omitempty" json:"deploy_id"`
+
+	Image string `yaml:"image,omitempty" json:"image"`
+
+	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
+
+	Target string `yaml:"target,omitempty" json:"target"`
+
+	Candy []string `yaml:"candy,omitempty" json:"candy,omitempty"`
+
+	AddCandy []string `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
+
+	DeployedAt string `yaml:"deployed_at,omitempty" json:"deployed_at"`
+}
+
+// #CandyRecord is the per-candy ledger entry. Lists concrete artifacts
+// (packages installed, files written, services enabled, env.d file created, repo
+// changes) so reversal doesn't need to re-compile the plan from the candy manifest.
+type CandyRecord struct {
+	SchemaVersion string `yaml:"schema_version,omitempty" json:"schema_version,omitempty"`
+
+	Candy string `yaml:"candy,omitempty" json:"candy"`
+
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+
+	DeployedBy []string `yaml:"deployed_by,omitempty" json:"deployed_by"`
+
+	DeployedAt string `yaml:"deployed_at,omitempty" json:"deployed_at"`
+
+	BuilderImage string `yaml:"builder_image,omitempty" json:"builder_image,omitempty"`
+
+	Steps []StepRecord `yaml:"steps,omitempty" json:"steps,omitempty"`
+
+	ReverseOps []ReverseOp `yaml:"reverse_ops,omitempty" json:"reverse_ops,omitempty"`
+}
+
+// #StepRecord is a thin summary of a completed InstallStep that the ledger keeps
+// for audit. Kept intentionally small — the ReverseOps list on CandyRecord is the
+// source of truth for teardown.
+type StepRecord struct {
+	Kind StepKind `yaml:"kind,omitempty" json:"kind"`
+
+	Scope Scope `yaml:"scope,omitempty" json:"scope,omitempty"`
+
+	Venue Venue `yaml:"venue,omitempty" json:"venue,omitempty"`
+
+	Summary string `yaml:"summary,omitempty" json:"summary,omitempty"`
+
+	CompletedAt string `yaml:"completed_at,omitempty" json:"completed_at"`
+
+	Extra map[string]string `yaml:"extra,omitempty" json:"extra,omitempty"`
+}
 
 // #DeployVenue is the venue descriptor the host puts in op.Env for an external
 // deploy Invoke: the deploy's name plus the merged deploy-node env (KEY=VALUE
@@ -4452,8 +4542,6 @@ type Format struct {
 
 	SectionFields map[string]string `yaml:"section_field,omitempty" json:"section_field,omitempty"`
 
-	InstallTemplate string `yaml:"install_template,omitempty" json:"install_template,omitempty"`
-
 	UninstallTemplate string `yaml:"uninstall_template,omitempty" json:"uninstall_template,omitempty"`
 
 	Phases *PhaseSet `yaml:"phase,omitempty" json:"phase,omitempty"`
@@ -4668,8 +4756,6 @@ type GpuProbeInput struct {
 // #GpuProbeReply is the action-multiplexed reply from verb:gpu. Each action
 // populates only the field(s) it produces.
 type GpuProbeReply struct {
-	// "bool" is quoted (a bare `bool` field name collides with the CUE builtin
-	// type keyword — the arbiter.cue #ArbiterInvokeReply precedent).
 	Bool bool `yaml:"bool,omitempty" json:"bool,omitempty"`
 
 	Str string `yaml:"str,omitempty" json:"str,omitempty"`
@@ -4681,6 +4767,37 @@ type GpuProbeReply struct {
 	MemlockSoft uint64 `yaml:"memlock_soft,omitempty" json:"memlock_soft,omitempty"`
 
 	MemlockHard uint64 `yaml:"memlock_hard,omitempty" json:"memlock_hard,omitempty"`
+}
+
+// #GpuSwitchInput is the action-multiplexed input the core driver-switch shims ship
+// to verb:gpu over OpRun for the DRIVER-SWITCH actions (cutover C9). It rides the
+// SAME verb:gpu provider as the C11 detection actions (GpuProbeInput); the action
+// vocabularies are disjoint, so the plugin's Invoke dispatches by which envelope
+// decodes — detection actions decode GpuProbeInput, switch actions decode this.
+type GpuSwitchInput struct {
+	Action string `yaml:"action,omitempty" json:"action"`
+
+	Gpu *VFIOGpu `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	Addr string `yaml:"addr,omitempty" json:"addr,omitempty"`
+
+	Vendor string `yaml:"vendor,omitempty" json:"vendor,omitempty"`
+}
+
+// #GpuSwitchReply is the action-multiplexed reply for the DRIVER-SWITCH actions.
+type GpuSwitchReply struct {
+	// "bool" quoted for the same builtin-keyword collision as #GpuProbeReply.
+	Bool bool `yaml:"bool,omitempty" json:"bool,omitempty"`
+
+	Str string `yaml:"str,omitempty" json:"str,omitempty"`
+
+	Plan []string `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	Wedged bool `yaml:"wedged,omitempty" json:"wedged,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
 // CUE schema for the `hook` KIND — a first-class HARNESS hook entity (the migration of the
@@ -5875,7 +5992,7 @@ type DeployNodeDelDispatchReply struct {
 // ancestor_paths/ancestor_nodes let the host reconstruct the SAME parentExec chain the OLD in-core
 // walk built (deriveChildExecutorForPath is pure Go over spec/kit types, re-run HOST-side) — a
 // live DeployExecutor never crosses the wire. target is the plugin-classified substrate word (a
-// pure ClassifyNodeTarget of node+path), carried so the host synthesizes a Target-only node when
+// pure spec/fleet.ClassifyNodeTarget of node+path), carried so the host synthesizes a Target-only node when
 // node is nil (a ref-based deploy with no charly.yml entry). The gate flags are the FINAL resolved
 // EmitOpts values (node.InstallOpts already applied over the CLI flags plugin-side); dry_run never
 // reaches this seam — a dry-run prints the compiled plans plugin-side and returns without dispatch.
@@ -6831,7 +6948,7 @@ type PodConfigSetupRequest struct {
 
 	UpdateAll bool `yaml:"update_all,omitempty" json:"update_all,omitempty"`
 
-	SshKey string `yaml:"ssh_key,omitempty" json:"ssh_key,omitempty"`
+	SSHKey string `yaml:"ssh_key,omitempty" json:"ssh_key,omitempty"`
 
 	Sidecar []string `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 
@@ -7277,7 +7394,7 @@ type ResolvedVm struct {
 
 	Network *VmNetwork `yaml:"network,omitempty" json:"network,omitempty"`
 
-	SSH *VmSSH `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	SSH *VmSsh `yaml:"ssh,omitempty" json:"ssh,omitempty"`
 
 	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
 
@@ -7935,7 +8052,7 @@ type Vm struct {
 
 	Network *VmNetwork `yaml:"network,omitempty" json:"network,omitempty"`
 
-	SSH *VmSSH `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	SSH *VmSsh `yaml:"ssh,omitempty" json:"ssh,omitempty"`
 
 	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
 

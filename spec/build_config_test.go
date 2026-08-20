@@ -17,13 +17,13 @@ func TestDistroConfigRoundTrip(t *testing.T) {
 			Bootstrap:   Bootstrap{InstallCmd: "bootstrap-base"},
 			Workarounds: []string{"wa"},
 			Format: map[string]*Format{
-				"rpm": {InstallTemplate: "dnf install"},
+				"rpm": {Phases: &PhaseSet{Install: &PhaseTemplates{Container: "dnf install"}}},
 			},
 		},
 		"fedora": {
 			Inherits: "base",
 			Format: map[string]*Format{
-				"deb": {InstallTemplate: "apt install"},
+				"deb": {Phases: &PhaseSet{Install: &PhaseTemplates{Container: "apt install"}}},
 			},
 		},
 	}}

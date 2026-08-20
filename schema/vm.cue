@@ -48,7 +48,7 @@
 	}
 
 	network?:    #VmNetwork    @go(Network,optional=nillable)
-	ssh?:        #VmSSH        @go(SSH,type=*VmSSH)
+	ssh?:        #VmSsh        @go(SSH,type=*VmSsh)
 	cloud_init?: #VmCloudInit  @go(CloudInit,optional=nillable)
 	libvirt?:    #LibvirtDomain @go(Libvirt,type=*LibvirtDomain)
 
@@ -159,7 +159,7 @@
 	}
 }
 
-#VmSSH: {
+#VmSsh: {
 							user?:          string
 							port?:          int & >=0 & <=65535
 							port_auto?:     bool
@@ -168,7 +168,7 @@
 							// port and port_auto are mutually exclusive (PortAuto && Port>0 was the
 							// error): port_auto is false/absent OR port is ≤0/absent. The
 							// disjunction keeps the struct CLOSED — an embedded matchN would open it.
-} & ({port_auto?: false} | {port?: int & <=0}) @go(-) // gengotypes: hand VmSSH (spec/union_types.go)
+} & ({port_auto?: false} | {port?: int & <=0}) @go(-) // gengotypes: hand VmSsh (spec/union_types.go)
 
 #VmKeyInjection: {
 	smbios?:     "auto" | "enabled" | "disabled" @go(SMBIOS)
@@ -713,7 +713,7 @@
 	backend!:   string
 	autostart!: bool
 	network?:    #VmNetwork     @go(Network,optional=nillable)
-	ssh?:        #VmSSH         @go(SSH,type=*VmSSH)
+	ssh?:        #VmSsh        @go(SSH,type=*VmSsh)
 	cloud_init?: #VmCloudInit   @go(CloudInit,optional=nillable)
 	libvirt?:    #LibvirtDomain @go(Libvirt,type=*LibvirtDomain)
 	plan?: [...#Step]

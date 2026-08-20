@@ -352,20 +352,10 @@ type CandyCandidate struct {
 	Source  string // "<repo>@<git-tag>" for warning attribution
 }
 
-// EnvProvideEntry is a resolved env_provides entry in charly.yml. Relocated from deploykit
-// (provides.go) so UnifiedFile.Provides (*ProvidesConfig) lives entirely in spec; deploykit keeps
-// the provides PIPELINE (FilterOwnProvides/ResolveTemplate/…), consuming these spec types.
-type EnvProvideEntry struct {
-	Name   string `yaml:"name" json:"name"`
-	Value  string `yaml:"value" json:"value"`
-	Source string `yaml:"source" json:"source"`
-}
-
+// EnvProvideEntry (schema/candy.cue, generated into cue_types_gen.go) is the
+// CUE-sourced RESOLVED env-provided entry — relocated from deploykit (provides.go) so
+// UnifiedFile.Provides (*ProvidesConfig) lives entirely in spec; deploykit keeps the
+// provides PIPELINE (FilterOwnProvides/ResolveTemplate/…), consuming these spec types.
+// Its GetName/GetSource satisfy charly's Named interface — hand-written behavior.
 func (e EnvProvideEntry) GetName() string   { return e.Name }
 func (e EnvProvideEntry) GetSource() string { return e.Source }
-
-// ProvidesConfig holds all resolved provides entries in charly.yml.
-type ProvidesConfig struct {
-	Env []EnvProvideEntry `yaml:"env,omitempty" json:"env,omitempty"`
-	MCP []MCPProvideEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
-}

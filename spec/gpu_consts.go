@@ -5,7 +5,10 @@ package spec
 // into candy/plugin-gpu (the vfio<->nvidia rebind), but a handful of core sites
 // (the arbiter mode-math seams, vm_gpu_cmd shims) still name these values, so they
 // live in package spec — the ONE importable home — and core aliases them
-// (in gpu_shim.go) so any residual core reference stays clean (R3).
+// (in gpu_shim.go) so any residual core reference stays clean (R3). The wire types
+// these actions ride on (GpuSwitchInput / GpuSwitchReply) are CUE-sourced at
+// schema/gpu.cue and generated into cue_types_gen.go — this file holds ONLY the
+// constant vocabulary.
 
 const (
 	// GpuModeVfio — EVERY function of the GPU's IOMMU group bound to vfio-pci
@@ -27,28 +30,6 @@ const (
 	HostDriverAudio   = "snd_hda_intel"
 	HostDriverVfio    = "vfio-pci"
 )
-
-// GpuSwitchInput is the action-multiplexed input the core driver-switch shims ship
-// to verb:gpu over OpRun for the DRIVER-SWITCH actions (cutover C9). It rides the
-// SAME verb:gpu provider as the C11 detection actions (GpuProbeInput); the action
-// vocabularies are disjoint, so the plugin's Invoke dispatches by which envelope
-// decodes — detection actions decode GpuProbeInput, switch actions decode this.
-type GpuSwitchInput struct {
-	Action string   `json:"action"`           // switch-mode | ensure-cdi | wedge-detected | group-in-mode | current-mode | display-driver | switch-plan
-	Gpu    *VFIOGpu `json:"gpu,omitempty"`    // switch-mode / group-in-mode / current-mode / switch-plan
-	Mode   string   `json:"mode,omitempty"`   // switch-mode / group-in-mode / switch-plan
-	Addr   string   `json:"addr,omitempty"`   // display-driver (a single PCI function)
-	Vendor string   `json:"vendor,omitempty"` // switch-mode (tolerant vendor-select) / ensure-cdi-N/A
-}
-
-// GpuSwitchReply is the action-multiplexed reply for the DRIVER-SWITCH actions.
-type GpuSwitchReply struct {
-	Bool   bool     `json:"bool,omitempty"`   // wedge-detected / group-in-mode
-	Str    string   `json:"str,omitempty"`    // current-mode / display-driver
-	Plan   []string `json:"plan,omitempty"`   // switch-plan: the exact rebind commands (DRY-RUN, no sysfs touched)
-	Wedged bool     `json:"wedged,omitempty"` // switch-mode: the switch wedged the device_lock (errGPUSwitchWedged)
-	Error  string   `json:"error,omitempty"`  // switch-mode / ensure-cdi op failure
-}
 
 // GPU driver-switch actions served by verb:gpu (cutover C9).
 const (

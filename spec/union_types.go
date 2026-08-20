@@ -257,8 +257,8 @@ func PackageNames(items []PackageItem) []string {
 }
 
 // ---------------------------------------------------------------------------
-// VmSource / VmSSH — #VmSource / #VmSSH. VmSource is the flat
-// discriminated-union source; VmSSH references the generated VmKeyInjection.
+// VmSource / VmSsh — #VmSource / #VmSsh. VmSource is the flat
+// discriminated-union source; VmSsh references the generated VmKeyInjection.
 // ---------------------------------------------------------------------------
 
 // VmSource is the discriminated-union source for a VM disk image (Kind selects
@@ -290,9 +290,9 @@ type VmSource struct {
 	BootstrapVariant string     `yaml:"bootstrap_variant,omitempty" json:"bootstrap_variant,omitempty"`
 }
 
-// VmSSH is the guest SSH access config (port XOR port_auto is a Go cross-field
+// VmSsh is the guest SSH access config (port XOR port_auto is a Go cross-field
 // rule). KeyInjection references the generated VmKeyInjection.
-type VmSSH struct {
+type VmSsh struct {
 	User         string          `yaml:"user,omitempty" json:"user,omitempty"`
 	Port         int             `yaml:"port,omitempty" json:"port,omitempty"`
 	PortAuto     bool            `yaml:"port_auto,omitempty" json:"port_auto,omitempty"`

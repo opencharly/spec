@@ -10,7 +10,7 @@ import (
 // kind must survive the FULL wire path — StepToView → JSON marshal → JSON unmarshal →
 // StepFromView — DeepEqual-intact. This proves the serializable per-step IR
 // (InstallStepView) drops NO field of any kind, so an external deploy/step plugin
-// that EXECUTES the plan walks the SAME data the in-proc DeployTargets walk (R3).
+// that EXECUTES the plan walks the SAME data the in-proc EmitTargets walk (R3).
 //
 // Map fields with `any` values (RawInstallContext/RawStageContext/Repos) are populated
 // with JSON-stable values (string/bool/[]any-of-string) — a raw int would deserialize as

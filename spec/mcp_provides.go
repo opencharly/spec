@@ -2,20 +2,9 @@ package spec
 
 import "strings"
 
-// MCPProvideEntry is a RESOLVED mcp_provide entry — a CandyMCPProvide (the raw baked label
-// form) plus the Source deployment it came from. It is shared by charly's DEPLOY-time provides
-// injection (config_image.go) AND the out-of-process mcp CHECK verb (candy/plugin-mcp), which
-// both apply PodAwareMCPProvides; it lives here (ONE copy, R3) so it crosses the charly/plugin
-// module boundary. charly aliases it as MCPProvideEntry; its GetName/GetSource satisfy charly's
-// Named interface structurally.
-type MCPProvideEntry struct {
-	Name      string `yaml:"name" json:"name"`
-	URL       string `yaml:"url" json:"url"`
-	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"`
-	Source    string `yaml:"source" json:"source"`
-}
-
-// GetName / GetSource let MCPProvideEntry satisfy charly's Named interface (provides.go).
+// MCPProvideEntry (schema/candy.cue, generated into cue_types_gen.go) is the CUE-sourced
+// RESOLVED mcp_provide entry. Its GetName/GetSource let it satisfy charly's Named interface
+// (provides.go) — hand-written behavior, not wire shape.
 func (e MCPProvideEntry) GetName() string   { return e.Name }
 func (e MCPProvideEntry) GetSource() string { return e.Source }
 

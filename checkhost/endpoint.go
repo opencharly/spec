@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/opencharly/spec/container"
+	"github.com/opencharly/spec/poll"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -129,14 +130,14 @@ func sshForwardEndpoint(desc spec.VenueDescriptor, port int) (*CheckEndpoint, er
 	// ConnectTimeout+5s (preserved); the 300ms dial is the per-attempt probe. FATAL fast-fail if ssh
 	// has exited (auth/forward failure) — note cmd.ProcessState is only populated after Wait
 	// (cleanup), so this remains best-effort, as before.
-	cfg := spec.ReadinessProvider().WaitCapped(fmt.Sprintf("ssh-forward %s", dest), spec.PollLocal, time.Duration(timeout+5)*time.Second)
-	perr := spec.PollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
+	cfg := poll.ReadinessProvider().WaitCapped(fmt.Sprintf("ssh-forward %s", dest), poll.PollLocal, time.Duration(timeout+5)*time.Second)
+	perr := poll.PollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
 		if c, derr := net.DialTimeout("tcp", localAddr, 300*time.Millisecond); derr == nil {
 			_ = c.Close()
 			return true, 0, nil
 		}
 		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-			return false, 0, spec.ErrPollFatal // ssh died (auth/forward failure)
+			return false, 0, poll.ErrPollFatal // ssh died (auth/forward failure)
 		}
 		return false, 0, nil
 	})

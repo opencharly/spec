@@ -7,10 +7,10 @@ package spec
 // build-render callers.
 
 // FormatPhaseTemplate looks up the template string for a (phase, venue)
-// lookup, with documented fallback behavior: if the new phase: block
-// lacks the requested cell, fall back to the legacy InstallTemplate for
-// (PhaseInstall, container) only — the combination covered by the
-// legacy field. All other lookups return "" when the new path is absent.
+// lookup. The phase: block is the single source of truth — the legacy
+// top-level InstallTemplate field was removed (R5) and its content migrated
+// into phase.install.container, so there is no fallback arm. A lookup
+// returns "" when the requested cell is absent.
 func FormatPhaseTemplate(f *Format, phase Phase, venue Venue) string {
 	if f == nil {
 		return ""
@@ -38,17 +38,15 @@ func FormatPhaseTemplate(f *Format, phase Phase, venue Venue) string {
 			}
 		}
 	}
-	// Legacy fallback: the old InstallTemplate only describes the
-	// install-phase in container venue.
-	if phase == PhaseInstall && venue == VenueContainerBuilder {
-		return f.InstallTemplate
-	}
 	return ""
 }
 
-// BuilderPhaseTemplate is the Builder analog of FormatPhaseTemplate.
-// Same fallback rules apply: (PhaseInstall, container) falls back to the
-// legacy inline InstallTemplate when Phases is absent.
+// BuilderPhaseTemplate is the Builder analog of FormatPhaseTemplate. The
+// phase: block is the single source of truth — the legacy inline
+// InstallTemplate field was removed (R5) and its content migrated into
+// phase.install.container, so there is no fallback arm. Multi-stage
+// builders render via their plugin's OpResolve (kit.BuilderResolve), NOT
+// this resolver.
 func BuilderPhaseTemplate(b *Builder, phase Phase, venue Venue) string {
 	if b == nil {
 		return ""
@@ -75,12 +73,6 @@ func BuilderPhaseTemplate(b *Builder, phase Phase, venue Venue) string {
 				}
 			}
 		}
-	}
-	// Legacy fallback: an inline builder (cargo) uses InstallTemplate for the
-	// container-shaped template. Multi-stage builders render via their plugin's
-	// OpResolve (kit.BuilderResolve), NOT this fallback.
-	if phase == PhaseInstall && venue == VenueContainerBuilder && b.Inline && b.InstallTemplate != "" {
-		return b.InstallTemplate
 	}
 	return ""
 }

@@ -1,13 +1,9 @@
-// gpu.cue — the GPU/VFIO HOST-DETECTION wire types shared between charly's core
-// and the compiled-in candy/plugin-gpu (cutover C11; SDD conversion, per the
-// standing operator directive: a hand-written wire struct not yet CUE-sourced is
-// conversion-in-progress, never a sanctioned exception). Plain structs —
-// gengotypes generates them faithfully, no disjunction/inexpressibility escape
-// needed. The DRIVER-SWITCH wire types (GpuSwitchInput/GpuSwitchReply,
-// spec/gpu_consts.go) are a SEPARATE, PRE-EXISTING hand-written surface — out of
-// scope for THIS conversion (untouched files stay tracked debt per the standing
-// "modified code = full guideline compliance" directive; they are not modified
-// here).
+// gpu.cue — the GPU/VFIO HOST-DETECTION + DRIVER-SWITCH wire types shared between
+// charly's core and the compiled-in candy/plugin-gpu (cutover C11 + the driver-switch
+// conversion; SDD: CUE is the single source of truth for every wire-shaped type —
+// the hand-written detection AND switch structs are both CUE-sourced now). Plain
+// structs — gengotypes generates them faithfully, no disjunction/inexpressibility
+// escape needed.
 
 // #VFIOPCIDevice is a single PCI function discovered under sysfs.
 #VFIOPCIDevice: {
@@ -69,12 +65,33 @@
 // #GpuProbeReply is the action-multiplexed reply from verb:gpu. Each action
 // populates only the field(s) it produces.
 #GpuProbeReply: {
-	// "bool" is quoted (a bare `bool` field name collides with the CUE builtin
-	// type keyword — the arbiter.cue #ArbiterInvokeReply precedent).
 	"bool"?:       bool             @go(Bool) // detect-gpu / detect-amd-gpu / vfio-group-accessible
 	str?:          string           @go(Str)  // amd-gfx-version
 	vfio?:         #VFIOReport      @go(Vfio,optional=nillable) // detect-vfio
 	host_devices?: #DetectedDevices @go(HostDevices,optional=nillable) // detect-host-devices
 	memlock_soft?: int @go(MemlockSoft,type=uint64) // memlock (RLIMIT_MEMLOCK soft)
 	memlock_hard?: int @go(MemlockHard,type=uint64) // memlock (RLIMIT_MEMLOCK hard)
+}
+
+// #GpuSwitchInput is the action-multiplexed input the core driver-switch shims ship
+// to verb:gpu over OpRun for the DRIVER-SWITCH actions (cutover C9). It rides the
+// SAME verb:gpu provider as the C11 detection actions (GpuProbeInput); the action
+// vocabularies are disjoint, so the plugin's Invoke dispatches by which envelope
+// decodes — detection actions decode GpuProbeInput, switch actions decode this.
+#GpuSwitchInput: {
+	action!: string @go(Action) // switch-mode | ensure-cdi | wedge-detected | group-in-mode | current-mode | display-driver | switch-plan
+	gpu?:    #VFIOGpu @go(Gpu,optional=nillable) // switch-mode / group-in-mode / current-mode / switch-plan
+	mode?:   string @go(Mode) // switch-mode / group-in-mode / switch-plan
+	addr?:   string @go(Addr) // display-driver (a single PCI function)
+	vendor?: string @go(Vendor) // switch-mode (tolerant vendor-select) / ensure-cdi-N/A
+}
+
+// #GpuSwitchReply is the action-multiplexed reply for the DRIVER-SWITCH actions.
+#GpuSwitchReply: {
+	// "bool" quoted for the same builtin-keyword collision as #GpuProbeReply.
+	"bool"?:  bool         @go(Bool) // wedge-detected / group-in-mode
+	str?:     string       @go(Str)  // current-mode / display-driver
+	plan?:    [...string]  @go(Plan) // switch-plan: the exact rebind commands (DRY-RUN, no sysfs touched)
+	wedged?:  bool         @go(Wedged) // switch-mode: the switch wedged the device_lock (errGPUSwitchWedged)
+	error?:   string       @go(Error) // switch-mode / ensure-cdi op failure
 }

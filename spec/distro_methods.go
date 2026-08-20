@@ -8,51 +8,67 @@ import "sort"
 // hand-written here, mirroring Op.Kind() in spec/charly_methods.go: a method,
 // not a type. Ported verbatim from the former hand-written ResolvedDistro
 // (sdk/spec/distro_wire.go, deleted by the SDD conversion).
+//
+// The bodies are SHARED with the *Distro twins in spec/charly_methods.go via the
+// unexported helpers below (R3 — one implementation, two receivers): Distro and
+// ResolvedDistro are field-identical (Format map[string]*Format), so the format
+// selection logic lives once.
 
 // PrimaryFormat returns the distro's primary (non-secondary) build format —
-// the deterministic first non-secondary Format name (mirrors
-// spec.Distro.PrimaryFormat).
+// the deterministic first non-secondary Format name.
 func (d *ResolvedDistro) PrimaryFormat() string {
 	if d == nil {
 		return ""
 	}
-	names := make([]string, 0, len(d.Format))
-	for name := range d.Format {
+	return primaryFormat(d.Format)
+}
+
+// LocalPkgFormat picks the format whose local_pkg block drives the charly
+// package INSTALL (the download leg): the caller's primary format, then
+// PrimaryFormat, then any localpkg-capable format.
+func (d *ResolvedDistro) LocalPkgFormat(primaryFormat string) (string, *LocalPkg) {
+	if d == nil {
+		return "", nil
+	}
+	return localPkgFormat(d.Format, primaryFormat)
+}
+
+// primaryFormat is the shared format-selection core: the deterministic first
+// non-secondary Format name (nil-safe on the map).
+func primaryFormat(format map[string]*Format) string {
+	names := make([]string, 0, len(format))
+	for name := range format {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		if fd := d.Format[name]; fd != nil && fd.Secondary {
-			continue
+		if fd := format[name]; fd != nil && fd.Secondary {
+			continue // secondary build format (declared in YAML), never primary
 		}
 		return name
 	}
 	return ""
 }
 
-// LocalPkgFormat picks the format whose local_pkg block drives the charly
-// package INSTALL (the download leg): the caller's primary format, then
-// PrimaryFormat, then any localpkg-capable format (mirrors
-// spec.Distro.LocalPkgFormat).
-func (d *ResolvedDistro) LocalPkgFormat(primaryFormat string) (string, *LocalPkg) {
-	if d == nil {
-		return "", nil
-	}
-	for _, fmtName := range []string{primaryFormat, d.PrimaryFormat()} {
+// localPkgFormat is the shared local-pkg selection core: the caller's primary
+// format, then the distro's own primary, then any localpkg-capable format
+// (deterministic).
+func localPkgFormat(format map[string]*Format, callerPrimary string) (string, *LocalPkg) {
+	for _, fmtName := range []string{callerPrimary, primaryFormat(format)} {
 		if fmtName == "" {
 			continue
 		}
-		if fd := d.Format[fmtName]; fd != nil && fd.LocalPkg != nil {
+		if fd := format[fmtName]; fd != nil && fd.LocalPkg != nil {
 			return fmtName, fd.LocalPkg
 		}
 	}
-	names := make([]string, 0, len(d.Format))
-	for name := range d.Format {
+	names := make([]string, 0, len(format))
+	for name := range format {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		if fd := d.Format[name]; fd != nil && fd.LocalPkg != nil {
+		if fd := format[name]; fd != nil && fd.LocalPkg != nil {
 			return name, fd.LocalPkg
 		}
 	}

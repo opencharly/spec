@@ -19,16 +19,14 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/opencharly/spec/poll"
 )
 
-// PollCond is a per-tick readiness probe (ready?, progress, err) — the same shape the host poll
-// primitive expects.
-type PollCond func(ctx context.Context) (ready bool, progress float64, err error)
-
-// PollFunc drives a PollCond to readiness under the caller's readiness-configured bounds. Core and the
-// vm plugin inject one wrapping vmshared's pollUntil + the resolved remote bounds, so kit never imports
-// the readiness/poll subsystem.
-type PollFunc func(ctx context.Context, cond PollCond) error
+// PollFunc drives a poll.PollCondition to readiness under the caller's readiness-configured bounds.
+// Core and the vm plugin inject one wrapping vmshared's pollUntil + the resolved remote bounds, so
+// kit never imports the readiness/poll subsystem.
+type PollFunc func(ctx context.Context, cond poll.PollCondition) error
 
 // SSHArgs is the host-surface ssh/scp coordinates for a managed VM alias.
 type SSHArgs struct {

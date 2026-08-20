@@ -1,14 +1,15 @@
-package spec
+package http
 
-// http_do.go — the host-side HTTP-do path for the `http` check verb, RELOCATED to the spec
-// contract module (#55 CHECK-ENGINE cone Option A — the check-verb host-vantage HTTP family:
-// net/http + crypto/tls host primitives operate only on the spec.CheckHTTPRequest /
-// spec.CheckHTTPResponse wire types, so charly core's check dispatch reaches them importing
-// zero kit). The ONE host-side HTTP-do path shared by the in-proc check context
-// (hostCheckContext.HTTPDo) AND the out-of-process CheckContextService.HTTPDo RPC leg (R3,
-// single source). sdk/kit re-exports each symbol (sdk/kit/http_do.go) so every existing
-// kit.DoHTTPRequest / kit.HTTPClientFor / kit.FormatHTTPHeaders call site (the candies + sdk)
-// is untouched. New consumers reference spec.* directly.
+// http_do.go — the host-side HTTP-do path for the `http` check verb, sliced out of
+// the spec contract module's spec/spec catch-all (#55 CHECK-ENGINE cone Option A — the
+// check-verb host-vantage HTTP family: net/http + crypto/tls host primitives operate only
+// on the spec.CheckHTTPRequest / spec.CheckHTTPResponse wire types, so charly core's check
+// dispatch reaches them importing zero kit). The ONE host-side HTTP-do path shared by the
+// in-proc check context (hostCheckContext.HTTPDo) AND the out-of-process
+// CheckContextService.HTTPDo RPC leg (R3, single source). sdk/kit re-exports each symbol
+// (sdk/kit/http_do.go) so every existing kit.DoHTTPRequest / kit.HTTPClientFor /
+// kit.FormatHTTPHeaders call site (the candies + sdk) is untouched. New consumers
+// reference http.* directly.
 
 import (
 	"bytes"
@@ -20,12 +21,14 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/opencharly/spec/spec"
 )
 
 // HTTPClientFor builds a per-request *http.Client honoring the CheckHTTPRequest policy
 // (AllowInsecure, NoFollowRedirects, CAPEM, Timeout), derived from the engine's base
 // client. The base supplies the default timeout; req.Timeout overrides it.
-func HTTPClientFor(base *http.Client, req CheckHTTPRequest) (*http.Client, error) {
+func HTTPClientFor(base *http.Client, req spec.CheckHTTPRequest) (*http.Client, error) {
 	client := &http.Client{}
 	if base != nil {
 		client.Timeout = base.Timeout
@@ -61,10 +64,10 @@ func HTTPClientFor(base *http.Client, req CheckHTTPRequest) (*http.Client, error
 // response-header blob. The ONE host-side HTTP-do path shared by the in-proc check context
 // AND the CheckContextService reverse channel (R3). A transport-level failure is returned as
 // err; a non-2xx is NOT an error (the caller matches resp.Status).
-func DoHTTPRequest(ctx context.Context, base *http.Client, req CheckHTTPRequest) (CheckHTTPResponse, error) {
+func DoHTTPRequest(ctx context.Context, base *http.Client, req spec.CheckHTTPRequest) (spec.CheckHTTPResponse, error) {
 	client, err := HTTPClientFor(base, req)
 	if err != nil {
-		return CheckHTTPResponse{}, err
+		return spec.CheckHTTPResponse{}, err
 	}
 	method := req.Method
 	if method == "" {
@@ -76,21 +79,21 @@ func DoHTTPRequest(ctx context.Context, base *http.Client, req CheckHTTPRequest)
 	}
 	hreq, err := http.NewRequestWithContext(ctx, method, req.URL, body)
 	if err != nil {
-		return CheckHTTPResponse{}, err
+		return spec.CheckHTTPResponse{}, err
 	}
 	for k, v := range req.Headers {
 		hreq.Header.Set(k, v)
 	}
 	resp, err := client.Do(hreq)
 	if err != nil {
-		return CheckHTTPResponse{}, err
+		return spec.CheckHTTPResponse{}, err
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return CheckHTTPResponse{}, err
+		return spec.CheckHTTPResponse{}, err
 	}
-	return CheckHTTPResponse{Status: resp.StatusCode, Body: respBody, HeaderBlob: FormatHTTPHeaders(resp.Header)}, nil
+	return spec.CheckHTTPResponse{Status: resp.StatusCode, Body: respBody, HeaderBlob: FormatHTTPHeaders(resp.Header)}, nil
 }
 
 // FormatHTTPHeaders renders an http.Header into a "Key: value\n" blob (one line per value,

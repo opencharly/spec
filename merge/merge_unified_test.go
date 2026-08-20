@@ -1,8 +1,10 @@
-package spec
+package merge
 
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/opencharly/spec/spec"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -35,8 +37,8 @@ func TestMergeRawTemplateMap(t *testing.T) {
 // MergeUnified from sdk/loaderkit/merge.go (#55 C3b).
 func TestMergeBoxConfig_BuildTunables(t *testing.T) {
 	// dst empty → fills from src (the path that dropped these fields).
-	dst := &BoxConfig{}
-	src := &BoxConfig{
+	dst := &spec.BoxConfig{}
+	src := &spec.BoxConfig{
 		Jobs:          ptr(4),
 		PodmanJobs:    ptr(0),
 		PodmanJobsCap: ptr(8),
@@ -69,8 +71,8 @@ func TestMergeBoxConfig_BuildTunables(t *testing.T) {
 	}
 
 	// dst already set → src must NOT override (per-field "dst wins if set").
-	dst2 := &BoxConfig{Jobs: ptr(2), Cache: "registry"}
-	mergeBoxConfig(dst2, &BoxConfig{Jobs: ptr(9), Cache: "image"})
+	dst2 := &spec.BoxConfig{Jobs: ptr(2), Cache: "registry"}
+	mergeBoxConfig(dst2, &spec.BoxConfig{Jobs: ptr(9), Cache: "image"})
 	if dst2.Jobs == nil || *dst2.Jobs != 2 {
 		t.Errorf("dst Jobs should win, got %v", dst2.Jobs)
 	}
@@ -97,7 +99,7 @@ func TestMergePluginKindsMap_NameKeyedOverride(t *testing.T) {
 			"redis":     json.RawMessage(`{"image":"embedded"}`), // new name — must be gap-filled
 		},
 	}
-	MergePluginKindsMap(&dst, src)
+	spec.MergePluginKindsMap(&dst, src)
 
 	sc := dst["sidecar"]
 	if len(sc) != 2 {

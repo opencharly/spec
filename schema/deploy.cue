@@ -152,7 +152,7 @@
 	// OpResolve (the sidecar de-type, Cutover D). The host never reads Sidecar fields.
 	sidecar?: {[string]: #Sidecar} @go(Sidecar,type=map[string]RawBody)
 	forward_gpg_agent?: bool @go(ForwardGpgAgent,type=*bool)
-	forward_ssh_agent?: bool @go(ForwardSshAgent,type=*bool)
+	forward_ssh_agent?: bool @go(ForwardSSHAgent,type=*bool)
 
 	plan?: [...#Step]
 	iterate?: #Iterate @go(Iterate,optional=nillable)
@@ -371,6 +371,49 @@
 	// ReverseOpPackageRemove op, filled at record time from the format's
 	// uninstall_template by fillReverseUninstallCmds.
 	uninstall_cmd?: string @go(UninstallCmd)
+}
+
+// #DeployRecord is the top-level entry in deploys/<deploy-id>.json. Lists the
+// image, tag, and the ordered candy set included in this deploy (image candies +
+// add_candy overlays, already topo-sorted).
+#DeployRecord: {
+	// schema_version is the ledger-format version (the ledger-candy-keys cutover's
+	// CalVer). Empty means a pre-cutover record (json "layer" keys) — the read path
+	// rejects it with a `charly migrate` hint.
+	schema_version?: string @go(SchemaVersion)
+	deploy_id!:      string @go(DeployID)
+	image!:          string @go(Image)
+	tag?:            string @go(Tag)
+	target!:         string @go(Target) // the deploy-record key, e.g. "vm:<name>" (only VM/local deploys write a DeployRecord)
+	candy?:          [...string] @go(Candy)
+	add_candy?:      [...string] @go(AddCandy)
+	deployed_at!:    string @go(DeployedAt)
+}
+
+// #CandyRecord is the per-candy ledger entry. Lists concrete artifacts
+// (packages installed, files written, services enabled, env.d file created, repo
+// changes) so reversal doesn't need to re-compile the plan from the candy manifest.
+#CandyRecord: {
+	schema_version?: string @go(SchemaVersion)
+	candy!:          string @go(Candy)
+	version?:        string @go(Version)
+	deployed_by!:    [...string] @go(DeployedBy) // set of deploy IDs
+	deployed_at!:    string @go(DeployedAt)
+	builder_image?:  string @go(BuilderImage)
+	steps?:          [...#StepRecord] @go(Steps)          // completed steps, in install order
+	reverse_ops?:    [...#ReverseOp] @go(ReverseOps)      // precomputed ops for teardown
+}
+
+// #StepRecord is a thin summary of a completed InstallStep that the ledger keeps
+// for audit. Kept intentionally small — the ReverseOps list on CandyRecord is the
+// source of truth for teardown.
+#StepRecord: {
+	kind!:         string           @go(Kind,type=StepKind) // the StepKind discriminator
+	scope?:        int              @go(Scope,type=Scope)
+	venue?:        int              @go(Venue,type=Venue)
+	summary?:      string           @go(Summary)
+	completed_at!: string           @go(CompletedAt)
+	extra?:        {[string]: string} @go(Extra)
 }
 
 // #InstallPlanView is the JSON-roundtrippable wire VIEW of an InstallPlan.

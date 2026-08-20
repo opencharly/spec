@@ -1,14 +1,15 @@
-package spec
+package calver
 
 // calver_parse.go — the parsed YYYY.DDD.HHMM schema-version type + the HEAD schema version /
-// migration floor + chronological comparison (RELOCATED from sdk/kit calver.go + calver_compare.go,
-// #55 value extraction). Pure value/transform over the version E-envelope: it PARSES the CUE-owned
-// SchemaVersion/SchemaFloor consts (this same package, generated from schema/version.cue) — there is
-// no hand-maintained HEAD literal.
+// migration floor + chronological comparison, sliced out of the spec contract module's spec/spec
+// catch-all (#55 CHECK-ENGINE cone Option A — the version/calver cone; originally relocated from
+// sdk/kit calver.go + calver_compare.go, #55 value extraction). Pure value/transform over the
+// version E-envelope: it PARSES the CUE-owned SchemaVersion/SchemaFloor consts (spec/spec
+// version_gen.go, generated from schema/version.cue) — there is no hand-maintained HEAD literal.
 //
 // The PARSED type is named ParsedCalVer, NOT CalVer, because this package ALREADY binds
 // `CalVer = string` (scalar_aliases.go — the CUE wire scalar for `version:` fields), a DIFFERENT
-// concept. sdk/kit re-exports the parsed type as `type CalVer = spec.ParsedCalVer` so every existing
+// concept. sdk/kit re-exports the parsed type as `type CalVer = calver.ParsedCalVer` so every existing
 // kit.CalVer / kit.ParseCalVer call site (charly core's migrate/version gate + plugin-box/clean/
 // migrate) is unchanged.
 
@@ -16,12 +17,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/opencharly/spec/spec"
 )
 
 // ParsedCalVer is a parsed YYYY.DDD.HHMM calendar version. The same format that ComputeCalVer
 // emits for image tags is, since the 2026-05 schema-versioning cutover, the schema-version stamp
 // carried by every versioned YAML config. The declarative migration table is ordered by
-// ParsedCalVer, and the load-time gate compares a file's version against LatestSchemaVersion.
+// ParsedCalVer, and the load-time gate compares a file's version against LatestSchemaCalVer.
 type ParsedCalVer struct {
 	Year int // calendar year (e.g. 2026)
 	Day  int // day of year, 1-366
@@ -104,11 +107,11 @@ func MustCalVer(s string) ParsedCalVer {
 // latestSchemaVersion is the HEAD schema CalVer, PARSED from the CUE-owned SchemaVersion string
 // const (version_gen.go, generated from schema/version.cue). Every current-format versioned file is
 // stamped to it and the load-time gate requires it. Bump the HEAD by editing #SchemaVersion.
-var latestSchemaVersion = MustCalVer(SchemaVersion)
+var latestSchemaVersion = MustCalVer(spec.SchemaVersion)
 
 // schemaFloor is the OLDEST schema CalVer `charly migrate` can migrate FROM, PARSED from the
 // CUE-owned SchemaFloor string const. A config below it predates the current migration baseline.
-var schemaFloor = MustCalVer(SchemaFloor)
+var schemaFloor = MustCalVer(spec.SchemaFloor)
 
 // LatestSchemaCalVer is the HEAD schema CalVer (parsed) — every current-format versioned file is
 // stamped to it and the load-time gate requires it. Named distinctly from the SchemaVersion string
@@ -127,8 +130,13 @@ func SchemaFloorCalVer() ParsedCalVer {
 // CompareCalVer compares two CalVer strings numerically component-by-component, falling back to
 // lexical comparison for any non-numeric component. Returns -1 if a < b, +1 if a > b, 0 if equal.
 // Distinct from ParsedCalVer.Less, which requires strictly-canonical parsed CalVers; this is the
-// lenient dotted-string comparator the build/tag paths use.
+// lenient dotted-string comparator the build/tag paths use. A leading "v" (the git-tag form) is
+// stripped before comparison, so semver-style tags ("v1.2.3") sort correctly against multi-digit
+// majors ("v10.0.0") — the single comparator for both CalVer and git-tag strings (refs.CompareSemver
+// delegates here).
 func CompareCalVer(a, b string) int {
+	a = strings.TrimPrefix(a, "v")
+	b = strings.TrimPrefix(b, "v")
 	aParts := strings.Split(a, ".")
 	bParts := strings.Split(b, ".")
 	n := min(len(aParts), len(bParts))
