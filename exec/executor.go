@@ -10,11 +10,12 @@ package exec
 // deleted.
 //
 // NOTE on StepContract: the SDK-facing authoring StepContract (string Scope / int Venue /
-// string Gate) is NOT redefined here — it is REPOINTed to spec/spec.StepContract (the typed
-// spec form, Scope/Venue/Gate enums). DescribeProvider below converts the proto wire form
-// (pb.StepContract, string Scope) into spec.StepContract via spec.ScopeFromName /
-// spec.Venue / spec.Gate. The sdk leg repoints charly's callers from the loose-typed SDK
-// StepContract to this typed spec form (R3 — ONE StepContract, not two).
+// string Gate) was DELETED in the R3 unification — spec/spec.StepContract (the typed form,
+// Scope/Venue/Gate enums) is the single canonical StepContract. DescribeProvider below
+// converts the proto wire form (pb.StepContract, string Scope) into spec.StepContract via
+// spec.ScopeFromName / spec.Venue / spec.Gate. The sdk root re-exports the typed form
+// (`type StepContract = spec.StepContract`); the loose string form is gone (R3 — ONE
+// StepContract, not two).
 
 import (
 	"context"

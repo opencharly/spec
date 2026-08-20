@@ -9,7 +9,7 @@ package spec
 // interface is the base and the structs import it, never the reverse.
 
 // InstallStep is one polymorphic step in an InstallPlan. Every concrete step
-// kind (SystemPackages, Builder, Op, File, …) implements it; a DeployTarget
+// kind (SystemPackages, Builder, Op, File, …) implements it; an EmitTarget
 // walks a plan's steps and dispatches on the returned discriminators.
 type InstallStep interface {
 	// Kind returns the step's concrete type discriminator.

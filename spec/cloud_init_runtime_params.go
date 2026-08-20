@@ -15,7 +15,7 @@ package spec
 type CloudInitRuntimeParams struct {
 	// SSHPublicKey is the OpenSSH authorized_keys-format public key
 	// line (e.g. "ssh-ed25519 AAAA..."). Empty when key injection is
-	// disabled or when VmSSH.KeySource == "none".
+	// disabled or when VmSsh.KeySource == "none".
 	SSHPublicKey string
 
 	// InstanceID is the stable UUIDv4 cloud-init instance-id.

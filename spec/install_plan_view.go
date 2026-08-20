@@ -22,7 +22,7 @@ const HomeToken = "{{.Home}}"
 // InstallPlanView the host marshals into an external deploy/step provider's
 // op.Params. The Steps interface slice round-trips through the SINGLE StepsToView /
 // stepsFromView converter (install_step_view.go) — an external deploy/step plugin walks the
-// same ordered step IR the in-proc DeployTargets walk and EXECUTES it on the venue (R3;
+// same ordered step IR the in-proc EmitTargets walk and EXECUTES it on the venue (R3;
 // proven by the step-IR round-trip test). The remaining fields are identity + provenance.
 //
 // A free function (not a method on InstallPlan) because it type-switches the
@@ -74,7 +74,7 @@ func PlansFromViews(viewsJSON json.RawMessage) ([]*InstallPlan, error) {
 }
 
 // ReconstructParentExec re-derives the ancestor executor chain from ROOT-FIRST ancestor
-// path/node lists (deploykit.ResolveNodePath's contract, EXCLUDING the target itself), applying
+// path/node lists (spec/fleet.ResolveNodePath's contract, EXCLUDING the target itself), applying
 // derive to each ancestor. derive is the registry-coupled per-ancestor hop (core's
 // deriveChildExecutorForPath) — the loop itself is pure, so it lives here once (K-wave 2 cone R2
 // bank D thin: the resolve-target-add seam's former reconstructParentExec).
@@ -114,7 +114,7 @@ func PlanFromView(v InstallPlanView) (*InstallPlan, error) {
 }
 
 // ResolveHome substitutes the deferred HomeToken with a concrete home in
-// every home-bearing step field, in place. Each DeployTarget calls this once
+// every home-bearing step field, in place. Each EmitTarget calls this once
 // at emit time with the home of its real destination: img.Home for the
 // OCI/pod-overlay build, the host home for the external local deploy, the GUEST home
 // (SSH executor ResolveHome) for the external vm deploy. Idempotent — fields without

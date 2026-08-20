@@ -102,7 +102,7 @@ func (ShellExecutor) StartProcess(ctx context.Context, launch spec.ProcessLaunch
 	}
 	cmd := exec.CommandContext(ctx, launch.Argv[0], launch.Argv[1:]...)
 	cmd.Dir = launch.WorkingDir
-	cmd.Env = append(os.Environ(), proc.SortedEnvPairs(launch.Env)...)
+	cmd.Env = append(os.Environ(), proc.EnvMapToPairs(launch.Env)...)
 	return startCommandProcess(cmd)
 }
 
@@ -139,7 +139,7 @@ func (n *NestedExecutor) StartProcess(ctx context.Context, launch spec.ProcessLa
 		if launch.WorkingDir != "" {
 			outer = append(outer, "--workdir", launch.WorkingDir)
 		}
-		for _, pair := range proc.SortedEnvPairs(launch.Env) {
+		for _, pair := range proc.EnvMapToPairs(launch.Env) {
 			outer = append(outer, "--env", pair)
 		}
 		outer = append(outer, n.Jump.Target)
@@ -148,7 +148,7 @@ func (n *NestedExecutor) StartProcess(ctx context.Context, launch spec.ProcessLa
 		if launch.WorkingDir != "" {
 			outer = append(outer, "--workdir", launch.WorkingDir)
 		}
-		for _, pair := range proc.SortedEnvPairs(launch.Env) {
+		for _, pair := range proc.EnvMapToPairs(launch.Env) {
 			outer = append(outer, "--env", pair)
 		}
 		outer = append(outer, n.Jump.Target)

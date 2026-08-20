@@ -14,9 +14,13 @@ package spec
 //
 // These types are IN-PROCESS: none is the marshaled gRPC payload. The wire forms are the
 // separate proto messages (pb.HTTPDoRequest/Reply, pb.ResolveGraphicsEndpointReply, …,
-// hand-mapped field-by-field in charly's checkContextReverseServer) plus the CUE-sourced
-// spec.CheckEnv snapshot (the run mode crosses as its "box"/"live" string) — so the
-// contract needs no CUE source, matching the hand-Go DeployExecutor precedent.
+// hand-mapped field-by-field in charly's checkContextReverseServer AND the sdk out-of-process
+// client) plus the CUE-sourced spec.CheckEnv snapshot (the run mode crosses as its "box"/"live"
+// string) — so the contract needs no CUE source, matching the hand-Go DeployExecutor precedent.
+// SDD-AUDITED (the spec-cleanup cutover's Unit 4e): these were reviewed for CUE-sourcing and
+// resolved REVIEWED-INTENTIONAL — they are not wire shapes (nothing marshals them as
+// themselves), so SDD's "wire types without exception" does not reach them; their actual wire
+// forms are the CUE/proto-generated pb.* messages.
 
 import (
 	"context"

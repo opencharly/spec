@@ -1,20 +1,22 @@
-package spec
+package poll
 
 import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/opencharly/spec/spec"
 )
 
 // readiness.go — the exported ResolvedReadiness methods + the SINGLE
 // config→resolved readiness resolver, shared by charly core AND the
 // out-of-process plugins. The ResolvedReadiness type + the readiness*Fallback
-// consts live in poll.go; ReadinessConfig is the `defaults.readiness:` block
-// (generated wire type). Every poll bound is NAMED (the fallbacks), CONFIG-SOURCED
-// (ReadinessConfig), env-overridable (CHARLY_READINESS_*), and VALIDATED on the
+// consts live in poll.go; ReadinessConfig (spec/spec) is the `defaults.readiness:`
+// block wire type. Every poll bound is NAMED (the fallbacks), CONFIG-SOURCED
+// (spec.ReadinessConfig), env-overridable (CHARLY_READINESS_*), and VALIDATED on the
 // RESOLVED post-env values (ValidateOrdering) — an env override cannot smuggle in
-// a nonsensical bound. Relocated from sdk/vmshared into the floor-legal spec leaf
-// so kernel-floor files reach these bounds without a vmshared import.
+// a nonsensical bound. Sliced into the spec/poll leaf (relocated from
+// sdk/vmshared) so kernel-floor files reach these bounds without a vmshared import.
 
 // PerAttemptFor returns the effective per-attempt never-hang bound for a poll
 // class (the field value, or the built-in fallback when unset). The unexported
@@ -91,28 +93,28 @@ func resolveReadinessDuration(field, envKey, cfgVal string, fallback time.Durati
 type readinessSpec struct {
 	name, env string
 	fb        time.Duration
-	cfg       func(*ReadinessConfig) string
+	cfg       func(*spec.ReadinessConfig) string
 	dst       func(*ResolvedReadiness) *time.Duration
 }
 
 var readinessSpecs = []readinessSpec{
-	{"poll_interval_local", "CHARLY_READINESS_POLL_LOCAL", readinessIntervalLocalFallback, func(rc *ReadinessConfig) string { return rc.PollIntervalLocal }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalLocal }},
-	{"poll_interval_remote", "CHARLY_READINESS_POLL_REMOTE", readinessIntervalRemoteFallback, func(rc *ReadinessConfig) string { return rc.PollIntervalRemote }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalRemote }},
-	{"poll_interval_heavy", "CHARLY_READINESS_POLL_HEAVY", readinessIntervalHeavyFallback, func(rc *ReadinessConfig) string { return rc.PollIntervalHeavy }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalHeavy }},
-	{"per_attempt", "CHARLY_READINESS_PER_ATTEMPT", readinessPerAttemptFallback, func(rc *ReadinessConfig) string { return rc.PerAttempt }, func(rr *ResolvedReadiness) *time.Duration { return &rr.PerAttempt }},
-	{"per_attempt_heavy", "CHARLY_READINESS_PER_ATTEMPT_HEAVY", readinessPerAttemptHeavyFallback, func(rc *ReadinessConfig) string { return rc.PerAttemptHeavy }, func(rr *ResolvedReadiness) *time.Duration { return &rr.PerAttemptHeavy }},
-	{"no_progress", "CHARLY_READINESS_NO_PROGRESS", readinessNoProgressFallback, func(rc *ReadinessConfig) string { return rc.NoProgress }, func(rr *ResolvedReadiness) *time.Duration { return &rr.NoProgress }},
-	{"absolute_cap", "CHARLY_READINESS_ABSOLUTE_CAP", readinessAbsoluteCapFallback, func(rc *ReadinessConfig) string { return rc.AbsoluteCap }, func(rr *ResolvedReadiness) *time.Duration { return &rr.AbsoluteCap }},
-	{"stop_grace", "CHARLY_READINESS_STOP_GRACE", readinessStopGraceFallback, func(rc *ReadinessConfig) string { return rc.StopGrace }, func(rr *ResolvedReadiness) *time.Duration { return &rr.StopGrace }},
+	{"poll_interval_local", "CHARLY_READINESS_POLL_LOCAL", readinessIntervalLocalFallback, func(rc *spec.ReadinessConfig) string { return rc.PollIntervalLocal }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalLocal }},
+	{"poll_interval_remote", "CHARLY_READINESS_POLL_REMOTE", readinessIntervalRemoteFallback, func(rc *spec.ReadinessConfig) string { return rc.PollIntervalRemote }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalRemote }},
+	{"poll_interval_heavy", "CHARLY_READINESS_POLL_HEAVY", readinessIntervalHeavyFallback, func(rc *spec.ReadinessConfig) string { return rc.PollIntervalHeavy }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalHeavy }},
+	{"per_attempt", "CHARLY_READINESS_PER_ATTEMPT", readinessPerAttemptFallback, func(rc *spec.ReadinessConfig) string { return rc.PerAttempt }, func(rr *ResolvedReadiness) *time.Duration { return &rr.PerAttempt }},
+	{"per_attempt_heavy", "CHARLY_READINESS_PER_ATTEMPT_HEAVY", readinessPerAttemptHeavyFallback, func(rc *spec.ReadinessConfig) string { return rc.PerAttemptHeavy }, func(rr *ResolvedReadiness) *time.Duration { return &rr.PerAttemptHeavy }},
+	{"no_progress", "CHARLY_READINESS_NO_PROGRESS", readinessNoProgressFallback, func(rc *spec.ReadinessConfig) string { return rc.NoProgress }, func(rr *ResolvedReadiness) *time.Duration { return &rr.NoProgress }},
+	{"absolute_cap", "CHARLY_READINESS_ABSOLUTE_CAP", readinessAbsoluteCapFallback, func(rc *spec.ReadinessConfig) string { return rc.AbsoluteCap }, func(rr *ResolvedReadiness) *time.Duration { return &rr.AbsoluteCap }},
+	{"stop_grace", "CHARLY_READINESS_STOP_GRACE", readinessStopGraceFallback, func(rc *spec.ReadinessConfig) string { return rc.StopGrace }, func(rr *ResolvedReadiness) *time.Duration { return &rr.StopGrace }},
 }
 
 // ResolveReadiness materializes the validated ResolvedReadiness from a `defaults.readiness:`
 // block plus CHARLY_READINESS_* env overrides plus the named fallbacks. Nil-safe (nil → all
 // fallbacks/env). The SINGLE resolver — charly core (loadedReadiness, from the project config)
 // AND the out-of-process plugins (nil + the host-threaded env) both call it.
-func ResolveReadiness(rc *ReadinessConfig) (ResolvedReadiness, error) {
+func ResolveReadiness(rc *spec.ReadinessConfig) (ResolvedReadiness, error) {
 	if rc == nil {
-		rc = &ReadinessConfig{}
+		rc = &spec.ReadinessConfig{}
 	}
 	var rr ResolvedReadiness
 	for _, s := range readinessSpecs {

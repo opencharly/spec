@@ -185,7 +185,7 @@ func stdioLaunchPlan(target spec.TargetSpec, opts DialOptions) (stdioLaunch, err
 		}
 		launch := stdioLaunch{argv: argv, dir: target.WorkingDir}
 		if len(first.Env) > 0 {
-			launch.env = proc.SortedEnvPairs(first.Env)
+			launch.env = proc.EnvMapToPairs(first.Env)
 		}
 		return launch, nil
 	case "ssh":
@@ -203,7 +203,7 @@ func stdioLaunchPlan(target spec.TargetSpec, opts DialOptions) (stdioLaunch, err
 		if first.IdentityFile != "" {
 			argv = append(argv, "-i", first.IdentityFile)
 		}
-		for _, option := range proc.SortedEnvPairs(first.Options) {
+		for _, option := range proc.EnvMapToPairs(first.Options) {
 			argv = append(argv, "-o", option)
 		}
 		destination := first.Address

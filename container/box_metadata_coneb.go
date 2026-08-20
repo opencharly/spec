@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/opencharly/spec/proc"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -141,7 +142,7 @@ func ExtractMetadata(engine, imageRef string) (*spec.BoxMetadata, error) {
 		if err := json.Unmarshal([]byte(v), &envMap); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", spec.LabelEnv, err)
 		}
-		meta.Env = spec.EnvMapToPairs(envMap)
+		meta.Env = proc.EnvMapToPairs(envMap)
 	}
 
 	// Hooks

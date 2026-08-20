@@ -11,7 +11,6 @@ package spec
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 )
@@ -173,50 +172,23 @@ func (b *Builder) IsBootstrap() bool {
 // ---------------------------------------------------------------------------
 
 // PrimaryFormat returns the distro's primary (non-secondary) package format.
+// Shares the selection core with the *ResolvedDistro twin (spec/distro_methods.go).
 func (d *Distro) PrimaryFormat() string {
 	if d == nil {
 		return ""
 	}
-	names := make([]string, 0, len(d.Format))
-	for name := range d.Format {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		if fd := d.Format[name]; fd != nil && fd.Secondary {
-			continue // secondary build format (declared in YAML), never primary
-		}
-		return name
-	}
-	return ""
+	return primaryFormat(d.Format)
 }
 
 // LocalPkgFormat picks the format whose local_pkg block drives the charly
 // package INSTALL (the download leg): the caller's primary format, then the
 // distro's own PrimaryFormat, then any localpkg-capable format (deterministic).
+// Shares the selection core with the *ResolvedDistro twin (spec/distro_methods.go).
 func (d *Distro) LocalPkgFormat(primaryFormat string) (string, *LocalPkg) {
 	if d == nil {
 		return "", nil
 	}
-	for _, fmtName := range []string{primaryFormat, d.PrimaryFormat()} {
-		if fmtName == "" {
-			continue
-		}
-		if fd := d.Format[fmtName]; fd != nil && fd.LocalPkg != nil {
-			return fmtName, fd.LocalPkg
-		}
-	}
-	names := make([]string, 0, len(d.Format))
-	for name := range d.Format {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		if fd := d.Format[name]; fd != nil && fd.LocalPkg != nil {
-			return name, fd.LocalPkg
-		}
-	}
-	return "", nil
+	return localPkgFormat(d.Format, primaryFormat)
 }
 
 // ---------------------------------------------------------------------------
@@ -290,16 +262,20 @@ func (e *CandyService) IsPackaged() bool {
 // ---------------------------------------------------------------------------
 
 // IsEndpoint reports whether the device targets a remote adb endpoint.
+// Shares the endpoint core with the *ResolvedAndroid twin
+// (spec/substrate_template_methods.go).
 func (a *Android) IsEndpoint() bool {
-	return a != nil && a.Adb != nil && a.Adb.Host != ""
+	return a != nil && isAndroidEndpoint(a.Adb)
 }
 
 // EffectiveSerial returns the device serial, defaulting to the emulator serial.
+// Shares the serial core with the *ResolvedAndroid twin
+// (spec/substrate_template_methods.go).
 func (a *Android) EffectiveSerial() string {
-	if a != nil && a.Serial != "" {
-		return a.Serial
+	if a == nil {
+		return "emulator-5554"
 	}
-	return "emulator-5554"
+	return effectiveAndroidSerial(a.Serial)
 }
 
 // ---------------------------------------------------------------------------

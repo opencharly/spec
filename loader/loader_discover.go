@@ -1,13 +1,13 @@
-package spec
+package loader
 
 // loader_discover.go — the kind-blind config-loader discover-walk LEAF PRIMITIVES:
 // FindEntityDirs (scan a discover root for directories carrying a manifest),
 // DiscoverSkipDir (the VCS/build-artifact skip-list), and the two os.Stat
-// helpers FindEntityDirs uses. Relocated here (FLOOR-SLIM axis-A mechanical
-// batch, zero logic change — the sibling of node_helpers.go's ClassifyDoc
-// relocation) from sdk/kit so charly core's prescan (plugin_prescan.go, the
-// loader-walk Boundary seam — a core M prescan-dispatch) can call it without
-// importing a mechanism kit; aliased in sdk/kit (loader_discover.go) so every
+// helpers FindEntityDirs uses. Sliced out of the spec contract module's spec/spec
+// catch-all (#55 CHECK-ENGINE cone Option A — the config-loader cone). The
+// discover-walk leaf primitives (originally relocated from sdk/kit so charly
+// core's prescan, plugin_prescan.go, can call them without importing a mechanism
+// kit) home in spec/loader; sdk/kit aliases them (kit/loader_discover.go) so every
 // existing kit.FindEntityDirs / kit.DiscoverSkipDir / kit.DirExists /
 // kit.FileExists call site (sdk/loaderkit's discover.go/walk.go,
 // sdk/deploykit, candy/plugin-box, sdk/kit/scaffold.go) keeps compiling

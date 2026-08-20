@@ -6,7 +6,7 @@ package spec
 //
 // TWO-TIER IR SPLIT (deliberate, #55 step-4). These are IN-PROC IR, hand-written
 // like their siblings — the InstallStep interface (install_step.go), the InstallPlan
-// container + StepBatch + DeployTarget (install_plan.go), and EmitOpts/DeployExecutor
+// container + StepBatch + EmitTarget (install_plan.go), and EmitOpts/DeployExecutor
 // (deploy_executor.go). They are NOT wire types: they never cross the process
 // boundary — StepToView (install_step_view.go) projects them onto the CUE-sourced
 // spec.InstallStepView, which IS the wire form. So this vocabulary is the
@@ -614,11 +614,11 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 //
 // Unlike every other step, an apk install lands on a RUNNING Android device,
 // not the build/host filesystem. `target: android` is an EXTERNAL deploy
-// substrate (F1): NO in-proc DeployTarget executes this step — the host-side
+// substrate (F1): NO in-proc EmitTarget executes this step — the host-side
 // android deploy preresolver (collectAndroidInstalls, android_deploy_preresolve.go)
 // READS it to collect the apk install specs and ships them to the deploy:android
 // plugin (candy/plugin-adb: apkeep + adb), which drives the device. Every
-// DeployTarget SKIPS it — OCITarget emits nothing (no device at image-build time),
+// EmitTarget SKIPS it — OCITarget emits nothing (no device at image-build time),
 // and Local/Vm/Pod targets record a skip (a host/VM/pod is not an Android device).
 // This is the same "wrong venue → skip" shape `aur:` uses off-Arch, expressed as a
 // clean recorded skip rather than an error (an image legitimately builds without
@@ -664,7 +664,7 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 // package now, so the deploy-time path only INSTALLS the published package.)
 //
 // Like ApkInstallStep, the step is compiled REGARDLESS of target and each
-// DeployTarget decides whether to execute or skip:
+// EmitTarget decides whether to execute or skip:
 //   - the external local deploy (Arch/CachyOS host) and external vm deploy (Arch/CachyOS
 //     guest) EXECUTE it via the RunHostStep host-engine leg (download → transfer →
 //     pacman -U on the target).

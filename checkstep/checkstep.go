@@ -4,14 +4,15 @@
 // inputs, the ResolvePackageName cross-distro resolver, and the OPTIONAL StepProvider /
 // ProvisionActor roles a kit candy implements alongside CheckVerbProvider.
 //
-// This cluster is its OWN package (not spec/spec) because the const IDENTIFIERS
-// StepKindServicePackaged / StepKindSystemPackages clash in spec/spec with the INTERNAL
-// InstallPlan IR enum (spec/spec/ir_enums.go's `StepKind` string enum, values "ServicePackaged" /
-// "SystemPackages") — a deliberately different type (the candy-facing kit.StepKindName string,
-// values "service-packaged" / "system-packages") that charly's kitStepKindToCharly MAPS onto
-// the internal StepKind. Housing the candy contract here lets charly core's in-proc
-// kitVerbAdapter (check_kit_adapter.go) reference it importing zero kit, while sdk/kit re-exports
-// each symbol (sdk/kit/check_step_descriptors.go) so every candy call site compiles UNCHANGED.
+// This cluster is its OWN package (not spec/spec) as the candy-facing step-role contract: the
+// StepKindName constants are named StepKindName* (StepKindNameServicePackaged /
+// StepKindNameSystemPackages) to disambiguate from the INTERNAL InstallPlan IR enum
+// (spec/spec/ir_enums.go's `StepKind` string enum, values "ServicePackaged" / "SystemPackages") —
+// a deliberately different type (the candy-facing kit.StepKindName string, values
+// "service-packaged" / "system-packages") that charly's kitStepKindToCharly MAPS onto the
+// internal StepKind. Housing the candy contract here lets charly core's in-proc kitVerbAdapter
+// (check_kit_adapter.go) reference it importing zero kit, while sdk/kit re-exports each symbol
+// (sdk/kit/check_step_descriptors.go) so every candy call site compiles UNCHANGED.
 // CheckVerbProvider / CheckContext / the CheckContext scalar types stay in spec/spec
 // (checkcontext.go) — the StepKindName cluster is the step-role sibling, imported here alongside
 // spec/spec for the *Op the StepProvider / ProvisionActor methods take.
@@ -25,10 +26,10 @@ import "github.com/opencharly/spec/spec"
 type StepKindName string
 
 const (
-	// StepKindServicePackaged — the `service` verb (enable a packaged unit; load-bearing reversals).
-	StepKindServicePackaged StepKindName = "service-packaged"
-	// StepKindSystemPackages — the `package` verb (install system packages).
-	StepKindSystemPackages StepKindName = "system-packages"
+	// StepKindNameServicePackaged — the `service` verb (enable a packaged unit; load-bearing reversals).
+	StepKindNameServicePackaged StepKindName = "service-packaged"
+	// StepKindNameSystemPackages — the `package` verb (install system packages).
+	StepKindNameSystemPackages StepKindName = "system-packages"
 )
 
 // ServicePackagedDesc is the candy-decodable construction input for a service-packaged

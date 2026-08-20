@@ -1,16 +1,16 @@
-# sdk/schema — the single-source CUE schema
+# spec/schema — the single-source CUE schema
 
 Every `charly.yml` shape (box / candy / fleet / vm / kubernetes / deploy / …) is defined
 ONCE here, in package-less `*.cue` files. These files are the single source of
 truth for two consumers:
 
 1. **Runtime validation (ingress).** The schema travels WITH this module as
-   `schema.FS` (package `github.com/opencharly/sdk/schema`). charly core
+   `schema.FS` (package `github.com/opencharly/spec/schema`). charly core
    (`charly/cue_schema.go` `sharedCueSchema`) unifies every `schema/*.cue` file
    via `schemaconcat.ConcatSchema` (sorted, newline-joined) into ONE compiled
    `cue.Value`, and validates every loaded entity against its `#<Kind>` def.
    See `/charly-build:validate`.
-2. **Generated Go param types + vocabulary (`sdk/spec`).** `task cue:gen`
+2. **Generated Go param types + vocabulary (`spec`).** `task cue:gen`
    turns these same files into the committed `spec/*_gen.go` — so the Go
    structs the loader decodes into, and the kind/verb/method word lists the CLI
    dispatches on, can never drift from what the schema validates.
@@ -48,7 +48,7 @@ The task (`Taskfile.yml`):
 5. **`gofmt`** the committed generated files.
 
 The superproject's `task cue:gen` (`taskfiles/Cue.yml`) wraps this: it asserts
-the two repos' cue pins match, runs THIS task first (base schema → `sdk/spec`),
+the two repos' cue pins match, runs THIS task first (base schema → `spec`),
 then regenerates every plugin candy's `params` package from its own
 self-contained `candy/plugin-*/schema/*.cue` via the SAME pipeline (R3).
 

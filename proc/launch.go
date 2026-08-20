@@ -3,10 +3,10 @@ package proc
 import (
 	"io"
 	"os/exec"
-	"sort"
 	"syscall"
 	"time"
 
+	"github.com/opencharly/spec/shellquote"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -61,22 +61,6 @@ func signalProcessGroup(cmd *exec.Cmd, sig syscall.Signal) {
 	}
 }
 
-// SortedEnvPairs renders an environment map as a deterministically ordered
-// "KEY=value" slice. Sorting makes launched-process environments and rendered
-// remote commands byte-reproducible across runs (map iteration order is not).
-func SortedEnvPairs(env map[string]string) []string {
-	keys := make([]string, 0, len(env))
-	for key := range env {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	out := make([]string, 0, len(keys))
-	for _, key := range keys {
-		out = append(out, key+"="+env[key])
-	}
-	return out
-}
-
 // RemoteLaunchCommand renders one exact-argv launch as the single command
 // string OpenSSH must receive: POSIX single-quoting each token preserves the
 // argv boundary and prevents interpolation by the remote login shell. The
@@ -86,12 +70,12 @@ func SortedEnvPairs(env map[string]string) []string {
 func RemoteLaunchCommand(launch spec.ProcessLaunch) string {
 	remote := ""
 	if launch.WorkingDir != "" {
-		remote = "cd " + spec.ShellQuote(launch.WorkingDir) + " && "
+		remote = "cd " + shellquote.ShellQuote(launch.WorkingDir) + " && "
 	}
 	if len(launch.Env) > 0 {
 		remote += "env"
-		for _, pair := range SortedEnvPairs(launch.Env) {
-			remote += " " + spec.ShellQuote(pair)
+		for _, pair := range EnvMapToPairs(launch.Env) {
+			remote += " " + shellquote.ShellQuote(pair)
 		}
 		remote += " "
 	}
@@ -99,7 +83,7 @@ func RemoteLaunchCommand(launch spec.ProcessLaunch) string {
 		if i > 0 {
 			remote += " "
 		}
-		remote += spec.ShellQuote(arg)
+		remote += shellquote.ShellQuote(arg)
 	}
 	return remote
 }

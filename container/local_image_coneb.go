@@ -11,7 +11,7 @@ package container
 // kit.X call sites unchanged. New consumers reference spec/container directly.
 //
 // Dependencies carried here are all already fabric: EngineBinary (spec/container), InspectImageLabels
-// (spec/container, coneA), CompareCalVer (spec/spec), ErrImageNotLocal/LabelVersion/LabelBox
+// (spec/container, coneA), CompareCalVer (spec/calver), ErrImageNotLocal/LabelVersion/LabelBox
 // (spec/spec). LocalImageExists (formerly sdk/kit/transfer.go) is co-located here because
 // ResolveLocalImageRef reads it — a spec/container function cannot call back into kit (cycle), so
 // the var's canonical home moves with the family; kit re-exports it.
@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/opencharly/spec/calver"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -572,7 +573,7 @@ func compareCalVerKey(a, b string) int {
 	if b == "" {
 		return 1
 	}
-	return spec.CompareCalVer(a, b)
+	return calver.CompareCalVer(a, b)
 }
 
 // sameRepoAcross reports whether every candidate ref shares the same

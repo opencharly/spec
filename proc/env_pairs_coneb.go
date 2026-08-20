@@ -1,11 +1,12 @@
-package spec
+package proc
 
-// env_pairs_coneb.go — the env-map → sorted KEY=VALUE pairs helper, RELOCATED to the spec/spec
-// fabric slice (#55 coneB build-render cone, Class A — a pure stdlib-only transform over the
-// deploy env E-envelope, co-located with the label/env value types). The body is verbatim from
-// sdk/kit/env.go; sdk/kit re-exports it (var EnvMapToPairs = spec.EnvMapToPairs) so existing
+// env_pairs_coneb.go — the env-map → sorted KEY=VALUE pairs helper, sliced out of the spec
+// contract module's spec/spec catch-all (#55 CHECK-ENGINE cone Option A — the process/launch
+// cone) and folded into spec/proc alongside the process-launch fabric (proc/launch.go's former
+// duplicate body is deleted — R3, ONE copy in this package). The body is verbatim from
+// sdk/kit/env.go; sdk/kit re-exports it (var EnvMapToPairs = proc.EnvMapToPairs) so existing
 // kit.EnvMapToPairs call sites (sdk/deploykit's deploy_file.go + read_labels.go, kit/box_metadata.go)
-// are unchanged. spec/container's ExtractMetadata (box_metadata_coneb.go) calls spec.EnvMapToPairs
+// are unchanged. spec/container's ExtractMetadata (box_metadata_coneb.go) calls proc.EnvMapToPairs
 // directly — the canonical home.
 
 import "sort"

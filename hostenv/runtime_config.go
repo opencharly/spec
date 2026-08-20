@@ -35,7 +35,7 @@ type RuntimeConfig struct {
 	VolumesPath            string            `yaml:"volumes_path,omitempty" json:"volumes_path,omitempty"`
 	SecretBackend          string            `yaml:"secret_backend,omitempty" json:"secret_backend,omitempty"`       // "auto", "keyring", "config"
 	ForwardGpgAgent        *bool             `yaml:"forward_gpg_agent,omitempty" json:"forward_gpg_agent,omitempty"` // Forward host GPG agent socket into containers (default: true)
-	ForwardSshAgent        *bool             `yaml:"forward_ssh_agent,omitempty" json:"forward_ssh_agent,omitempty"` // Forward host SSH agent socket into containers (default: true)
+	ForwardSSHAgent        *bool             `yaml:"forward_ssh_agent,omitempty" json:"forward_ssh_agent,omitempty"` // Forward host SSH agent socket into containers (default: true)
 	Vm                     RuntimeVmConfig   `yaml:"vm,omitempty" json:"vm,omitempty"`
 	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty" json:"vnc_passwords,omitempty"`                       // VNC passwords keyed by image[-instance]
 	KeyringKeys            []string          `yaml:"keyring_keys,omitempty" json:"keyring_keys,omitempty"`                         // Shadow index: names of keys stored in keyring (no values)
@@ -76,7 +76,7 @@ type ResolvedRuntime struct {
 	EncryptedStoragePath string // path for gocryptfs encrypted storage
 	VolumesPath          string // base path for bind mount volume data
 	ForwardGpgAgent      bool   // forward host GPG agent socket into containers
-	ForwardSshAgent      bool   // forward host SSH agent socket into containers
+	ForwardSSHAgent      bool   // forward host SSH agent socket into containers
 	VmBackend            string // "auto", "libvirt", or "qemu"
 }
 
@@ -164,7 +164,7 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		EncryptedStoragePath: ResolveEncryptedStoragePath(os.Getenv("CHARLY_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
 		VolumesPath:          ResolveVolumesPath(os.Getenv("CHARLY_VOLUMES_PATH"), cfg.VolumesPath),
 		ForwardGpgAgent:      ResolveAutoEnable(os.Getenv("CHARLY_FORWARD_GPG_AGENT"), cfg.ForwardGpgAgent),
-		ForwardSshAgent:      ResolveAutoEnable(os.Getenv("CHARLY_FORWARD_SSH_AGENT"), cfg.ForwardSshAgent),
+		ForwardSSHAgent:      ResolveAutoEnable(os.Getenv("CHARLY_FORWARD_SSH_AGENT"), cfg.ForwardSSHAgent),
 		VmBackend:            ResolveValue(os.Getenv("CHARLY_VM_BACKEND"), cfg.Vm.Backend, "auto"),
 	}
 

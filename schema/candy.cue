@@ -303,6 +303,35 @@
 	transport?: *"http" | "sse"
 }
 
+// #MCPProvideEntry is a RESOLVED mcp_provide entry — a CandyMCPProvide (the raw baked label
+// form) plus the Source deployment it came from. Shared by charly's DEPLOY-time provides
+// injection AND the out-of-process mcp CHECK verb (candy/plugin-mcp), which both apply
+// PodAwareMCPProvides; it lives in package spec (ONE copy, R3) so it crosses the
+// charly/plugin module boundary. Its GetName/GetSource methods satisfy charly's Named
+// interface structurally (hand-written behavior, not wire shape).
+#MCPProvideEntry: {
+	name!:      string @go(Name)
+	url!:       string @go(URL)
+	transport?: string @go(Transport)
+	source!:    string @go(Source)
+}
+
+// #EnvProvideEntry is a RESOLVED env-provided entry — the raw authored
+// env_provide name→value entry plus the Source deployment it came from. Its
+// GetName/GetSource methods satisfy charly's Named interface structurally
+// (hand-written behavior, not wire shape).
+#EnvProvideEntry: {
+	name!:   string @go(Name)
+	value!:  string @go(Value)
+	source!: string @go(Source)
+}
+
+// #ProvidesConfig holds all resolved provides entries in charly.yml.
+#ProvidesConfig: {
+	env?: [...#EnvProvideEntry] @go(Env)
+	mcp?: [...#MCPProvideEntry] @go(MCP)
+}
+
 // SecretYAML — a candy-owned secret (target defaults to /run/secrets/<name>).
 #CandySecret: {
 	name:    string & !=""

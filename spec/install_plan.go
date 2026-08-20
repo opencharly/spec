@@ -9,7 +9,7 @@ package spec
 
 // InstallPlan is the full ordered list of steps for one candy or one
 // whole-image deploy. Compiled by the deploykit compiler and consumed by any
-// DeployTarget implementation.
+// EmitTarget implementation.
 //
 // The compiler produces one InstallPlan per candy (then merges them in
 // topological order for whole-image deploys). A whole-image deploy keeps
@@ -67,13 +67,13 @@ type StepBatch struct {
 	Steps []InstallStep
 }
 
-// DeployTarget is the interface OCI + container-deploy + host-deploy
+// EmitTarget is the interface OCI + container-deploy + host-deploy
 // emitters satisfy. Taking a slice of plans (rather than a single plan)
 // lets whole-image deploys pass all per-candy plans at once and let the
 // target merge them — useful because OCITarget may want to emit a single
 // Containerfile for the image while the local deploy target may batch steps
 // across candies.
-type DeployTarget interface {
+type EmitTarget interface {
 	Name() string
 	Emit(plans []*InstallPlan, opts EmitOpts) error
 }

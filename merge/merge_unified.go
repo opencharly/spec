@@ -1,17 +1,22 @@
-package spec
+package merge
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/opencharly/spec/spec"
+)
 
 // merge_unified.go — the kind-blind document MERGE half of the unified-config loader.
-// These are pure map/struct merges over an already-parsed UnifiedFile: no provider
-// registry, no plugin round-trip, no charly-core helper. The host materialize
-// (charly/materialize.go) and loaderkit's MaterializeLoadedProject replay the walk's
-// documents in order — the root file first, then its flat imports — calling MergeUnified
-// for each, so the root file's values are present before any import's fields are considered
-// (root-wins). Relocated from sdk/loaderkit/merge.go to the dedicated spec module (#55 C3b)
-// alongside its siblings MergePluginKindsMap (merge_plugin_kinds.go) and AnchorScanSpecs
-// (load_directives.go), so charly core reaches it WITHOUT importing loaderkit — the same
-// import-purity route MaterializeProjectSeams and MergePluginKindsMap already took.
+// These are pure map/struct merges over an already-parsed spec.UnifiedFile: no provider
+// registry, no plugin round-trip, no charly-core helper. Sliced out of the spec contract
+// module's spec/spec catch-all (#55 CHECK-ENGINE cone Option A — the config-loader cone).
+// The host materialize (charly/materialize.go) and loaderkit's MaterializeLoadedProject
+// replay the walk's documents in order — the root file first, then its flat imports —
+// calling merge.MergeUnified for each, so the root file's values are present before any
+// import's fields are considered (root-wins). The doc MERGE types (UnifiedFile, FleetNode,
+// BoxConfig) stay in spec/spec; the pure merge behavior lives HERE in spec/merge, so
+// charly core reaches it WITHOUT importing loaderkit — the same import-purity route
+// MaterializeProjectSeams and MergePluginKindsMap already took.
 
 // MergeUnified merges src into dst such that dst's existing values WIN on
 // conflict at the same leaf (root-wins). This means when MaterializeLoadedProject
@@ -22,7 +27,7 @@ import "encoding/json"
 // For included files: the same MergeUnified is called but dst already contains
 // the root's values, so those fields stay untouched. src's fields that aren't
 // present in dst get copied over. That's the desired semantics.
-func MergeUnified(dst, src *UnifiedFile, srcDir string) {
+func MergeUnified(dst, src *spec.UnifiedFile, srcDir string) {
 	if src.Version != "" && dst.Version == "" {
 		dst.Version = src.Version
 	}
@@ -38,7 +43,7 @@ func MergeUnified(dst, src *UnifiedFile, srcDir string) {
 	// downstream workspace that `include:`-s an upstream charly.yml
 	// would look for upstream's `candy/` inside the workspace tree.
 	if len(src.Discover) > 0 {
-		dst.Discover = append(dst.Discover, AnchorScanSpecs(src.Discover, srcDir)...)
+		dst.Discover = append(dst.Discover, spec.AnchorScanSpecs(src.Discover, srcDir)...)
 	}
 	mergeRawTemplateMap(&dst.Box, src.Box)
 	mergeRawTemplateMap(&dst.Candy, src.Candy)
@@ -50,7 +55,7 @@ func MergeUnified(dst, src *UnifiedFile, srcDir string) {
 	// other templated kind) — merged once here (root-wins, name-keyed override). The former
 	// mergeDistroMap/mergeBuilderMap/mergeInitMap/mergeResourceMap/mergeTargetMap calls
 	// are subsumed by this one generic merge.
-	MergePluginKindsMap(&dst.PluginKinds, src.PluginKinds)
+	spec.MergePluginKindsMap(&dst.PluginKinds, src.PluginKinds)
 	mergeDeployMaps(&dst.Fleet, src.Fleet)
 	if dst.Provides == nil && src.Provides != nil {
 		dst.Provides = src.Provides
@@ -80,12 +85,12 @@ func mergeRawTemplateMap(dst *map[string]json.RawMessage, src map[string]json.Ra
 // Field-singular cutover: replaces the legacy mergeDeployments which
 // took *DeploymentsSection wrappers. Provides now lives at UnifiedFile
 // root and is merged separately by MergeUnified.
-func mergeDeployMaps(dst *map[string]FleetNode, src map[string]FleetNode) {
+func mergeDeployMaps(dst *map[string]spec.FleetNode, src map[string]spec.FleetNode) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]FleetNode)
+		*dst = make(map[string]spec.FleetNode)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -96,7 +101,7 @@ func mergeDeployMaps(dst *map[string]FleetNode, src map[string]FleetNode) {
 
 // mergeBoxConfig preserves dst's already-set fields and fills only the
 // zero-valued ones from src. Used for merging Defaults blocks from includes.
-func mergeBoxConfig(dst, src *BoxConfig) {
+func mergeBoxConfig(dst, src *spec.BoxConfig) {
 	if src == nil || dst == nil {
 		return
 	}

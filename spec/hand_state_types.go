@@ -31,12 +31,12 @@ type VmDeployState struct {
 	InstanceID string `yaml:"instance_id,omitempty" json:"instance_id,omitempty"`
 	DiskPath   string `yaml:"disk_path,omitempty" json:"disk_path,omitempty"`
 	SeedIso    string `yaml:"seed_iso,omitempty" json:"seed_iso,omitempty"`
-	SshPort    int    `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`
+	SSHPort    int    `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`
 	// PortForwards maps a guest port (string) to its auto-allocated host port for
 	// each `auto:<guest>` network.port_forwards entry — persisted at vm-create so
-	// the allocation is reused across create→deploy-add (the sibling of SshPort).
+	// the allocation is reused across create→deploy-add (the sibling of SSHPort).
 	PortForwards            map[string]int          `yaml:"port_forwards,omitempty" json:"port_forwards,omitempty"`
-	SshUser                 string                  `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+	SSHUser                 string                  `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
 	Backend                 string                  `yaml:"backend,omitempty" json:"backend,omitempty"`
 	KeyInjectionResolved    *VmKeyInjectionResolved `yaml:"key_injection_resolved,omitempty" json:"key_injection_resolved,omitempty"`
 	CharlyInstallStrategy   string                  `yaml:"charly_install_strategy,omitempty" json:"charly_install_strategy,omitempty"`

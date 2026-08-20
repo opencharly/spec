@@ -1,6 +1,6 @@
-package spec
+package poll
 
-// readiness_seam.go — the executor-side readiness SEAM var, homed in the fabric
+// readiness_seam.go — the executor-side readiness SEAM var, homed in the spec/poll
 // slice so both the host/guest executors (spec/exec) and every other reader reach
 // the SAME live var. The host-side SSHExecutor's wait-for-SSH bounds come from the
 // project's defaults.readiness, which only the charly HOST can LoadUnified. Rather
@@ -10,8 +10,8 @@ package spec
 // always safe + never-hang).
 //
 // This is a LIVE seam var charly WRITES, so it is homed ONCE here and every reader +
-// the charly writer references spec.ReadinessProvider DIRECTLY — a `var X =
-// spec.ReadinessProvider` copy-alias is FORBIDDEN (it snapshots the func value at
+// the charly writer references spec/poll.ReadinessProvider DIRECTLY — a `var X =
+// poll.ReadinessProvider` copy-alias is FORBIDDEN (it snapshots the func value at
 // init and breaks write-through).
 
 // ReadinessProvider returns the resolved readiness bounds the executors' waits use.

@@ -4,7 +4,7 @@ package spec
 // serializable wire form (InstallStepView). StepToView projects a concrete step
 // onto the wire union; StepFromView reconstructs the SAME concrete step from a view.
 //
-// This is the R3 single source for step serialization: the in-proc DeployTargets keep
+// This is the R3 single source for step serialization: the in-proc EmitTargets keep
 // walking []InstallStep unchanged, and the external (out-of-process) deploy/step plugin
 // receives []InstallStepView carrying identical data. Because every step's
 // Scope()/Venue()/RequiresGate()/Reverse() are METHODS computed from stored fields,

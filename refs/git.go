@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/opencharly/spec/calver"
 	"github.com/opencharly/spec/lock"
 )
 
@@ -489,50 +490,11 @@ func parseTagRefs(output string) []string {
 
 // CompareSemver compares two semver-like version strings (e.g. "v1.2.3").
 // Returns -1 if a < b, 0 if equal, 1 if a > b.
-// Handles v-prefixed versions and falls back to string comparison for non-numeric parts.
+// It delegates to spec/calver.CompareCalVer — the single dotted-version comparator
+// (which strips the "v" prefix and falls back to lexical comparison for
+// non-numeric parts) — so semver and CalVer strings share ONE implementation.
 func CompareSemver(a, b string) int {
-	aParts := parseSemverParts(a)
-	bParts := parseSemverParts(b)
-
-	for i := 0; i < len(aParts) || i < len(bParts); i++ {
-		var av, bv int
-		if i < len(aParts) {
-			av = aParts[i]
-		}
-		if i < len(bParts) {
-			bv = bParts[i]
-		}
-		if av < bv {
-			return -1
-		}
-		if av > bv {
-			return 1
-		}
-	}
-	return 0
-}
-
-// parseSemverParts extracts numeric parts from a version string like "v1.2.3".
-func parseSemverParts(v string) []int {
-	v = strings.TrimPrefix(v, "v")
-	// Strip pre-release suffix (e.g. "-rc1")
-	if idx := strings.IndexByte(v, '-'); idx != -1 {
-		v = v[:idx]
-	}
-	parts := strings.Split(v, ".")
-	nums := make([]int, 0, len(parts))
-	for _, p := range parts {
-		n := 0
-		for _, c := range p {
-			if c >= '0' && c <= '9' {
-				n = n*10 + int(c-'0')
-			} else {
-				break
-			}
-		}
-		nums = append(nums, n)
-	}
-	return nums
+	return calver.CompareCalVer(a, b)
 }
 
 // isHex returns true if s contains only hexadecimal characters

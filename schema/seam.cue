@@ -229,7 +229,7 @@
 // ancestor_paths/ancestor_nodes let the host reconstruct the SAME parentExec chain the OLD in-core
 // walk built (deriveChildExecutorForPath is pure Go over spec/kit types, re-run HOST-side) — a
 // live DeployExecutor never crosses the wire. target is the plugin-classified substrate word (a
-// pure ClassifyNodeTarget of node+path), carried so the host synthesizes a Target-only node when
+// pure spec/fleet.ClassifyNodeTarget of node+path), carried so the host synthesizes a Target-only node when
 // node is nil (a ref-based deploy with no charly.yml entry). The gate flags are the FINAL resolved
 // EmitOpts values (node.InstallOpts already applied over the CLI flags plugin-side); dry_run never
 // reaches this seam — a dry-run prints the compiled plans plugin-side and returns without dispatch.
@@ -1032,7 +1032,7 @@
 	force_seed?:       bool   @go(ForceSeed)
 	data_from?:        string @go(DataFrom)
 	update_all?:       bool   @go(UpdateAll)
-	ssh_key?:          string @go(SshKey)
+	ssh_key?:          string @go(SSHKey)
 	sidecar?: [...string] @go(Sidecar)
 	list_sidecars?:    bool   @go(ListSidecars)
 	no_autodetect?:    bool   @go(NoAutoDetect)

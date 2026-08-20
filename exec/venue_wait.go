@@ -5,6 +5,7 @@ import (
 	"context"
 	"os/exec"
 
+	"github.com/opencharly/spec/poll"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -45,7 +46,7 @@ func WaitForVmSshReady(domainID string) {
 // the instant it reaches RUNNING) instead of sleeping a fixed, host-tuned interval. Images
 // without supervisord settle immediately. Best-effort: silent on timeout (the next check-live
 // step surfaces the real failure). Reads the project's readiness bounds via
-// spec.ReadinessProvider() — the SAME plugin-portable channel every other executor wait uses
+// poll.ReadinessProvider() — the SAME plugin-portable channel every other executor wait uses
 // (the host threads its resolved bounds via ResolvedReadiness.PluginEnv; a project-unaware
 // caller falls back to the built-in defaults).
 func WaitForContainerReady(bed string) {
@@ -60,8 +61,8 @@ func WaitForContainerReady(bed string) {
 	// high-water, so the watchdog correctly does NOT treat the flap as progress and the bed
 	// stalls out instead of hiding the fault. Best-effort: silent on stall/cap (the next
 	// check-live step surfaces the real failure).
-	cfg := spec.ReadinessProvider().Wait("container-ready "+bed, spec.PollLocal)
-	_ = spec.PollUntil(context.Background(), cfg, func(actx context.Context) (bool, float64, error) {
+	cfg := poll.ReadinessProvider().Wait("container-ready "+bed, poll.PollLocal)
+	_ = poll.PollUntil(context.Background(), cfg, func(actx context.Context) (bool, float64, error) {
 		if exec.CommandContext(actx, "podman", "exec", containerName, "true").Run() != nil {
 			return false, 0, nil // container not exec-able yet
 		}

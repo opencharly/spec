@@ -17,6 +17,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/opencharly/spec/calver"
+	"github.com/opencharly/spec/shellquote"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -45,11 +47,11 @@ func ResolveCharlyInstallStrategy(raw string) CharlyInstallStrategy {
 // true, venue equal-or-newer → false, never downgraded); host unparseable → false (never clobber a
 // venue charly on an unprovable claim).
 func HostCharlyIsNewer(hostVer, venueVerOut string) bool {
-	host, hostOK := spec.ParseCalVer(strings.TrimSpace(hostVer))
+	host, hostOK := calver.ParseCalVer(strings.TrimSpace(hostVer))
 	if !hostOK {
 		return false
 	}
-	venue, venueOK := spec.ParseCalVer(strings.TrimSpace(venueVerOut))
+	venue, venueOK := calver.ParseCalVer(strings.TrimSpace(venueVerOut))
 	if !venueOK {
 		return true
 	}
@@ -103,7 +105,7 @@ func EnsureCharlyInDeployVenue(ctx context.Context, ve spec.DeployExecutor, char
 		},
 		func() (string, error) { return replicatedCharlyPath(charlyBin, hostVer) },
 		func(path string) bool {
-			_, _, exit, err := ve.RunCapture(ctx, spec.ShellQuote(path)+" version >/dev/null 2>&1")
+			_, _, exit, err := ve.RunCapture(ctx, shellquote.ShellQuote(path)+" version >/dev/null 2>&1")
 			return err == nil && exit == 0
 		},
 		func(remotePath string) error {
@@ -126,7 +128,7 @@ func EnsureCharlyInGuest(ctx context.Context, ssh SSHArgs, charlyBin, hostVer, s
 				return sshCapture(ctx, ssh, `command -v charly >/dev/null 2>&1 && charly version 2>/dev/null || true`)
 			},
 			func() (string, error) { return replicatedCharlyPath(charlyBin, hostVer) },
-			func(path string) bool { return sshOK(ctx, ssh, spec.ShellQuote(path)+" version >/dev/null 2>&1") },
+			func(path string) bool { return sshOK(ctx, ssh, shellquote.ShellQuote(path)+" version >/dev/null 2>&1") },
 			func(remotePath string) error { return scpInto(ctx, ssh, charlyBin, remotePath) })
 		if err != nil {
 			return "", err

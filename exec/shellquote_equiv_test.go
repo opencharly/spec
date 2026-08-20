@@ -3,15 +3,15 @@ package exec
 import (
 	"testing"
 
-	"github.com/opencharly/spec/spec"
+	"github.com/opencharly/spec/shellquote"
 )
 
 // TestShellSingleQuoters_CanonicalPOSIX asserts EVERY package-main POSIX single-quoter — plus the
-// canonical spec.ShellQuote they all fold onto — emits the identical canonical single-quoted form for
+// canonical shellquote.ShellQuote they all fold onto — emits the identical canonical single-quoted form for
 // a corpus of adversarial inputs (shell metachars, embedded quotes, command-substitution, newlines).
 // It is the equivalence + regression guard for the shell-quoter consolidation (FU-13 deployShellQuote,
 // FU-14 shellSingleQuoteSSH + wl.shellQuote): the corpus passes against each helper's ORIGINAL impl
-// AND against the spec.ShellQuote alias, proving they are behaviorally identical (inside '...' the ONLY
+// AND against the shellquote.ShellQuote alias, proving they are behaviorally identical (inside '...' the ONLY
 // special char is ', escaped '\” by all; everything else — $, `, ;, ", \n — is literal). These are
 // the quoters for SSH/podman/dbus/wayland command construction, so equivalence is security-relevant.
 func TestShellSingleQuoters_CanonicalPOSIX(t *testing.T) {
@@ -28,9 +28,9 @@ func TestShellSingleQuoters_CanonicalPOSIX(t *testing.T) {
 		{"a\nb", "'a\nb'"},
 	}
 	quoters := map[string]func(string) string{
-		"deployShellQuote":    deployShellQuote,
-		"shellSingleQuoteSSH": shellSingleQuoteSSH,
-		"spec.ShellQuote":     spec.ShellQuote,
+		"deployShellQuote":      deployShellQuote,
+		"shellSingleQuoteSSH":   shellSingleQuoteSSH,
+		"shellquote.ShellQuote": shellquote.ShellQuote,
 	}
 	for name, q := range quoters {
 		for _, c := range cases {

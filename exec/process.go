@@ -6,12 +6,12 @@ import (
 	"os/exec"
 )
 
-// The process-group shutdown ladder + the SortedEnvPairs / RemoteLaunchCommand
-// launch renderers moved to the fabric slice github.com/opencharly/spec/proc
-// (#55 step1) — a host primitive a plugin cannot hold, now single-sourced in
-// the spec contract module. This file keeps only the caller-owned stdio pipe
-// wiring, which is used exclusively by sdk/kit's own process-executor
-// (deploy_executor_process.go) and therefore stays in kit.
+// The process-group shutdown ladder + the RemoteLaunchCommand launch renderer
+// moved to the fabric slice github.com/opencharly/spec/proc (#55 step1) — a host
+// primitive a plugin cannot hold, now single-sourced in the spec contract module.
+// This file keeps only the caller-owned stdio pipe wiring, which is used
+// exclusively by sdk/kit's own process-executor (deploy_executor_process.go) and
+// therefore stays in kit.
 
 // processPipes holds the parent-side ends of a child's three stdio pipes
 // created by startProcessPipes.

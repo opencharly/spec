@@ -2,7 +2,7 @@ package spec
 
 // deploy_target_unified.go — the kind-agnostic deploy-target contract.
 //
-// The legacy DeployTarget interface (install_plan.go) is the 2-method
+// The EmitTarget interface (install_plan.go) is the 2-method
 // contract (Name + Emit) that the retained BUILD ENGINES (the pod-overlay
 // walker, sdk/deploykit.OCITarget) satisfy at the IR-emission level. This
 // file defines the lifecycle-and-management contract layered on top:

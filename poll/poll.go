@@ -1,4 +1,4 @@
-package spec
+package poll
 
 import (
 	"context"
@@ -21,11 +21,14 @@ import (
 // primitive whose bounds are config-sourced + validated (see ReadinessConfig).
 //
 // Home note (FLOOR-legal leaf): this poll/readiness primitive lives in package
-// spec — the always-floor-legal wire/vocabulary leaf any charly file (kernel
-// floor included) may import. It is stdlib-only (context/errors/fmt/time) and
-// carries no vmshared/plugin dependency, so it does not enlarge spec's
-// dependency surface. vmshared re-exports the symbols (poll_reexport.go) for its
-// existing cross-module users.
+// spec/poll, sliced out of the spec contract module's spec/spec catch-all
+// (#55 CHECK-ENGINE cone Option A — the check-verb readiness-poll cone). It is
+// stdlib-only (context/errors/fmt/time) + spec's own ReadinessConfig wire type,
+// and carries no vmshared/plugin dependency, so it does not enlarge spec's
+// dependency surface. spec/poll remains a `github.com/opencharly/spec/*`
+// package, so any charly file (kernel floor included) may import it.
+// sdk/vmshared re-exports the symbols (poll_reexport.go) for its existing
+// cross-module users.
 //
 // Two honest readiness modes — chosen by the call-site builders below, because
 // a single "no-progress" rule is WRONG for half the sites:

@@ -14,7 +14,7 @@ import (
 // manifest-filename constant they default to. These are pure DATA carriers (custom YAML shapes, no
 // mechanism), so they live in the types-only spec module where charly core, sdk/kit, sdk/loaderkit,
 // and every loader-consuming plugin share ONE copy. The AnchorScanSpecs path-anchoring FUNCTION lives
-// here too (#55 C3b) — its only non-loaderkit caller was MergeUnified, which itself relocated into
+// here too (#55 C3b) — its only non-loaderkit caller was merge.MergeUnified, which itself relocated into
 // this spec module, so it can no longer live in sdk/kit (spec cannot import sdk/kit); sdk/kit keeps a
 // forwarder (var AnchorScanSpecs = spec.AnchorScanSpecs) for its remaining walk.go caller.
 
@@ -190,7 +190,7 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 // kept verbatim. Empty srcDir leaves specs unchanged so the
 // root-file merge (called with rootDir == workspace) is a no-op.
 // Path-anchoring MECHANISM (filepath) over spec.ScanSpec, relocated from
-// sdk/kit (#55 C3b) so MergeUnified — which itself moved into this spec
+// sdk/kit (#55 C3b) so merge.MergeUnified — which itself moved into this spec
 // module — can call it without a spec→sdk import inversion.
 func AnchorScanSpecs(specs []ScanSpec, srcDir string) []ScanSpec {
 	if srcDir == "" || len(specs) == 0 {
