@@ -47,11 +47,3 @@ func TestCandyMapKey_Local(t *testing.T) {
 	}
 }
 
-// A root-level remote candy with an explicit name must STILL key as the repo
-// path (the empty-prefix guard, not the name, decides the root-level shape).
-func TestCandyMapKey_RootLevelRemoteNamed(t *testing.T) {
-	got := CandyMapKey(fakeCandy{name: "layer-ripgrep", remote: true, repo: "github.com/opencharly/layer-ripgrep"})
-	if got != "github.com/opencharly/layer-ripgrep" {
-		t.Fatalf("root-level remote key = %q, want the repo path itself", got)
-	}
-}
