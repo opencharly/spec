@@ -249,9 +249,15 @@ func MergeFleetNode(dst, src spec.FleetNode) spec.FleetNode {
 // --- candy-stage helpers ---
 
 // CandyMapKey returns the candy's map key: the full @github ref for a remote candy
-// (RepoPath/SubPathPrefix+Name), else the bare Name.
+// (RepoPath/SubPathPrefix+Name), else the bare Name. A ROOT-LEVEL remote candy (the
+// candy de-submodule cutover — a standalone candy repo whose manifest lives at the
+// repo root, SubPathPrefix "") keys as the repo path itself: appending the name would
+// double it (github.com/org/layer-ripgrep/layer-ripgrep).
 func CandyMapKey(layer spec.CandyReader) string {
 	if layer.GetRemote() {
+		if layer.GetSubPathPrefix() == "" {
+			return layer.GetRepoPath()
+		}
 		return layer.GetRepoPath() + "/" + layer.GetSubPathPrefix() + layer.GetName()
 	}
 	return layer.GetName()

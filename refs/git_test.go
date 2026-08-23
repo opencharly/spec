@@ -278,14 +278,12 @@ func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
 // fresh GitClone of the charly repo populates EVERY declared submodule, so a
 // --repo cache is a project a user can actually drive with only the binary.
 //
-// This is the coverage that fails without the fix. `sdk` alone passed before
-// and would still pass, so it proves nothing on its own — `spec` is the
-// assertion that breaks against the old sdk-only special case, and it is the
-// one that matters most: every out-of-process plugin candy carries
-// `replace github.com/opencharly/spec => ../../spec`, so without it every such
-// build dies on "../../spec/go.mod: no such file" and no out-of-process verb is
-// reachable through --repo at all. box/<distro> covers `box build` (main owns
-// no boxes), which the old code excluded as "heavy".
+// The probe set tracks the charly repo's CURRENT submodule reality: after the
+// sdk/spec de-submodule and the plugins→marketplace cutovers, the charly repo
+// pins only the five box/<distro> repos. (The probes were sdk/go.mod +
+// spec/go.mod + box/fedora + plugins/README.md — the contract modules and the
+// plugin corpus are no longer charly submodules, and the test failed on the
+// stale expectations.)
 //
 // Network-gated: skipped offline.
 func TestGitClone_PopulatesAllSubmodules(t *testing.T) {
@@ -300,10 +298,11 @@ func TestGitClone_PopulatesAllSubmodules(t *testing.T) {
 		t.Fatalf("GitClone: %v", err)
 	}
 	for _, probe := range []struct{ path, why string }{
-		{"sdk/go.mod", "plugin builds fail 'cannot load module ../../sdk'"},
-		{"spec/go.mod", "plugin builds fail 'cannot load module ../../spec' — every out-of-process verb unreachable via --repo"},
-		{"box/fedora/charly.yml", "`charly --repo … box build` has no box definitions; main owns none"},
-		{"plugins/README.md", "the skill corpus is absent"},
+		{"box/arch/charly.yml", "`charly --repo … box build` has no box definitions; main owns none"},
+		{"box/cachyos/charly.yml", "the cachyos distro checkout"},
+		{"box/debian/charly.yml", "the debian distro checkout"},
+		{"box/fedora/charly.yml", "the fedora distro checkout"},
+		{"box/ubuntu/charly.yml", "the ubuntu distro checkout"},
 	} {
 		if _, err := os.Stat(filepath.Join(dir, probe.path)); err != nil {
 			t.Errorf("submodule path %s not populated (%s): %v", probe.path, probe.why, err)
