@@ -199,6 +199,15 @@ type PhaseSet struct {
 }
 
 type PhaseTemplates struct {
+	// install is the ONE venue-agnostic package-install body (repo setup + key
+	// import + package install, written with `&& \` continuations valid in both
+	// plain shell and a Dockerfile RUN). FormatPhaseTemplate wraps it per venue:
+	// the container venue prepends `RUN {{cacheMounts .CacheMounts}} \`, the host
+	// venue runs it as-is. host/container remain as venue-specific OVERRIDES for
+	// the prepare/cleanup phases and for any install that genuinely differs by
+	// venue (R3: one canonical body, venue applied at render, never two copies).
+	Install string `yaml:"install,omitempty" json:"install,omitempty"`
+
 	Container string `yaml:"container,omitempty" json:"container,omitempty"`
 
 	Host string `yaml:"host,omitempty" json:"host,omitempty"`

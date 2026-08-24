@@ -9,8 +9,16 @@ package spec
 // FormatPhaseTemplate looks up the template string for a (phase, venue)
 // lookup. The phase: block is the single source of truth — the legacy
 // top-level InstallTemplate field was removed (R5) and its content migrated
-// into phase.install.container, so there is no fallback arm. A lookup
-// returns "" when the requested cell is absent.
+// into phase.install, so there is no fallback arm. A lookup returns "" when
+// the requested cell is absent.
+//
+// R3 (one canonical body, venue applied at render): the install cell is the
+// venue-agnostic body written with `&& \` continuations (valid plain shell AND
+// inside a Dockerfile RUN). The container venue wraps it with the BuildKit
+// cacheMounts RUN prefix; the host venue returns it verbatim. Venue-specific
+// OVERRIDES (host/container) take precedence when present, so a phase that
+// genuinely differs by venue keeps its two cells without forcing a second
+// canonical copy.
 func FormatPhaseTemplate(f *Format, phase Phase, venue Venue) string {
 	if f == nil {
 		return ""
@@ -31,9 +39,15 @@ func FormatPhaseTemplate(f *Format, phase Phase, venue Venue) string {
 				if pt.Host != "" {
 					return pt.Host
 				}
+				if pt.Install != "" {
+					return pt.Install
+				}
 			case VenueContainerBuilder:
 				if pt.Container != "" {
 					return pt.Container
+				}
+				if pt.Install != "" {
+					return "RUN {{cacheMounts .CacheMounts}} \\\n" + pt.Install
 				}
 			}
 		}
