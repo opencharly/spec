@@ -479,6 +479,11 @@ type RefsCollectSeams struct {
 	// #55 W3 B2-full — shared by charly core's plugin_loader.go and candy/plugin-check's
 	// bed_session.go, both of which read/write it independently).
 	OverrideEnvValue string
+	// LatestTag resolves a repo's newest tag for a VERSION-LESS remote ref (the candy de-submodule
+	// cutover, Phase 4: version-less refs resolve to the immutable latest tag, not the mutable
+	// default branch). Registry-coupled (spec/refs.GitLatestTag shells out to git ls-remote), so it
+	// stays a host-supplied callback — and a seam, so the mechanism is unit-testable offline.
+	LatestTag func(repoURL string) (string, error)
 }
 
 // RefsDownloader is the swappable remote-repo FETCH BACKEND seam (P7): the host dispatches every
