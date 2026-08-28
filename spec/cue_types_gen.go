@@ -2452,6 +2452,44 @@ type CandyService struct {
 	ExitCode string `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
 
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// ---- Portable lifecycle fields -------------------------------------------
+	// Every field below is expressible by at least TWO of the three init systems.
+	// That is the admission rule: a field only one init can honour belongs in
+	// unit_options: instead, where it is named as that init's own.
+	//
+	// type — systemd Type=; supervisord approximates oneshot with startsecs=0;
+	// OpenRC distinguishes forking via command_background.
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	// requires — a HARD dependency, distinct from after:'s ordering. systemd
+	// Requires=; OpenRC depend(){ need … }, which its template already emits for
+	// localmount. supervisord has no equivalent and ignores it.
+	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+
+	// restart_sec — delay before a restart. systemd RestartSec=; OpenRC
+	// --respawn-delay. Accepts "5s" or a bare 5 (Go-coerced; the Go field is string,
+	// matching stop_timeout's shape).
+	RestartSec string `yaml:"restart_sec,omitempty" json:"restart_sec,omitempty"`
+
+	// watchdog_sec — liveness deadline. systemd WatchdogSec=; OpenRC
+	// --healthcheck-timer. Requires type: notify on systemd to be meaningful.
+	WatchdogSec string `yaml:"watchdog_sec,omitempty" json:"watchdog_sec,omitempty"`
+
+	// unit_options — the ONE escape hatch for init-specific directives, keyed
+	// init-name -> directive -> value.
+	//
+	// It exists so #ServiceRenderContext does not grow a field per init-specific
+	// knob. That struct is a kind-AGNOSTIC envelope rendered by every init's
+	// template; putting NotifyAccess, Slice, KillMode, RuntimeDirectory and a
+	// hardening block into it would make it systemd's typed shape wearing a generic
+	// name — the leak the boundary law names. With this map, a FOURTH init needs no
+	// schema change, exactly as the openrc init entity needed no Go change.
+	//
+	// A value may be a scalar or a list; a list emits the directive once per element,
+	// which is what systemd expects for repeatable directives such as
+	// RuntimeDirectory= or ReadWritePaths=.
+	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
 }
 
 type CandyServiceOverrides struct {
@@ -4975,6 +5013,23 @@ type ServiceRenderContext struct {
 	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
 
 	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
+
+	// Portable lifecycle fields, carried verbatim from the entry. Each is honoured
+	// by at least two inits; an init whose template does not reference one simply
+	// ignores it, exactly as supervisord already ignores wanted_by/before.
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+
+	RestartSec string `yaml:"restart_sec,omitempty" json:"restart_sec,omitempty"`
+
+	WatchdogSec string `yaml:"watchdog_sec,omitempty" json:"watchdog_sec,omitempty"`
+
+	// unit_options — init-specific directives, keyed init-name -> directive -> value.
+	// A template reads only its OWN key, so this stays ONE field on the shared
+	// envelope no matter how many inits exist. See #CandyService.unit_options for
+	// why this is a map rather than a field per directive.
+	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
 
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The
