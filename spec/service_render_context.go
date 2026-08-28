@@ -98,5 +98,17 @@ func BuildServiceRenderContext(entry *ServiceEntry, ctx ServiceRenderContext) Se
 	// entry's and the overrides' lists).
 	ctx.ExecStartPre = entry.ExecStartPre
 	ctx.ExecStartPost = entry.ExecStartPost
+	// Portable lifecycle fields. Verbatim, like the start hooks and for the same reason:
+	// each is an init-level directive value, not a path or an ordering list, so there is
+	// nothing to expand or merge. A field that stops here never reaches a template, which
+	// is why the schema and this projection are asserted together.
+	ctx.Type = entry.Type
+	ctx.Requires = entry.Requires
+	ctx.RestartSec = entry.RestartSec
+	ctx.WatchdogSec = entry.WatchdogSec
+	ctx.UnitOptions = entry.UnitOptions
+	// wait_for rides along as the same pointer: it is a small immutable value the
+	// templates only read, and copying it would invite the two to drift.
+	ctx.WaitFor = entry.WaitFor
 	return ctx
 }

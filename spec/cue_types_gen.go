@@ -1007,6 +1007,12 @@ type Box struct {
 
 	Network string `yaml:"network,omitempty" json:"network,omitempty"`
 
+	// init — pin the box's init system instead of letting composition auto-detect it.
+	// Every value here must be an init the build vocabulary actually defines
+	// (charly.yml's `init:` entities): a word the vocabulary knows but this enum
+	// omits is unselectable, which is what kept `openrc` out of reach despite being
+	// a first-class init with its own service_template, management commands and
+	// unit_path_template.
 	Init string `yaml:"init,omitempty" json:"init,omitempty"`
 
 	DataImage bool `yaml:"data_image,omitempty" json:"data_image,omitempty"`
@@ -2446,6 +2452,60 @@ type CandyService struct {
 	ExitCode string `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
 
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// ---- Portable lifecycle fields -------------------------------------------
+	// Every field below is expressible by at least TWO of the three init systems.
+	// That is the admission rule: a field only one init can honour belongs in
+	// unit_options: instead, where it is named as that init's own.
+	//
+	// type — systemd Type=; supervisord approximates oneshot with startsecs=0;
+	// OpenRC distinguishes forking via command_background.
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	// requires — a HARD dependency, distinct from after:'s ordering. systemd
+	// Requires=; OpenRC depend(){ need … }, which its template already emits for
+	// localmount. supervisord has no equivalent and ignores it.
+	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+
+	// restart_sec — delay before a restart. systemd RestartSec=; OpenRC
+	// --respawn-delay. Accepts "5s" or a bare 5 (Go-coerced; the Go field is string,
+	// matching stop_timeout's shape).
+	RestartSec string `yaml:"restart_sec,omitempty" json:"restart_sec,omitempty"`
+
+	// watchdog_sec — liveness deadline. systemd WatchdogSec=; OpenRC
+	// --healthcheck-timer. Requires type: notify on systemd to be meaningful.
+	WatchdogSec string `yaml:"watchdog_sec,omitempty" json:"watchdog_sec,omitempty"`
+
+	// unit_options — the ONE escape hatch for init-specific directives, keyed
+	// init-name -> directive -> value.
+	//
+	// It exists so #ServiceRenderContext does not grow a field per init-specific
+	// knob. That struct is a kind-AGNOSTIC envelope rendered by every init's
+	// template; putting NotifyAccess, Slice, KillMode, RuntimeDirectory and a
+	// hardening block into it would make it systemd's typed shape wearing a generic
+	// name — the leak the boundary law names. With this map, a FOURTH init needs no
+	// schema change, exactly as the openrc init entity needed no Go change.
+	//
+	// A value may be a scalar or a list; a list emits the directive once per element,
+	// which is what systemd expects for repeatable directives such as
+	// RuntimeDirectory= or ReadWritePaths=.
+	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
+
+	// wait_for — block the service's start until the paths it needs exist.
+	//
+	// Nine hand-rolled versions of this loop exist in the candy corpus today
+	// (labwc, kde-selkies x2, chrome-cdp, wayvnc x3, swaync, waybar, waybar-labwc,
+	// sway), each re-deriving the same poll with its own hardcoded timeout — the
+	// sleeps and magic numbers R4 forbids. One of them is already wrong: labwc's
+	// declares TIMEOUT=30 but sleeps 0.5s per iteration while counting +1, so it
+	// actually gives up after 15 seconds. That is the failure mode a hand-rolled
+	// loop has and a declared one cannot.
+	//
+	// Each init lowers this natively — systemd ExecStartPre=, supervisord a
+	// rendered pre-exec ahead of the command, OpenRC start_pre() — so the wait is
+	// SUPERVISED: a timeout fails the unit and surfaces in its status, instead of a
+	// wrapper exiting non-zero and looking like a crash.
+	WaitFor *ServiceWaitFor `yaml:"wait_for,omitempty" json:"wait_for,omitempty"`
 }
 
 type CandyServiceOverrides struct {
@@ -2454,6 +2514,26 @@ type CandyServiceOverrides struct {
 	After []string `yaml:"after,omitempty" json:"after,omitempty"`
 
 	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
+}
+
+// #ServiceWaitFor is a readiness precondition on a service's start.
+//
+// PATHS only, deliberately. All nine existing loops wait on a filesystem path (a
+// Wayland socket, an IPC socket, a lock file); none polls a TCP port. A ports:
+// form would need a probe tool the base images do not all carry, so it waits for
+// a real second consumer rather than being designed against a hypothetical one.
+type ServiceWaitFor struct {
+	// paths — every path must exist before the service starts. Relative paths are
+	// resolved by the init against the service's own working directory, exactly as
+	// exec: is.
+	//
+	// Required, and at least one element: a wait_for with no paths waits for
+	// nothing while reading like a guard, which is worse than no guard at all.
+	Paths []string `yaml:"paths,omitempty" json:"paths"`
+
+	// timeout — how long to wait before failing the start. "30s" or a bare 30,
+	// matching stop_timeout's shape. Absent means the init's own default.
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 }
 
 // ExtractYAML — copy a path out of another OCI image into this one. source is
@@ -4969,6 +5049,27 @@ type ServiceRenderContext struct {
 	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
 
 	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
+
+	// Portable lifecycle fields, carried verbatim from the entry. Each is honoured
+	// by at least two inits; an init whose template does not reference one simply
+	// ignores it, exactly as supervisord already ignores wanted_by/before.
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+
+	RestartSec string `yaml:"restart_sec,omitempty" json:"restart_sec,omitempty"`
+
+	WatchdogSec string `yaml:"watchdog_sec,omitempty" json:"watchdog_sec,omitempty"`
+
+	// unit_options — init-specific directives, keyed init-name -> directive -> value.
+	// A template reads only its OWN key, so this stays ONE field on the shared
+	// envelope no matter how many inits exist. See #CandyService.unit_options for
+	// why this is a map rather than a field per directive.
+	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
+
+	// wait_for — the readiness precondition, carried from the entry so each init's
+	// template can lower it in its own idiom.
+	WaitFor *ServiceWaitFor `yaml:"wait_for,omitempty" json:"wait_for,omitempty"`
 
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The
