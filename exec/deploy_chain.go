@@ -171,9 +171,20 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.FleetNode, flatP
 		if node.Engine == "docker" {
 			engineJump = JumpDockerExec
 		}
+		// Deterministic exec user/HOME (issue #149): read the running
+		// container's OCI-spec User + HOME once at chain construction so every
+		// exec hop passes them explicitly, immune to the engine's exec
+		// user/HOME resolution race for containers created during a
+		// concurrent bed window. Best-effort — an unreadable container falls
+		// back to the engine's own resolution (the pre-fix behavior).
+		engine := "podman"
+		if node.Engine == "docker" {
+			engine = "docker"
+		}
+		user, home := containerExecUserHome(engine, name)
 		return &NestedExecutor{
 			Parent: chain,
-			Jump:   NestedJump{Kind: engineJump, Target: name},
+			Jump:   NestedJump{Kind: engineJump, Target: name, User: user, Home: home},
 		}, nil
 
 	case "ssh":
