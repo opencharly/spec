@@ -210,6 +210,12 @@ func writeVocab(dir, out string) error {
 	if err != nil {
 		return err
 	}
+	// ovmf_family is OPTIONAL on #DistroTrait, so ids that declare none are absent
+	// from the table rather than an error — that absence IS the all-families fallback.
+	distroOvmfFamilies, err := distroTraitOptional(schema, "ovmf_family")
+	if err != nil {
+		return err
+	}
 	distroIDs := make([]string, 0, len(distroFormats))
 	for id := range distroFormats {
 		distroIDs = append(distroIDs, id)
@@ -248,19 +254,20 @@ func writeVocab(dir, out string) error {
 	}
 
 	code := renderVocab(vocabSets{
-		kinds:          kinds,
-		resourceKinds:  resourceKinds,
-		distroIDs:      distroIDs,
-		distroFormats:  distroFormats,
-		distroSSHUnits: distroSSHUnits,
-		distroInits:    distroInits,
-		directives:     directives,
-		stepKeywords:   stepKeywords,
-		contexts:       contexts,
-		opFields:       opFields,
-		opVerbs:        opVerbs,
-		authoringVerbs: authoringVerbs,
-		kindValueDefs:  kindValues,
+		kinds:              kinds,
+		resourceKinds:      resourceKinds,
+		distroIDs:          distroIDs,
+		distroFormats:      distroFormats,
+		distroSSHUnits:     distroSSHUnits,
+		distroInits:        distroInits,
+		distroOvmfFamilies: distroOvmfFamilies,
+		directives:         directives,
+		stepKeywords:       stepKeywords,
+		contexts:           contexts,
+		opFields:           opFields,
+		opVerbs:            opVerbs,
+		authoringVerbs:     authoringVerbs,
+		kindValueDefs:      kindValues,
 	})
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
@@ -433,19 +440,20 @@ func sortedKeys(m map[string]bool) []string {
 
 // vocabSets gathers every CUE-derived word list renderVocab emits.
 type vocabSets struct {
-	kinds          []string
-	resourceKinds  []string
-	distroIDs      []string
-	distroFormats  map[string]string
-	distroSSHUnits map[string]string
-	distroInits    map[string]string
-	directives     []string
-	stepKeywords   []string
-	contexts       []string
-	opFields       []string
-	opVerbs        []string
-	authoringVerbs []string
-	kindValueDefs  map[string]string
+	kinds              []string
+	resourceKinds      []string
+	distroIDs          []string
+	distroFormats      map[string]string
+	distroSSHUnits     map[string]string
+	distroInits        map[string]string
+	distroOvmfFamilies map[string]string
+	directives         []string
+	stepKeywords       []string
+	contexts           []string
+	opFields           []string
+	opVerbs            []string
+	authoringVerbs     []string
+	kindValueDefs      map[string]string
 }
 
 func renderVocab(s vocabSets) string {
@@ -464,6 +472,7 @@ func renderVocab(s vocabSets) string {
 	writeStrMap(&b, "DistroFormats", "each distro id's native package format (#Distros[id].format). The SINGLE table — hostenv.FormatForDistroID reads it; there is no hand-written Go copy.", s.distroFormats)
 	writeStrMap(&b, "DistroSSHUnits", "each distro id's OpenSSH service name (#Distros[id].ssh_unit) — `ssh` on Debian-family, `sshd` elsewhere. Replaces a hardcoded Go switch.", s.distroSSHUnits)
 	writeStrMap(&b, "DistroInits", "each distro id's guest init system (#Distros[id].init) — systemd or openrc. Replaces `if distro == \"alpine\"` branches.", s.distroInits)
+	writeStrMap(&b, "DistroOvmfFamilies", "each distro id's OVMF firmware family (#Distros[id].ovmf_family), for the ids that declare one. Replaces the hand-maintained ovmf_distro_aliases: map that was kept in two byte-identical copies. An id with no entry keeps the all-families fallback.", s.distroOvmfFamilies)
 	writeStrSlice(&b, "StepKeywords", "the plan-step intent keywords (#Step arms minus #Op fields).", s.stepKeywords)
 	writeStrSlice(&b, "ContextWords", "the plan-step execution contexts (#Context).", s.contexts)
 	writeStrSlice(&b, "OpFields", "every #Op verb/modifier field name (the flat Op vocabulary).", s.opFields)
@@ -564,6 +573,37 @@ func renderVersion(schemaVersion, schemaFloor string) string {
 
 // distroTrait harvests one trait field across every #Distros entry, so the id space and
 // each of its traits come from ONE CUE struct rather than parallel hand-written tables.
+// distroTraitOptional is distroTrait for a trait an id may omit: a missing field is
+// skipped instead of failing generation. The resulting gap is meaningful — it is what
+// keeps a distro on the fallback path rather than pinning it to a family.
+func distroTraitOptional(schema cue.Value, field string) (map[string]string, error) {
+	distros := schema.LookupPath(cue.ParsePath("#Distros"))
+	if err := distros.Err(); err != nil {
+		return nil, fmt.Errorf("lookup #Distros: %w", err)
+	}
+	it, err := distros.Fields()
+	if err != nil {
+		return nil, fmt.Errorf("iterate #Distros: %w", err)
+	}
+	out := map[string]string{}
+	for it.Next() {
+		id := it.Selector().Unquoted()
+		if id == "" {
+			id = it.Selector().String()
+		}
+		v := it.Value().LookupPath(cue.ParsePath(field))
+		if !v.Exists() {
+			continue
+		}
+		sv, err := v.String()
+		if err != nil {
+			return nil, fmt.Errorf("#Distros.%s.%s: %w", id, field, err)
+		}
+		out[id] = sv
+	}
+	return out, nil
+}
+
 func distroTrait(schema cue.Value, field string) (map[string]string, error) {
 	distros := schema.LookupPath(cue.ParsePath("#Distros"))
 	if err := distros.Err(); err != nil {
