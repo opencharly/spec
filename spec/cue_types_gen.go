@@ -8687,10 +8687,13 @@ type LibvirtGraphicsGL struct {
 type LibvirtVideo struct {
 	Model string `yaml:"model,omitempty" json:"model"`
 
-	// device: the concrete QEMU device behind the model — `virtio-gpu-gl`,
-	// `virtio-vga-gl`, `vhost-user-gpu`, … `model` alone cannot select these:
-	// model='virtio' emits plain virtio-vga, which has no GL and therefore no
+	// device: the concrete QEMU device behind the model. `model` alone cannot select
+	// these: model='virtio' emits plain virtio-vga, which has no GL and therefore no
 	// blob/native-context support. Requires libvirt >= 12.5.0.
+	//
+	// The vocabulary is closed because libvirt's own RNG closes it (domaincommon.rng,
+	// the type='virtio' group): any other value is rejected at DEFINE time with an
+	// error that blames <devices>, not the attribute. Rejecting it here names the field.
 	Device string `yaml:"device,omitempty" json:"device,omitempty"`
 
 	Ram int `yaml:"ram,omitempty" json:"ram,omitempty"`
@@ -8744,10 +8747,15 @@ type LibvirtVideoResolution struct {
 }
 
 type LibvirtVideoDriver struct {
+	// Both enums are closed by libvirt's RNG (domaincommon.rng, the video <driver>
+	// element). A name like "qxl" — the plausible guess, since it is a valid video
+	// MODEL — is not a valid driver name and fails at define time.
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
 	VGAConf string `yaml:"vgaconf,omitempty" json:"vgaconf,omitempty"`
 
+	// The virtioOptions toggles. libvirt spells these on/off, where the video model's
+	// own attributes beside them are yes/no — the renderer keeps the two apart.
 	IOMMU *bool `yaml:"iommu,omitempty" json:"iommu,omitempty"`
 
 	ATS *bool `yaml:"ats,omitempty" json:"ats,omitempty"`

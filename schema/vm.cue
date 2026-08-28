@@ -600,11 +600,15 @@
 #LibvirtVideo: {
 	model: string & !="" // LibvirtVideo.Model required; "none" is valid
 
-	// device: the concrete QEMU device behind the model — `virtio-gpu-gl`,
-	// `virtio-vga-gl`, `vhost-user-gpu`, … `model` alone cannot select these:
-	// model='virtio' emits plain virtio-vga, which has no GL and therefore no
+	// device: the concrete QEMU device behind the model. `model` alone cannot select
+	// these: model='virtio' emits plain virtio-vga, which has no GL and therefore no
 	// blob/native-context support. Requires libvirt >= 12.5.0.
-	device?: string
+	//
+	// The vocabulary is closed because libvirt's own RNG closes it (domaincommon.rng,
+	// the type='virtio' group): any other value is rejected at DEFINE time with an
+	// error that blames <devices>, not the attribute. Rejecting it here names the field.
+	device?: "virtio-vga" | "virtio-vga-gl" | "virtio-gpu" | "virtio-gpu-gl" |
+		"vhost-user-vga" | "vhost-user-gpu"
 
 	ram?:    int @go(,type=int)
 	vram?:   int @go(VRAM,type=int)
@@ -648,12 +652,18 @@
 }
 
 #LibvirtVideoDriver: {
-	name?:        string
-	vgaconf?:     string @go(VGAConf)
-	iommu?:       bool   @go(IOMMU,type=*bool)
-	ats?:         bool   @go(ATS,type=*bool)
-	packed?:      bool   @go(,type=*bool)
-	page_per_vq?: bool   @go(PagePerVQ,type=*bool)
+	// Both enums are closed by libvirt's RNG (domaincommon.rng, the video <driver>
+	// element). A name like "qxl" — the plausible guess, since it is a valid video
+	// MODEL — is not a valid driver name and fails at define time.
+	name?:    "qemu" | "vhostuser"
+	vgaconf?: "io" | "on" | "off" @go(VGAConf)
+
+	// The virtioOptions toggles. libvirt spells these on/off, where the video model's
+	// own attributes beside them are yes/no — the renderer keeps the two apart.
+	iommu?:       bool @go(IOMMU,type=*bool)
+	ats?:         bool @go(ATS,type=*bool)
+	packed?:      bool @go(,type=*bool)
+	page_per_vq?: bool @go(PagePerVQ,type=*bool)
 }
 
 #LibvirtAudio: {
