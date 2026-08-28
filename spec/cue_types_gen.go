@@ -8221,6 +8221,31 @@ type LibvirtDomain struct {
 	Resource *LibvirtResource `yaml:"resource,omitempty" json:"resource,omitempty"`
 
 	SysInfo *LibvirtSysInfo `yaml:"sysinfo,omitempty" json:"sysinfo,omitempty"`
+
+	// qemu_override: QEMU frontend device properties libvirt models no element
+	// for, rendered as
+	//
+	//	<qemu:override><qemu:device alias='ua-…'><qemu:frontend><qemu:property …/>
+	//
+	// on the libvirt backend and as `-device <dev>,<prop>=<val>` on the qemu one.
+	//
+	// This is the ONE escape hatch for the device-property axis, deliberately
+	// shaped like libvirt's own override element rather than as a field per knob:
+	// virtio-gpu alone carries drm_native_context, hostmem, max_hostmem and venus,
+	// and rutabaga adds more. A new knob is a YAML line, never a schema change.
+	//
+	// Keyed by the device's USER alias, which the device itself must declare (e.g.
+	// #LibvirtVideo.alias) — an override naming an alias no device carries is a
+	// hard render error, not a silent no-op. The `ua-` prefix libvirt demands is
+	// enforced on the ALIAS field, so it reaches these keys transitively: a key
+	// that is not `ua-`-prefixed can never equal a valid alias, and the renderer
+	// then names it as unmatched. (The key is typed `[string]` rather than a
+	// pattern: `cue exp gengotypes` renders a pattern-constrained key as an EMPTY
+	// Go struct, which would drop every override on the floor.)
+	//
+	// Requires libvirt >= 8.2.0. An override TAINTS the domain (libvirt records
+	// taint flag `custom-device`); that is libvirt's own policy, not charly's.
+	QemuOverride map[string]map[string]any/* CUE disjunction: (bool|int|string) */ `yaml:"qemu_override,omitempty" json:"qemu_override,omitempty"`
 }
 
 type LibvirtFeatures struct {
@@ -8623,19 +8648,113 @@ type LibvirtGraphics struct {
 
 	Keymap string `yaml:"keymap,omitempty" json:"keymap,omitempty"`
 
-	GL string `yaml:"gl,omitempty" json:"gl,omitempty"`
+	// gl: libvirt models <gl> PER GRAPHICS TYPE, not as one shared element, so this
+	// is a struct rather than the scalar it used to be. A bare `gl: "yes"` could
+	// only ever reach spice's enable= attribute and had NO way to express
+	// rendernode= — which is the attribute that points virtio-gpu at a specific
+	// host DRM node, and therefore the whole reason a GPU-in-VM candy touches <gl>
+	// at all. `<acceleration rendernode=…>` on #LibvirtVideo is NOT the substitute:
+	// libvirt documents that one as vhostuser-driver-only.
+	GL *LibvirtGraphicsGL `yaml:"gl,omitempty" json:"gl,omitempty"`
+
+	// address/p2p are dbus-only (<graphics type='dbus' address=… p2p=…/>).
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+
+	// The per-type field rules — <gl> exists only on spice/egl-headless/dbus,
+	// gl.enable only on spice/dbus, address/p2p only on dbus — are NOT expressible
+	// here. Writing them as `if type == … { gl?: _|_ }` type-checks in CUE but
+	// makes `cue exp gengotypes` emit `type LibvirtGraphics any`: it evaluates the
+	// definition with `type` still abstract, so every branch stays unresolved, the
+	// field kinds reduce to bottom, and the generator degrades the WHOLE struct.
+	// That compiles, so the damage is silent — every graphics block would decode
+	// into an untyped map. (The `if firmware == …` rules on #Vm are safe only
+	// because they TIGHTEN fields to concrete values instead of to bottom.)
+	//
+	// They are enforced instead as hard render errors in the libvirt bridge's
+	// mapGraphics, which is the exact point where the field would otherwise be
+	// dropped on the floor, and where the message can name the reason.
+	P2P *bool `yaml:"p2p,omitempty" json:"p2p,omitempty"`
+}
+
+type LibvirtGraphicsGL struct {
+	Enable *bool `yaml:"enable,omitempty" json:"enable,omitempty"`
+
+	// render_node: absolute path to the host DRM render node (/dev/dri/renderD128).
+	// Requires libvirt >= 5.8.0 (spice) / >= 5.10.0 (egl-headless).
+	RenderNode string `yaml:"render_node,omitempty" json:"render_node,omitempty"`
 }
 
 type LibvirtVideo struct {
 	Model string `yaml:"model,omitempty" json:"model"`
 
+	// device: the concrete QEMU device behind the model — `virtio-gpu-gl`,
+	// `virtio-vga-gl`, `vhost-user-gpu`, … `model` alone cannot select these:
+	// model='virtio' emits plain virtio-vga, which has no GL and therefore no
+	// blob/native-context support. Requires libvirt >= 12.5.0.
+	Device string `yaml:"device,omitempty" json:"device,omitempty"`
+
+	Ram int `yaml:"ram,omitempty" json:"ram,omitempty"`
+
 	VRAM int `yaml:"vram,omitempty" json:"vram,omitempty"`
+
+	VRAM64 int `yaml:"vram64,omitempty" json:"vram64,omitempty"`
+
+	VGAMem int `yaml:"vgamem,omitempty" json:"vgamem,omitempty"`
 
 	Heads int `yaml:"heads,omitempty" json:"heads,omitempty"`
 
+	// blob: virtio-gpu blob resources — the guest maps host memory directly
+	// instead of copying through the device. Required for a native-context or
+	// venus guest. Requires libvirt >= 9.2.0 and QEMU >= 6.1, and the domain MUST
+	// have shared memory backing (memory_backing.source: memfd + access: shared).
+	Blob *bool `yaml:"blob,omitempty" json:"blob,omitempty"`
+
+	EDID *bool `yaml:"edid,omitempty" json:"edid,omitempty"`
+
 	Accel3D *bool `yaml:"accel3d,omitempty" json:"accel3d,omitempty"`
 
+	Accel2D *bool `yaml:"accel2d,omitempty" json:"accel2d,omitempty"`
+
+	// render_node on <acceleration> is documented by libvirt as VHOSTUSER-DRIVER
+	// ONLY (since 5.8.0). To point an ordinary virtio-gpu at a host node, set
+	// graphics.gl.render_node instead — that is the attribute libvirt actually
+	// reads for it.
+	RenderNode string `yaml:"render_node,omitempty" json:"render_node,omitempty"`
+
 	Primary *bool `yaml:"primary,omitempty" json:"primary,omitempty"`
+
+	Resolution *LibvirtVideoResolution `yaml:"resolution,omitempty" json:"resolution,omitempty"`
+
+	Driver *LibvirtVideoDriver `yaml:"driver,omitempty" json:"driver,omitempty"`
+
+	// alias: a libvirt USER alias for this device. Its only purpose is to be
+	// targeted by libvirt.qemu_override — libvirt refuses an override against its
+	// own auto-assigned alias (video0), which is why the `ua-` prefix is required
+	// rather than conventional. Emitted ONLY when declared, so a VM that does not
+	// use it renders byte-identically to before this field existed.
+	Alias string `yaml:"alias,omitempty" json:"alias,omitempty"`
+}
+
+type LibvirtVideoResolution struct {
+	// Both required: libvirt's <resolution> has no default and a 0x0 would be
+	// emitted verbatim.
+	X int `yaml:"x,omitempty" json:"x"`
+
+	Y int `yaml:"y,omitempty" json:"y"`
+}
+
+type LibvirtVideoDriver struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	VGAConf string `yaml:"vgaconf,omitempty" json:"vgaconf,omitempty"`
+
+	IOMMU *bool `yaml:"iommu,omitempty" json:"iommu,omitempty"`
+
+	ATS *bool `yaml:"ats,omitempty" json:"ats,omitempty"`
+
+	Packed *bool `yaml:"packed,omitempty" json:"packed,omitempty"`
+
+	PagePerVQ *bool `yaml:"page_per_vq,omitempty" json:"page_per_vq,omitempty"`
 }
 
 type LibvirtAudio struct {
