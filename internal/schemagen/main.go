@@ -198,21 +198,21 @@ func writeVocab(dir, out string) error {
 	if err != nil {
 		return err
 	}
-	distroFormats, err := distroTrait(schema, "format")
+	distroFormats, err := distroTrait(schema, "format", true)
 	if err != nil {
 		return err
 	}
-	distroSSHUnits, err := distroTrait(schema, "ssh_unit")
+	distroSSHUnits, err := distroTrait(schema, "ssh_unit", true)
 	if err != nil {
 		return err
 	}
-	distroInits, err := distroTrait(schema, "init")
+	distroInits, err := distroTrait(schema, "init", true)
 	if err != nil {
 		return err
 	}
 	// ovmf_family is OPTIONAL on #DistroTrait, so ids that declare none are absent
 	// from the table rather than an error — that absence IS the all-families fallback.
-	distroOvmfFamilies, err := distroTraitOptional(schema, "ovmf_family")
+	distroOvmfFamilies, err := distroTrait(schema, "ovmf_family", false)
 	if err != nil {
 		return err
 	}
@@ -573,10 +573,14 @@ func renderVersion(schemaVersion, schemaFloor string) string {
 
 // distroTrait harvests one trait field across every #Distros entry, so the id space and
 // each of its traits come from ONE CUE struct rather than parallel hand-written tables.
-// distroTraitOptional is distroTrait for a trait an id may omit: a missing field is
-// skipped instead of failing generation. The resulting gap is meaningful — it is what
-// keeps a distro on the fallback path rather than pinning it to a family.
-func distroTraitOptional(schema cue.Value, field string) (map[string]string, error) {
+// distroTrait collects one #DistroTrait field across every distro id.
+//
+// required distinguishes the two kinds of trait the vocabulary has. format, ssh_unit
+// and init are declared by EVERY id, so a missing one is a vocabulary bug and fails
+// generation. ovmf_family is optional, and its ABSENCE is meaningful: an id with no
+// family stays on the all-families OVMF fallback rather than being pinned to a layout
+// nobody verified. Erroring there would force a guess for archarm and alpine.
+func distroTrait(schema cue.Value, field string, required bool) (map[string]string, error) {
 	distros := schema.LookupPath(cue.ParsePath("#Distros"))
 	if err := distros.Err(); err != nil {
 		return nil, fmt.Errorf("lookup #Distros: %w", err)
@@ -592,7 +596,7 @@ func distroTraitOptional(schema cue.Value, field string) (map[string]string, err
 			id = it.Selector().String()
 		}
 		v := it.Value().LookupPath(cue.ParsePath(field))
-		if !v.Exists() {
+		if !v.Exists() && !required {
 			continue
 		}
 		sv, err := v.String()
@@ -601,32 +605,9 @@ func distroTraitOptional(schema cue.Value, field string) (map[string]string, err
 		}
 		out[id] = sv
 	}
-	return out, nil
-}
-
-func distroTrait(schema cue.Value, field string) (map[string]string, error) {
-	distros := schema.LookupPath(cue.ParsePath("#Distros"))
-	if err := distros.Err(); err != nil {
-		return nil, fmt.Errorf("lookup #Distros: %w", err)
-	}
-	it, err := distros.Fields()
-	if err != nil {
-		return nil, fmt.Errorf("iterate #Distros: %w", err)
-	}
-	out := map[string]string{}
-	for it.Next() {
-		id := it.Selector().Unquoted()
-		if id == "" {
-			id = it.Selector().String()
-		}
-		v := it.Value().LookupPath(cue.ParsePath(field))
-		sv, err := v.String()
-		if err != nil {
-			return nil, fmt.Errorf("#Distros.%s.%s: %w", id, field, err)
-		}
-		out[id] = sv
-	}
-	if len(out) == 0 {
+	// Only a REQUIRED trait proves #Distros was populated at all; an optional one may
+	// legitimately be empty, so it cannot carry that check.
+	if required && len(out) == 0 {
 		return nil, fmt.Errorf("#Distros is empty — every distro-trait table would generate empty")
 	}
 	return out, nil
