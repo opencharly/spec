@@ -125,6 +125,10 @@
 	// why this is a map rather than a field per directive.
 	unit_options?: {[string]: {[string]: string | [...string]}} @go(UnitOptions)
 
+	// wait_for — the readiness precondition, carried from the entry so each init's
+	// template can lower it in its own idiom.
+	wait_for?: #ServiceWaitFor @go(WaitFor,optional=nillable)
+
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The
 	// host derives both from the ServiceEntry so the plugin renders from the

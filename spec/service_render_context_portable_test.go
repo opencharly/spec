@@ -63,3 +63,30 @@ func TestBuildServiceRenderContextLeavesPortableFieldsUnsetWhenAbsent(t *testing
 			"%+v — existing candies would stop rendering byte-identically", ctx)
 	}
 }
+
+// wait_for has to reach the render context like the rest: a readiness precondition
+// the templates cannot see is a precondition that never runs.
+func TestBuildServiceRenderContextCarriesWaitFor(t *testing.T) {
+	entry := &ServiceEntry{
+		Name: "svc", Exec: "/usr/bin/svc",
+		WaitFor: &ServiceWaitFor{
+			Paths:   []string{"/tmp/xdg/wayland-1", "/run/broker.sock"},
+			Timeout: "30s",
+		},
+	}
+	ctx := BuildServiceRenderContext(entry, ServiceRenderContext{})
+	if ctx.WaitFor == nil {
+		t.Fatal("WaitFor is nil: the readiness precondition never reaches a template, " +
+			"so the service starts before what it needs exists")
+	}
+	if len(ctx.WaitFor.Paths) != 2 || ctx.WaitFor.Timeout != "30s" {
+		t.Errorf("WaitFor = %+v, want both paths and the timeout", ctx.WaitFor)
+	}
+	// A service without wait_for must stay nil so a template can omit the whole
+	// pre-start branch rather than emitting an empty one.
+	plain := BuildServiceRenderContext(&ServiceEntry{Name: "p", Exec: "/bin/p"},
+		ServiceRenderContext{})
+	if plain.WaitFor != nil {
+		t.Errorf("WaitFor = %+v for an entry that declares none, want nil", plain.WaitFor)
+	}
+}

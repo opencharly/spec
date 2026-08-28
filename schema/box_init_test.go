@@ -100,6 +100,24 @@ func unifyDef(t *testing.T, def, value string) error {
 	return u.Validate(cue.Concrete(false))
 }
 
+// unifyDefFinal is unifyDef under FINAL validation, which is what surfaces
+// required-field and list-arity violations; the structural form does not.
+func unifyDefFinal(t *testing.T, def, value string) error {
+	t.Helper()
+	src, _, err := schemaconcat.ConcatSchema(schema.FS, ".", nil)
+	if err != nil {
+		t.Fatalf("concatenating the shipped schema: %v", err)
+	}
+	ctx := cuecontext.New()
+	v := ctx.CompileString(src)
+	d := v.LookupPath(cue.ParsePath(def))
+	u := d.Unify(ctx.CompileString(value))
+	if u.Err() != nil {
+		return u.Err()
+	}
+	return u.Validate(cue.Final())
+}
+
 // The portable lifecycle fields must be authorable on a service. Each is honoured by
 // at least two of the three inits — the admission rule that keeps a single-init knob
 // out of the shared schema and in unit_options: instead.
@@ -158,5 +176,27 @@ func TestServiceRenderContextCarriesTheSameFields(t *testing.T) {
 	}`
 	if err := unifyDef(t, "#ServiceRenderContext", val); err != nil {
 		t.Errorf("#ServiceRenderContext cannot carry the portable fields:\n%v", err)
+	}
+}
+
+// wait_for replaces nine hand-rolled poll loops in the candy corpus. paths is the
+// whole surface: every one of those loops waits on a filesystem path.
+func TestCandyServiceAcceptsWaitFor(t *testing.T) {
+	ok := `{name: "x", exec: "/bin/x", wait_for: {paths: ["/run/a.sock"], timeout: "30s"}}`
+	if err := unifyDef(t, "#CandyService", ok); err != nil {
+		t.Errorf("#CandyService rejects wait_for:\n%v", err)
+	}
+	// A bare int timeout, matching stop_timeout's shape rather than a second convention.
+	if err := unifyDef(t, "#CandyService", `{name: "x", exec: "/bin/x", wait_for: {paths: ["/a"], timeout: 30}}`); err != nil {
+		t.Errorf("#CandyService rejects an integer wait_for timeout:\n%v", err)
+	}
+	// paths is REQUIRED: a wait_for waiting for nothing is a no-op that reads like a
+	// guard. Required-field violations only surface under final validation, so this
+	// case validates concretely rather than structurally.
+	if err := unifyDefFinal(t, "#CandyService", `{name: "x", exec: "/bin/x", wait_for: {timeout: "30s"}}`); err == nil {
+		t.Error("#CandyService accepts a wait_for with no paths — a guard that guards nothing")
+	}
+	if err := unifyDef(t, "#ServiceRenderContext", ok); err != nil {
+		t.Errorf("#ServiceRenderContext cannot carry wait_for:\n%v", err)
 	}
 }
