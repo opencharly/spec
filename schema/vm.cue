@@ -260,6 +260,29 @@
 	launch_security?:      #LibvirtLaunchSecurity @go(LaunchSecurity,optional=nillable)
 	resource?:             #LibvirtResource @go(Resource,optional=nillable)
 	sysinfo?:              #LibvirtSysInfo @go(SysInfo,optional=nillable)
+
+	// qemu_override: QEMU frontend device properties libvirt models no element
+	// for, rendered as
+	//   <qemu:override><qemu:device alias='ua-…'><qemu:frontend><qemu:property …/>
+	// on the libvirt backend and as `-device <dev>,<prop>=<val>` on the qemu one.
+	//
+	// This is the ONE escape hatch for the device-property axis, deliberately
+	// shaped like libvirt's own override element rather than as a field per knob:
+	// virtio-gpu alone carries drm_native_context, hostmem, max_hostmem and venus,
+	// and rutabaga adds more. A new knob is a YAML line, never a schema change.
+	//
+	// Keyed by the device's USER alias, which the device itself must declare (e.g.
+	// #LibvirtVideo.alias) — an override naming an alias no device carries is a
+	// hard render error, not a silent no-op. The `ua-` prefix libvirt demands is
+	// enforced on the ALIAS field, so it reaches these keys transitively: a key
+	// that is not `ua-`-prefixed can never equal a valid alias, and the renderer
+	// then names it as unmatched. (The key is typed `[string]` rather than a
+	// pattern: `cue exp gengotypes` renders a pattern-constrained key as an EMPTY
+	// Go struct, which would drop every override on the floor.)
+	//
+	// Requires libvirt >= 8.2.0. An override TAINTS the domain (libvirt records
+	// taint flag `custom-device`); that is libvirt's own policy, not charly's.
+	qemu_override?: {[string]: {[string]: string | bool | int}} @go(QemuOverride)
 }
 
 #LibvirtFeatures: {
@@ -523,13 +546,46 @@
 }
 
 #LibvirtGraphics: {
-	type:      "vnc" | "spice" | "rdp" | "sdl" | "egl-headless" // required
-	port?:     int                                              @go(,type=int)
-	autoport?: string                                           @go(AutoPort)
-	listen?:   #LibvirtListen                                   @go(Listen,type=LibvirtGraphicsListeners,optional=nillable)
+	type:      "vnc" | "spice" | "rdp" | "sdl" | "egl-headless" | "dbus" // required
+	port?:     int                                                       @go(,type=int)
+	autoport?: string                                                    @go(AutoPort)
+	listen?:   #LibvirtListen                                            @go(Listen,type=LibvirtGraphicsListeners,optional=nillable)
 	passwd?:   string
 	keymap?:   string
-	gl?:       string @go(GL)
+
+	// gl: libvirt models <gl> PER GRAPHICS TYPE, not as one shared element, so this
+	// is a struct rather than the scalar it used to be. A bare `gl: "yes"` could
+	// only ever reach spice's enable= attribute and had NO way to express
+	// rendernode= — which is the attribute that points virtio-gpu at a specific
+	// host DRM node, and therefore the whole reason a GPU-in-VM candy touches <gl>
+	// at all. `<acceleration rendernode=…>` on #LibvirtVideo is NOT the substitute:
+	// libvirt documents that one as vhostuser-driver-only.
+	gl?: #LibvirtGraphicsGL @go(GL,optional=nillable)
+
+	// address/p2p are dbus-only (<graphics type='dbus' address=… p2p=…/>).
+	address?: string
+	p2p?:     bool @go(P2P,type=*bool)
+
+	// The per-type field rules — <gl> exists only on spice/egl-headless/dbus,
+	// gl.enable only on spice/dbus, address/p2p only on dbus — are NOT expressible
+	// here. Writing them as `if type == … { gl?: _|_ }` type-checks in CUE but
+	// makes `cue exp gengotypes` emit `type LibvirtGraphics any`: it evaluates the
+	// definition with `type` still abstract, so every branch stays unresolved, the
+	// field kinds reduce to bottom, and the generator degrades the WHOLE struct.
+	// That compiles, so the damage is silent — every graphics block would decode
+	// into an untyped map. (The `if firmware == …` rules on #Vm are safe only
+	// because they TIGHTEN fields to concrete values instead of to bottom.)
+	//
+	// They are enforced instead as hard render errors in the libvirt bridge's
+	// mapGraphics, which is the exact point where the field would otherwise be
+	// dropped on the floor, and where the message can name the reason.
+}
+
+#LibvirtGraphicsGL: {
+	enable?: bool @go(Enable,type=*bool)
+	// render_node: absolute path to the host DRM render node (/dev/dri/renderD128).
+	// Requires libvirt >= 5.8.0 (spice) / >= 5.10.0 (egl-headless).
+	render_node?: string @go(RenderNode)
 }
 
 // LibvirtGraphicsListeners union: scalar address | single map | list of maps.
@@ -542,11 +598,62 @@
 }
 
 #LibvirtVideo: {
-	model:    string & !="" // LibvirtVideo.Model required; "none" is valid
-	vram?:    int           @go(VRAM,type=int)
-	heads?:   int           @go(,type=int)
-	accel3d?: bool          @go(Accel3D,type=*bool)
-	primary?: bool          @go(,type=*bool)
+	model: string & !="" // LibvirtVideo.Model required; "none" is valid
+
+	// device: the concrete QEMU device behind the model — `virtio-gpu-gl`,
+	// `virtio-vga-gl`, `vhost-user-gpu`, … `model` alone cannot select these:
+	// model='virtio' emits plain virtio-vga, which has no GL and therefore no
+	// blob/native-context support. Requires libvirt >= 12.5.0.
+	device?: string
+
+	ram?:    int @go(,type=int)
+	vram?:   int @go(VRAM,type=int)
+	vram64?: int @go(VRAM64,type=int)
+	vgamem?: int @go(VGAMem,type=int)
+	heads?:  int @go(,type=int)
+
+	// blob: virtio-gpu blob resources — the guest maps host memory directly
+	// instead of copying through the device. Required for a native-context or
+	// venus guest. Requires libvirt >= 9.2.0 and QEMU >= 6.1, and the domain MUST
+	// have shared memory backing (memory_backing.source: memfd + access: shared).
+	blob?: bool @go(,type=*bool)
+	edid?: bool @go(EDID,type=*bool)
+
+	accel3d?: bool @go(Accel3D,type=*bool)
+	accel2d?: bool @go(Accel2D,type=*bool)
+
+	// render_node on <acceleration> is documented by libvirt as VHOSTUSER-DRIVER
+	// ONLY (since 5.8.0). To point an ordinary virtio-gpu at a host node, set
+	// graphics.gl.render_node instead — that is the attribute libvirt actually
+	// reads for it.
+	render_node?: string @go(RenderNode)
+
+	primary?:    bool                     @go(,type=*bool)
+	resolution?: #LibvirtVideoResolution  @go(,optional=nillable)
+	driver?:     #LibvirtVideoDriver      @go(,optional=nillable)
+
+	// alias: a libvirt USER alias for this device. Its only purpose is to be
+	// targeted by libvirt.qemu_override — libvirt refuses an override against its
+	// own auto-assigned alias (video0), which is why the `ua-` prefix is required
+	// rather than conventional. Emitted ONLY when declared, so a VM that does not
+	// use it renders byte-identically to before this field existed.
+	alias?: string & =~"^ua-[A-Za-z0-9_.-]+$"
+}
+
+#LibvirtVideoResolution: {
+	// Both required: libvirt's <resolution> has no default and a 0x0 would be
+	// emitted verbatim.
+	x: int & >0 @go(X,type=int)
+	y: int & >0 @go(Y,type=int)
+}
+
+#LibvirtVideoDriver: {
+	name?:        string
+	vgaconf?:     string @go(VGAConf)
+	iommu?:       bool   @go(IOMMU,type=*bool)
+	ats?:         bool   @go(ATS,type=*bool)
+	packed?:      bool   @go(,type=*bool)
+	page_per_vq?: bool   @go(PagePerVQ,type=*bool)
 }
 
 #LibvirtAudio: {

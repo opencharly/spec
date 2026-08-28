@@ -50,8 +50,16 @@
 // be expressed as rename_key/move_key ops — see the charly-side migration
 // entry) when the spec submodule pointer is bumped (step 3 of the cross-repo
 // cutover).
+// Bumped again by the GPU-configuration-surface cutover: #LibvirtGraphics.gl
+// changes SHAPE, from a bare scalar (`gl: "yes"`, which could only ever reach
+// spice's enable= attribute) to #LibvirtGraphicsGL, so that rendernode= — the
+// attribute that points virtio-gpu at a specific host DRM node — is expressible
+// at all. An authored WIRE-SHAPE change on the vm surface, migrated by the
+// `reshapeGraphicsGL` reshaper hook in candy/plugin-migrate: the scalar sits at
+// vm.libvirt.devices.graphics[].gl, a field inside a LIST element, which none of
+// the four key-transform ops can reach.
 // Re-stamped to the merge-time CalVer by the fresh pr-validator.
-#SchemaVersion: #CanonCalVer & "2026.232.0520" @go(-)
+#SchemaVersion: #CanonCalVer & "2026.240.1943" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
 // the migration-baseline reset it EQUALS #SchemaVersion — the deleted 47-step chain
