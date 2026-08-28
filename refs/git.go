@@ -23,6 +23,11 @@ import (
 
 // GitResolveRef resolves a git reference (tag, branch, or commit) to a full commit hash.
 // Uses git ls-remote for tags/branches; for commit hashes, validates length and returns as-is.
+//
+// NOTE: deliberately NOT cached. DownloadRepo's freshness contract resolves the ref to its
+// CURRENT commit on every call, so a mutable branch (main) that moved upstream is re-downloaded
+// instead of serving stale content (refs/git_test.go TestDownloadRepoFrom_RefreshesMovedBranch).
+// A TTL cache here would break that contract — the freshness check must see the live commit.
 func GitResolveRef(repoURL string, ref string) (string, error) {
 	// If ref looks like a full commit hash (40 hex chars), return as-is
 	if len(ref) == 40 && isHex(ref) {
@@ -407,6 +412,11 @@ func downloadRepoFrom(repoURL, repoPath, version string) (string, error) {
 // Uses git ls-remote --symref to find what HEAD points to.
 // Returns the branch name (e.g., "main", "master").
 func GitDefaultBranch(repoURL string) (string, error) {
+	// Fast path: a fresh cached entry avoids the network entirely (issue #208).
+	if branch := cachedDefaultBranch(repoURL); branch != "" {
+		return branch, nil
+	}
+
 	cmd := exec.Command("git", "ls-remote", "--symref", repoURL, "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
@@ -416,6 +426,7 @@ func GitDefaultBranch(repoURL string) (string, error) {
 	if branch == "" {
 		return "", fmt.Errorf("could not determine default branch for %s", repoURL)
 	}
+	rememberDefaultBranch(repoURL, branch)
 	return branch, nil
 }
 
@@ -438,7 +449,17 @@ func parseDefaultBranch(output string) string {
 // GitLatestTag queries a remote repo for tags and returns the highest semver tag.
 // Looks for tags matching v* pattern, sorts by semver, returns the highest.
 // Returns an error if no version tags are found.
+//
+// The result is cached persistently (latest-tags.json beside the repo cache) with a
+// 1h TTL — tags are immutable and add-only, so a cached value is valid until a newer
+// tag appears. This removes the per-ref network round-trip from repeated resolutions
+// (issue #208: 366 git-remote-https invocations in one `charly status`).
 func GitLatestTag(repoURL string) (string, error) {
+	// Fast path: a fresh cached entry avoids the network entirely.
+	if tag := cachedLatestTag(repoURL); tag != "" {
+		return tag, nil
+	}
+
 	cmd := exec.Command("git", "ls-remote", "--tags", repoURL)
 	out, err := cmd.Output()
 	if err != nil {
@@ -454,7 +475,9 @@ func GitLatestTag(repoURL string) (string, error) {
 		return CompareSemver(tags[i], tags[j]) < 0
 	})
 
-	return tags[len(tags)-1], nil
+	latest := tags[len(tags)-1]
+	rememberLatestTag(repoURL, latest)
+	return latest, nil
 }
 
 // parseTagRefs extracts tag names from git ls-remote --tags output.
@@ -506,3 +529,4 @@ func isHex(s string) bool {
 	}
 	return len(s) > 0
 }
+// cache freshness: see latest_tag_cache.go
