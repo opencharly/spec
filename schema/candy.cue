@@ -241,6 +241,41 @@
 	stop_signal?:  string & !="" @go(StopSignal)
 	exit_code?:    string & !="" @go(ExitCode)
 	priority?:     int           @go(,type=int)
+
+	// ---- Portable lifecycle fields -------------------------------------------
+	// Every field below is expressible by at least TWO of the three init systems.
+	// That is the admission rule: a field only one init can honour belongs in
+	// unit_options: instead, where it is named as that init's own.
+	//
+	// type — systemd Type=; supervisord approximates oneshot with startsecs=0;
+	// OpenRC distinguishes forking via command_background.
+	type?: "simple" | "exec" | "forking" | "oneshot" | "notify" | "idle" @go(Type)
+	// requires — a HARD dependency, distinct from after:'s ordering. systemd
+	// Requires=; OpenRC depend(){ need … }, which its template already emits for
+	// localmount. supervisord has no equivalent and ignores it.
+	requires?: [...(string & !="")] @go(Requires)
+	// restart_sec — delay before a restart. systemd RestartSec=; OpenRC
+	// --respawn-delay. Accepts "5s" or a bare 5 (Go-coerced; the Go field is string,
+	// matching stop_timeout's shape).
+	restart_sec?: (string & !="") | int @go(RestartSec,type=string)
+	// watchdog_sec — liveness deadline. systemd WatchdogSec=; OpenRC
+	// --healthcheck-timer. Requires type: notify on systemd to be meaningful.
+	watchdog_sec?: (string & !="") | int @go(WatchdogSec,type=string)
+
+	// unit_options — the ONE escape hatch for init-specific directives, keyed
+	// init-name -> directive -> value.
+	//
+	// It exists so #ServiceRenderContext does not grow a field per init-specific
+	// knob. That struct is a kind-AGNOSTIC envelope rendered by every init's
+	// template; putting NotifyAccess, Slice, KillMode, RuntimeDirectory and a
+	// hardening block into it would make it systemd's typed shape wearing a generic
+	// name — the leak the boundary law names. With this map, a FOURTH init needs no
+	// schema change, exactly as the openrc init entity needed no Go change.
+	//
+	// A value may be a scalar or a list; a list emits the directive once per element,
+	// which is what systemd expects for repeatable directives such as
+	// RuntimeDirectory= or ReadWritePaths=.
+	unit_options?: {[string]: {[string]: string | [...string]}} @go(UnitOptions)
 }
 #CandyServiceOverrides: {
 	env?: #StrMap

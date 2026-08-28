@@ -111,6 +111,20 @@
 	exec_start_pre?: [...string] @go(ExecStartPre)
 	exec_start_post?: [...string] @go(ExecStartPost)
 
+	// Portable lifecycle fields, carried verbatim from the entry. Each is honoured
+	// by at least two inits; an init whose template does not reference one simply
+	// ignores it, exactly as supervisord already ignores wanted_by/before.
+	type?: string @go(Type)
+	requires?: [...string] @go(Requires)
+	restart_sec?:  string @go(RestartSec)
+	watchdog_sec?: string @go(WatchdogSec)
+
+	// unit_options — init-specific directives, keyed init-name -> directive -> value.
+	// A template reads only its OWN key, so this stays ONE field on the shared
+	// envelope no matter how many inits exist. See #CandyService.unit_options for
+	// why this is a map rather than a field per directive.
+	unit_options?: {[string]: {[string]: string | [...string]}} @go(UnitOptions)
+
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The
 	// host derives both from the ServiceEntry so the plugin renders from the

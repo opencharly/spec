@@ -76,3 +76,87 @@ func TestBoxInitDocumentsItsInvariant(t *testing.T) {
 			"without it the next init is omitted the way openrc was")
 	}
 }
+
+// unifyDef validates a concrete value against a named definition in the shipped schema.
+func unifyDef(t *testing.T, def, value string) error {
+	t.Helper()
+	src, _, err := schemaconcat.ConcatSchema(schema.FS, ".", nil)
+	if err != nil {
+		t.Fatalf("concatenating the shipped schema: %v", err)
+	}
+	ctx := cuecontext.New()
+	v := ctx.CompileString(src)
+	if v.Err() != nil {
+		t.Fatalf("the shipped schema does not compile: %v", v.Err())
+	}
+	d := v.LookupPath(cue.ParsePath(def))
+	if !d.Exists() {
+		t.Fatalf("%s is not defined in the shipped schema", def)
+	}
+	u := d.Unify(ctx.CompileString(value))
+	if u.Err() != nil {
+		return u.Err()
+	}
+	return u.Validate(cue.Concrete(false))
+}
+
+// The portable lifecycle fields must be authorable on a service. Each is honoured by
+// at least two of the three inits — the admission rule that keeps a single-init knob
+// out of the shared schema and in unit_options: instead.
+func TestCandyServiceAcceptsPortableLifecycleFields(t *testing.T) {
+	for _, tc := range []struct{ name, val string }{
+		{"type", `{name: "x", exec: "/bin/x", type: "notify"}`},
+		{"requires", `{name: "x", exec: "/bin/x", requires: ["a.service"]}`},
+		{"restart_sec as a string", `{name: "x", exec: "/bin/x", restart_sec: "5s"}`},
+		{"restart_sec as a bare int", `{name: "x", exec: "/bin/x", restart_sec: 5}`},
+		{"watchdog_sec", `{name: "x", exec: "/bin/x", watchdog_sec: "30s"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := unifyDef(t, "#CandyService", tc.val); err != nil {
+				t.Errorf("#CandyService rejects %s:\n%v", tc.name, err)
+			}
+		})
+	}
+}
+
+// type: is an enum, not free text — a typo must not reach a template and render an
+// invalid Type= directive.
+func TestCandyServiceTypeIsConstrained(t *testing.T) {
+	if err := unifyDef(t, "#CandyService", `{name: "x", exec: "/bin/x", type: "notifyy"}`); err == nil {
+		t.Error("#CandyService accepts an unknown service type; the field constrains nothing")
+	}
+}
+
+// unit_options is the one escape hatch for init-specific directives. It must take a
+// scalar OR a list per directive — systemd repeats directives such as
+// RuntimeDirectory= once per element — and it must be keyed by init name, so a
+// template reads only its own.
+func TestCandyServiceUnitOptionsTakeScalarsAndLists(t *testing.T) {
+	val := `{
+		name: "x", exec: "/bin/x",
+		unit_options: {
+			systemd: {
+				KillMode: "process"
+				RuntimeDirectory: ["cstream", "cstream/leaders"]
+			}
+			openrc: {supervise_daemon_args: "--foo"}
+		}
+	}`
+	if err := unifyDef(t, "#CandyService", val); err != nil {
+		t.Errorf("#CandyService rejects unit_options with a scalar and a list:\n%v", err)
+	}
+}
+
+// The render context is what every init's template renders against, so the same
+// fields have to reach it — a field on the entry that never lands in the context is
+// unreachable from any template.
+func TestServiceRenderContextCarriesTheSameFields(t *testing.T) {
+	val := `{
+		name: "x", exec: "/bin/x", type: "notify", requires: ["a.service"],
+		restart_sec: "5s", watchdog_sec: "30s",
+		unit_options: {systemd: {Slice: "session.slice"}}
+	}`
+	if err := unifyDef(t, "#ServiceRenderContext", val); err != nil {
+		t.Errorf("#ServiceRenderContext cannot carry the portable fields:\n%v", err)
+	}
+}
