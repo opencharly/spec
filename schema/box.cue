@@ -94,7 +94,13 @@
 	env_file?:   string & !="" @go(EnvFile)
 	security?:   #Security @go(Security,optional=nillable)
 	network?:    string & !=""
-	init?:       "supervisord" | "systemd"
+	// init — pin the box's init system instead of letting composition auto-detect it.
+	// Every value here must be an init the build vocabulary actually defines
+	// (charly.yml's `init:` entities): a word the vocabulary knows but this enum
+	// omits is unselectable, which is what kept `openrc` out of reach despite being
+	// a first-class init with its own service_template, management commands and
+	// unit_path_template.
+	init?:       "supervisord" | "systemd" | "openrc"
 	data_image?: bool @go(DataImage)
 	bootc?:      bool // image is bootc-bootable (for `charly vm build` → qcow2)
 	readiness?:  #Readiness @go(Readiness,optional=nillable)

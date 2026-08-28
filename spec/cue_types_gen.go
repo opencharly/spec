@@ -1007,6 +1007,12 @@ type Box struct {
 
 	Network string `yaml:"network,omitempty" json:"network,omitempty"`
 
+	// init — pin the box's init system instead of letting composition auto-detect it.
+	// Every value here must be an init the build vocabulary actually defines
+	// (charly.yml's `init:` entities): a word the vocabulary knows but this enum
+	// omits is unselectable, which is what kept `openrc` out of reach despite being
+	// a first-class init with its own service_template, management commands and
+	// unit_path_template.
 	Init string `yaml:"init,omitempty" json:"init,omitempty"`
 
 	DataImage bool `yaml:"data_image,omitempty" json:"data_image,omitempty"`
