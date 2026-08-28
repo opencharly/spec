@@ -31,26 +31,37 @@
 	// init is the guest's service manager. It selects HOW a service is enabled and
 	// started, never a distro-specific command inline in Go.
 	init: "systemd" | "openrc"
+	// ovmf_family is which vendor's OVMF firmware layout a HOST of this distro ships,
+	// selecting where the edk2 images live. It is a property of the distro like the
+	// other three, and it lived in a hand-maintained `ovmf_distro_aliases:` map kept in
+	// TWO byte-identical copies (charly's charly.yml and plugin-vm's
+	// build_defaults.yml) — a table that had to be edited twice for every new distro.
+	//
+	// OPTIONAL on purpose: a distro with no known family keeps today's behaviour
+	// exactly, where ovmfCandidatesForDistro tries the union of all families and the
+	// not-found error emits the generic install hint. archarm (aarch64 firmware paths
+	// differ) and alpine are unset for that reason, as they were before.
+	ovmf_family?: "fedora" | "arch" | "debian"
 } @go(-)
 
 #Distros: [string]: #DistroTrait
 #Distros: { // @go(-) — see #DistroTrait
-	fedora: {format: "rpm", ssh_unit: "sshd", init: "systemd"}
-	rhel: {format: "rpm", ssh_unit: "sshd", init: "systemd"}
-	centos: {format: "rpm", ssh_unit: "sshd", init: "systemd"}
-	rocky: {format: "rpm", ssh_unit: "sshd", init: "systemd"}
-	almalinux: {format: "rpm", ssh_unit: "sshd", init: "systemd"}
+	fedora: {format: "rpm", ssh_unit: "sshd", init: "systemd", ovmf_family: "fedora"}
+	rhel: {format: "rpm", ssh_unit: "sshd", init: "systemd", ovmf_family: "fedora"}
+	centos: {format: "rpm", ssh_unit: "sshd", init: "systemd", ovmf_family: "fedora"}
+	rocky: {format: "rpm", ssh_unit: "sshd", init: "systemd", ovmf_family: "fedora"}
+	almalinux: {format: "rpm", ssh_unit: "sshd", init: "systemd", ovmf_family: "fedora"}
 
 	// Debian-family: the OpenSSH service is `ssh`, and on releases where it is
 	// socket-activated the socket carries the same stem.
-	debian: {format: "deb", ssh_unit: "ssh", init: "systemd"}
-	ubuntu: {format: "deb", ssh_unit: "ssh", init: "systemd"}
+	debian: {format: "deb", ssh_unit: "ssh", init: "systemd", ovmf_family: "debian"}
+	ubuntu: {format: "deb", ssh_unit: "ssh", init: "systemd", ovmf_family: "debian"}
 
-	arch: {format: "pac", ssh_unit: "sshd", init: "systemd"}
+	arch: {format: "pac", ssh_unit: "sshd", init: "systemd", ovmf_family: "arch"}
 	archarm: {format: "pac", ssh_unit: "sshd", init: "systemd"}
-	manjaro: {format: "pac", ssh_unit: "sshd", init: "systemd"}
-	endeavouros: {format: "pac", ssh_unit: "sshd", init: "systemd"}
-	cachyos: {format: "pac", ssh_unit: "sshd", init: "systemd"}
+	manjaro: {format: "pac", ssh_unit: "sshd", init: "systemd", ovmf_family: "arch"}
+	endeavouros: {format: "pac", ssh_unit: "sshd", init: "systemd", ovmf_family: "arch"}
+	cachyos: {format: "pac", ssh_unit: "sshd", init: "systemd", ovmf_family: "arch"}
 
 	// Alpine runs OpenRC, not systemd. This row is what makes that a first-class,
 	// enumerable property instead of a branch on the string "alpine".
