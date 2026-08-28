@@ -168,3 +168,33 @@ func TestGpuSurfaceTypesAreStructsNotAny(t *testing.T) {
 	_ = LibvirtVideoDriver{Name: "vhostuser"}
 	_ = LibvirtDomain{QemuOverride: map[string]map[string]any{"ua-gpu": {"blob": true}}}
 }
+
+// The two closed vocabularies are transcribed from libvirt's own RNG
+// (/usr/share/libvirt/schemas/domaincommon.rng), so this test is the place a drift between
+// charly's schema and libvirt's would show up. Both were plain `string` when the fields
+// landed, which meant an invalid value was accepted here and rejected at DEFINE time, with
+// an RNG error that blames <devices> rather than the attribute.
+func TestLibvirtVideoClosedVocabularies(t *testing.T) {
+	// domaincommon.rng, the <model type='virtio'> group.
+	for _, dev := range []string{
+		"virtio-vga", "virtio-vga-gl", "virtio-gpu", "virtio-gpu-gl",
+		"vhost-user-vga", "vhost-user-gpu",
+	} {
+		var v LibvirtVideo
+		if err := yaml.Unmarshal([]byte("model: virtio\ndevice: "+dev+"\n"), &v); err != nil {
+			t.Fatalf("decode %s: %v", dev, err)
+		}
+		if v.Device != dev {
+			t.Errorf("device %q did not decode", dev)
+		}
+	}
+	// domaincommon.rng, the video <driver> element. "qxl" is the plausible wrong guess —
+	// it is a valid video MODEL but not a driver name.
+	var d LibvirtVideoDriver
+	if err := yaml.Unmarshal([]byte("name: vhostuser\nvgaconf: io\n"), &d); err != nil {
+		t.Fatalf("decode driver: %v", err)
+	}
+	if d.Name != "vhostuser" || d.VGAConf != "io" {
+		t.Errorf("driver = %#v", d)
+	}
+}
