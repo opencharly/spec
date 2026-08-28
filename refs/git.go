@@ -529,3 +529,4 @@ func isHex(s string) bool {
 	}
 	return len(s) > 0
 }
+// cache freshness: see latest_tag_cache.go
