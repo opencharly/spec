@@ -29,6 +29,11 @@ func GitResolveRef(repoURL string, ref string) (string, error) {
 		return ref, nil
 	}
 
+	// Fast path: a fresh cached resolution avoids the network (issue #208).
+	if commit := cachedResolvedRef(repoURL, ref); commit != "" {
+		return commit, nil
+	}
+
 	// Query the ref AND its peeled ^{} form so an ANNOTATED tag resolves to the
 	// underlying COMMIT (refs/tags/X^{}), not the tag object (refs/tags/X).
 	cmd := exec.Command("git", "ls-remote", repoURL, ref, "refs/tags/"+ref, "refs/tags/"+ref+"^{}", "refs/heads/"+ref)
@@ -39,6 +44,7 @@ func GitResolveRef(repoURL string, ref string) (string, error) {
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if commit := pickResolvedCommit(lines, ref); commit != "" {
+		rememberResolvedRef(repoURL, ref, commit)
 		return commit, nil
 	}
 

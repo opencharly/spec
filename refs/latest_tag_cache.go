@@ -58,9 +58,16 @@ type defaultBranchEntry struct {
 	Resolved time.Time `json:"resolved"`
 }
 
+// resolvedRefEntry is the cached GitResolveRef result (repo URL + ref → commit).
+type resolvedRefEntry struct {
+	Commit   string    `json:"commit"`
+	Resolved time.Time `json:"resolved"`
+}
+
 type latestTagCache struct {
 	Entries       map[string]latestTagEntry     `json:"entries"`
 	DefaultBranch map[string]defaultBranchEntry `json:"default_branches,omitempty"`
+	ResolvedRefs  map[string]resolvedRefEntry   `json:"resolved_refs,omitempty"`
 }
 
 func loadLatestTagCache() (latestTagCache, error) {
@@ -74,6 +81,7 @@ func loadLatestTagCache() (latestTagCache, error) {
 		if os.IsNotExist(err) {
 			c.Entries = map[string]latestTagEntry{}
 			c.DefaultBranch = map[string]defaultBranchEntry{}
+			c.ResolvedRefs = map[string]resolvedRefEntry{}
 			return c, nil
 		}
 		return c, err
@@ -82,6 +90,7 @@ func loadLatestTagCache() (latestTagCache, error) {
 		// A corrupt cache is not fatal — start fresh.
 		c.Entries = map[string]latestTagEntry{}
 		c.DefaultBranch = map[string]defaultBranchEntry{}
+		c.ResolvedRefs = map[string]resolvedRefEntry{}
 		return c, nil
 	}
 	if c.Entries == nil {
@@ -89,6 +98,9 @@ func loadLatestTagCache() (latestTagCache, error) {
 	}
 	if c.DefaultBranch == nil {
 		c.DefaultBranch = map[string]defaultBranchEntry{}
+	}
+	if c.ResolvedRefs == nil {
+		c.ResolvedRefs = map[string]resolvedRefEntry{}
 	}
 	return c, nil
 }
@@ -178,6 +190,35 @@ func cachedDefaultBranch(repoURL string) string {
 func rememberDefaultBranch(repoURL, branch string) {
 	_ = withLatestTagCacheLock(func(c *latestTagCache) error {
 		c.DefaultBranch[repoURL] = defaultBranchEntry{Branch: branch, Resolved: time.Now()}
+		return nil
+	})
+}
+
+// resolvedRefCacheKey is the map key for a GitResolveRef result.
+func resolvedRefCacheKey(repoURL, ref string) string {
+	return repoURL + " " + ref
+}
+
+// cachedResolvedRef returns the cached GitResolveRef commit for repoURL+ref if fresh.
+func cachedResolvedRef(repoURL, ref string) string {
+	c, err := loadLatestTagCache()
+	if err != nil {
+		return ""
+	}
+	e, ok := c.ResolvedRefs[resolvedRefCacheKey(repoURL, ref)]
+	if !ok {
+		return ""
+	}
+	if time.Since(e.Resolved) > latestTagTTL {
+		return ""
+	}
+	return e.Commit
+}
+
+// rememberResolvedRef stores a GitResolveRef result in the persistent cache.
+func rememberResolvedRef(repoURL, ref, commit string) {
+	_ = withLatestTagCacheLock(func(c *latestTagCache) error {
+		c.ResolvedRefs[resolvedRefCacheKey(repoURL, ref)] = resolvedRefEntry{Commit: commit, Resolved: time.Now()}
 		return nil
 	})
 }
