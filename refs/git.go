@@ -23,15 +23,15 @@ import (
 
 // GitResolveRef resolves a git reference (tag, branch, or commit) to a full commit hash.
 // Uses git ls-remote for tags/branches; for commit hashes, validates length and returns as-is.
+//
+// NOTE: deliberately NOT cached. DownloadRepo's freshness contract resolves the ref to its
+// CURRENT commit on every call, so a mutable branch (main) that moved upstream is re-downloaded
+// instead of serving stale content (refs/git_test.go TestDownloadRepoFrom_RefreshesMovedBranch).
+// A TTL cache here would break that contract — the freshness check must see the live commit.
 func GitResolveRef(repoURL string, ref string) (string, error) {
 	// If ref looks like a full commit hash (40 hex chars), return as-is
 	if len(ref) == 40 && isHex(ref) {
 		return ref, nil
-	}
-
-	// Fast path: a fresh cached resolution avoids the network (issue #208).
-	if commit := cachedResolvedRef(repoURL, ref); commit != "" {
-		return commit, nil
 	}
 
 	// Query the ref AND its peeled ^{} form so an ANNOTATED tag resolves to the
@@ -44,7 +44,6 @@ func GitResolveRef(repoURL string, ref string) (string, error) {
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if commit := pickResolvedCommit(lines, ref); commit != "" {
-		rememberResolvedRef(repoURL, ref, commit)
 		return commit, nil
 	}
 
