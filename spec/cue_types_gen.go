@@ -2490,6 +2490,22 @@ type CandyService struct {
 	// which is what systemd expects for repeatable directives such as
 	// RuntimeDirectory= or ReadWritePaths=.
 	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
+
+	// wait_for — block the service's start until the paths it needs exist.
+	//
+	// Nine hand-rolled versions of this loop exist in the candy corpus today
+	// (labwc, kde-selkies x2, chrome-cdp, wayvnc x3, swaync, waybar, waybar-labwc,
+	// sway), each re-deriving the same poll with its own hardcoded timeout — the
+	// sleeps and magic numbers R4 forbids. One of them is already wrong: labwc's
+	// declares TIMEOUT=30 but sleeps 0.5s per iteration while counting +1, so it
+	// actually gives up after 15 seconds. That is the failure mode a hand-rolled
+	// loop has and a declared one cannot.
+	//
+	// Each init lowers this natively — systemd ExecStartPre=, supervisord a
+	// rendered pre-exec ahead of the command, OpenRC start_pre() — so the wait is
+	// SUPERVISED: a timeout fails the unit and surfaces in its status, instead of a
+	// wrapper exiting non-zero and looking like a crash.
+	WaitFor *ServiceWaitFor `yaml:"wait_for,omitempty" json:"wait_for,omitempty"`
 }
 
 type CandyServiceOverrides struct {
@@ -2498,6 +2514,26 @@ type CandyServiceOverrides struct {
 	After []string `yaml:"after,omitempty" json:"after,omitempty"`
 
 	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
+}
+
+// #ServiceWaitFor is a readiness precondition on a service's start.
+//
+// PATHS only, deliberately. All nine existing loops wait on a filesystem path (a
+// Wayland socket, an IPC socket, a lock file); none polls a TCP port. A ports:
+// form would need a probe tool the base images do not all carry, so it waits for
+// a real second consumer rather than being designed against a hypothetical one.
+type ServiceWaitFor struct {
+	// paths — every path must exist before the service starts. Relative paths are
+	// resolved by the init against the service's own working directory, exactly as
+	// exec: is.
+	//
+	// Required, and at least one element: a wait_for with no paths waits for
+	// nothing while reading like a guard, which is worse than no guard at all.
+	Paths []string `yaml:"paths,omitempty" json:"paths"`
+
+	// timeout — how long to wait before failing the start. "30s" or a bare 30,
+	// matching stop_timeout's shape. Absent means the init's own default.
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 }
 
 // ExtractYAML — copy a path out of another OCI image into this one. source is
@@ -5030,6 +5066,10 @@ type ServiceRenderContext struct {
 	// envelope no matter how many inits exist. See #CandyService.unit_options for
 	// why this is a map rather than a field per directive.
 	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
+
+	// wait_for — the readiness precondition, carried from the entry so each init's
+	// template can lower it in its own idiom.
+	WaitFor *ServiceWaitFor `yaml:"wait_for,omitempty" json:"wait_for,omitempty"`
 
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The

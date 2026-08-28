@@ -107,5 +107,8 @@ func BuildServiceRenderContext(entry *ServiceEntry, ctx ServiceRenderContext) Se
 	ctx.RestartSec = entry.RestartSec
 	ctx.WatchdogSec = entry.WatchdogSec
 	ctx.UnitOptions = entry.UnitOptions
+	// wait_for rides along as the same pointer: it is a small immutable value the
+	// templates only read, and copying it would invite the two to drift.
+	ctx.WaitFor = entry.WaitFor
 	return ctx
 }
