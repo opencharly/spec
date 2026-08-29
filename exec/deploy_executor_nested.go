@@ -792,3 +792,4 @@ var _ = bytes.NewReader
 func NestedContainerName(path string) string {
 	return strings.ReplaceAll(path, ".", "_")
 }
+// exec user/HOME: see deploy_executor_nested.go
