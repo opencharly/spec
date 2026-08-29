@@ -359,10 +359,30 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		return
 	}
 	fmt.Fprintf(stderr, "charly: fetching git metadata for %d repo(s) (first run — may take a moment)...\n", len(cold))
-	for _, u := range cold {
-		_, _ = g.LatestTag(u)
-		_, _ = g.DefaultBranch(u)
+	// Parallelize the fetch with a bounded worker pool: each repo is an
+	// independent `git ls-remote` (network-bound), so a sequential loop pays the
+	// round-trip latency once per repo — 200 repos × ~1.5s ≈ 5 minutes on a cold
+	// cache. 10 workers collapse that to ~30s. The GitClient methods are
+	// mutex-guarded, so concurrent warm-up is safe; the advisory file lock
+	// serializes the cache writes.
+	const warmUpWorkers = 10
+	jobs := make(chan string)
+	var wg sync.WaitGroup
+	for range warmUpWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for u := range jobs {
+				_, _ = g.LatestTag(u)
+				_, _ = g.DefaultBranch(u)
+			}
+		}()
 	}
+	for _, u := range cold {
+		jobs <- u
+	}
+	close(jobs)
+	wg.Wait()
 	fmt.Fprintf(stderr, "charly: git metadata cached.\n")
 }
 
