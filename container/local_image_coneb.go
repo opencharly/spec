@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opencharly/spec/cache"
 	"github.com/opencharly/spec/calver"
 	"github.com/opencharly/spec/spec"
 )
@@ -146,51 +147,26 @@ func imageCachePath() (string, error) {
 	return filepath.Join(filepath.Dir(cfg), "cache", "images.json"), nil
 }
 
-// imageCacheFile is the on-disk cache shape: the engine + the image list + the
-// resolution time (RFC3339), so the TTL policy can decide freshness.
-type imageCacheFile struct {
-	Engine    string           `json:"engine"`
-	Resolved  string           `json:"resolved"`
-	Images    []LocalImageInfo `json:"images"`
+// imageCacheValue is the cached image list for one engine.
+type imageCacheValue struct {
+	Engine string           `json:"engine"`
+	Images []LocalImageInfo `json:"images"`
 }
 
 // readImageCache returns the cached image list if fresh for engine, else (nil,
 // false). A corrupt/absent file is a cache miss.
 func readImageCache(path, engine string) ([]LocalImageInfo, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
+	var v imageCacheValue
+	if !cache.Read(path, engine, imageCacheTTL, &v) || v.Engine != engine {
 		return nil, false
 	}
-	var cf imageCacheFile
-	if json.Unmarshal(data, &cf) != nil || cf.Engine != engine {
-		return nil, false
-	}
-	resolved, err := time.Parse(time.RFC3339, cf.Resolved)
-	if err != nil || time.Since(resolved) > imageCacheTTL {
-		return nil, false
-	}
-	return cf.Images, true
+	return v.Images, true
 }
 
-// writeImageCache persists the image list under the advisory lock (best-effort).
+// writeImageCache persists the image list (best-effort).
 func writeImageCache(path, engine string, images []LocalImageInfo) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	cf := imageCacheFile{
-		Engine:   engine,
-		Resolved: time.Now().UTC().Format(time.RFC3339),
-		Images:   images,
-	}
-	data, err := json.Marshal(cf)
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	cache.Write(path, engine, imageCacheValue{Engine: engine, Images: images})
+	return nil
 }
 
 func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/opencharly/spec/cache"
 )
 
 // cache_test.go — the persistent caches for the status hot path. Each test
@@ -40,11 +42,14 @@ func TestImageCacheTTLExpiry(t *testing.T) {
 	if err := writeImageCache(path, "podman", images); err != nil {
 		t.Fatal(err)
 	}
-	// Backdate the resolution beyond the TTL.
+	// Backdate the entry beyond the TTL via the shared cache file.
 	data, _ := os.ReadFile(path)
-	var cf imageCacheFile
+	var cf cache.File
 	json.Unmarshal(data, &cf)
-	cf.Resolved = time.Now().Add(-2 * imageCacheTTL).UTC().Format(time.RFC3339)
+	for k, e := range cf.Entries {
+		e.Resolved = time.Now().Add(-2 * imageCacheTTL)
+		cf.Entries[k] = e
+	}
 	out, _ := json.Marshal(cf)
 	_ = os.WriteFile(path, out, 0o644)
 	if _, ok := readImageCache(path, "podman"); ok {

@@ -14,12 +14,12 @@ package container
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/opencharly/spec/cache"
 	execc "github.com/opencharly/spec/exec"
 	"github.com/opencharly/spec/spec"
 )
@@ -103,56 +103,18 @@ func imageLabelsCacheKey(engine, imageRef string) (string, string) {
 	return filepath.Join(filepath.Dir(cfg), "cache", "labels.json"), engine + "|" + imageRef
 }
 
-// imageLabelsCacheFile is the on-disk cache shape: key -> labels + resolution
-// time.
-type imageLabelsCacheFile struct {
-	Entries map[string]imageLabelsCacheEntry `json:"entries"`
-}
-
-type imageLabelsCacheEntry struct {
-	Labels   map[string]string `json:"labels"`
-	Resolved time.Time         `json:"resolved"`
-}
-
 // readImageLabelsCache returns the cached labels for key if fresh, else (nil,
 // false). A corrupt/absent file is a cache miss.
 func readImageLabelsCache(path, key string) (map[string]string, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
+	var labels map[string]string
+	if !cache.Read(path, key, imageLabelsCacheTTL, &labels) {
 		return nil, false
 	}
-	var cf imageLabelsCacheFile
-	if json.Unmarshal(data, &cf) != nil {
-		return nil, false
-	}
-	e, ok := cf.Entries[key]
-	if !ok || time.Since(e.Resolved) > imageLabelsCacheTTL {
-		return nil, false
-	}
-	return e.Labels, true
+	return labels, true
 }
 
-// writeImageLabelsCache persists the labels under the advisory lock
-// (best-effort).
+// writeImageLabelsCache persists the labels (best-effort).
 func writeImageLabelsCache(path, key string, labels map[string]string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	var cf imageLabelsCacheFile
-	if data, rerr := os.ReadFile(path); rerr == nil {
-		_ = json.Unmarshal(data, &cf)
-	}
-	if cf.Entries == nil {
-		cf.Entries = map[string]imageLabelsCacheEntry{}
-	}
-	cf.Entries[key] = imageLabelsCacheEntry{Labels: labels, Resolved: time.Now()}
-	data, err := json.Marshal(cf)
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	cache.Write(path, key, labels)
+	return nil
 }

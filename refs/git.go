@@ -10,7 +10,6 @@ package refs
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/opencharly/spec/cache"
 	"github.com/opencharly/spec/calver"
 	"github.com/opencharly/spec/lock"
 	"github.com/opencharly/spec/spec"
@@ -329,15 +329,9 @@ func submodulesPopulated(cachePath string) bool {
 // hour.
 const submoduleCacheTTL = time.Hour
 
-// submoduleCacheFile is the persistent cache: cachePath -> verdict + resolution
-// time.
-type submoduleCacheFile struct {
-	Entries map[string]submoduleCacheEntry `json:"entries"`
-}
-
-type submoduleCacheEntry struct {
-	Populated bool      `json:"populated"`
-	Resolved  time.Time `json:"resolved"`
+// submoduleCacheValue is the cached verdict for one cache path.
+type submoduleCacheValue struct {
+	Populated bool `json:"populated"`
 }
 
 // submoduleCachePath returns the persistent submodule-verdict cache file under
@@ -357,47 +351,20 @@ func readSubmoduleCache(cachePath string) (bool, bool) {
 	if err != nil {
 		return false, false
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
+	var v submoduleCacheValue
+	if !cache.Read(path, cachePath, submoduleCacheTTL, &v) {
 		return false, false
 	}
-	var cf submoduleCacheFile
-	if json.Unmarshal(data, &cf) != nil {
-		return false, false
-	}
-	e, ok := cf.Entries[cachePath]
-	if !ok || time.Since(e.Resolved) > submoduleCacheTTL {
-		return false, false
-	}
-	return e.Populated, true
+	return v.Populated, true
 }
 
-// writeSubmoduleCache persists the verdict under the advisory lock (best-effort).
+// writeSubmoduleCache persists the verdict (best-effort).
 func writeSubmoduleCache(cachePath string, populated bool) {
 	path, err := submoduleCachePath()
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
-	}
-	var cf submoduleCacheFile
-	if data, rerr := os.ReadFile(path); rerr == nil {
-		_ = json.Unmarshal(data, &cf)
-	}
-	if cf.Entries == nil {
-		cf.Entries = map[string]submoduleCacheEntry{}
-	}
-	cf.Entries[cachePath] = submoduleCacheEntry{Populated: populated, Resolved: time.Now()}
-	data, err := json.Marshal(cf)
-	if err != nil {
-		return
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, path)
+	cache.Write(path, cachePath, submoduleCacheValue{Populated: populated})
 }
 
 func submodulesPopulatedUncached(cachePath string) bool {

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/opencharly/spec/cache"
 )
 
 // submodule_cache_test.go — the persistent submodule-populated verdict cache.
@@ -35,12 +37,15 @@ func TestSubmoduleCacheTTLExpiry(t *testing.T) {
 	cfg := filepath.Join(dir, "charly.yml")
 	t.Setenv("CHARLY_DEPLOY_CONFIG", cfg)
 	writeSubmoduleCache("/tmp/repo1", true)
-	// Backdate the entry beyond the TTL.
+	// Backdate the entry beyond the TTL via the shared cache file.
 	path, _ := submoduleCachePath()
 	data, _ := os.ReadFile(path)
-	var cf submoduleCacheFile
+	var cf cache.File
 	json.Unmarshal(data, &cf)
-	cf.Entries["/tmp/repo1"] = submoduleCacheEntry{Populated: true, Resolved: time.Now().Add(-2 * submoduleCacheTTL)}
+	for k, e := range cf.Entries {
+		e.Resolved = time.Now().Add(-2 * submoduleCacheTTL)
+		cf.Entries[k] = e
+	}
 	out, _ := json.Marshal(cf)
 	_ = os.WriteFile(path, out, 0o644)
 	if _, ok := readSubmoduleCache("/tmp/repo1"); ok {
