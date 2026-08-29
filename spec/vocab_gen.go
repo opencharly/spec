@@ -21,16 +21,19 @@ var ResourceKinds = []string{
 
 // DocDirectives is the reserved document directives (#NodeDoc top-level keys).
 var DocDirectives = []string{
+	"cache",
 	"compiled_plugins",
 	"context_ignore_baseline",
 	"defaults",
 	"discover",
 	"import",
+	"ledger",
 	"ovmf_distro_aliases",
 	"ovmf_paths",
 	"providers",
 	"provides",
 	"repo",
+	"system",
 	"version",
 }
 

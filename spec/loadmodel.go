@@ -46,6 +46,20 @@ type UnifiedFile struct {
 	Fleet    map[string]FleetNode `yaml:"deploy,omitempty" json:"deploy,omitempty"`
 	Provides *ProvidesConfig      `yaml:"provides,omitempty" json:"provides,omitempty"`
 
+	// Cache is the per-host LOCAL cache status (git metadata cache). Lives in the
+	// per-host charly.yml (~/.config/charly/charly.yml) — the single home for local
+	// system state — NOT in ad-hoc JSON files under ~/.cache/charly/repos. Shape:
+	// schema/cache.cue #CacheConfig.
+	Cache *CacheConfig `yaml:"cache,omitempty" json:"cache,omitempty"`
+	// Ledger is the per-host INSTALL LEDGER (deploy/candy/step records). The
+	// unified home for what is installed on this host, replacing the per-deploy
+	// JSON files under ~/.config/opencharly/installed/. Shape: schema/ledger.cue
+	// #LedgerConfig.
+	Ledger *LedgerConfig `yaml:"ledger,omitempty" json:"ledger,omitempty"`
+	// System is the per-host LOCAL SYSTEM INFO (hostname, distro, kernel, arch,
+	// GPU, …). Shape: schema/system.cue #SystemInfo.
+	System *SystemInfo `yaml:"system,omitempty" json:"system,omitempty"`
+
 	// PluginKinds holds entities of KINDS contributed by plugins (a kind the core has no typed
 	// map for). NAME-KEYED: kind word → entity NAME → canonical body (opaque JSON). Built-in
 	// kinds decode into their typed maps above. Host-internal — never serialized.

@@ -26,6 +26,13 @@ type FleetConfig struct {
 	// these UNDER each deploy node's own overrides; the kernel reads no fields
 	// (the sidecar de-type, Cutover D).
 	Sidecar map[string]json.RawMessage `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
+	// Cache is the per-host LOCAL cache status (git metadata cache). The unified
+	// home for local system state — see spec/loadmodel.go UnifiedFile.Cache.
+	Cache *CacheConfig `yaml:"cache,omitempty" json:"cache,omitempty"`
+	// Ledger is the per-host INSTALL LEDGER (deploy/candy/step records).
+	Ledger *LedgerConfig `yaml:"ledger,omitempty" json:"ledger,omitempty"`
+	// System is the per-host LOCAL SYSTEM INFO.
+	System *SystemInfo `yaml:"system,omitempty" json:"system,omitempty"`
 }
 
 // Lookup returns the FleetNode for (deployName, instance), or

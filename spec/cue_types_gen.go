@@ -3250,6 +3250,32 @@ type BuildPkgReply struct {
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
+// #CacheConfig is the top-level `cache:` block. `git` holds the git metadata
+// cache; future caches (image layers, check runs) add their own sub-key.
+type CacheConfig struct {
+	Git GitCache `yaml:"git,omitempty" json:"git,omitempty"`
+}
+
+// #GitCache is the git metadata cache: latest tags, default branches, resolved
+// refs, and repo downloads. Each entry records the value and when it was
+// resolved (RFC3339), so the TTL policy can decide freshness.
+type GitCache struct {
+	LatestTags map[string]GitCacheEntry `yaml:"latest_tags,omitempty" json:"latest_tags,omitempty"`
+
+	DefaultBranches map[string]GitCacheEntry `yaml:"default_branches,omitempty" json:"default_branches,omitempty"`
+
+	ResolvedRefs map[string]GitCacheEntry `yaml:"resolved_refs,omitempty" json:"resolved_refs,omitempty"`
+
+	Downloads map[string]GitCacheEntry `yaml:"downloads,omitempty" json:"downloads,omitempty"`
+}
+
+// #GitCacheEntry is one cached git answer: the value plus the resolution time.
+type GitCacheEntry struct {
+	Value string `yaml:"value,omitempty" json:"value"`
+
+	Resolved string `yaml:"resolved,omitempty" json:"resolved"`
+}
+
 type Candy struct {
 	// --- identity (required: ADE mandates version+name+description+plan) ---
 	Version CalVer `yaml:"version,omitempty" json:"version"`
@@ -5367,6 +5393,14 @@ type KubernetesGenReply struct {
 	OverlayRelPath string `yaml:"overlay_rel_path,omitempty" json:"overlay_rel_path"`
 
 	Files []KubernetesGenFile `yaml:"files,omitempty" json:"files"`
+}
+
+// #LedgerConfig is the top-level `ledger:` block. `deploys` maps deploy-id →
+// #DeployRecord; `candies` maps candy name → #CandyRecord.
+type LedgerConfig struct {
+	Deploys map[string]DeployRecord `yaml:"deploys,omitempty" json:"deploys,omitempty"`
+
+	Candies map[string]CandyRecord `yaml:"candies,omitempty" json:"candies,omitempty"`
 }
 
 // #LoadedDoc — one parsed document of a namespace's flattened file tree (root file OR a flat
@@ -8093,6 +8127,35 @@ type VmResolveInput struct {
 // vm.cue).
 type VmResolveReply struct {
 	Resolved *ResolvedVm `yaml:"resolved,omitempty" json:"resolved,omitempty"`
+}
+
+// #SystemInfo is the top-level `system:` block — the host identity snapshot.
+type SystemInfo struct {
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+
+	// distro_id is the host distro identifier (e.g. "fedora", "arch", "debian").
+	DistroID string `yaml:"distro_id,omitempty" json:"distro_id,omitempty"`
+
+	// distro_version is the host distro version string (e.g. "43", "rolling").
+	DistroVersion string `yaml:"distro_version,omitempty" json:"distro_version,omitempty"`
+
+	// kernel is the running kernel release (uname -r).
+	Kernel string `yaml:"kernel,omitempty" json:"kernel,omitempty"`
+
+	// arch is the host architecture (uname -m).
+	Arch string `yaml:"arch,omitempty" json:"arch,omitempty"`
+
+	// gpu is the primary GPU description (vendor + model), when detectable.
+	GPU string `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+
+	// virtualization is the detected virtualization backend (kvm, qemu, none).
+	Virtualization string `yaml:"virtualization,omitempty" json:"virtualization,omitempty"`
+
+	// podman is the podman version string, when present.
+	Podman string `yaml:"podman,omitempty" json:"podman,omitempty"`
+
+	// updated_at is when this snapshot was last refreshed (RFC3339).
+	UpdatedAt string `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`
 }
 
 // #ValidateProjectRequest — which project dir to validate (empty = the host's cwd) + whether to

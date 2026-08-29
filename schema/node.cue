@@ -145,6 +145,23 @@
 	discover?: _
 	defaults?: _
 	provides?: _
+	// cache — the per-host LOCAL cache status (git metadata cache: latest tags,
+	// default branches, resolved refs, downloads). Lives in the per-host charly.yml
+	// (~/.config/charly/charly.yml) — the single home for local system state — NOT
+	// in ad-hoc JSON files under ~/.cache/charly/repos. Recognized here so a
+	// document carrying it is not mis-read as a node named "cache". Shape:
+	// schema/cache.cue #CacheConfig.
+	cache?: _
+	// ledger — the per-host INSTALL LEDGER (deploy/candy/step records). The
+	// unified home for what is installed on this host, replacing the per-deploy
+	// JSON files under ~/.config/opencharly/installed/deploys/. Recognized here so
+	// a document carrying it is not mis-read as a node named "ledger". Shape:
+	// schema/ledger.cue #LedgerConfig.
+	ledger?: _
+	// system — the per-host LOCAL SYSTEM INFO (hostname, distro, kernel, arch,
+	// GPU, …). Recognized here so a document carrying it is not mis-read as a node
+	// named "system". Shape: schema/system.cue #SystemInfo.
+	system?: _
 	// providers — the registry membership manifest (provider class → the words it
 	// contributes). Read at init by registry_bootstrap.go to drive built-in provider
 	// registration from the embedded charly.yml (the binary's default config);
@@ -177,5 +194,5 @@
 	// charly.yml (project or box) ever. candy/plugin-gpu and candy/plugin-doctor now carry
 	// their own independent copies as plain (non-#NodeDoc) embedded YAML — see
 	// candy/plugin-gpu/data.yml and candy/plugin-doctor/data.yml.
-	{[!~"^(version|repo|import|discover|defaults|provides|providers|compiled_plugins|context_ignore_baseline|ovmf_paths|ovmf_distro_aliases)$"]: #Node}
+	{[!~"^(version|repo|import|discover|defaults|provides|cache|ledger|system|providers|compiled_plugins|context_ignore_baseline|ovmf_paths|ovmf_distro_aliases)$"]: #Node}
 })

@@ -411,12 +411,12 @@ func downloadRepoFrom(repoURL, repoPath, version string) (string, error) {
 // GitDefaultBranch detects the default branch of a remote repository.
 // Uses git ls-remote --symref to find what HEAD points to.
 // Returns the branch name (e.g., "main", "master").
+//
+// This is the RAW primitive — it always hits the network. Caching is the
+// GitClient's job (refs/git_client.go): every consumer that needs a cached answer
+// goes through GitClient.DefaultBranch. The former per-primitive cache
+// (latest-tags.json) is DELETED — one cache, one layer (R3/R5).
 func GitDefaultBranch(repoURL string) (string, error) {
-	// Fast path: a fresh cached entry avoids the network entirely (issue #208).
-	if branch := cachedDefaultBranch(repoURL); branch != "" {
-		return branch, nil
-	}
-
 	cmd := exec.Command("git", "ls-remote", "--symref", repoURL, "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
@@ -426,7 +426,6 @@ func GitDefaultBranch(repoURL string) (string, error) {
 	if branch == "" {
 		return "", fmt.Errorf("could not determine default branch for %s", repoURL)
 	}
-	rememberDefaultBranch(repoURL, branch)
 	return branch, nil
 }
 
@@ -450,16 +449,12 @@ func parseDefaultBranch(output string) string {
 // Looks for tags matching v* pattern, sorts by semver, returns the highest.
 // Returns an error if no version tags are found.
 //
-// The result is cached persistently (latest-tags.json beside the repo cache) with a
-// 1h TTL — tags are immutable and add-only, so a cached value is valid until a newer
-// tag appears. This removes the per-ref network round-trip from repeated resolutions
-// (issue #208: 366 git-remote-https invocations in one `charly status`).
+// This is the RAW primitive — it always hits the network. Caching is the
+// GitClient's job (refs/git_client.go): every consumer that needs a cached answer
+// goes through GitClient.LatestTag, which wraps this primitive with the persistent
+// `cache:` section of the per-host charly.yml. The former per-primitive cache
+// (latest-tags.json) is DELETED — one cache, one layer (R3/R5).
 func GitLatestTag(repoURL string) (string, error) {
-	// Fast path: a fresh cached entry avoids the network entirely.
-	if tag := cachedLatestTag(repoURL); tag != "" {
-		return tag, nil
-	}
-
 	cmd := exec.Command("git", "ls-remote", "--tags", repoURL)
 	out, err := cmd.Output()
 	if err != nil {
@@ -475,9 +470,7 @@ func GitLatestTag(repoURL string) (string, error) {
 		return CompareSemver(tags[i], tags[j]) < 0
 	})
 
-	latest := tags[len(tags)-1]
-	rememberLatestTag(repoURL, latest)
-	return latest, nil
+	return tags[len(tags)-1], nil
 }
 
 // parseTagRefs extracts tag names from git ls-remote --tags output.
