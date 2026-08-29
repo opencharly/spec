@@ -3,8 +3,8 @@ package refs
 // git_client.go — the centralized GIT LAYER: the single entry point every charly
 // command, plugin, and loader uses for git operations. It wraps the raw git
 // primitives (GitLatestTag / GitDefaultBranch / GitResolveRef / GitClone) with a
-// persistent, project-scoped cache, so a git command runs ONLY when the answer is
-// not already known — never once per call site per resolution.
+// persistent cache, so a git command runs ONLY when the answer is not already
+// known — never once per call site per resolution.
 //
 // Why this exists: before this layer, every consumer called the raw primitives
 // directly (loaderkit's refs_collect/canonical_ref/scan_orchestrate, charly core's
@@ -12,10 +12,16 @@ package refs
 // with a fresh `git ls-remote` — 30+ network calls on the charly repo's own project,
 // paid by every command including `charly version` (issue #423, #208).
 //
-// The cache is PROJECT-SCOPED: it lives under the project's charly directory
-// (CHARLY_PROJECT_DIR/.charly/cache/git.json, or the repo cache dir when no project
-// is present), so each project's resolved refs persist across invocations and are
-// shared by every command in that project.
+// The cache lives in the `cache:` section of the PER-HOST charly.yml
+// (~/.config/charly/charly.yml) — the single home for local system state
+// (deployments under `deploy:`, install records under `ledger:`, local system
+// info under `system:`, cache status under `cache:`). It is NOT a separate ad-hoc
+// JSON file under ~/.cache/charly/repos (git-cache.json / latest-tags.json — both
+// deleted by this cutover). The `cache:` shape is CUE-sourced (schema/cache.cue
+// #CacheConfig) and validated whenever the per-host file is loaded through the
+// unified loader; the GitClient itself does a lightweight YAML read-modify-write
+// of just the `cache:` key (preserving every other key), under the same advisory
+// file-lock primitive the repo fetch uses.
 //
 // Freshness policy (the load-bearing contract):
 //   - latest-tag: tags are IMMUTABLE and add-only → a cached value is valid until a
@@ -24,19 +30,18 @@ package refs
 //   - resolve-ref (the DownloadRepo freshness check): a mutable branch can move, so
 //     this is cached with a SHORT TTL (5m) — the freshness contract requires seeing
 //     the live commit of a mutable branch, but not on every single invocation.
-//
-// The cache is guarded by the same advisory file-lock primitive the repo fetch uses,
-// so concurrent resolvers serialize their read-modify-write and cannot lose updates.
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/opencharly/spec/lock"
+	"github.com/opencharly/spec/spec"
+	"gopkg.in/yaml.v3"
 )
 
 // Cache TTLs (see the freshness policy above).
@@ -49,7 +54,7 @@ const (
 // GitClient is the centralized git layer. Construct once per process (or per
 // project) and share it — the cache is the point.
 type GitClient struct {
-	cacheDir string // the project's charly dir cache (or the repo cache dir)
+	cacheFile string // the per-host charly.yml path holding the `cache:` section
 
 	mu              sync.Mutex
 	latestTags      map[string]gitCacheEntry
@@ -59,18 +64,20 @@ type GitClient struct {
 }
 
 type gitCacheEntry struct {
-	Value    string    `json:"value"`
-	Resolved time.Time `json:"resolved"`
+	Value    string    `yaml:"value"`
+	Resolved time.Time `yaml:"resolved"`
 }
 
-// NewGitClient returns a GitClient whose cache lives under cacheDir. When cacheDir
-// is empty, the repo cache dir (~/.cache/charly/repos) is used.
-func NewGitClient(cacheDir string) *GitClient {
-	if cacheDir == "" {
-		cacheDir, _ = RepoCacheDir()
+// NewGitClient returns a GitClient whose cache lives in the `cache:` section of
+// the per-host charly.yml at cacheFile. When cacheFile is empty, the default
+// deploy config path (~/.config/charly/charly.yml, honoring the
+// CHARLY_DEPLOY_CONFIG override) is used.
+func NewGitClient(cacheFile string) *GitClient {
+	if cacheFile == "" {
+		cacheFile, _ = spec.DefaultDeployConfigPath()
 	}
 	g := &GitClient{
-		cacheDir:        cacheDir,
+		cacheFile:       cacheFile,
 		latestTags:      map[string]gitCacheEntry{},
 		defaultBranches: map[string]gitCacheEntry{},
 		resolvedRefs:    map[string]gitCacheEntry{},
@@ -80,62 +87,184 @@ func NewGitClient(cacheDir string) *GitClient {
 	return g
 }
 
-// cacheFile is the JSON cache path under the cache dir.
-func (g *GitClient) cacheFile() string {
-	return filepath.Join(g.cacheDir, "git-cache.json")
+// cacheLockPath is the advisory lock path guarding the cache's read-modify-write.
+// A separate .lock file keeps the lock from clobbering the config's own bytes.
+func (g *GitClient) cacheLockPath() string {
+	return g.cacheFile + ".lock"
 }
 
-// load reads the persisted cache (best-effort; a corrupt/absent file starts empty).
+// load reads the `cache:` section of the per-host charly.yml (best-effort; a
+// corrupt/absent file starts empty).
 func (g *GitClient) load() {
-	data, err := os.ReadFile(g.cacheFile())
+	data, err := os.ReadFile(g.cacheFile)
 	if err != nil {
 		return
 	}
-	var persisted struct {
-		LatestTags      map[string]gitCacheEntry `json:"latest_tags"`
-		DefaultBranches map[string]gitCacheEntry `json:"default_branches"`
-		ResolvedRefs    map[string]gitCacheEntry `json:"resolved_refs"`
-		Downloads       map[string]gitCacheEntry `json:"downloads"`
+	var doc struct {
+		Cache *struct {
+			Git *struct {
+				LatestTags      map[string]gitCacheEntry `yaml:"latest_tags"`
+				DefaultBranches map[string]gitCacheEntry `yaml:"default_branches"`
+				ResolvedRefs    map[string]gitCacheEntry `yaml:"resolved_refs"`
+				Downloads       map[string]gitCacheEntry `yaml:"downloads"`
+			} `yaml:"git"`
+		} `yaml:"cache"`
 	}
-	if json.Unmarshal(data, &persisted) != nil {
+	if yaml.Unmarshal(data, &doc) != nil {
 		return
 	}
-	if persisted.LatestTags != nil {
-		g.latestTags = persisted.LatestTags
+	if doc.Cache == nil || doc.Cache.Git == nil {
+		return
 	}
-	if persisted.DefaultBranches != nil {
-		g.defaultBranches = persisted.DefaultBranches
+	if doc.Cache.Git.LatestTags != nil {
+		g.latestTags = doc.Cache.Git.LatestTags
 	}
-	if persisted.ResolvedRefs != nil {
-		g.resolvedRefs = persisted.ResolvedRefs
+	if doc.Cache.Git.DefaultBranches != nil {
+		g.defaultBranches = doc.Cache.Git.DefaultBranches
 	}
-	if persisted.Downloads != nil {
-		g.downloads = persisted.Downloads
+	if doc.Cache.Git.ResolvedRefs != nil {
+		g.resolvedRefs = doc.Cache.Git.ResolvedRefs
+	}
+	if doc.Cache.Git.Downloads != nil {
+		g.downloads = doc.Cache.Git.Downloads
 	}
 }
 
-// save persists the cache under the advisory lock (best-effort).
+// save persists the `cache:` section into the per-host charly.yml under the
+// advisory lock (best-effort). It reads the CURRENT file, updates only the
+// `cache:` key (preserving every other key — deploy:, provides:, ledger:,
+// system:, …), and writes back atomically (tempfile + rename).
 func (g *GitClient) save() {
-	lockPath := g.cacheFile() + ".lock"
-	unlock, err := lock.AcquireFileLock(lockPath, true)
+	unlock, err := lock.AcquireFileLock(g.cacheLockPath(), true)
 	if err != nil {
 		return
 	}
 	defer unlock()
-	if err := os.MkdirAll(g.cacheDir, 0o755); err != nil {
+
+	// Read the current file (may not exist yet — a fresh host starts empty).
+	data, err := os.ReadFile(g.cacheFile)
+	var doc yaml.Node
+	if err == nil {
+		if yaml.Unmarshal(data, &doc) != nil {
+			return // corrupt file — never clobber it
+		}
+	}
+	if doc.Kind == 0 {
+		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{
+			{Kind: yaml.MappingNode, Tag: "!!map"},
+		}}
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
 		return
 	}
-	persisted := struct {
-		LatestTags      map[string]gitCacheEntry `json:"latest_tags"`
-		DefaultBranches map[string]gitCacheEntry `json:"default_branches"`
-		ResolvedRefs    map[string]gitCacheEntry `json:"resolved_refs"`
-		Downloads       map[string]gitCacheEntry `json:"downloads"`
-	}{g.latestTags, g.defaultBranches, g.resolvedRefs, g.downloads}
-	data, err := json.MarshalIndent(persisted, "", "  ")
+
+	// Ensure the HEAD schema version stamp is present — the per-host charly.yml
+	// is loaded through the unified loader, which requires the version directive.
+	// A fresh file created by the cache write must carry it, or the loader rejects
+	// the file ("schema X is required (found \"\")").
+	if !hasMappingKey(root, "version") {
+		root.Content = append(root.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: "version"},
+			&yaml.Node{Kind: yaml.ScalarNode, Value: spec.SchemaVersion},
+		)
+	}
+
+	// Find or create the `cache` key.
+	var cacheVal *yaml.Node
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "cache" {
+			cacheVal = root.Content[i+1]
+			break
+		}
+	}
+	if cacheVal == nil {
+		root.Content = append(root.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: "cache"},
+			&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"},
+		)
+		cacheVal = root.Content[len(root.Content)-1]
+	}
+
+	// Build the cache: git: {latest_tags, default_branches, resolved_refs, downloads}.
+	gitVal := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "latest_tags"},
+		entryMapNode(g.latestTags),
+		{Kind: yaml.ScalarNode, Value: "default_branches"},
+		entryMapNode(g.defaultBranches),
+		{Kind: yaml.ScalarNode, Value: "resolved_refs"},
+		entryMapNode(g.resolvedRefs),
+		{Kind: yaml.ScalarNode, Value: "downloads"},
+		entryMapNode(g.downloads),
+	}}
+	cacheVal.Kind = yaml.MappingNode
+	cacheVal.Tag = "!!map"
+	cacheVal.Content = []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "git"},
+		gitVal,
+	}
+
+	out, err := yaml.Marshal(&doc)
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(g.cacheFile(), data, 0o644)
+	// Atomic write: tempfile in the same dir + rename.
+	dir := filepath.Dir(g.cacheFile)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, ".charly-cache-*")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return
+	}
+	if err := os.Rename(tmpName, g.cacheFile); err != nil {
+		os.Remove(tmpName)
+	}
+}
+
+// hasMappingKey reports whether a mapping node has a top-level key with the given
+// name.
+func hasMappingKey(m *yaml.Node, name string) bool {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == name {
+			return true
+		}
+	}
+	return false
+}
+
+// entryMapNode builds a YAML mapping node from a cache-entry map.
+func entryMapNode(entries map[string]gitCacheEntry) *yaml.Node {
+	n := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	keys := make([]string, 0, len(entries))
+	for k := range entries {
+		keys = append(keys, k)
+	}
+	// Deterministic output: sort keys so the file is stable across runs.
+	sort.Strings(keys)
+	for _, k := range keys {
+		e := entries[k]
+		n.Content = append(n.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: k},
+			&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "value"},
+				{Kind: yaml.ScalarNode, Value: e.Value},
+				{Kind: yaml.ScalarNode, Value: "resolved"},
+				{Kind: yaml.ScalarNode, Value: e.Resolved.UTC().Format(time.RFC3339)},
+			}},
+		)
+	}
+	return n
 }
 
 // cached returns the cached value for key if fresh, or "".
@@ -230,10 +359,30 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		return
 	}
 	fmt.Fprintf(stderr, "charly: fetching git metadata for %d repo(s) (first run — may take a moment)...\n", len(cold))
-	for _, u := range cold {
-		_, _ = g.LatestTag(u)
-		_, _ = g.DefaultBranch(u)
+	// Parallelize the fetch with a bounded worker pool: each repo is an
+	// independent `git ls-remote` (network-bound), so a sequential loop pays the
+	// round-trip latency once per repo — 200 repos × ~1.5s ≈ 5 minutes on a cold
+	// cache. 10 workers collapse that to ~30s. The GitClient methods are
+	// mutex-guarded, so concurrent warm-up is safe; the advisory file lock
+	// serializes the cache writes.
+	const warmUpWorkers = 10
+	jobs := make(chan string)
+	var wg sync.WaitGroup
+	for range warmUpWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for u := range jobs {
+				_, _ = g.LatestTag(u)
+				_, _ = g.DefaultBranch(u)
+			}
+		}()
 	}
+	for _, u := range cold {
+		jobs <- u
+	}
+	close(jobs)
+	wg.Wait()
 	fmt.Fprintf(stderr, "charly: git metadata cached.\n")
 }
 
