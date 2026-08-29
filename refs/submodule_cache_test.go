@@ -41,7 +41,7 @@ func TestSubmoduleCacheTTLExpiry(t *testing.T) {
 	path, _ := submoduleCachePath()
 	data, _ := os.ReadFile(path)
 	var cf cache.File
-	json.Unmarshal(data, &cf)
+	_ = json.Unmarshal(data, &cf)
 	for k, e := range cf.Entries {
 		e.Resolved = time.Now().Add(-2 * submoduleCacheTTL)
 		cf.Entries[k] = e

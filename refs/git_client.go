@@ -139,7 +139,7 @@ func (g *GitClient) save() {
 	if err != nil {
 		return
 	}
-	defer unlock()
+	defer func() { _ = unlock() }()
 
 	// Read the current file (may not exist yet — a fresh host starts empty).
 	data, err := os.ReadFile(g.cacheFile)
@@ -219,16 +219,16 @@ func (g *GitClient) save() {
 	}
 	tmpName := tmp.Name()
 	if _, err := tmp.Write(out); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return
 	}
 	if err := os.Rename(tmpName, g.cacheFile); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 	}
 }
 

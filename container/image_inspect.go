@@ -62,7 +62,7 @@ func InspectImageLabels(engine, imageRef string) (map[string]string, error) {
 		return nil, err
 	}
 	if cachePath != "" {
-		_ = writeImageLabelsCache(cachePath, key, labels)
+		writeImageLabelsCache(cachePath, key, labels)
 	}
 	return labels, nil
 }
@@ -114,7 +114,6 @@ func readImageLabelsCache(path, key string) (map[string]string, bool) {
 }
 
 // writeImageLabelsCache persists the labels (best-effort).
-func writeImageLabelsCache(path, key string, labels map[string]string) error {
+func writeImageLabelsCache(path, key string, labels map[string]string) {
 	cache.Write(path, key, labels)
-	return nil
 }

@@ -19,9 +19,7 @@ func TestImageCacheRoundTrip(t *testing.T) {
 	images := []LocalImageInfo{
 		{ID: "sha256:abc", Names: []string{"ghcr.io/opencharly/test:1.0"}, Labels: map[string]string{"ai.opencharly.box": "test"}},
 	}
-	if err := writeImageCache(path, "podman", images); err != nil {
-		t.Fatalf("writeImageCache: %v", err)
-	}
+	writeImageCache(path, "podman", images)
 	got, ok := readImageCache(path, "podman")
 	if !ok {
 		t.Fatal("readImageCache: cache miss after write")
@@ -39,13 +37,11 @@ func TestImageCacheTTLExpiry(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "images.json")
 	images := []LocalImageInfo{{ID: "sha256:abc"}}
-	if err := writeImageCache(path, "podman", images); err != nil {
-		t.Fatal(err)
-	}
+	writeImageCache(path, "podman", images)
 	// Backdate the entry beyond the TTL via the shared cache file.
 	data, _ := os.ReadFile(path)
 	var cf cache.File
-	json.Unmarshal(data, &cf)
+	_ = json.Unmarshal(data, &cf)
 	for k, e := range cf.Entries {
 		e.Resolved = time.Now().Add(-2 * imageCacheTTL)
 		cf.Entries[k] = e
@@ -66,9 +62,7 @@ func TestInvalidateImageCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := writeImageCache(path, "podman", []LocalImageInfo{{ID: "sha256:abc"}}); err != nil {
-		t.Fatal(err)
-	}
+	writeImageCache(path, "podman", []LocalImageInfo{{ID: "sha256:abc"}})
 	InvalidateImageCache()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("InvalidateImageCache: cache file still exists: %v", err)
@@ -79,9 +73,7 @@ func TestImageLabelsCacheRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "labels.json")
 	labels := map[string]string{"ai.opencharly.box": "test"}
-	if err := writeImageLabelsCache(path, "podman|ghcr.io/opencharly/test:1.0", labels); err != nil {
-		t.Fatalf("writeImageLabelsCache: %v", err)
-	}
+	writeImageLabelsCache(path, "podman|ghcr.io/opencharly/test:1.0", labels)
 	got, ok := readImageLabelsCache(path, "podman|ghcr.io/opencharly/test:1.0")
 	if !ok {
 		t.Fatal("readImageLabelsCache: cache miss after write")
