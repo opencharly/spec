@@ -120,7 +120,7 @@ func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 		return nil, err
 	}
 	if cachePath != "" {
-		_ = writeImageCache(cachePath, engine, images)
+		writeImageCache(cachePath, engine, images)
 	}
 	return images, nil
 }
@@ -164,9 +164,8 @@ func readImageCache(path, engine string) ([]LocalImageInfo, bool) {
 }
 
 // writeImageCache persists the image list (best-effort).
-func writeImageCache(path, engine string, images []LocalImageInfo) error {
+func writeImageCache(path, engine string, images []LocalImageInfo) {
 	cache.Write(path, engine, imageCacheValue{Engine: engine, Images: images})
-	return nil
 }
 
 func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
