@@ -51,11 +51,11 @@ const (
 type GitClient struct {
 	cacheDir string // the project's charly dir cache (or the repo cache dir)
 
-	mu             sync.Mutex
-	latestTags     map[string]gitCacheEntry
+	mu              sync.Mutex
+	latestTags      map[string]gitCacheEntry
 	defaultBranches map[string]gitCacheEntry
-	resolvedRefs   map[string]gitCacheEntry
-	downloads      map[string]gitCacheEntry
+	resolvedRefs    map[string]gitCacheEntry
+	downloads       map[string]gitCacheEntry
 }
 
 type gitCacheEntry struct {
@@ -236,7 +236,6 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	}
 	fmt.Fprintf(stderr, "charly: git metadata cached.\n")
 }
-
 
 // Download fetches repoPath@version into the repo cache and returns the cache path,
 // CACHED with a short TTL. A mutable ref (a branch or the default branch) can move,
