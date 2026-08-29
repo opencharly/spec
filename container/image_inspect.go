@@ -14,10 +14,14 @@ package container
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	execc "github.com/opencharly/spec/exec"
+	"github.com/opencharly/spec/spec"
 )
 
 // ContainerImageRef returns the image ref backing a running container (.Config.Image via
@@ -42,8 +46,28 @@ func ContainerImage(engine, containerName string) string {
 }
 
 // InspectImageLabels reads a local image's OCI labels via engine inspect. Pure container-storage
-// probe: no charly-core coupling.
+// probe: no charly-core coupling. CACHED persistently — the labels are image METADATA (they do
+// not change unless the image is rebuilt), so the first call after the TTL expires re-fetches and
+// every subsequent call within the TTL reads the cache. The LIVE container state (podman ps) is
+// never cached.
 func InspectImageLabels(engine, imageRef string) (map[string]string, error) {
+	cachePath, key := imageLabelsCacheKey(engine, imageRef)
+	if cachePath != "" {
+		if labels, ok := readImageLabelsCache(cachePath, key); ok {
+			return labels, nil
+		}
+	}
+	labels, err := inspectImageLabelsUncached(engine, imageRef)
+	if err != nil {
+		return nil, err
+	}
+	if cachePath != "" {
+		_ = writeImageLabelsCache(cachePath, key, labels)
+	}
+	return labels, nil
+}
+
+func inspectImageLabelsUncached(engine, imageRef string) (map[string]string, error) {
 	binary := EngineBinary(engine)
 	cmd := exec.Command(binary, "inspect", "--format", "{{json .Config.Labels}}", imageRef)
 	output, err := cmd.Output()
@@ -61,4 +85,74 @@ func InspectImageLabels(engine, imageRef string) (map[string]string, error) {
 		return nil, fmt.Errorf("parsing labels from %s: %w", imageRef, err)
 	}
 	return labels, nil
+}
+
+// imageLabelsCacheTTL is how long a cached image-label map is trusted. The
+// labels are image metadata — they change only on a rebuild — so a 5-minute
+// TTL makes consecutive status runs fast while still seeing a rebuilt image
+// within a few minutes.
+const imageLabelsCacheTTL = 5 * time.Minute
+
+// imageLabelsCacheKey returns the image-label cache file + a content key (the
+// engine + the image ref).
+func imageLabelsCacheKey(engine, imageRef string) (string, string) {
+	cfg, err := spec.DefaultDeployConfigPath()
+	if err != nil {
+		return "", ""
+	}
+	return filepath.Join(filepath.Dir(cfg), "cache", "labels.json"), engine + "|" + imageRef
+}
+
+// imageLabelsCacheFile is the on-disk cache shape: key -> labels + resolution
+// time.
+type imageLabelsCacheFile struct {
+	Entries map[string]imageLabelsCacheEntry `json:"entries"`
+}
+
+type imageLabelsCacheEntry struct {
+	Labels   map[string]string `json:"labels"`
+	Resolved time.Time         `json:"resolved"`
+}
+
+// readImageLabelsCache returns the cached labels for key if fresh, else (nil,
+// false). A corrupt/absent file is a cache miss.
+func readImageLabelsCache(path, key string) (map[string]string, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var cf imageLabelsCacheFile
+	if json.Unmarshal(data, &cf) != nil {
+		return nil, false
+	}
+	e, ok := cf.Entries[key]
+	if !ok || time.Since(e.Resolved) > imageLabelsCacheTTL {
+		return nil, false
+	}
+	return e.Labels, true
+}
+
+// writeImageLabelsCache persists the labels under the advisory lock
+// (best-effort).
+func writeImageLabelsCache(path, key string, labels map[string]string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	var cf imageLabelsCacheFile
+	if data, rerr := os.ReadFile(path); rerr == nil {
+		_ = json.Unmarshal(data, &cf)
+	}
+	if cf.Entries == nil {
+		cf.Entries = map[string]imageLabelsCacheEntry{}
+	}
+	cf.Entries[key] = imageLabelsCacheEntry{Labels: labels, Resolved: time.Now()}
+	data, err := json.Marshal(cf)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }

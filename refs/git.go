@@ -10,15 +10,19 @@ package refs
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/opencharly/spec/calver"
 	"github.com/opencharly/spec/lock"
+	"github.com/opencharly/spec/spec"
 )
 
 // GitResolveRef resolves a git reference (tag, branch, or commit) to a full commit hash.
@@ -287,8 +291,18 @@ func repoCacheFresh(cachePath, commit string) bool {
 	return submodulesPopulated(cachePath)
 }
 
+// submodulesPopulatedCache caches the submodule-populated verdict per cache path.
+// The verdict is stable for the process lifetime (the cache dirs do not change
+// during a run), so a process-wide cache eliminates the repeated
+// `git config -f .gitmodules` subprocess spawns that dominated `charly status`
+// (one spawn per cached repo, measured). A PERSISTENT cache file extends this
+// across runs — the repos are fetched once and cached, so the verdict does not
+// change between runs either.
+var submodulesPopulatedCache sync.Map // cachePath -> bool
+
 // submodulesPopulated reports whether every submodule the export declares has
-// content on disk. An export declaring none is trivially complete.
+// content on disk. An export declaring none is trivially complete. Cached
+// process-wide per cache path, with a persistent cache file across runs.
 //
 // The export has had its .git removed (see downloadRepoFrom), so this reads
 // .gitmodules directly — via `git config -f`, the same parser git itself uses,
@@ -296,6 +310,97 @@ func repoCacheFresh(cachePath, commit string) bool {
 // unreadable or absent .gitmodules means nothing to verify, which keeps a
 // non-submodule repo on the pure cache-hit path.
 func submodulesPopulated(cachePath string) bool {
+	if v, ok := submodulesPopulatedCache.Load(cachePath); ok {
+		return v.(bool)
+	}
+	if v, ok := readSubmoduleCache(cachePath); ok {
+		submodulesPopulatedCache.Store(cachePath, v)
+		return v
+	}
+	result := submodulesPopulatedUncached(cachePath)
+	submodulesPopulatedCache.Store(cachePath, result)
+	writeSubmoduleCache(cachePath, result)
+	return result
+}
+
+// submoduleCacheTTL is how long a cached submodule-populated verdict is trusted.
+// The repo cache dirs change only on a re-fetch, so a 1-hour TTL makes
+// consecutive status runs fast while still seeing a re-fetched repo within an
+// hour.
+const submoduleCacheTTL = time.Hour
+
+// submoduleCacheFile is the persistent cache: cachePath -> verdict + resolution
+// time.
+type submoduleCacheFile struct {
+	Entries map[string]submoduleCacheEntry `json:"entries"`
+}
+
+type submoduleCacheEntry struct {
+	Populated bool      `json:"populated"`
+	Resolved  time.Time `json:"resolved"`
+}
+
+// submoduleCachePath returns the persistent submodule-verdict cache file under
+// the charly dir (~/.config/charly/cache/submodules.json).
+func submoduleCachePath() (string, error) {
+	cfg, err := spec.DefaultDeployConfigPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(cfg), "cache", "submodules.json"), nil
+}
+
+// readSubmoduleCache returns the cached verdict for cachePath if fresh, else
+// (false, false). A corrupt/absent file is a cache miss.
+func readSubmoduleCache(cachePath string) (bool, bool) {
+	path, err := submoduleCachePath()
+	if err != nil {
+		return false, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, false
+	}
+	var cf submoduleCacheFile
+	if json.Unmarshal(data, &cf) != nil {
+		return false, false
+	}
+	e, ok := cf.Entries[cachePath]
+	if !ok || time.Since(e.Resolved) > submoduleCacheTTL {
+		return false, false
+	}
+	return e.Populated, true
+}
+
+// writeSubmoduleCache persists the verdict under the advisory lock (best-effort).
+func writeSubmoduleCache(cachePath string, populated bool) {
+	path, err := submoduleCachePath()
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	var cf submoduleCacheFile
+	if data, rerr := os.ReadFile(path); rerr == nil {
+		_ = json.Unmarshal(data, &cf)
+	}
+	if cf.Entries == nil {
+		cf.Entries = map[string]submoduleCacheEntry{}
+	}
+	cf.Entries[cachePath] = submoduleCacheEntry{Populated: populated, Resolved: time.Now()}
+	data, err := json.Marshal(cf)
+	if err != nil {
+		return
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, path)
+}
+
+func submodulesPopulatedUncached(cachePath string) bool {
 	gm := filepath.Join(cachePath, ".gitmodules")
 	if _, err := os.Stat(gm); err != nil {
 		return true
