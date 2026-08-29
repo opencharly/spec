@@ -1743,6 +1743,8 @@ type ResolvedDistro struct {
 
 	Dnf *Dnf `yaml:"dnf,omitempty" json:"dnf,omitempty"`
 
+	Installer *DistroInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
+
 	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
 
@@ -1828,6 +1830,62 @@ type Dnf struct {
 	MaxParallelDownloads int64 `yaml:"max_parallel_downloads,omitempty" json:"max_parallel_downloads,omitempty"`
 
 	Fastestmirror bool `yaml:"fastestmirror,omitempty" json:"fastestmirror,omitempty"`
+}
+
+// #DistroInstaller — the UNATTENDED-INSTALL renderer vocabulary for a
+// `source.kind: iso` VM. It is to that arm exactly what #Init.service_schema is to
+// `service:`: THIS DISTRO owns the answer-file FORMAT, while the vm entity's
+// `source.installer:` owns the DATA (#VmInstaller). Nothing may infer an installer
+// format from a URL, an ISO name or a base_user — the same rule distro_vocab.cue's
+// header states for every other distro trait, and for the same reason.
+//
+// Five real formats live behind this one shape: archinstall JSON (Omarchy, Arch),
+// kickstart (Fedora/RHEL), preseed (Debian), Subiquity autoinstall (Ubuntu) and
+// AutoYaST (SUSE). Each is keyed by distro and by nothing else.
+type DistroInstaller struct {
+	// volume_id is the filesystem LABEL the installer looks for. archinstall and
+	// cloud-init NoCloud use "cidata"; Anaconda kickstart uses "OEMDRV". Case is
+	// preserved verbatim by the ISO writer, so write it exactly as the installer
+	// matches it.
+	VolumeID string `yaml:"volume_id,omitempty" json:"volume_id"`
+
+	// fs is how the answers volume is packed. iso9660 is correct for every installer
+	// verified so far; vfat exists for one that matches its label case-sensitively in
+	// a way ISO 9660 cannot represent.
+	FS string `yaml:"fs,omitempty" json:"fs,omitempty"`
+
+	Files []DistroInstallerFile `yaml:"file,omitempty" json:"file"`
+
+	// boot_arg is appended to the INSTALLER's kernel cmdline when the installer needs
+	// to be pointed at its answers explicitly ("inst.ks=hd:LABEL=OEMDRV:/ks.cfg").
+	// Empty for an installer that auto-discovers the labelled volume.
+	BootArg string `yaml:"boot_arg,omitempty" json:"boot_arg,omitempty"`
+
+	// done is how the build path learns the install finished. poweroff: the installer
+	// powers the guest off and the build waits for the process to exit. marker: the
+	// installer writes marker_path into the target root, polled over the guest agent.
+	// NEVER a sleep.
+	Done string `yaml:"done,omitempty" json:"done,omitempty"`
+
+	MarkerPath string `yaml:"marker_path,omitempty" json:"marker_path,omitempty"`
+}
+
+// #DistroInstallerFile is ONE file placed on the answers volume.
+type DistroInstallerFile struct {
+	// path is relative to the volume root.
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	// content is a Go text/template rendered against #InstallerSeedContext.
+	Content string `yaml:"content,omitempty" json:"content"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	// when is a Go-template guard: the file is emitted only when it renders non-empty
+	// and not "false". This is what lets ONE vocabulary express a whole optional
+	// matrix — an ssh key file only when keys were given, a "defer provisioning"
+	// sentinel INSTEAD of credentials, an encryption marker only when encrypting —
+	// with no Go branch anywhere.
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
 }
 
 type BuildResolveReply struct {
@@ -4650,6 +4708,8 @@ type Distro struct {
 	Bootloader *Bootloader `yaml:"bootloader,omitempty" json:"bootloader,omitempty"`
 
 	Dnf *Dnf `yaml:"dnf,omitempty" json:"dnf,omitempty"`
+
+	Installer *DistroInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
 }
 
 type Format struct {
@@ -4695,6 +4755,43 @@ type DistroResolveInput struct {
 // #DistroResolveReply wraps the resolved distro.
 type DistroResolveReply struct {
 	Resolved *ResolvedDistro `yaml:"resolved,omitempty" json:"resolved,omitempty"`
+}
+
+// #InstallerSeedContext is what a #DistroInstallerFile.content template renders
+// against. Host-computed. The PLAINTEXT password never appears here: the caller
+// crypt()s it first, so no plaintext reaches a template, a log, or a temp file.
+type InstallerSeedContext struct {
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
+
+	Keyboard string `yaml:"keyboard,omitempty" json:"keyboard,omitempty"`
+
+	Username string `yaml:"username,omitempty" json:"username,omitempty"`
+
+	FullName string `yaml:"full_name,omitempty" json:"full_name,omitempty"`
+
+	Email string `yaml:"email,omitempty" json:"email,omitempty"`
+
+	PasswordHash string `yaml:"password_hash,omitempty" json:"password_hash,omitempty"`
+
+	Disk string `yaml:"disk,omitempty" json:"disk,omitempty"`
+
+	Encrypt bool `yaml:"encrypt,omitempty" json:"encrypt,omitempty"`
+
+	// encryption_password is the LUKS passphrase, and it is plaintext by necessity:
+	// the installer needs it to create the volume. It is only ever set when
+	// encrypt is true, and it makes the rendered answers volume a secret.
+	EncryptionPassword string `yaml:"encryption_password,omitempty" json:"encryption_password,omitempty"`
+
+	SSHAuthorizedKeys []string `yaml:"ssh_authorized_key,omitempty" json:"ssh_authorized_key,omitempty"`
+
+	DeferProvisioning bool `yaml:"defer_provisioning,omitempty" json:"defer_provisioning,omitempty"`
+
+	// answer carries the vm entity's per-distro extras verbatim.
+	Answers map[string]string `yaml:"answer,omitempty" json:"answer,omitempty"`
 }
 
 // #CredentialHealth is the credential-store health snapshot. Rendered into the
@@ -8240,6 +8337,68 @@ type VmChecksum struct {
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 
 	Value string `yaml:"value,omitempty" json:"value,omitempty"`
+}
+
+// #VmInstaller — the unattended-install ANSWERS for a `source.kind: iso` VM.
+//
+// Distro-AGNOSTIC on purpose: every field here is a question EVERY installer asks.
+// Distro-SPECIFIC extras go in `answer:` (typed-open — a distro's installer vocabulary
+// is that distro's business, not vm.cue's), reachable from a #DistroInstaller template
+// as {{index .Answers "key"}}. The FORMAT that renders these into files lives on the
+// distro (#DistroInstaller), exactly as `init:` renders `service:`: archinstall JSON,
+// kickstart, preseed, Subiquity autoinstall and AutoYaST are five real formats, each
+// keyed by distro and by nothing else.
+//
+// password ⊻ password_hash is enforced by the vm kind's OWN OpValidate, not by CUE —
+// the same reason validateSourceDistro lives there: the host's value gate is
+// closedness-only by design, and a disjunction over two optional strings cannot
+// express "exactly one present".
+type VmInstaller struct {
+	Username string `yaml:"username,omitempty" json:"username,omitempty"`
+
+	Full_name string `yaml:"full_name,omitempty" json:"full_name,omitempty"`
+
+	Email string `yaml:"email,omitempty" json:"email,omitempty"`
+
+	// password is PLAINTEXT. The renderer crypt()s it before it reaches any template,
+	// so the plaintext exists only in memory and never lands on the answers volume.
+	Password string `yaml:"password,omitempty" json:"password,omitempty"`
+
+	Password_hash string `yaml:"password_hash,omitempty" json:"password_hash,omitempty"`
+
+	// disk is the target block device the installer wipes. It is the guest's view
+	// (/dev/vda), not a host path.
+	Disk string `yaml:"disk,omitempty" json:"disk,omitempty"`
+
+	// encrypt requests full-disk encryption. NOTE: an encrypted unattended install is
+	// not fully unattended — someone still types the LUKS passphrase at first boot —
+	// and the passphrase is written in PLAINTEXT onto the answers volume, which makes
+	// that volume a secret. Source it from the secrets backend, never a committed
+	// literal.
+	Encrypt bool `yaml:"encrypt,omitempty" json:"encrypt,omitempty"`
+
+	Keyboard string `yaml:"keyboard,omitempty" json:"keyboard,omitempty"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
+
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+
+	// ssh_authorized_key seeds the created account's ~/.ssh/authorized_keys. On a
+	// distro whose installer honours it this is what makes the guest reachable at all
+	// (a stock Omarchy install ships openssh with the service disabled and the port
+	// closed), so charly defaults it to the public half of the per-VM generated key.
+	Ssh_authorized_key []string `yaml:"ssh_authorized_key,omitempty" json:"ssh_authorized_key,omitempty"`
+
+	// defer_provisioning installs with NO personal details, leaving the first person
+	// to boot the machine to create their own user — the imaging-rig mode. Mutually
+	// exclusive with the credential fields; enforced in OpValidate.
+	Defer_provisioning bool `yaml:"defer_provisioning,omitempty" json:"defer_provisioning,omitempty"`
+
+	// answer carries per-distro extras the common fields do not model (a Tailscale
+	// auth key, a proxy, a licence). Typed-open by design.
+	Answer map[string]string `yaml:"answer,omitempty" json:"answer,omitempty"`
 }
 
 type VmKeyInjection struct {

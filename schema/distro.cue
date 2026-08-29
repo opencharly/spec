@@ -17,6 +17,7 @@
 	alpine_bootstrap?: #AlpineBootstrap @go(AlpineBootstrap,optional=nillable)
 	bootloader?:       #Bootloader @go(Bootloader,optional=nillable)
 	dnf?:              #Dnf @go(Dnf,optional=nillable)
+	installer?:        #DistroInstaller @go(Installer,optional=nillable)
 }
 
 // install_cmd is the bootstrap command; ubuntu sets it to "" (kept WITHOUT
@@ -124,6 +125,7 @@
 	alpine_bootstrap?: #AlpineBootstrap @go(AlpineBootstrap,optional=nillable)
 	bootloader?:       #Bootloader      @go(Bootloader,optional=nillable)
 	dnf?:              #Dnf             @go(Dnf,optional=nillable)
+	installer?:        #DistroInstaller @go(Installer,optional=nillable)
 	raw?: bytes @go(Raw,type=RawBody)
 }
 
@@ -148,4 +150,79 @@
 // #DistroResolveReply wraps the resolved distro.
 #DistroResolveReply: {
 	resolved?: #ResolvedDistro @go(Resolved,optional=nillable)
+}
+
+// #DistroInstaller — the UNATTENDED-INSTALL renderer vocabulary for a
+// `source.kind: iso` VM. It is to that arm exactly what #Init.service_schema is to
+// `service:`: THIS DISTRO owns the answer-file FORMAT, while the vm entity's
+// `source.installer:` owns the DATA (#VmInstaller). Nothing may infer an installer
+// format from a URL, an ISO name or a base_user — the same rule distro_vocab.cue's
+// header states for every other distro trait, and for the same reason.
+//
+// Five real formats live behind this one shape: archinstall JSON (Omarchy, Arch),
+// kickstart (Fedora/RHEL), preseed (Debian), Subiquity autoinstall (Ubuntu) and
+// AutoYaST (SUSE). Each is keyed by distro and by nothing else.
+#DistroInstaller: {
+	// volume_id is the filesystem LABEL the installer looks for. archinstall and
+	// cloud-init NoCloud use "cidata"; Anaconda kickstart uses "OEMDRV". Case is
+	// preserved verbatim by the ISO writer, so write it exactly as the installer
+	// matches it.
+	volume_id: string & =~"^[A-Za-z0-9_-]{1,32}$" @go(VolumeID)
+	// fs is how the answers volume is packed. iso9660 is correct for every installer
+	// verified so far; vfat exists for one that matches its label case-sensitively in
+	// a way ISO 9660 cannot represent.
+	fs?: *"iso9660" | "vfat" @go(FS)
+	file: [...#DistroInstallerFile] @go(Files)
+	// boot_arg is appended to the INSTALLER's kernel cmdline when the installer needs
+	// to be pointed at its answers explicitly ("inst.ks=hd:LABEL=OEMDRV:/ks.cfg").
+	// Empty for an installer that auto-discovers the labelled volume.
+	boot_arg?: string @go(BootArg)
+	// done is how the build path learns the install finished. poweroff: the installer
+	// powers the guest off and the build waits for the process to exit. marker: the
+	// installer writes marker_path into the target root, polled over the guest agent.
+	// NEVER a sleep.
+	done?:        *"poweroff" | "marker" @go(Done)
+	marker_path?: string & =~"^/"        @go(MarkerPath)
+}
+
+// #DistroInstallerFile is ONE file placed on the answers volume.
+#DistroInstallerFile: {
+	// path is relative to the volume root.
+	path: string & =~"^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$"
+	// content is a Go text/template rendered against #InstallerSeedContext.
+	content: string
+	mode?:   string & =~"^0[0-7]{3,4}$"
+	// when is a Go-template guard: the file is emitted only when it renders non-empty
+	// and not "false". This is what lets ONE vocabulary express a whole optional
+	// matrix — an ssh key file only when keys were given, a "defer provisioning"
+	// sentinel INSTEAD of credentials, an encryption marker only when encrypting —
+	// with no Go branch anywhere.
+	when?: string
+}
+
+// #InstallerSeedContext is what a #DistroInstallerFile.content template renders
+// against. Host-computed. The PLAINTEXT password never appears here: the caller
+// crypt()s it first, so no plaintext reaches a template, a log, or a temp file.
+#InstallerSeedContext: {
+	hostname?: string @go(Hostname)
+	timezone?: string @go(Timezone)
+	locale?:   string @go(Locale)
+	keyboard?: string @go(Keyboard)
+
+	username?:      string @go(Username)
+	full_name?:     string @go(FullName)
+	email?:         string @go(Email)
+	password_hash?: string @go(PasswordHash)
+
+	disk?:    string @go(Disk)
+	encrypt?: bool   @go(Encrypt)
+	// encryption_password is the LUKS passphrase, and it is plaintext by necessity:
+	// the installer needs it to create the volume. It is only ever set when
+	// encrypt is true, and it makes the rendered answers volume a secret.
+	encryption_password?: string @go(EncryptionPassword)
+
+	ssh_authorized_key?: [...string] @go(SSHAuthorizedKeys)
+	defer_provisioning?: bool        @go(DeferProvisioning)
+	// answer carries the vm entity's per-distro extras verbatim.
+	answer?: {[string]: string} @go(Answers)
 }

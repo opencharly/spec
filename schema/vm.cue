@@ -137,11 +137,104 @@
 			url?:               _|_
 			box?:               _|_
 			transport?:         _|_
+	} | {
+		kind: "iso"
+		// url is the INSTALLER medium, not a disk image: an ISO that boots its own
+		// installer, which then partitions and installs onto the (initially blank)
+		// disk charly allocates. Contrast cloud_image, whose url IS the rootfs.
+		url:       string & !=""
+		checksum?: #VmChecksum
+		cache?:    string
+		// distro is CUE-REQUIRED here, unlike the cloud_image arm which declares it
+		// optional and enforces presence in the vm kind's own OpValidate. The arm
+		// cannot render at all without it: the ANSWER-FILE FORMAT lives on the
+		// distro (#DistroInstaller), so an absent value is a hard nil rather than a
+		// wrong default. There is no "render with a plausible default" failure mode
+		// to trade against, so the stricter CUE requirement is strictly better here
+		// — the same reasoning the bootstrap arm uses.
+		distro: #DistroID
+		// installer carries the ANSWERS (username, disk, timezone, …). The distro
+		// owns the FORMAT that renders them. Optional: omitting it emits only the
+		// distro's `when:`-guarded minimal set, which boots the medium to its own
+		// interactive installer on the console.
+		installer?: #VmInstaller
+		// install_timeout bounds the headless installer run. A full Omarchy install
+		// took ~5 minutes on a warm mirror in testing; the default is deliberately
+		// generous. The wait is a process-exit / marker POLL, never a sleep.
+		install_timeout?: #Duration
+		// kernel_args is appended to the INSTALLER's kernel cmdline (console=ttyS0
+		// for serial diagnostics), not the installed system's — that one is the
+		// installer's business.
+		kernel_args?: string
+		// Cross-branch fields. rootfs/root_size are forbidden because the INSTALLER
+		// partitions the disk, not charly; base_user because installer.username is
+		// the account.
+		box?:           _|_
+		transport?:     _|_
+		rootfs?:        _|_
+		root_size?:     _|_
+		base_user?:     _|_
+		from_vm?:       _|_
+		from_snapshot?: _|_
+		libvirt_name?:  _|_
+		disk_path?:     _|_
+		disk_format?:   _|_
+		builder?:       _|_
+		builder_image?: _|_
 	} @go(-) // gengotypes: hand VmSource (spec/union_types.go) — flat discriminated struct
 
 #VmChecksum: {
 	type?:  "sha256"
 	value?: string & =~"^[0-9a-fA-F]{64}$"
+}
+
+// #VmInstaller — the unattended-install ANSWERS for a `source.kind: iso` VM.
+//
+// Distro-AGNOSTIC on purpose: every field here is a question EVERY installer asks.
+// Distro-SPECIFIC extras go in `answer:` (typed-open — a distro's installer vocabulary
+// is that distro's business, not vm.cue's), reachable from a #DistroInstaller template
+// as {{index .Answers "key"}}. The FORMAT that renders these into files lives on the
+// distro (#DistroInstaller), exactly as `init:` renders `service:`: archinstall JSON,
+// kickstart, preseed, Subiquity autoinstall and AutoYaST are five real formats, each
+// keyed by distro and by nothing else.
+//
+// password ⊻ password_hash is enforced by the vm kind's OWN OpValidate, not by CUE —
+// the same reason validateSourceDistro lives there: the host's value gate is
+// closedness-only by design, and a disjunction over two optional strings cannot
+// express "exactly one present".
+#VmInstaller: {
+	username?:  string & =~"^[a-z_][a-z0-9_-]{0,31}$"
+	full_name?: string
+	email?:     string
+	// password is PLAINTEXT. The renderer crypt()s it before it reaches any template,
+	// so the plaintext exists only in memory and never lands on the answers volume.
+	password?:      string & !=""
+	password_hash?: string & =~"^\\$(1|5|6|y|2b)\\$"
+	// disk is the target block device the installer wipes. It is the guest's view
+	// (/dev/vda), not a host path.
+	disk?: string & =~"^/dev/[a-z0-9/]+$"
+	// encrypt requests full-disk encryption. NOTE: an encrypted unattended install is
+	// not fully unattended — someone still types the LUKS passphrase at first boot —
+	// and the passphrase is written in PLAINTEXT onto the answers volume, which makes
+	// that volume a secret. Source it from the secrets backend, never a committed
+	// literal.
+	encrypt?:  bool
+	keyboard?: string & !=""
+	timezone?: string & !=""
+	locale?:   string & !=""
+	hostname?: string & !=""
+	// ssh_authorized_key seeds the created account's ~/.ssh/authorized_keys. On a
+	// distro whose installer honours it this is what makes the guest reachable at all
+	// (a stock Omarchy install ships openssh with the service disabled and the port
+	// closed), so charly defaults it to the public half of the per-VM generated key.
+	ssh_authorized_key?: [...(string & !="")]
+	// defer_provisioning installs with NO personal details, leaving the first person
+	// to boot the machine to create their own user — the imaging-rig mode. Mutually
+	// exclusive with the credential fields; enforced in OpValidate.
+	defer_provisioning?: bool
+	// answer carries per-distro extras the common fields do not model (a Tailscale
+	// auth key, a proxy, a licence). Typed-open by design.
+	answer?: {[string]: string}
 }
 
 #VmNetwork: {
