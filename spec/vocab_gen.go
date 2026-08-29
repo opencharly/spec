@@ -102,6 +102,21 @@ var DistroInits = map[string]string{
 	"ubuntu":      "systemd",
 }
 
+// DistroOvmfFamilies is each distro id's OVMF firmware family (#Distros[id].ovmf_family), for the ids that declare one. Replaces the hand-maintained ovmf_distro_aliases: map that was kept in two byte-identical copies. An id with no entry keeps the all-families fallback.
+var DistroOvmfFamilies = map[string]string{
+	"almalinux":   "fedora",
+	"arch":        "arch",
+	"cachyos":     "arch",
+	"centos":      "fedora",
+	"debian":      "debian",
+	"endeavouros": "arch",
+	"fedora":      "fedora",
+	"manjaro":     "arch",
+	"rhel":        "fedora",
+	"rocky":       "fedora",
+	"ubuntu":      "debian",
+}
+
 // StepKeywords is the plan-step intent keywords (#Step arms minus #Op fields).
 var StepKeywords = []string{
 	"agent-check",

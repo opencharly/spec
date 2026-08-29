@@ -94,6 +94,21 @@ type NestedJump struct {
 	Kind   JumpKind
 	Target string
 
+	// User is the explicit `--user` value (e.g. "1000:1000") passed to a
+	// podman/docker exec hop. When set, the exec argv carries `--user <User>`
+	// so the session user is deterministic instead of whatever the engine's
+	// exec user/HOME resolution derives at that moment (issue #149: a
+	// container created during a concurrent bed window resolves uid=1000
+	// gid=0 with an empty HOME even though the OCI spec carries 1000:1000
+	// and HOME=/home/user). Filled from the running container's .Config.User
+	// at chain construction; empty means "let the engine resolve" (the
+	// pre-fix behavior).
+	User string
+
+	// Home is the explicit HOME value (e.g. "/home/user") passed to a
+	// podman/docker exec hop as `--env HOME=<Home>`. See User.
+	Home string
+
 	// Extra arguments inserted before the shell invocation. Rarely
 	// needed; useful for `podman exec --env FOO=bar` or
 	// `ssh -o ProxyJump=…` style tweaks.
@@ -477,9 +492,21 @@ func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
 		envFlags := buildContainerEnvFlags()
 		extras := strings.Join(escapeTokens(jump.ExtraArgs), " ")
 		// stdin-attached exec so the heredoc reaches the nested shell.
-		// Layout: `<engine> exec -i [--env KEY=VALUE …] [extras] <target> <shell>`
+		// Layout: `<engine> exec -i [--user U] [--env HOME=H] [--env KEY=VALUE …] [extras] <target> <shell>`
 		var execParts []string
 		execParts = append(execParts, engine, "exec", "-i")
+		// Deterministic session user/HOME (issue #149): the engine's exec
+		// user/HOME resolution can race for containers created during a
+		// concurrent bed window, yielding uid=1000 gid=0 with an empty HOME
+		// even though the OCI spec carries 1000:1000 + HOME=/home/user.
+		// Passing the container's own configured values explicitly makes the
+		// session env independent of that resolution.
+		if jump.User != "" {
+			execParts = append(execParts, "--user", deployShellQuote(jump.User))
+		}
+		if jump.Home != "" {
+			execParts = append(execParts, "--env", deployShellQuote("HOME="+jump.Home))
+		}
 		if envFlags != "" {
 			execParts = append(execParts, envFlags)
 		}
@@ -698,6 +725,41 @@ func buildContainerEnvFlags() string {
 	return strings.Join(flags, " ")
 }
 
+// containerExecUserHome inspects a RUNNING container's OCI spec for the
+// configured User and HOME env, returning them as the explicit `--user` and
+// `--env HOME=` values an exec hop should pass. Returns ("", "") when the
+// container is not found or carries neither.
+//
+// The values come from the container's own runtime config (.Config.User /
+// .Config.Env), which is authoritative: the exec-resolution race (issue #149)
+// breaks the DERIVED session env (uid=1000 gid=0, empty HOME) for containers
+// created during a concurrent bed window, NOT the spec. Reading the spec and
+// passing it back explicitly makes the session env deterministic.
+func containerExecUserHome(engine, containerName string) (user, home string) {
+	out, _, _, err := RunCaptureCmd(exec.Command(engine, "inspect", "--format", "{{.Config.User}}|{{range .Config.Env}}{{.}}\n{{end}}", containerName))
+	if err != nil {
+		return "", ""
+	}
+	return parseContainerUserHome(out)
+}
+
+// parseContainerUserHome extracts the User and HOME from the inspect output
+// layout `<user>|<env1>\n<env2>\n…` — the user is before the first `|`, each
+// env pair is on its own line. Returns ("", "") when the user is empty.
+func parseContainerUserHome(out string) (user, home string) {
+	user, envBlock, _ := strings.Cut(out, "|")
+	user = strings.TrimSpace(user)
+	if user == "" {
+		return "", ""
+	}
+	for _, line := range strings.Split(envBlock, "\n") {
+		if k, v, ok := strings.Cut(line, "="); ok && k == "HOME" {
+			return user, v
+		}
+	}
+	return user, ""
+}
+
 // escapeTokens wraps each token in single quotes for safe embedding in a
 // POSIX shell line. Not "a bash line": its only caller is wrapWithJump, whose
 // emitted line runs in the PARENT's shell — which is `sh` when the parent is
@@ -730,3 +792,4 @@ var _ = bytes.NewReader
 func NestedContainerName(path string) string {
 	return strings.ReplaceAll(path, ".", "_")
 }
+// exec user/HOME: see deploy_executor_nested.go

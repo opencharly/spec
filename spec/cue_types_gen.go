@@ -1007,6 +1007,12 @@ type Box struct {
 
 	Network string `yaml:"network,omitempty" json:"network,omitempty"`
 
+	// init — pin the box's init system instead of letting composition auto-detect it.
+	// Every value here must be an init the build vocabulary actually defines
+	// (charly.yml's `init:` entities): a word the vocabulary knows but this enum
+	// omits is unselectable, which is what kept `openrc` out of reach despite being
+	// a first-class init with its own service_template, management commands and
+	// unit_path_template.
 	Init string `yaml:"init,omitempty" json:"init,omitempty"`
 
 	DataImage bool `yaml:"data_image,omitempty" json:"data_image,omitempty"`
@@ -2446,6 +2452,60 @@ type CandyService struct {
 	ExitCode string `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
 
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// ---- Portable lifecycle fields -------------------------------------------
+	// Every field below is expressible by at least TWO of the three init systems.
+	// That is the admission rule: a field only one init can honour belongs in
+	// unit_options: instead, where it is named as that init's own.
+	//
+	// type — systemd Type=; supervisord approximates oneshot with startsecs=0;
+	// OpenRC distinguishes forking via command_background.
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	// requires — a HARD dependency, distinct from after:'s ordering. systemd
+	// Requires=; OpenRC depend(){ need … }, which its template already emits for
+	// localmount. supervisord has no equivalent and ignores it.
+	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+
+	// restart_sec — delay before a restart. systemd RestartSec=; OpenRC
+	// --respawn-delay. Accepts "5s" or a bare 5 (Go-coerced; the Go field is string,
+	// matching stop_timeout's shape).
+	RestartSec string `yaml:"restart_sec,omitempty" json:"restart_sec,omitempty"`
+
+	// watchdog_sec — liveness deadline. systemd WatchdogSec=; OpenRC
+	// --healthcheck-timer. Requires type: notify on systemd to be meaningful.
+	WatchdogSec string `yaml:"watchdog_sec,omitempty" json:"watchdog_sec,omitempty"`
+
+	// unit_options — the ONE escape hatch for init-specific directives, keyed
+	// init-name -> directive -> value.
+	//
+	// It exists so #ServiceRenderContext does not grow a field per init-specific
+	// knob. That struct is a kind-AGNOSTIC envelope rendered by every init's
+	// template; putting NotifyAccess, Slice, KillMode, RuntimeDirectory and a
+	// hardening block into it would make it systemd's typed shape wearing a generic
+	// name — the leak the boundary law names. With this map, a FOURTH init needs no
+	// schema change, exactly as the openrc init entity needed no Go change.
+	//
+	// A value may be a scalar or a list; a list emits the directive once per element,
+	// which is what systemd expects for repeatable directives such as
+	// RuntimeDirectory= or ReadWritePaths=.
+	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
+
+	// wait_for — block the service's start until the paths it needs exist.
+	//
+	// Nine hand-rolled versions of this loop exist in the candy corpus today
+	// (labwc, kde-selkies x2, chrome-cdp, wayvnc x3, swaync, waybar, waybar-labwc,
+	// sway), each re-deriving the same poll with its own hardcoded timeout — the
+	// sleeps and magic numbers R4 forbids. One of them is already wrong: labwc's
+	// declares TIMEOUT=30 but sleeps 0.5s per iteration while counting +1, so it
+	// actually gives up after 15 seconds. That is the failure mode a hand-rolled
+	// loop has and a declared one cannot.
+	//
+	// Each init lowers this natively — systemd ExecStartPre=, supervisord a
+	// rendered pre-exec ahead of the command, OpenRC start_pre() — so the wait is
+	// SUPERVISED: a timeout fails the unit and surfaces in its status, instead of a
+	// wrapper exiting non-zero and looking like a crash.
+	WaitFor *ServiceWaitFor `yaml:"wait_for,omitempty" json:"wait_for,omitempty"`
 }
 
 type CandyServiceOverrides struct {
@@ -2454,6 +2514,26 @@ type CandyServiceOverrides struct {
 	After []string `yaml:"after,omitempty" json:"after,omitempty"`
 
 	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
+}
+
+// #ServiceWaitFor is a readiness precondition on a service's start.
+//
+// PATHS only, deliberately. All nine existing loops wait on a filesystem path (a
+// Wayland socket, an IPC socket, a lock file); none polls a TCP port. A ports:
+// form would need a probe tool the base images do not all carry, so it waits for
+// a real second consumer rather than being designed against a hypothetical one.
+type ServiceWaitFor struct {
+	// paths — every path must exist before the service starts. Relative paths are
+	// resolved by the init against the service's own working directory, exactly as
+	// exec: is.
+	//
+	// Required, and at least one element: a wait_for with no paths waits for
+	// nothing while reading like a guard, which is worse than no guard at all.
+	Paths []string `yaml:"paths,omitempty" json:"paths"`
+
+	// timeout — how long to wait before failing the start. "30s" or a bare 30,
+	// matching stop_timeout's shape. Absent means the init's own default.
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 }
 
 // ExtractYAML — copy a path out of another OCI image into this one. source is
@@ -4969,6 +5049,27 @@ type ServiceRenderContext struct {
 	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
 
 	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
+
+	// Portable lifecycle fields, carried verbatim from the entry. Each is honoured
+	// by at least two inits; an init whose template does not reference one simply
+	// ignores it, exactly as supervisord already ignores wanted_by/before.
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+
+	RestartSec string `yaml:"restart_sec,omitempty" json:"restart_sec,omitempty"`
+
+	WatchdogSec string `yaml:"watchdog_sec,omitempty" json:"watchdog_sec,omitempty"`
+
+	// unit_options — init-specific directives, keyed init-name -> directive -> value.
+	// A template reads only its OWN key, so this stays ONE field on the shared
+	// envelope no matter how many inits exist. See #CandyService.unit_options for
+	// why this is a map rather than a field per directive.
+	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
+
+	// wait_for — the readiness precondition, carried from the entry so each init's
+	// template can lower it in its own idiom.
+	WaitFor *ServiceWaitFor `yaml:"wait_for,omitempty" json:"wait_for,omitempty"`
 
 	// render_dropin is the host-precomputed drop-in decision (the entry
 	// carries Overrides). PackagedUnit != "" selects the packaged branch. The
@@ -8120,6 +8221,31 @@ type LibvirtDomain struct {
 	Resource *LibvirtResource `yaml:"resource,omitempty" json:"resource,omitempty"`
 
 	SysInfo *LibvirtSysInfo `yaml:"sysinfo,omitempty" json:"sysinfo,omitempty"`
+
+	// qemu_override: QEMU frontend device properties libvirt models no element
+	// for, rendered as
+	//
+	//	<qemu:override><qemu:device alias='ua-…'><qemu:frontend><qemu:property …/>
+	//
+	// on the libvirt backend and as `-device <dev>,<prop>=<val>` on the qemu one.
+	//
+	// This is the ONE escape hatch for the device-property axis, deliberately
+	// shaped like libvirt's own override element rather than as a field per knob:
+	// virtio-gpu alone carries drm_native_context, hostmem, max_hostmem and venus,
+	// and rutabaga adds more. A new knob is a YAML line, never a schema change.
+	//
+	// Keyed by the device's USER alias, which the device itself must declare (e.g.
+	// #LibvirtVideo.alias) — an override naming an alias no device carries is a
+	// hard render error, not a silent no-op. The `ua-` prefix libvirt demands is
+	// enforced on the ALIAS field, so it reaches these keys transitively: a key
+	// that is not `ua-`-prefixed can never equal a valid alias, and the renderer
+	// then names it as unmatched. (The key is typed `[string]` rather than a
+	// pattern: `cue exp gengotypes` renders a pattern-constrained key as an EMPTY
+	// Go struct, which would drop every override on the floor.)
+	//
+	// Requires libvirt >= 8.2.0. An override TAINTS the domain (libvirt records
+	// taint flag `custom-device`); that is libvirt's own policy, not charly's.
+	QemuOverride map[string]map[string]any/* CUE disjunction: (bool|int|string) */ `yaml:"qemu_override,omitempty" json:"qemu_override,omitempty"`
 }
 
 type LibvirtFeatures struct {
@@ -8522,19 +8648,121 @@ type LibvirtGraphics struct {
 
 	Keymap string `yaml:"keymap,omitempty" json:"keymap,omitempty"`
 
-	GL string `yaml:"gl,omitempty" json:"gl,omitempty"`
+	// gl: libvirt models <gl> PER GRAPHICS TYPE, not as one shared element, so this
+	// is a struct rather than the scalar it used to be. A bare `gl: "yes"` could
+	// only ever reach spice's enable= attribute and had NO way to express
+	// rendernode= — which is the attribute that points virtio-gpu at a specific
+	// host DRM node, and therefore the whole reason a GPU-in-VM candy touches <gl>
+	// at all. `<acceleration rendernode=…>` on #LibvirtVideo is NOT the substitute:
+	// libvirt documents that one as vhostuser-driver-only.
+	GL *LibvirtGraphicsGL `yaml:"gl,omitempty" json:"gl,omitempty"`
+
+	// address/p2p are dbus-only (<graphics type='dbus' address=… p2p=…/>).
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+
+	// The per-type field rules — <gl> exists only on spice/egl-headless/dbus,
+	// gl.enable only on spice/dbus, address/p2p only on dbus — are NOT expressible
+	// here. Writing them as `if type == … { gl?: _|_ }` type-checks in CUE but
+	// makes `cue exp gengotypes` emit `type LibvirtGraphics any`: it evaluates the
+	// definition with `type` still abstract, so every branch stays unresolved, the
+	// field kinds reduce to bottom, and the generator degrades the WHOLE struct.
+	// That compiles, so the damage is silent — every graphics block would decode
+	// into an untyped map. (The `if firmware == …` rules on #Vm are safe only
+	// because they TIGHTEN fields to concrete values instead of to bottom.)
+	//
+	// They are enforced instead as hard render errors in the libvirt bridge's
+	// mapGraphics, which is the exact point where the field would otherwise be
+	// dropped on the floor, and where the message can name the reason.
+	P2P *bool `yaml:"p2p,omitempty" json:"p2p,omitempty"`
+}
+
+type LibvirtGraphicsGL struct {
+	Enable *bool `yaml:"enable,omitempty" json:"enable,omitempty"`
+
+	// render_node: absolute path to the host DRM render node (/dev/dri/renderD128).
+	// Requires libvirt >= 5.8.0 (spice) / >= 5.10.0 (egl-headless).
+	RenderNode string `yaml:"render_node,omitempty" json:"render_node,omitempty"`
 }
 
 type LibvirtVideo struct {
 	Model string `yaml:"model,omitempty" json:"model"`
 
+	// device: the concrete QEMU device behind the model. `model` alone cannot select
+	// these: model='virtio' emits plain virtio-vga, which has no GL and therefore no
+	// blob/native-context support. Requires libvirt >= 12.5.0.
+	//
+	// The vocabulary is closed because libvirt's own RNG closes it (domaincommon.rng,
+	// the type='virtio' group): any other value is rejected at DEFINE time with an
+	// error that blames <devices>, not the attribute. Rejecting it here names the field.
+	Device string `yaml:"device,omitempty" json:"device,omitempty"`
+
+	Ram int `yaml:"ram,omitempty" json:"ram,omitempty"`
+
 	VRAM int `yaml:"vram,omitempty" json:"vram,omitempty"`
+
+	VRAM64 int `yaml:"vram64,omitempty" json:"vram64,omitempty"`
+
+	VGAMem int `yaml:"vgamem,omitempty" json:"vgamem,omitempty"`
 
 	Heads int `yaml:"heads,omitempty" json:"heads,omitempty"`
 
+	// blob: virtio-gpu blob resources — the guest maps host memory directly
+	// instead of copying through the device. Required for a native-context or
+	// venus guest. Requires libvirt >= 9.2.0 and QEMU >= 6.1, and the domain MUST
+	// have shared memory backing (memory_backing.source: memfd + access: shared).
+	Blob *bool `yaml:"blob,omitempty" json:"blob,omitempty"`
+
+	EDID *bool `yaml:"edid,omitempty" json:"edid,omitempty"`
+
 	Accel3D *bool `yaml:"accel3d,omitempty" json:"accel3d,omitempty"`
 
+	Accel2D *bool `yaml:"accel2d,omitempty" json:"accel2d,omitempty"`
+
+	// render_node on <acceleration> is documented by libvirt as VHOSTUSER-DRIVER
+	// ONLY (since 5.8.0). To point an ordinary virtio-gpu at a host node, set
+	// graphics.gl.render_node instead — that is the attribute libvirt actually
+	// reads for it.
+	RenderNode string `yaml:"render_node,omitempty" json:"render_node,omitempty"`
+
 	Primary *bool `yaml:"primary,omitempty" json:"primary,omitempty"`
+
+	Resolution *LibvirtVideoResolution `yaml:"resolution,omitempty" json:"resolution,omitempty"`
+
+	Driver *LibvirtVideoDriver `yaml:"driver,omitempty" json:"driver,omitempty"`
+
+	// alias: a libvirt USER alias for this device. Its only purpose is to be
+	// targeted by libvirt.qemu_override — libvirt refuses an override against its
+	// own auto-assigned alias (video0), which is why the `ua-` prefix is required
+	// rather than conventional. Emitted ONLY when declared, so a VM that does not
+	// use it renders byte-identically to before this field existed.
+	Alias string `yaml:"alias,omitempty" json:"alias,omitempty"`
+}
+
+type LibvirtVideoResolution struct {
+	// Both required: libvirt's <resolution> has no default and a 0x0 would be
+	// emitted verbatim.
+	X int `yaml:"x,omitempty" json:"x"`
+
+	Y int `yaml:"y,omitempty" json:"y"`
+}
+
+type LibvirtVideoDriver struct {
+	// Both enums are closed by libvirt's RNG (domaincommon.rng, the video <driver>
+	// element). A name like "qxl" — the plausible guess, since it is a valid video
+	// MODEL — is not a valid driver name and fails at define time.
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	VGAConf string `yaml:"vgaconf,omitempty" json:"vgaconf,omitempty"`
+
+	// The virtioOptions toggles. libvirt spells these on/off, where the video model's
+	// own attributes beside them are yes/no — the renderer keeps the two apart.
+	IOMMU *bool `yaml:"iommu,omitempty" json:"iommu,omitempty"`
+
+	ATS *bool `yaml:"ats,omitempty" json:"ats,omitempty"`
+
+	Packed *bool `yaml:"packed,omitempty" json:"packed,omitempty"`
+
+	PagePerVQ *bool `yaml:"page_per_vq,omitempty" json:"page_per_vq,omitempty"`
 }
 
 type LibvirtAudio struct {

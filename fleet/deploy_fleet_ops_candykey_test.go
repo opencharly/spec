@@ -46,4 +46,3 @@ func TestCandyMapKey_Local(t *testing.T) {
 		t.Fatalf("local key = %q, want the bare name", got)
 	}
 }
-

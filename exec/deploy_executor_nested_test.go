@@ -603,3 +603,73 @@ exec "$@"
 		})
 	}
 }
+
+// TestWrapWithJump_PodmanExplicitUserHome pins the issue #149 fix: when a
+// NestedJump carries an explicit User/Home, the emitted podman exec line must
+// pass them as `--user` and `--env HOME=` so the session env is deterministic
+// (immune to the engine's exec user/HOME resolution race for containers
+// created during a concurrent bed window).
+func TestWrapWithJump_PodmanExplicitUserHome(t *testing.T) {
+	j := NestedJump{Kind: JumpPodmanExec, Target: "mybox", User: "1000:1000", Home: "/home/user"}
+	out, err := wrapWithJump(j, "echo hi", false)
+	if err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	if !strings.Contains(out, "podman exec -i --user '1000:1000' --env 'HOME=/home/user'") {
+		t.Errorf("wrapped missing explicit --user/--env HOME: %s", out)
+	}
+	// The pre-fix shape (no explicit user/HOME) must still work unchanged.
+	plain := NestedJump{Kind: JumpPodmanExec, Target: "mybox"}
+	out2, err := wrapWithJump(plain, "echo hi", false)
+	if err != nil {
+		t.Fatalf("wrap plain: %v", err)
+	}
+	if strings.Contains(out2, "--user") {
+		t.Errorf("plain jump must not carry --user: %s", out2)
+	}
+}
+
+// TestParseContainerUserHome pins the inspect-output parser behind
+// containerExecUserHome: the `<user>|<env1>\n<env2>\n…` layout yields the
+// explicit User + HOME, and a missing user yields ("", "").
+func TestParseContainerUserHome(t *testing.T) {
+	cases := []struct {
+		name     string
+		out      string
+		wantUser string
+		wantHome string
+	}{
+		{
+			name:     "user-and-home",
+			out:      "1000:1000|PATH=/usr/bin:/bin\nHOME=/home/user\nTERM=xterm\n",
+			wantUser: "1000:1000",
+			wantHome: "/home/user",
+		},
+		{
+			name:     "user-no-home",
+			out:      "1000:1000|PATH=/usr/bin:/bin\n",
+			wantUser: "1000:1000",
+			wantHome: "",
+		},
+		{
+			name:     "empty-user",
+			out:      "|PATH=/usr/bin:/bin\nHOME=/home/user\n",
+			wantUser: "",
+			wantHome: "",
+		},
+		{
+			name:     "empty-output",
+			out:      "",
+			wantUser: "",
+			wantHome: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			user, home := parseContainerUserHome(tc.out)
+			if user != tc.wantUser || home != tc.wantHome {
+				t.Errorf("parseContainerUserHome(%q) = (%q, %q), want (%q, %q)", tc.out, user, home, tc.wantUser, tc.wantHome)
+			}
+		})
+	}
+}
