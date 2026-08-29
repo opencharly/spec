@@ -63,6 +63,16 @@
 	endeavouros: {format: "pac", ssh_unit: "sshd", init: "systemd", ovmf_family: "arch"}
 	cachyos: {format: "pac", ssh_unit: "sshd", init: "systemd", ovmf_family: "arch"}
 
+	// Omarchy (omacom/omarchy) is vanilla Arch + Hyprland: Arch's pacman, Arch's
+	// openssh (`sshd`), Arch's systemd, Arch's edk2 layout. A DISTINCT id rather than
+	// an alias of arch, because #DistroID keys three things Arch does not share: the
+	// unattended-install answer format (archinstall JSON, which Arch's own ISO does
+	// not ship pre-seeded), the extra [omarchy] pacman repo plus Omarchy's pinned
+	// Arch mirror snapshot, and the bootloader (limine + a UKI, not grub). Reusing
+	// `arch` would turn every one of those into a branch on a string.
+	// x86_64 only — pkgs.omarchy.org publishes no aarch64 tree.
+	omarchy: {format: "pac", ssh_unit: "sshd", init: "systemd", ovmf_family: "arch"}
+
 	// Alpine runs OpenRC, not systemd. This row is what makes that a first-class,
 	// enumerable property instead of a branch on the string "alpine".
 	alpine: {format: "apk", ssh_unit: "sshd", init: "openrc"}
