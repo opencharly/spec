@@ -43,9 +43,15 @@ func ContainerChainFromDescriptor(engine, containerName string) spec.DeployExecu
 	if engine == "docker" {
 		jumpKind = JumpDockerExec
 	}
+	// Deterministic exec user/HOME (issue #149): read the running container's
+	// OCI-spec User + HOME once at chain construction so every exec hop passes
+	// them explicitly, immune to the engine's exec user/HOME resolution race
+	// for containers created during a concurrent bed window. Best-effort — an
+	// unreadable container falls back to the engine's own resolution.
+	user, home := containerExecUserHome(engine, containerName)
 	return &NestedExecutor{
 		Parent: ShellExecutor{},
-		Jump:   NestedJump{Kind: jumpKind, Target: containerName},
+		Jump:   NestedJump{Kind: jumpKind, Target: containerName, User: user, Home: home},
 	}
 }
 

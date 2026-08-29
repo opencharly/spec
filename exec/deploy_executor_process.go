@@ -135,7 +135,15 @@ func (n *NestedExecutor) StartProcess(ctx context.Context, launch spec.ProcessLa
 	var outer []string
 	switch n.Jump.Kind {
 	case JumpPodmanExec:
-		outer = append([]string{"podman", "exec", "-i"}, n.Jump.ExtraArgs...)
+		outer = []string{"podman", "exec", "-i"}
+		// Deterministic session user/HOME (issue #149): see wrapWithJump.
+		if n.Jump.User != "" {
+			outer = append(outer, "--user", n.Jump.User)
+		}
+		if n.Jump.Home != "" {
+			outer = append(outer, "--env", "HOME="+n.Jump.Home)
+		}
+		outer = append(outer, n.Jump.ExtraArgs...)
 		if launch.WorkingDir != "" {
 			outer = append(outer, "--workdir", launch.WorkingDir)
 		}
@@ -144,7 +152,14 @@ func (n *NestedExecutor) StartProcess(ctx context.Context, launch spec.ProcessLa
 		}
 		outer = append(outer, n.Jump.Target)
 	case JumpDockerExec:
-		outer = append([]string{"docker", "exec", "-i"}, n.Jump.ExtraArgs...)
+		outer = []string{"docker", "exec", "-i"}
+		if n.Jump.User != "" {
+			outer = append(outer, "--user", n.Jump.User)
+		}
+		if n.Jump.Home != "" {
+			outer = append(outer, "--env", "HOME="+n.Jump.Home)
+		}
+		outer = append(outer, n.Jump.ExtraArgs...)
 		if launch.WorkingDir != "" {
 			outer = append(outer, "--workdir", launch.WorkingDir)
 		}
