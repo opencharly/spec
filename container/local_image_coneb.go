@@ -19,10 +19,14 @@ package container
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/opencharly/spec/cache"
 	"github.com/opencharly/spec/calver"
 	"github.com/opencharly/spec/spec"
 )
@@ -87,9 +91,83 @@ type LocalImageInfo struct {
 	Created int64
 }
 
-// ListLocalImages returns all images in the engine's local storage.
-// Package-level var for testability (same pattern as LocalImageExists, DetectEngine).
-var ListLocalImages = defaultListLocalImages
+// ListLocalImages returns all images in the engine's local storage, CACHED
+// persistently (the image list does not change often — only a build or pull
+// mutates it). The first call after the TTL expires re-fetches with user
+// feedback; every subsequent call within the TTL reads the cache, so `charly
+// status` is sub-second after the first run. Package-level var for testability
+// (same pattern as LocalImageExists, DetectEngine).
+var ListLocalImages = cachedListLocalImages
+
+// imageCacheTTL is how long a cached image list is trusted before a re-fetch.
+// The images change only on build/pull, so a 5-minute TTL makes consecutive
+// status runs fast while still seeing new images within a few minutes.
+const imageCacheTTL = 5 * time.Minute
+
+// cachedListLocalImages is the persistent-cache wrapper: it reads the cached
+// image list from the charly dir cache file when fresh, else re-fetches via
+// `{podman,docker} images --format json` and caches the result.
+func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
+	cachePath, err := imageCachePath()
+	if err == nil {
+		if images, ok := readImageCache(cachePath, engine); ok {
+			return images, nil
+		}
+	}
+	fmt.Fprintf(os.Stderr, "charly: listing local images (first run — may take a moment)...\n")
+	images, err := defaultListLocalImages(engine)
+	if err != nil {
+		return nil, err
+	}
+	if cachePath != "" {
+		_ = writeImageCache(cachePath, engine, images)
+	}
+	return images, nil
+}
+
+// InvalidateImageCache clears the persistent image-list cache. Called by the
+// build and deploy commands (charly box build / fleet add / update) — every
+// operation that creates or pulls an image — so the next status run re-fetches
+// the fresh image list instead of serving a stale cache.
+func InvalidateImageCache() {
+	cachePath, err := imageCachePath()
+	if err != nil {
+		return
+	}
+	_ = os.Remove(cachePath)
+}
+
+// imageCachePath returns the image-list cache file under the charly dir
+// (~/.config/charly/cache/images.json).
+func imageCachePath() (string, error) {
+	cfg, err := spec.DefaultDeployConfigPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(cfg), "cache", "images.json"), nil
+}
+
+// imageCacheValue is the cached image list for one engine.
+type imageCacheValue struct {
+	Engine string           `json:"engine"`
+	Images []LocalImageInfo `json:"images"`
+}
+
+// readImageCache returns the cached image list if fresh for engine, else (nil,
+// false). A corrupt/absent file is a cache miss.
+func readImageCache(path, engine string) ([]LocalImageInfo, bool) {
+	var v imageCacheValue
+	if !cache.Read(path, engine, imageCacheTTL, &v) || v.Engine != engine {
+		return nil, false
+	}
+	return v.Images, true
+}
+
+// writeImageCache persists the image list (best-effort).
+func writeImageCache(path, engine string, images []LocalImageInfo) error {
+	cache.Write(path, engine, imageCacheValue{Engine: engine, Images: images})
+	return nil
+}
 
 func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 	binary := EngineBinary(engine)

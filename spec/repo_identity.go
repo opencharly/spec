@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -97,14 +98,27 @@ func RootRepoIdentity(dir string) string {
 	return GitRemoteIdentity(dir)
 }
 
+// gitRemoteIdentityCache caches the git `origin` identity per directory. The
+// identity of a dir's git remote does NOT change during a process run (the
+// process never modifies git remotes), so a process-wide cache is safe — and it
+// eliminates the repeated `git remote get-url origin` subprocess spawns that
+// dominated `charly status` (514 spawns on the per-host config dir, measured).
+var gitRemoteIdentityCache sync.Map // dir -> identity ("" for non-git dirs)
+
 // GitRemoteIdentity returns the normalized `host/owner/repo` identity of dir's git `origin`
-// remote, or "" when dir is not a git repo / has no origin / git is unavailable.
+// remote, or "" when dir is not a git repo / has no origin / git is unavailable. Cached
+// process-wide per directory (the identity is stable for the process lifetime).
 func GitRemoteIdentity(dir string) string {
-	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
-	if err != nil {
-		return ""
+	if v, ok := gitRemoteIdentityCache.Load(dir); ok {
+		return v.(string)
 	}
-	return NormalizeGitRemoteURL(strings.TrimSpace(string(out)))
+	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
+	identity := ""
+	if err == nil {
+		identity = NormalizeGitRemoteURL(strings.TrimSpace(string(out)))
+	}
+	gitRemoteIdentityCache.Store(dir, identity)
+	return identity
 }
 
 // NormalizeRepoIdentity normalizes an explicit `repo:` value (which may be a full git URL, an
