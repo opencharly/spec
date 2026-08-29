@@ -159,6 +159,17 @@ func (g *GitClient) save() {
 		return
 	}
 
+	// Ensure the HEAD schema version stamp is present — the per-host charly.yml
+	// is loaded through the unified loader, which requires the version directive.
+	// A fresh file created by the cache write must carry it, or the loader rejects
+	// the file ("schema X is required (found \"\")").
+	if !hasMappingKey(root, "version") {
+		root.Content = append(root.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: "version"},
+			&yaml.Node{Kind: yaml.ScalarNode, Value: spec.SchemaVersion},
+		)
+	}
+
 	// Find or create the `cache` key.
 	var cacheVal *yaml.Node
 	for i := 0; i+1 < len(root.Content); i += 2 {
@@ -219,6 +230,17 @@ func (g *GitClient) save() {
 	if err := os.Rename(tmpName, g.cacheFile); err != nil {
 		os.Remove(tmpName)
 	}
+}
+
+// hasMappingKey reports whether a mapping node has a top-level key with the given
+// name.
+func hasMappingKey(m *yaml.Node, name string) bool {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == name {
+			return true
+		}
+	}
+	return false
 }
 
 // entryMapNode builds a YAML mapping node from a cache-entry map.

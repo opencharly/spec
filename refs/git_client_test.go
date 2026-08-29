@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/opencharly/spec/spec"
 	"gopkg.in/yaml.v3"
 )
 
@@ -118,6 +119,42 @@ func TestGitClientPreservesOtherKeys(t *testing.T) {
 	}
 	if _, ok := doc.Cache.Git.LatestTags["https://github.com/opencharly/example"]; !ok {
 		t.Fatal("cache: git: latest_tags missing the seeded entry")
+	}
+}
+
+func TestGitClientFreshFileGetsVersionStamp(t *testing.T) {
+	dir := t.TempDir()
+	cacheFile := filepath.Join(dir, "charly.yml")
+	client := NewGitClient(cacheFile)
+
+	// A fresh file (no pre-existing charly.yml) must be created WITH the HEAD
+	// schema version stamp — the per-host file is loaded through the unified
+	// loader, which rejects a version-less file.
+	client.mu.Lock()
+	client.latestTags["https://github.com/opencharly/example"] = gitCacheEntry{Value: "v1", Resolved: time.Now()}
+	client.save()
+	client.mu.Unlock()
+
+	data, err := os.ReadFile(cacheFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Version string `yaml:"version"`
+		Cache   *struct {
+			Git *struct {
+				LatestTags map[string]gitCacheEntry `yaml:"latest_tags"`
+			} `yaml:"git"`
+		} `yaml:"cache"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("cache file is not valid YAML: %v", err)
+	}
+	if doc.Version != spec.SchemaVersion {
+		t.Fatalf("fresh cache file version = %q, want %q", doc.Version, spec.SchemaVersion)
+	}
+	if doc.Cache == nil || doc.Cache.Git == nil {
+		t.Fatal("cache: git: section missing")
 	}
 }
 
