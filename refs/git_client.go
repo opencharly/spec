@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -228,7 +229,7 @@ func entryMapNode(entries map[string]gitCacheEntry) *yaml.Node {
 		keys = append(keys, k)
 	}
 	// Deterministic output: sort keys so the file is stable across runs.
-	sortStrings(keys)
+	sort.Strings(keys)
 	for _, k := range keys {
 		e := entries[k]
 		n.Content = append(n.Content,
@@ -242,16 +243,6 @@ func entryMapNode(entries map[string]gitCacheEntry) *yaml.Node {
 		)
 	}
 	return n
-}
-
-// sortStrings sorts a string slice in place (avoid importing sort in the hot path
-// of every cache write — a tiny helper keeps the dependency surface minimal).
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
-	}
 }
 
 // cached returns the cached value for key if fresh, or "".
