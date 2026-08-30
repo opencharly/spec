@@ -1741,6 +1741,8 @@ type ResolvedDistro struct {
 
 	Bootloader *Bootloader `yaml:"bootloader,omitempty" json:"bootloader,omitempty"`
 
+	DiskLayout *DiskLayout `yaml:"disk_layout,omitempty" json:"disk_layout,omitempty"`
+
 	Dnf *Dnf `yaml:"dnf,omitempty" json:"dnf,omitempty"`
 
 	Installer *DistroInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
@@ -1824,6 +1826,44 @@ type Bootloader struct {
 	InitramfsTemplate string `yaml:"initramfs_template,omitempty" json:"initramfs_template,omitempty"`
 
 	FstabTemplate string `yaml:"fstab_template,omitempty" json:"fstab_template,omitempty"`
+}
+
+// #DiskLayout describes how a bootstrap VM's disk is partitioned and mounted, for the
+// distros whose on-disk shape is part of their identity rather than a per-VM choice.
+//
+// Both fields are optional and both default to what charly did before this def existed,
+// so a distro that omits the block builds exactly the disk it built before: a bare root
+// filesystem with the ESP at /boot/efi.
+type DiskLayout struct {
+	// esp_mount_point is where the EFI System Partition is mounted, relative to the guest
+	// root. Defaults to "/boot/efi".
+	//
+	// This is NOT cosmetic. Omarchy mounts its ESP at "/boot", which is what
+	// limine-entry-tool and ESP_PATH assume; a loader written to the other path leaves an
+	// unbootable disk and the build reports success either way.
+	EspMountPoint string `yaml:"esp_mount_point,omitempty" json:"esp_mount_point,omitempty"`
+
+	// subvolume, when non-empty, makes the root filesystem a btrfs subvolume layout
+	// instead of a bare filesystem. Requires the VM source's rootfs to be "btrfs".
+	//
+	// Exactly one entry must mount at "/" — it becomes the root that the others nest
+	// under, so without it there is nothing to mount them into. Enforced by OpValidate
+	// rather than by CUE, because "exactly one element of this list has field X = Y" is
+	// not expressible in a closed struct.
+	Subvolume []Subvolume `yaml:"subvolume,omitempty" json:"subvolume,omitempty"`
+}
+
+// #Subvolume is one btrfs subvolume in a #DiskLayout.
+type Subvolume struct {
+	// name is the subvolume as created, e.g. "@" or "@home".
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	// mount_point is the guest-absolute path it is mounted at, e.g. "/" or "/home".
+	MountPoint string `yaml:"mount_point,omitempty" json:"mount_point"`
+
+	// mount_options are extra comma-joined mount options, e.g. "compress=zstd,noatime".
+	// `subvol=<name>` is always prepended by the emitter and must not be repeated here.
+	MountOptions string `yaml:"mount_options,omitempty" json:"mount_options,omitempty"`
 }
 
 type Dnf struct {
@@ -4706,6 +4746,8 @@ type Distro struct {
 	AlpineBootstrap *AlpineBootstrap `yaml:"alpine_bootstrap,omitempty" json:"alpine_bootstrap,omitempty"`
 
 	Bootloader *Bootloader `yaml:"bootloader,omitempty" json:"bootloader,omitempty"`
+
+	DiskLayout *DiskLayout `yaml:"disk_layout,omitempty" json:"disk_layout,omitempty"`
 
 	Dnf *Dnf `yaml:"dnf,omitempty" json:"dnf,omitempty"`
 

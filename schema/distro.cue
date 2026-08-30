@@ -16,6 +16,7 @@
 	debootstrap?:      #Debootstrap @go(Debootstrap,optional=nillable)
 	alpine_bootstrap?: #AlpineBootstrap @go(AlpineBootstrap,optional=nillable)
 	bootloader?:       #Bootloader @go(Bootloader,optional=nillable)
+	disk_layout?:      #DiskLayout @go(DiskLayout,optional=nillable)
 	dnf?:              #Dnf @go(Dnf,optional=nillable)
 	installer?:        #DistroInstaller @go(Installer,optional=nillable)
 }
@@ -89,6 +90,44 @@
 	initramfs_template?: string @go(InitramfsTemplate)
 	fstab_template?:     string @go(FstabTemplate)
 }
+
+// #DiskLayout describes how a bootstrap VM's disk is partitioned and mounted, for the
+// distros whose on-disk shape is part of their identity rather than a per-VM choice.
+//
+// Both fields are optional and both default to what charly did before this def existed,
+// so a distro that omits the block builds exactly the disk it built before: a bare root
+// filesystem with the ESP at /boot/efi.
+#DiskLayout: {
+	// esp_mount_point is where the EFI System Partition is mounted, relative to the guest
+	// root. Defaults to "/boot/efi".
+	//
+	// This is NOT cosmetic. Omarchy mounts its ESP at "/boot", which is what
+	// limine-entry-tool and ESP_PATH assume; a loader written to the other path leaves an
+	// unbootable disk and the build reports success either way.
+	esp_mount_point?: string & =~"^/" @go(EspMountPoint)
+
+	// subvolume, when non-empty, makes the root filesystem a btrfs subvolume layout
+	// instead of a bare filesystem. Requires the VM source's rootfs to be "btrfs".
+	//
+	// Exactly one entry must mount at "/" — it becomes the root that the others nest
+	// under, so without it there is nothing to mount them into. Enforced by OpValidate
+	// rather than by CUE, because "exactly one element of this list has field X = Y" is
+	// not expressible in a closed struct.
+	subvolume?: [...#Subvolume] @go(Subvolume)
+}
+
+// #Subvolume is one btrfs subvolume in a #DiskLayout.
+#Subvolume: {
+	// name is the subvolume as created, e.g. "@" or "@home".
+	name: string & !=""
+
+	// mount_point is the guest-absolute path it is mounted at, e.g. "/" or "/home".
+	mount_point: string & =~"^/" @go(MountPoint)
+
+	// mount_options are extra comma-joined mount options, e.g. "compress=zstd,noatime".
+	// `subvol=<name>` is always prepended by the emitter and must not be repeated here.
+	mount_options?: string @go(MountOptions)
+}
 #BaseUser: {
 	name: string & !=""
 	uid:  int & >=0 @go(UID,type=int)
@@ -124,6 +163,7 @@
 	debootstrap?:      #Debootstrap     @go(Debootstrap,optional=nillable)
 	alpine_bootstrap?: #AlpineBootstrap @go(AlpineBootstrap,optional=nillable)
 	bootloader?:       #Bootloader      @go(Bootloader,optional=nillable)
+	disk_layout?:      #DiskLayout      @go(DiskLayout,optional=nillable)
 	dnf?:              #Dnf             @go(Dnf,optional=nillable)
 	installer?:        #DistroInstaller @go(Installer,optional=nillable)
 	raw?: bytes @go(Raw,type=RawBody)
