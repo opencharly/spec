@@ -16,11 +16,36 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // ErrLockBusy is returned by a NON-blocking AcquireFileLock when another holder already owns the
 // lock. Callers detect it with errors.Is to render a precise "already in progress" message.
 var ErrLockBusy = errors.New("file lock held by another process")
+
+// lockTimeout bounds the BLOCKING acquire wait. Under heavy concurrent load (parallel bed runs),
+// a peer holding the lock can stall; an unbounded flock would hang the caller forever (the
+// recurring fleet-del stall). A package var (not a const) so a test can shorten it.
+var lockTimeout = 2 * time.Minute
+
+// flockBounded acquires an exclusive flock, failing fast after lockTimeout instead of blocking
+// forever on a contended lock.
+func flockBounded(f *os.File, path string) error {
+	deadline := time.Now().Add(lockTimeout)
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return nil
+		}
+		if err != syscall.EWOULDBLOCK {
+			return fmt.Errorf("flock %s: %w", path, err)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("flock %s: lock held by another process for > %s", path, lockTimeout)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
 
 // AcquireFileLock takes an advisory flock on path (creating the file + parent dirs on demand) and
 // returns a release closure that unlocks + closes.
@@ -40,16 +65,14 @@ func AcquireFileLock(path string, blocking bool) (release func() error, err erro
 	if err != nil {
 		return nil, fmt.Errorf("open lock %s: %w", path, err)
 	}
-	how := syscall.LOCK_EX
 	if !blocking {
-		how |= syscall.LOCK_NB
-	}
-	if flockErr := syscall.Flock(int(f.Fd()), how); flockErr != nil {
-		_ = f.Close()
-		if !blocking {
+		if flockErr := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); flockErr != nil {
+			_ = f.Close()
 			return nil, fmt.Errorf("%s: %w", path, ErrLockBusy)
 		}
-		return nil, fmt.Errorf("flock %s: %w", path, flockErr)
+	} else if flockErr := flockBounded(f, path); flockErr != nil {
+		_ = f.Close()
+		return nil, flockErr
 	}
 	// Truncate but write NOTHING. The truncate is deliberate and is not dead code: O_CREATE|O_RDWR
 	// does not truncate, so without it a re-acquired lock retains the PREVIOUS holder's bytes —
