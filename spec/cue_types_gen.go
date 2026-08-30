@@ -4724,6 +4724,292 @@ type SaveDeployStateInput struct {
 	RequiresShared []string `yaml:"requires_shared,omitempty" json:"requires_shared,omitempty"`
 }
 
+// #Theme is a colour scheme plus the per-application files it renders into.
+//
+// The token vocabulary is CLOSED. A template referencing {{.Token.accnt}} is a typo that
+// would render an empty colour — a subtly wrong desktop rather than a failure — so
+// OpValidate rejects any template naming a token this entity does not define. That check is
+// the whole reason this is a kind.
+//
+// Nothing here names a compositor, so the same entity serves Hyprland, sway, labwc and KDE.
+type Theme struct {
+	// name is the theme's identity, e.g. "tokyo-night". Lowercase and hyphenated, matching
+	// what a theme-switcher command accepts.
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	// variant tells applications which system palette to pair with. Closed: these are the
+	// only two values the freedesktop colour-scheme preference has.
+	Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
+
+	// token is the colour palette. accent, foreground and background are REQUIRED because a
+	// theme that defines none of them cannot render anything legible; everything else is
+	// optional so a minimal theme stays small.
+	Token ThemeTokens `yaml:"token,omitempty" json:"token"`
+
+	// font, cursor_theme and icon_theme are the non-colour half of a theme. They are named
+	// separately from token because they are resource NAMES, not colours, and a template
+	// interpolating them into a font stack must not be able to reach the colour namespace.
+	Font string `yaml:"font,omitempty" json:"font,omitempty"`
+
+	Cursor_theme string `yaml:"cursor_theme,omitempty" json:"cursor_theme,omitempty"`
+
+	Icon_theme string `yaml:"icon_theme,omitempty" json:"icon_theme,omitempty"`
+
+	// background lists wallpaper files, candy-relative. First entry is the default. These
+	// lower to `copy:` rather than `write:` — a JPEG base64'd through a plan is neither
+	// readable nor small.
+	Background []string `yaml:"background,omitempty" json:"background,omitempty"`
+
+	// render is where the theme becomes files. Each entry names an application and the file
+	// to write for it, as a Go template over {{.Token.*}}, {{.Font}}, {{.CursorTheme}},
+	// {{.IconTheme}} and {{.Variant}}.
+	Render []ThemeRender `yaml:"render,omitempty" json:"render,omitempty"`
+}
+
+// #ThemeTokens is the closed colour vocabulary. Every value is a #HexColor: a token that
+// accepted arbitrary strings would let "blue" through and render a broken config.
+type ThemeTokens struct {
+	Accent HexColor `yaml:"accent,omitempty" json:"accent"`
+
+	Foreground HexColor `yaml:"foreground,omitempty" json:"foreground"`
+
+	Background HexColor `yaml:"background,omitempty" json:"background"`
+
+	Cursor HexColor `yaml:"cursor,omitempty" json:"cursor,omitempty"`
+
+	SelectionForeground HexColor `yaml:"selection_foreground,omitempty" json:"selection_foreground,omitempty"`
+
+	SelectionBackground HexColor `yaml:"selection_background,omitempty" json:"selection_background,omitempty"`
+
+	// The 16 ANSI slots a terminal palette needs. Named individually rather than as a list
+	// so a template says {{.Token.color4}} and a missing one is a load error, not an index
+	// panic at render time.
+	Color0 HexColor `yaml:"color0,omitempty" json:"color0,omitempty"`
+
+	Color1 HexColor `yaml:"color1,omitempty" json:"color1,omitempty"`
+
+	Color2 HexColor `yaml:"color2,omitempty" json:"color2,omitempty"`
+
+	Color3 HexColor `yaml:"color3,omitempty" json:"color3,omitempty"`
+
+	Color4 HexColor `yaml:"color4,omitempty" json:"color4,omitempty"`
+
+	Color5 HexColor `yaml:"color5,omitempty" json:"color5,omitempty"`
+
+	Color6 HexColor `yaml:"color6,omitempty" json:"color6,omitempty"`
+
+	Color7 HexColor `yaml:"color7,omitempty" json:"color7,omitempty"`
+
+	Color8 HexColor `yaml:"color8,omitempty" json:"color8,omitempty"`
+
+	Color9 HexColor `yaml:"color9,omitempty" json:"color9,omitempty"`
+
+	Color10 HexColor `yaml:"color10,omitempty" json:"color10,omitempty"`
+
+	Color11 HexColor `yaml:"color11,omitempty" json:"color11,omitempty"`
+
+	Color12 HexColor `yaml:"color12,omitempty" json:"color12,omitempty"`
+
+	Color13 HexColor `yaml:"color13,omitempty" json:"color13,omitempty"`
+
+	Color14 HexColor `yaml:"color14,omitempty" json:"color14,omitempty"`
+
+	Color15 HexColor `yaml:"color15,omitempty" json:"color15,omitempty"`
+}
+
+// #HexColor is #rrggbb. Six digits only: a renderer that also accepted #rgb or #rrggbbaa
+// would have to normalise, and every consuming format spells alpha differently.
+type HexColor string
+
+// #ThemeRender is one file a theme writes.
+type ThemeRender struct {
+	// app is a label for diagnostics — "foot", "btop", "hyprland". It is not looked up.
+	App string `yaml:"app,omitempty" json:"app"`
+
+	// path is where the file lands, ${HOME}-relative or absolute.
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	Content string `yaml:"content,omitempty" json:"content"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	// scope selects whose file it is; user means run_as the image user.
+	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"`
+
+	// distro restricts this file to matching distro TAGS, for the cases where one desktop
+	// spells a path differently across distros.
+	//
+	// [...string], not [...#DistroID], and deliberately: these are the same free-form TAGS
+	// a candy's `distro:` list carries (box.cue does the same), not the closed guest-distro
+	// id a VM source is validated against. #DistroID is also `@go(-)` — it generates no Go
+	// type — so a list of it would emit a reference to a type that does not exist.
+	Distro []string `yaml:"distro,omitempty" json:"distro,omitempty"`
+}
+
+// #Session is a compositor's RENDERER VOCABULARY — the exact `init:`/`service:` mirror.
+//
+// The kind says HOW a construct is spelled; the candy's `desktop:` block says WHICH
+// constructs exist. That split is what lets one authored keybinding reach Hyprland's Lua,
+// sway's config syntax and labwc's XML without the author knowing any of them.
+//
+// A compositor that cannot express a construct simply omits its template, and entries of
+// that kind are dropped with a diagnostic — the same way supervisord ignores `wanted_by`.
+type Session struct {
+	// compositor is the binary this session runs, e.g. "Hyprland", "sway", "labwc".
+	Compositor string `yaml:"compositor,omitempty" json:"compositor"`
+
+	// syntax is a label for diagnostics and for choosing an escaping strategy.
+	Syntax string `yaml:"syntax,omitempty" json:"syntax,omitempty"`
+
+	// config_path_template is where the rendered config lands, as a Go template so a
+	// compositor that keys off its own name does not need a second field.
+	Config_path_template string `yaml:"config_path_template,omitempty" json:"config_path_template"`
+
+	// model says whether the constructs concatenate into ONE file (assembly) or each render
+	// to its own (file_set). Hyprland and sway are assembly; labwc is a file set.
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+
+	// The per-construct templates. Each renders once per authored entry. A compositor that
+	// has no notion of a construct omits the template.
+	Monitor_template string `yaml:"monitor_template,omitempty" json:"monitor_template,omitempty"`
+
+	Bind_template string `yaml:"bind_template,omitempty" json:"bind_template,omitempty"`
+
+	Input_template string `yaml:"input_template,omitempty" json:"input_template,omitempty"`
+
+	Exec_template string `yaml:"exec_template,omitempty" json:"exec_template,omitempty"`
+
+	Env_template string `yaml:"env_template,omitempty" json:"env_template,omitempty"`
+
+	Rule_template string `yaml:"rule_template,omitempty" json:"rule_template,omitempty"`
+
+	Include_template string `yaml:"include_template,omitempty" json:"include_template,omitempty"`
+
+	// extra_file is for the parts of a session that are not one of the constructs above —
+	// a bootstrap loader, a portal config.
+	Extra_file []ThemeRender `yaml:"extra_file,omitempty" json:"extra_file,omitempty"`
+
+	// session_desktop is the /usr/share/wayland-sessions entry a display manager offers.
+	// Its `id` is what a displaymanager's `session:` must match, and that cross-check is
+	// enforced at load: an autologin naming a session file nothing installed is a black
+	// screen at boot with nothing in any log.
+	Session_desktop SessionDesktop `yaml:"session_desktop,omitempty" json:"session_desktop,omitempty"`
+
+	// theme_render lets a session pull colours from a theme entity by name, so a compositor
+	// config can be themed without the theme knowing the compositor exists.
+	Theme_render []string `yaml:"theme_render,omitempty" json:"theme_render,omitempty"`
+}
+
+// #SessionDesktop is the wayland-sessions entry.
+type SessionDesktop struct {
+	Id string `yaml:"id,omitempty" json:"id"`
+
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Exec string `yaml:"exec,omitempty" json:"exec"`
+
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+}
+
+// #DisplayManager is the greeter: which one, which session it starts, and whether it logs a
+// user in without asking.
+//
+// The load-time cross-check is the point: `session` must match a #SessionDesktop.id that
+// some session entity in the same project declares. An autologin pointing at a session file
+// nothing installed produces a black screen and an empty journal, which is the single worst
+// failure this surface has.
+type DisplayManager struct {
+	Manager string `yaml:"manager,omitempty" json:"manager"`
+
+	// session is the #SessionDesktop.id to start. Cross-checked at load.
+	Session string `yaml:"session,omitempty" json:"session"`
+
+	Autologin AutoLogin `yaml:"autologin,omitempty" json:"autologin,omitempty"`
+
+	Numlock string `yaml:"numlock,omitempty" json:"numlock,omitempty"`
+
+	// theme names a greeter theme package or directory. Free-form: every greeter spells
+	// this differently and none of them validate it either.
+	Theme string `yaml:"theme,omitempty" json:"theme,omitempty"`
+
+	// config is the greeter's own files, rendered the same way a theme's are.
+	Config []ThemeRender `yaml:"config,omitempty" json:"config,omitempty"`
+
+	// unit is the systemd unit to enable. Named explicitly rather than derived from
+	// `manager`, because a distro may ship it under a different name and guessing would be
+	// the "renderer guesses the distro" failure this codebase already recorded.
+	Unit string `yaml:"unit,omitempty" json:"unit,omitempty"`
+}
+
+type AutoLogin struct {
+	User string `yaml:"user,omitempty" json:"user"`
+
+	// relogin controls whether the greeter logs the user back in after they log out.
+	// Default false: an operator who logs out usually means it.
+	Relogin bool `yaml:"relogin,omitempty" json:"relogin,omitempty"`
+}
+
+// #DesktopEntry is a freedesktop .desktop file.
+//
+// A .desktop file is a trivial INI, and this kind earns its keep on ONE ground: startup_wm_class
+// and window are consumed by the SESSION renderer through the render context, so a single
+// entity feeds both the applications menu and the compositor's window rules. Without that it
+// would be `write:` duplication and should be dropped.
+type DesktopEntry struct {
+	// entry_name is the file stem and the menu label source.
+	Entry_name string `yaml:"entry_name,omitempty" json:"entry_name"`
+
+	// exec and url are mutually exclusive: `url` renders the browser --app=<url> form, which
+	// is all a "web app" installer does. Enforced by OpValidate rather than CUE so the error
+	// can say which one to remove.
+	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
+
+	Url string `yaml:"url,omitempty" json:"url,omitempty"`
+
+	// browser_arg are extra flags for the url form.
+	Browser_arg []string `yaml:"browser_arg,omitempty" json:"browser_arg,omitempty"`
+
+	Icon DesktopIcon `yaml:"icon,omitempty" json:"icon,omitempty"`
+
+	// categories is CLOSED to the freedesktop registered main categories. A typo here does
+	// not error anywhere — the entry silently vanishes from every menu — which is exactly
+	// the class of failure a closed enum exists to catch.
+	Categories []DesktopCategory `yaml:"categories,omitempty" json:"categories,omitempty"`
+
+	Mime_type []string `yaml:"mime_type,omitempty" json:"mime_type,omitempty"`
+
+	// startup_wm_class ties the launched window back to this entry. Also read by the session
+	// renderer's window rules, which is this kind's reason to exist.
+	Startup_wm_class string `yaml:"startup_wm_class,omitempty" json:"startup_wm_class,omitempty"`
+
+	Window DesktopWindow `yaml:"window,omitempty" json:"window,omitempty"`
+
+	Terminal bool `yaml:"terminal,omitempty" json:"terminal,omitempty"`
+
+	Comment string `yaml:"comment,omitempty" json:"comment,omitempty"`
+}
+
+// #DesktopIcon is name XOR source: a stock icon name, or a candy-relative file that lowers
+// to `copy:` (an icon base64'd through a plan is neither readable nor small).
+type DesktopIcon struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Source string `yaml:"source,omitempty" json:"source,omitempty"`
+}
+
+// #DesktopCategory is the freedesktop registered MAIN categories, verbatim. Closed on
+// purpose — see the note on `categories`.
+type DesktopCategory string
+
+// #DesktopWindow is the placement the session renderer turns into a window rule.
+type DesktopWindow struct {
+	Placement string `yaml:"placement,omitempty" json:"placement,omitempty"`
+
+	Workspace string `yaml:"workspace,omitempty" json:"workspace,omitempty"`
+
+	Size string `yaml:"size,omitempty" json:"size,omitempty"`
+}
+
 type Distro struct {
 	Inherits string `yaml:"inherits,omitempty" json:"inherits,omitempty"`
 
