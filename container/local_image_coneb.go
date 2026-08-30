@@ -17,6 +17,7 @@ package container
 // the var's canonical home moves with the family; kit re-exports it.
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/opencharly/spec/cache"
@@ -115,9 +117,17 @@ func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 		}
 	}
 	fmt.Fprintf(os.Stderr, "charly: listing local images (first run — may take a moment)...\n")
+	started := time.Now()
 	images, err := defaultListLocalImages(engine)
 	if err != nil {
 		return nil, err
+	}
+	// Report what it cost. A store that has grown to thousands of tags makes this call
+	// slow on EVERY cache miss, and without this line the only symptom is that charly
+	// seems to pause — the number is what tells an operator to prune.
+	if el := time.Since(started); el > 2*time.Second {
+		fmt.Fprintf(os.Stderr, "charly: listed %d local images in %s — consider pruning the image store\n",
+			len(images), el.Round(time.Millisecond))
 	}
 	if cachePath != "" {
 		writeImageCache(cachePath, engine, images)
@@ -168,10 +178,36 @@ func writeImageCache(path, engine string, images []LocalImageInfo) {
 	cache.Write(path, engine, imageCacheValue{Engine: engine, Images: images})
 }
 
+// listLocalImagesTimeout bounds the image enumeration. `podman images --format json`
+// walks the whole local store, so its cost scales with the store, not with what the
+// caller wants: measured on a workstation store of 1,170 image IDs carrying 12,585 tag
+// names, one call takes ~9s of wall clock and emits ~17MB of JSON — and under concurrent
+// builds contending for the same store it has been observed to sit for 25+ MINUTES.
+//
+// Unbounded, that is indistinguishable from a hang: the caller writes no log line, the
+// run directory stays empty, and the only evidence is a `podman images` child process.
+// Bound it so a degraded store produces a NAMED error instead of a silent stall. A
+// package var so a test can shorten it.
+var listLocalImagesTimeout = 4 * time.Minute
+
 func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 	binary := EngineBinary(engine)
-	cmd := exec.Command(binary, "images", "--format", "json")
+	ctx, cancel := context.WithTimeout(context.Background(), listLocalImagesTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, "images", "--format", "json")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		return nil
+	}
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("listing local images via %s: timed out after %s — the local image "+
+			"store is large or contended; prune it (charly clean) or retry when builds are idle",
+			binary, listLocalImagesTimeout)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("listing local images via %s: %w", binary, err)
 	}
