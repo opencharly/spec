@@ -1,0 +1,57 @@
+# CI for the spec module.
+#
+# This repo had NO Go CI at all: only pr-validator.yml and tag-on-merge.yml, neither of
+# which builds, tests or lints the module. The only enforcement was the local
+# .claude/hooks/pre-commit-gate.sh, so nothing kept `main` green between commits — and
+# because that hook lints the WHOLE repo rather than the diff, the next contributor to
+# touch a drifted repo could not commit until they had cleaned up someone else's files.
+# Measured here on 2026-08-29: 11 findings (7 errcheck, 2 gofmt, 2 unparam) sitting on a
+# pristine main. See opencharly/charly#464.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "gofmt would rewrite these files:" >&2
+            echo "$out" >&2
+            exit 1
+          fi
+
+      # Pinned by module version rather than a third-party action, so the CI binary is the
+      # same build .claude/hooks/pre-commit-gate.sh uses locally — a gate that disagrees with
+      # the hook is worse than no gate, because it fails people who did everything right — and
+      # so a new upstream release cannot turn main red on its own schedule.
+      - name: golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+          "$(go env GOPATH)/bin/golangci-lint" run ./...

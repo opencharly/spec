@@ -17,6 +17,7 @@ package container
 // the var's canonical home moves with the family; kit re-exports it.
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/opencharly/spec/cache"
@@ -115,9 +117,17 @@ func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 		}
 	}
 	fmt.Fprintf(os.Stderr, "charly: listing local images (first run — may take a moment)...\n")
+	started := time.Now()
 	images, err := defaultListLocalImages(engine)
 	if err != nil {
 		return nil, err
+	}
+	// Report what it cost. A store that has grown to thousands of tags makes this call
+	// slow on EVERY cache miss, and without this line the only symptom is that charly
+	// seems to pause — the number is what tells an operator to prune.
+	if el := time.Since(started); el > 2*time.Second {
+		fmt.Fprintf(os.Stderr, "charly: listed %d local images in %s — consider pruning the image store\n",
+			len(images), el.Round(time.Millisecond))
 	}
 	if cachePath != "" {
 		writeImageCache(cachePath, engine, images)
@@ -168,10 +178,36 @@ func writeImageCache(path, engine string, images []LocalImageInfo) {
 	cache.Write(path, engine, imageCacheValue{Engine: engine, Images: images})
 }
 
+// listLocalImagesTimeout bounds the image enumeration. `podman images --format json`
+// walks the whole local store, so its cost scales with the store, not with what the
+// caller wants: measured on a workstation store of 1,170 image IDs carrying 12,585 tag
+// names, one call takes ~9s of wall clock and emits ~17MB of JSON — and under concurrent
+// builds contending for the same store it has been observed to sit for 25+ MINUTES.
+//
+// Unbounded, that is indistinguishable from a hang: the caller writes no log line, the
+// run directory stays empty, and the only evidence is a `podman images` child process.
+// Bound it so a degraded store produces a NAMED error instead of a silent stall. A
+// package var so a test can shorten it.
+var listLocalImagesTimeout = 4 * time.Minute
+
 func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 	binary := EngineBinary(engine)
-	cmd := exec.Command(binary, "images", "--format", "json")
+	ctx, cancel := context.WithTimeout(context.Background(), listLocalImagesTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, "images", "--format", "json")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		return nil
+	}
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("listing local images via %s: timed out after %s — the local image "+
+			"store is large or contended; prune it (charly clean) or retry when builds are idle",
+			binary, listLocalImagesTimeout)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("listing local images via %s: %w", binary, err)
 	}
@@ -366,8 +402,46 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 	if err != nil {
 		return LocalImageResolution{}, err
 	}
+	labelCands, nameCands := gatherResolverCandidates(images, shortName, requestedTag)
 
-	var labelCands, nameCands []resolverCandidate
+	// A MISS against the CACHED list is the one answer staleness can get wrong in the
+	// harmful direction. ListLocalImages serves a 5-minute persistent cache; a stale HIT
+	// still names an image that exists, but a stale MISS reports "not available locally"
+	// for an image that was built seconds ago.
+	//
+	// That is not hypothetical. In a group bed with two image-backed members the phase
+	// order is: build A, check A, build B, check B. Checking A repopulates the cache from
+	// a snapshot taken BEFORE B was tagged, so checking B — a separate process, and now a
+	// cache HIT — cannot see its OWN freshly built image, and the bed dies with
+	// `image "<box>:<tag>" is not available locally`. Reproduced deterministically on
+	// consecutive runs: the passing member logs a cache miss, the failing one logs none.
+	//
+	// So confirm a miss against reality before believing it: drop the cache and gather
+	// once more. The cost is one enumeration on a path that was already about to fail,
+	// and it cannot mask a real absence — the second gather is authoritative.
+	if len(labelCands) == 0 && len(nameCands) == 0 {
+		InvalidateImageCache()
+		if fresh, ferr := ListLocalImages(engine); ferr == nil {
+			labelCands, nameCands = gatherResolverCandidates(fresh, shortName, requestedTag)
+		}
+	}
+
+	cands := labelCands
+	if len(cands) == 0 {
+		cands = nameCands
+	}
+	if len(cands) == 0 {
+		return LocalImageResolution{}, fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
+	}
+	return electResolvedImage(cands, labelCands, nameCands, input, requestedTag)
+}
+
+// gatherResolverCandidates collects the refs that could answer shortName[:requestedTag],
+// as two families: label-preferred (ai.opencharly.box equals the short name) and a name
+// fallback. Split out of ResolveLocalImage so the resolver can run it twice — once against
+// the cached image list, once against a freshly fetched one when the first pass found
+// nothing. Both families are returned because the newest-BUILD staleness probe spans them.
+func gatherResolverCandidates(images []LocalImageInfo, shortName, requestedTag string) (labelCands, nameCands []resolverCandidate) {
 	for _, img := range images {
 		labelCalVer := img.Labels[spec.LabelVersion] // content-derived EffectiveVersion (primary key)
 		// Label-preferred: ai.opencharly.image equals the short name.
@@ -423,14 +497,12 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 		}
 	}
 
-	cands := labelCands
-	if len(cands) == 0 {
-		cands = nameCands
-	}
-	if len(cands) == 0 {
-		return LocalImageResolution{}, fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
-	}
+	return labelCands, nameCands
+}
 
+// electResolvedImage orders the candidates and elects the winner, then runs the
+// newest-BUILD staleness probe across BOTH families.
+func electResolvedImage(cands, labelCands, nameCands []resolverCandidate, input, requestedTag string) (LocalImageResolution, error) {
 	// Sort newest-first. The label-CalVer (the content-derived
 	// ai.opencharly.version) is the PRIMARY key — it ALWAYS takes priority
 	// over the tag-CalVer. The tag-CalVer (the per-build YYYY.DDD.HHMM

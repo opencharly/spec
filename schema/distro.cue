@@ -57,8 +57,6 @@
 
 #Pacstrap: {
 	base_package?: [...string] @go(BasePackages)
-	keyring_init_cmd?: string @go(KeyringInitCmd)
-	mirrorlist_url?:   string & =~"^https?://" @go(MirrorlistURL)
 	extra_repo?: [...#PacstrapRepo] @go(ExtraRepos)
 	runtime_pacman_conf?: string @go(RuntimePacmanConf)
 }
@@ -263,6 +261,17 @@
 
 	ssh_authorized_key?: [...string] @go(SSHAuthorizedKeys)
 	defer_provisioning?: bool        @go(DeferProvisioning)
+
+	// disk_size_bytes is the TARGET DISK's size in bytes, from the vm entity's
+	// disk_size. It is here because a real installer answer file states partition
+	// sizes as absolute numbers, not as "the rest of the disk": archinstall, for one,
+	// indexes partition['size'] with no default and has no fill-remaining sentinel, so
+	// a template that cannot see the disk size cannot describe a root partition at all.
+	//
+	// BYTES, not a suffixed string, because the arithmetic happens in the template and
+	// a template is the wrong place to parse "40G".
+	disk_size_bytes?: int @go(DiskSizeBytes,type=int64)
+
 	// answer carries the vm entity's per-distro extras verbatim.
 	answer?: {[string]: string} @go(Answers)
 }

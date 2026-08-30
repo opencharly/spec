@@ -228,3 +228,48 @@ func TestDistroInstallerRejectsAMalformedVolumeID(t *testing.T) {
 		}
 	}
 }
+
+// disk_size_bytes exists because a real installer answer file states partition sizes as
+// ABSOLUTE NUMBERS, not as "the rest of the disk". archinstall indexes partition['size']
+// with no default and offers no fill-remaining sentinel, so a template that cannot see the
+// disk size cannot describe a root partition at all — measured against the shipping
+// Omarchy 4.0.1 installer, which aborts with `KeyError: 'size'` without it.
+//
+// It is an int (bytes), not a suffixed string: the arithmetic happens in the template, and
+// a template is the wrong place to parse "40G".
+func TestInstallerSeedContextCarriesTheDiskSize(t *testing.T) {
+	schemaSrc, _, err := schemaconcat.ConcatSchema(schema.FS, ".", nil)
+	if err != nil {
+		t.Fatalf("concatenating the shipped schema: %v", err)
+	}
+	ctx := cuecontext.New()
+	v := ctx.CompileString(schemaSrc)
+	if v.Err() != nil {
+		t.Fatalf("the shipped schema does not compile: %v", v.Err())
+	}
+	def := v.LookupPath(cue.ParsePath("#InstallerSeedContext"))
+	if !def.Exists() {
+		t.Fatal("#InstallerSeedContext is not defined in the shipped schema")
+	}
+
+	// A 40 GiB disk, as a whole number of bytes.
+	unified := def.Unify(ctx.CompileString(`{
+		hostname:        "omarchy"
+		disk:            "/dev/vda"
+		disk_size_bytes: 42949672960
+	}`))
+	if unified.Err() != nil {
+		t.Fatalf("#InstallerSeedContext rejects disk_size_bytes: %v", unified.Err())
+	}
+	if err := unified.Validate(cue.Concrete(false)); err != nil {
+		t.Errorf("#InstallerSeedContext rejects disk_size_bytes: %v", err)
+	}
+
+	// A suffixed string must NOT satisfy it: the whole point is that the template gets a
+	// number it can do arithmetic on, and CUE is where that is enforced rather than in a
+	// renderer that would have to fail at execute time, inside a guest nobody is watching.
+	bad := def.Unify(ctx.CompileString(`{disk_size_bytes: "40G"}`))
+	if bad.Err() == nil && bad.Validate(cue.Concrete(false)) == nil {
+		t.Error("#InstallerSeedContext accepts a suffixed string for disk_size_bytes; it must be bytes")
+	}
+}
