@@ -13,7 +13,7 @@
 #BuildFormat: "rpm" | "deb" | "pac" | "aur" | "apk" @go(-)
 
 // Builder build-type slots (BoxConfig.Produce + BoxConfig.Builder keys).
-#BuildType: "pixi" | "npm" | "cargo" | "aur" @go(-)
+#BuildType: "pixi" | "npm" | "cargo" | "aur" | "mise" @go(-)
 
 // MergeConfig (config.go). CLOSED.
 #BoxMerge: {
