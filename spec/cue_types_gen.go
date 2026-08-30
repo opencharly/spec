@@ -4751,9 +4751,9 @@ type Theme struct {
 	// interpolating them into a font stack must not be able to reach the colour namespace.
 	Font string `yaml:"font,omitempty" json:"font,omitempty"`
 
-	Cursor_theme string `yaml:"cursor_theme,omitempty" json:"cursor_theme,omitempty"`
+	CursorTheme string `yaml:"cursor_theme,omitempty" json:"cursor_theme,omitempty"`
 
-	Icon_theme string `yaml:"icon_theme,omitempty" json:"icon_theme,omitempty"`
+	IconTheme string `yaml:"icon_theme,omitempty" json:"icon_theme,omitempty"`
 
 	// background lists wallpaper files, candy-relative. First entry is the default. These
 	// lower to `copy:` rather than `write:` — a JPEG base64'd through a plan is neither
@@ -4863,7 +4863,7 @@ type Session struct {
 
 	// config_path_template is where the rendered config lands, as a Go template so a
 	// compositor that keys off its own name does not need a second field.
-	Config_path_template string `yaml:"config_path_template,omitempty" json:"config_path_template"`
+	ConfigPathTemplate string `yaml:"config_path_template,omitempty" json:"config_path_template"`
 
 	// model says whether the constructs concatenate into ONE file (assembly) or each render
 	// to its own (file_set). Hyprland and sway are assembly; labwc is a file set.
@@ -4871,33 +4871,33 @@ type Session struct {
 
 	// The per-construct templates. Each renders once per authored entry. A compositor that
 	// has no notion of a construct omits the template.
-	Monitor_template string `yaml:"monitor_template,omitempty" json:"monitor_template,omitempty"`
+	MonitorTemplate string `yaml:"monitor_template,omitempty" json:"monitor_template,omitempty"`
 
-	Bind_template string `yaml:"bind_template,omitempty" json:"bind_template,omitempty"`
+	BindTemplate string `yaml:"bind_template,omitempty" json:"bind_template,omitempty"`
 
-	Input_template string `yaml:"input_template,omitempty" json:"input_template,omitempty"`
+	InputTemplate string `yaml:"input_template,omitempty" json:"input_template,omitempty"`
 
-	Exec_template string `yaml:"exec_template,omitempty" json:"exec_template,omitempty"`
+	ExecTemplate string `yaml:"exec_template,omitempty" json:"exec_template,omitempty"`
 
-	Env_template string `yaml:"env_template,omitempty" json:"env_template,omitempty"`
+	EnvTemplate string `yaml:"env_template,omitempty" json:"env_template,omitempty"`
 
-	Rule_template string `yaml:"rule_template,omitempty" json:"rule_template,omitempty"`
+	RuleTemplate string `yaml:"rule_template,omitempty" json:"rule_template,omitempty"`
 
-	Include_template string `yaml:"include_template,omitempty" json:"include_template,omitempty"`
+	IncludeTemplate string `yaml:"include_template,omitempty" json:"include_template,omitempty"`
 
 	// extra_file is for the parts of a session that are not one of the constructs above —
 	// a bootstrap loader, a portal config.
-	Extra_file []ThemeRender `yaml:"extra_file,omitempty" json:"extra_file,omitempty"`
+	ExtraFiles []ThemeRender `yaml:"extra_file,omitempty" json:"extra_file,omitempty"`
 
 	// session_desktop is the /usr/share/wayland-sessions entry a display manager offers.
 	// Its `id` is what a displaymanager's `session:` must match, and that cross-check is
 	// enforced at load: an autologin naming a session file nothing installed is a black
 	// screen at boot with nothing in any log.
-	Session_desktop SessionDesktop `yaml:"session_desktop,omitempty" json:"session_desktop,omitempty"`
+	SessionDesktop SessionDesktop `yaml:"session_desktop,omitempty" json:"session_desktop,omitempty"`
 
 	// theme_render lets a session pull colours from a theme entity by name, so a compositor
 	// config can be themed without the theme knowing the compositor exists.
-	Theme_render []string `yaml:"theme_render,omitempty" json:"theme_render,omitempty"`
+	ThemeRender []string `yaml:"theme_render,omitempty" json:"theme_render,omitempty"`
 }
 
 // #SessionDesktop is the wayland-sessions entry.
@@ -4957,17 +4957,17 @@ type AutoLogin struct {
 // would be `write:` duplication and should be dropped.
 type DesktopEntry struct {
 	// entry_name is the file stem and the menu label source.
-	Entry_name string `yaml:"entry_name,omitempty" json:"entry_name"`
+	EntryName string `yaml:"entry_name,omitempty" json:"entry_name"`
 
 	// exec and url are mutually exclusive: `url` renders the browser --app=<url> form, which
 	// is all a "web app" installer does. Enforced by OpValidate rather than CUE so the error
 	// can say which one to remove.
 	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
 
-	Url string `yaml:"url,omitempty" json:"url,omitempty"`
+	URL string `yaml:"url,omitempty" json:"url,omitempty"`
 
 	// browser_arg are extra flags for the url form.
-	Browser_arg []string `yaml:"browser_arg,omitempty" json:"browser_arg,omitempty"`
+	BrowserArgs []string `yaml:"browser_arg,omitempty" json:"browser_arg,omitempty"`
 
 	Icon DesktopIcon `yaml:"icon,omitempty" json:"icon,omitempty"`
 
@@ -4976,11 +4976,11 @@ type DesktopEntry struct {
 	// the class of failure a closed enum exists to catch.
 	Categories []DesktopCategory `yaml:"categories,omitempty" json:"categories,omitempty"`
 
-	Mime_type []string `yaml:"mime_type,omitempty" json:"mime_type,omitempty"`
+	MimeTypes []string `yaml:"mime_type,omitempty" json:"mime_type,omitempty"`
 
 	// startup_wm_class ties the launched window back to this entry. Also read by the session
 	// renderer's window rules, which is this kind's reason to exist.
-	Startup_wm_class string `yaml:"startup_wm_class,omitempty" json:"startup_wm_class,omitempty"`
+	StartupWMClass string `yaml:"startup_wm_class,omitempty" json:"startup_wm_class,omitempty"`
 
 	Window DesktopWindow `yaml:"window,omitempty" json:"window,omitempty"`
 
