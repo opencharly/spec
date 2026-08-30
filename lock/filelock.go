@@ -51,7 +51,7 @@ func flockBounded(f *os.File, path string) error {
 // returns a release closure that unlocks + closes.
 //
 // blocking selects the contention behavior:
-//   - true  → LOCK_EX: wait until the lock is free (serialize, never fail).
+//   - true  → LOCK_EX: wait until the lock is free, failing fast after lockTimeout (bounded, never hangs).
 //   - false → LOCK_EX|LOCK_NB: return ErrLockBusy immediately when another holder exists.
 //
 // The lock file is deliberately NOT unlinked on release (unlinking a held lock races a waiter
