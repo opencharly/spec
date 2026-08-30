@@ -48,7 +48,6 @@ func TestVmSourceAcceptsTheIsoArm(t *testing.T) {
 		url:    "https://iso.omarchy.org/omarchy-4.0.1.iso"
 		distro: "omarchy"
 		checksum: {type: "sha256", value: "69cbb4e10d98ad831c3c9f245b5757a9d1fedfd0c9592780e977d6f950dea8c3"}
-		install_timeout: "45m"
 		installer: {
 			username: "user"
 			password: "user"
@@ -271,5 +270,29 @@ func TestInstallerSeedContextCarriesTheDiskSize(t *testing.T) {
 	bad := def.Unify(ctx.CompileString(`{disk_size_bytes: "40G"}`))
 	if bad.Err() == nil && bad.Validate(cue.Concrete(false)) == nil {
 		t.Error("#InstallerSeedContext accepts a suffixed string for disk_size_bytes; it must be bytes")
+	}
+}
+
+// install_timeout was declared on the iso arm and read by NOTHING — no consumer in
+// plugin-vm or sdk, only the generated struct field. It was removed rather than
+// speculatively implemented, so authoring it must now be REJECTED: a field that silently
+// does nothing is the exact failure this cutover fixed twice already (spec's
+// ResolveInherits and plugin-distro's resolveDistro both dropped fields every gate
+// accepted).
+//
+// It was originally added on the theory that an ISO install needs its own readiness
+// deadline. That theory was wrong: the bed it was meant to unblock was actually stalling on
+// a stale SSH host-key pin from the installer environment (fixed in plugin-vm), and the
+// existing remote readiness cap covers a ~5-minute install with room to spare. If a slow
+// mirror ever proves otherwise, the field comes back WITH a consumer.
+func TestVmSourceIsoRejectsTheRemovedInstallTimeout(t *testing.T) {
+	err := vmSource(t, `{
+		kind:   "iso"
+		distro: "omarchy"
+		url:    "https://iso.omarchy.org/omarchy-4.0.1.iso"
+		install_timeout: "45m"
+	}`)
+	if err == nil {
+		t.Error("install_timeout is still accepted — a declared field with no consumer silently does nothing")
 	}
 }

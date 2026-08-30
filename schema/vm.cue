@@ -158,10 +158,6 @@
 		// distro's `when:`-guarded minimal set, which boots the medium to its own
 		// interactive installer on the console.
 		installer?: #VmInstaller
-		// install_timeout bounds the headless installer run. A full Omarchy install
-		// took ~5 minutes on a warm mirror in testing; the default is deliberately
-		// generous. The wait is a process-exit / marker POLL, never a sleep.
-		install_timeout?: #Duration
 		// kernel_args is appended to the INSTALLER's kernel cmdline (console=ttyS0
 		// for serial diagnostics), not the installed system's — that one is the
 		// installer's business.

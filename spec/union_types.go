@@ -291,8 +291,7 @@ type VmSource struct {
 
 	// iso arm. Installer carries the unattended-install ANSWERS; the distro owns the
 	// FORMAT that renders them (Distro.Installer / #DistroInstaller).
-	Installer      *VmInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
-	InstallTimeout string       `yaml:"install_timeout,omitempty" json:"install_timeout,omitempty"`
+	Installer *VmInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
 }
 
 // VmSsh is the guest SSH access config (port XOR port_auto is a Go cross-field
