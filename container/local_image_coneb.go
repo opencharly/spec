@@ -433,7 +433,7 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 	if len(cands) == 0 {
 		return LocalImageResolution{}, fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
 	}
-	return electResolvedImage(cands, labelCands, nameCands, input, shortName, requestedTag)
+	return electResolvedImage(cands, labelCands, nameCands, input, requestedTag)
 }
 
 // gatherResolverCandidates collects the refs that could answer shortName[:requestedTag],
@@ -502,7 +502,7 @@ func gatherResolverCandidates(images []LocalImageInfo, shortName, requestedTag s
 
 // electResolvedImage orders the candidates and elects the winner, then runs the
 // newest-BUILD staleness probe across BOTH families.
-func electResolvedImage(cands, labelCands, nameCands []resolverCandidate, input, shortName, requestedTag string) (LocalImageResolution, error) {
+func electResolvedImage(cands, labelCands, nameCands []resolverCandidate, input, requestedTag string) (LocalImageResolution, error) {
 	// Sort newest-first. The label-CalVer (the content-derived
 	// ai.opencharly.version) is the PRIMARY key — it ALWAYS takes priority
 	// over the tag-CalVer. The tag-CalVer (the per-build YYYY.DDD.HHMM
