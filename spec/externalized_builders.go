@@ -8,6 +8,9 @@ package spec
 // ExternalizedBuilders is THE single source of truth for which builder words are served by an EXTERNAL
 // out-of-process plugin. A word here resolves through the registry to a *grpcProvider connected at
 // plugin-load time.
+// mise: the builder:mise plugin (opencharly/plugin-mise) — externalized like the four
+// detection builders; the embedded builder: mise: vocabulary in charly selects it by
+// detect_file (mise.toml/.tool-versions).
 var ExternalizedBuilders = map[string]bool{
 	"cargo": true,
 	"npm":   true,
