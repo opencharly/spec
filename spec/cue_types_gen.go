@@ -1773,10 +1773,6 @@ type BaseUser struct {
 type Pacstrap struct {
 	BasePackages []string `yaml:"base_package,omitempty" json:"base_package,omitempty"`
 
-	KeyringInitCmd string `yaml:"keyring_init_cmd,omitempty" json:"keyring_init_cmd,omitempty"`
-
-	MirrorlistURL string `yaml:"mirrorlist_url,omitempty" json:"mirrorlist_url,omitempty"`
-
 	ExtraRepos []PacstrapRepo `yaml:"extra_repo,omitempty" json:"extra_repo,omitempty"`
 
 	RuntimePacmanConf string `yaml:"runtime_pacman_conf,omitempty" json:"runtime_pacman_conf,omitempty"`

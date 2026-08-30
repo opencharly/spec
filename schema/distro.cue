@@ -57,8 +57,6 @@
 
 #Pacstrap: {
 	base_package?: [...string] @go(BasePackages)
-	keyring_init_cmd?: string @go(KeyringInitCmd)
-	mirrorlist_url?:   string & =~"^https?://" @go(MirrorlistURL)
 	extra_repo?: [...#PacstrapRepo] @go(ExtraRepos)
 	runtime_pacman_conf?: string @go(RuntimePacmanConf)
 }
