@@ -72,6 +72,17 @@ func (dc *DistroConfig) ResolveInherits(def *ResolvedDistro, maxDepth int) *Reso
 	if version == "" {
 		version = resolved.Version
 	}
+	// disk_layout and installer inherit like every other optional sub-block above. A
+	// derivative that adds only an installer (an Arch spin reusing archinstall) or only a
+	// disk layout must not have to restate its parent's whole boot chain to keep it.
+	diskLayout := def.DiskLayout
+	if diskLayout == nil {
+		diskLayout = resolved.DiskLayout
+	}
+	installer := def.Installer
+	if installer == nil {
+		installer = resolved.Installer
+	}
 
 	if def.Bootstrap.InstallCmd != "" {
 		// Child has its own bootstrap. Merge inherited optional sub-blocks onto it.
@@ -90,7 +101,18 @@ func (dc *DistroConfig) ResolveInherits(def *ResolvedDistro, maxDepth int) *Reso
 			Debootstrap:     debootstrap,
 			AlpineBootstrap: alpineBootstrap,
 			Bootloader:      bootloader,
+			DiskLayout:      diskLayout,
+			Installer:       installer,
 			Dnf:             dnf,
+			// InheritPackages is the CHILD's own declaration, never the parent's: it says
+			// "expand my distro tag chain through my parent", which is a statement about
+			// this node. Dropping it silently disabled package inheritance for every
+			// distro that declares inherits — the exact mechanism the tag chain rests on.
+			InheritPackages: def.InheritPackages,
+			// Raw is the authored body every consumer falls back to for fields this
+			// projection does not model. Dropping it turned "not modelled" into "not
+			// present" for any distro with a parent.
+			Raw: def.Raw,
 		}
 		return merged
 	}
@@ -111,7 +133,11 @@ func (dc *DistroConfig) ResolveInherits(def *ResolvedDistro, maxDepth int) *Reso
 		Debootstrap:     debootstrap,
 		AlpineBootstrap: alpineBootstrap,
 		Bootloader:      bootloader,
+		DiskLayout:      diskLayout,
+		Installer:       installer,
 		Dnf:             dnf,
+		InheritPackages: def.InheritPackages,
+		Raw:             def.Raw,
 	}
 	return merged
 }
