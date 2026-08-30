@@ -8,11 +8,15 @@ package spec
 // ExternalizedBuilders is THE single source of truth for which builder words are served by an EXTERNAL
 // out-of-process plugin. A word here resolves through the registry to a *grpcProvider connected at
 // plugin-load time.
+// mise: the builder:mise plugin (opencharly/plugin-mise) — externalized like the four
+// detection builders; the embedded builder: mise: vocabulary in charly selects it by
+// detect_file (mise.toml/.tool-versions).
 var ExternalizedBuilders = map[string]bool{
 	"cargo": true,
 	"npm":   true,
 	"pixi":  true,
 	"aur":   true,
+	"mise":  true,
 }
 
 // externalBuilderPlugins maps each externalized builder word to the STANDALONE plugin-candy ref
@@ -26,6 +30,7 @@ var externalBuilderPlugins = map[string]string{
 	"npm":   "plugin-builder-npm/candy/plugin-builder-npm",
 	"pixi":  "plugin-builder-pixi/candy/plugin-builder-pixi",
 	"aur":   "plugin-builder-aur/candy/plugin-builder-aur",
+	"mise":  "plugin-mise/candy/plugin-mise",
 }
 
 // ExternalBuilderPluginRef returns the canonical @github ref to the candy serving an externalized
