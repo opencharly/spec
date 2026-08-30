@@ -22,12 +22,12 @@ func TestAcquireFileLock_FailsFastOnContendedLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	release, err := AcquireFileLock(lockPath, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer release()
+	defer func() { _ = release() }()
 
 	start := time.Now()
 	_, err = AcquireFileLock(lockPath, true)
