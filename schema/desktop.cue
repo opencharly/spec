@@ -46,8 +46,8 @@
 	// separately from token because they are resource NAMES, not colours, and a template
 	// interpolating them into a font stack must not be able to reach the colour namespace.
 	font?:         string & !=""
-	cursor_theme?: string & !=""
-	icon_theme?:   string & !=""
+	cursor_theme?: string & !="" @go(CursorTheme)
+	icon_theme?:   string & !="" @go(IconTheme)
 
 	// background lists wallpaper files, candy-relative. First entry is the default. These
 	// lower to `copy:` rather than `write:` — a JPEG base64'd through a plan is neither
@@ -135,7 +135,7 @@
 
 	// config_path_template is where the rendered config lands, as a Go template so a
 	// compositor that keys off its own name does not need a second field.
-	config_path_template!: string & !=""
+	config_path_template!: string & !="" @go(ConfigPathTemplate)
 
 	// model says whether the constructs concatenate into ONE file (assembly) or each render
 	// to its own (file_set). Hyprland and sway are assembly; labwc is a file set.
@@ -143,27 +143,27 @@
 
 	// The per-construct templates. Each renders once per authored entry. A compositor that
 	// has no notion of a construct omits the template.
-	monitor_template?: string
-	bind_template?:    string
-	input_template?:   string
-	exec_template?:    string
-	env_template?:     string
-	rule_template?:    string
-	include_template?: string
+	monitor_template?: string @go(MonitorTemplate)
+	bind_template?:    string @go(BindTemplate)
+	input_template?:   string @go(InputTemplate)
+	exec_template?:    string @go(ExecTemplate)
+	env_template?:     string @go(EnvTemplate)
+	rule_template?:    string @go(RuleTemplate)
+	include_template?: string @go(IncludeTemplate)
 
 	// extra_file is for the parts of a session that are not one of the constructs above —
 	// a bootstrap loader, a portal config.
-	extra_file?: [...#ThemeRender]
+	extra_file?: [...#ThemeRender] @go(ExtraFiles)
 
 	// session_desktop is the /usr/share/wayland-sessions entry a display manager offers.
 	// Its `id` is what a displaymanager's `session:` must match, and that cross-check is
 	// enforced at load: an autologin naming a session file nothing installed is a black
 	// screen at boot with nothing in any log.
-	session_desktop?: #SessionDesktop
+	session_desktop?: #SessionDesktop @go(SessionDesktop)
 
 	// theme_render lets a session pull colours from a theme entity by name, so a compositor
 	// config can be themed without the theme knowing the compositor exists.
-	theme_render?: [...string & !=""]
+	theme_render?: [...string & !=""] @go(ThemeRender)
 }
 
 // #SessionDesktop is the wayland-sessions entry.
@@ -222,16 +222,16 @@
 // would be `write:` duplication and should be dropped.
 #DesktopEntry: {
 	// entry_name is the file stem and the menu label source.
-	entry_name!: string & !=""
+	entry_name!: string & !="" @go(EntryName)
 
 	// exec and url are mutually exclusive: `url` renders the browser --app=<url> form, which
 	// is all a "web app" installer does. Enforced by OpValidate rather than CUE so the error
 	// can say which one to remove.
 	exec?: string & !=""
-	url?:  string & =~"^https?://"
+	url?:  string & =~"^https?://" @go(URL)
 
 	// browser_arg are extra flags for the url form.
-	browser_arg?: [...string & !=""]
+	browser_arg?: [...string & !=""] @go(BrowserArgs)
 
 	icon?: #DesktopIcon
 
@@ -240,11 +240,11 @@
 	// the class of failure a closed enum exists to catch.
 	categories?: [...#DesktopCategory]
 
-	mime_type?: [...string & !=""]
+	mime_type?: [...string & !=""] @go(MimeTypes)
 
 	// startup_wm_class ties the launched window back to this entry. Also read by the session
 	// renderer's window rules, which is this kind's reason to exist.
-	startup_wm_class?: string & !=""
+	startup_wm_class?: string & !="" @go(StartupWMClass)
 
 	window?: #DesktopWindow
 
