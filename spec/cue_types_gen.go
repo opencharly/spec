@@ -1741,7 +1741,11 @@ type ResolvedDistro struct {
 
 	Bootloader *Bootloader `yaml:"bootloader,omitempty" json:"bootloader,omitempty"`
 
+	DiskLayout *DiskLayout `yaml:"disk_layout,omitempty" json:"disk_layout,omitempty"`
+
 	Dnf *Dnf `yaml:"dnf,omitempty" json:"dnf,omitempty"`
+
+	Installer *DistroInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
 
 	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
@@ -1824,10 +1828,104 @@ type Bootloader struct {
 	FstabTemplate string `yaml:"fstab_template,omitempty" json:"fstab_template,omitempty"`
 }
 
+// #DiskLayout describes how a bootstrap VM's disk is partitioned and mounted, for the
+// distros whose on-disk shape is part of their identity rather than a per-VM choice.
+//
+// Both fields are optional and both default to what charly did before this def existed,
+// so a distro that omits the block builds exactly the disk it built before: a bare root
+// filesystem with the ESP at /boot/efi.
+type DiskLayout struct {
+	// esp_mount_point is where the EFI System Partition is mounted, relative to the guest
+	// root. Defaults to "/boot/efi".
+	//
+	// This is NOT cosmetic. Omarchy mounts its ESP at "/boot", which is what
+	// limine-entry-tool and ESP_PATH assume; a loader written to the other path leaves an
+	// unbootable disk and the build reports success either way.
+	EspMountPoint string `yaml:"esp_mount_point,omitempty" json:"esp_mount_point,omitempty"`
+
+	// subvolume, when non-empty, makes the root filesystem a btrfs subvolume layout
+	// instead of a bare filesystem. Requires the VM source's rootfs to be "btrfs".
+	//
+	// Exactly one entry must mount at "/" — it becomes the root that the others nest
+	// under, so without it there is nothing to mount them into. Enforced by OpValidate
+	// rather than by CUE, because "exactly one element of this list has field X = Y" is
+	// not expressible in a closed struct.
+	Subvolume []Subvolume `yaml:"subvolume,omitempty" json:"subvolume,omitempty"`
+}
+
+// #Subvolume is one btrfs subvolume in a #DiskLayout.
+type Subvolume struct {
+	// name is the subvolume as created, e.g. "@" or "@home".
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	// mount_point is the guest-absolute path it is mounted at, e.g. "/" or "/home".
+	MountPoint string `yaml:"mount_point,omitempty" json:"mount_point"`
+
+	// mount_options are extra comma-joined mount options, e.g. "compress=zstd,noatime".
+	// `subvol=<name>` is always prepended by the emitter and must not be repeated here.
+	MountOptions string `yaml:"mount_options,omitempty" json:"mount_options,omitempty"`
+}
+
 type Dnf struct {
 	MaxParallelDownloads int64 `yaml:"max_parallel_downloads,omitempty" json:"max_parallel_downloads,omitempty"`
 
 	Fastestmirror bool `yaml:"fastestmirror,omitempty" json:"fastestmirror,omitempty"`
+}
+
+// #DistroInstaller — the UNATTENDED-INSTALL renderer vocabulary for a
+// `source.kind: iso` VM. It is to that arm exactly what #Init.service_schema is to
+// `service:`: THIS DISTRO owns the answer-file FORMAT, while the vm entity's
+// `source.installer:` owns the DATA (#VmInstaller). Nothing may infer an installer
+// format from a URL, an ISO name or a base_user — the same rule distro_vocab.cue's
+// header states for every other distro trait, and for the same reason.
+//
+// Five real formats live behind this one shape: archinstall JSON (Omarchy, Arch),
+// kickstart (Fedora/RHEL), preseed (Debian), Subiquity autoinstall (Ubuntu) and
+// AutoYaST (SUSE). Each is keyed by distro and by nothing else.
+type DistroInstaller struct {
+	// volume_id is the filesystem LABEL the installer looks for. archinstall and
+	// cloud-init NoCloud use "cidata"; Anaconda kickstart uses "OEMDRV". Case is
+	// preserved verbatim by the ISO writer, so write it exactly as the installer
+	// matches it.
+	VolumeID string `yaml:"volume_id,omitempty" json:"volume_id"`
+
+	// fs is how the answers volume is packed. iso9660 is correct for every installer
+	// verified so far; vfat exists for one that matches its label case-sensitively in
+	// a way ISO 9660 cannot represent.
+	FS string `yaml:"fs,omitempty" json:"fs,omitempty"`
+
+	Files []DistroInstallerFile `yaml:"file,omitempty" json:"file"`
+
+	// boot_arg is appended to the INSTALLER's kernel cmdline when the installer needs
+	// to be pointed at its answers explicitly ("inst.ks=hd:LABEL=OEMDRV:/ks.cfg").
+	// Empty for an installer that auto-discovers the labelled volume.
+	BootArg string `yaml:"boot_arg,omitempty" json:"boot_arg,omitempty"`
+
+	// done is how the build path learns the install finished. poweroff: the installer
+	// powers the guest off and the build waits for the process to exit. marker: the
+	// installer writes marker_path into the target root, polled over the guest agent.
+	// NEVER a sleep.
+	Done string `yaml:"done,omitempty" json:"done,omitempty"`
+
+	MarkerPath string `yaml:"marker_path,omitempty" json:"marker_path,omitempty"`
+}
+
+// #DistroInstallerFile is ONE file placed on the answers volume.
+type DistroInstallerFile struct {
+	// path is relative to the volume root.
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	// content is a Go text/template rendered against #InstallerSeedContext.
+	Content string `yaml:"content,omitempty" json:"content"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	// when is a Go-template guard: the file is emitted only when it renders non-empty
+	// and not "false". This is what lets ONE vocabulary express a whole optional
+	// matrix — an ssh key file only when keys were given, a "defer provisioning"
+	// sentinel INSTEAD of credentials, an encryption marker only when encrypting —
+	// with no Go branch anywhere.
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
 }
 
 type BuildResolveReply struct {
@@ -4626,6 +4724,292 @@ type SaveDeployStateInput struct {
 	RequiresShared []string `yaml:"requires_shared,omitempty" json:"requires_shared,omitempty"`
 }
 
+// #Theme is a colour scheme plus the per-application files it renders into.
+//
+// The token vocabulary is CLOSED. A template referencing {{.Token.accnt}} is a typo that
+// would render an empty colour — a subtly wrong desktop rather than a failure — so
+// OpValidate rejects any template naming a token this entity does not define. That check is
+// the whole reason this is a kind.
+//
+// Nothing here names a compositor, so the same entity serves Hyprland, sway, labwc and KDE.
+type Theme struct {
+	// name is the theme's identity, e.g. "tokyo-night". Lowercase and hyphenated, matching
+	// what a theme-switcher command accepts.
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	// variant tells applications which system palette to pair with. Closed: these are the
+	// only two values the freedesktop colour-scheme preference has.
+	Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
+
+	// token is the colour palette. accent, foreground and background are REQUIRED because a
+	// theme that defines none of them cannot render anything legible; everything else is
+	// optional so a minimal theme stays small.
+	Token ThemeTokens `yaml:"token,omitempty" json:"token"`
+
+	// font, cursor_theme and icon_theme are the non-colour half of a theme. They are named
+	// separately from token because they are resource NAMES, not colours, and a template
+	// interpolating them into a font stack must not be able to reach the colour namespace.
+	Font string `yaml:"font,omitempty" json:"font,omitempty"`
+
+	CursorTheme string `yaml:"cursor_theme,omitempty" json:"cursor_theme,omitempty"`
+
+	IconTheme string `yaml:"icon_theme,omitempty" json:"icon_theme,omitempty"`
+
+	// background lists wallpaper files, candy-relative. First entry is the default. These
+	// lower to `copy:` rather than `write:` — a JPEG base64'd through a plan is neither
+	// readable nor small.
+	Background []string `yaml:"background,omitempty" json:"background,omitempty"`
+
+	// render is where the theme becomes files. Each entry names an application and the file
+	// to write for it, as a Go template over {{.Token.*}}, {{.Font}}, {{.CursorTheme}},
+	// {{.IconTheme}} and {{.Variant}}.
+	Render []ThemeRender `yaml:"render,omitempty" json:"render,omitempty"`
+}
+
+// #ThemeTokens is the closed colour vocabulary. Every value is a #HexColor: a token that
+// accepted arbitrary strings would let "blue" through and render a broken config.
+type ThemeTokens struct {
+	Accent HexColor `yaml:"accent,omitempty" json:"accent"`
+
+	Foreground HexColor `yaml:"foreground,omitempty" json:"foreground"`
+
+	Background HexColor `yaml:"background,omitempty" json:"background"`
+
+	Cursor HexColor `yaml:"cursor,omitempty" json:"cursor,omitempty"`
+
+	SelectionForeground HexColor `yaml:"selection_foreground,omitempty" json:"selection_foreground,omitempty"`
+
+	SelectionBackground HexColor `yaml:"selection_background,omitempty" json:"selection_background,omitempty"`
+
+	// The 16 ANSI slots a terminal palette needs. Named individually rather than as a list
+	// so a template says {{.Token.color4}} and a missing one is a load error, not an index
+	// panic at render time.
+	Color0 HexColor `yaml:"color0,omitempty" json:"color0,omitempty"`
+
+	Color1 HexColor `yaml:"color1,omitempty" json:"color1,omitempty"`
+
+	Color2 HexColor `yaml:"color2,omitempty" json:"color2,omitempty"`
+
+	Color3 HexColor `yaml:"color3,omitempty" json:"color3,omitempty"`
+
+	Color4 HexColor `yaml:"color4,omitempty" json:"color4,omitempty"`
+
+	Color5 HexColor `yaml:"color5,omitempty" json:"color5,omitempty"`
+
+	Color6 HexColor `yaml:"color6,omitempty" json:"color6,omitempty"`
+
+	Color7 HexColor `yaml:"color7,omitempty" json:"color7,omitempty"`
+
+	Color8 HexColor `yaml:"color8,omitempty" json:"color8,omitempty"`
+
+	Color9 HexColor `yaml:"color9,omitempty" json:"color9,omitempty"`
+
+	Color10 HexColor `yaml:"color10,omitempty" json:"color10,omitempty"`
+
+	Color11 HexColor `yaml:"color11,omitempty" json:"color11,omitempty"`
+
+	Color12 HexColor `yaml:"color12,omitempty" json:"color12,omitempty"`
+
+	Color13 HexColor `yaml:"color13,omitempty" json:"color13,omitempty"`
+
+	Color14 HexColor `yaml:"color14,omitempty" json:"color14,omitempty"`
+
+	Color15 HexColor `yaml:"color15,omitempty" json:"color15,omitempty"`
+}
+
+// #HexColor is #rrggbb. Six digits only: a renderer that also accepted #rgb or #rrggbbaa
+// would have to normalise, and every consuming format spells alpha differently.
+type HexColor string
+
+// #ThemeRender is one file a theme writes.
+type ThemeRender struct {
+	// app is a label for diagnostics — "foot", "btop", "hyprland". It is not looked up.
+	App string `yaml:"app,omitempty" json:"app"`
+
+	// path is where the file lands, ${HOME}-relative or absolute.
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	Content string `yaml:"content,omitempty" json:"content"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	// scope selects whose file it is; user means run_as the image user.
+	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"`
+
+	// distro restricts this file to matching distro TAGS, for the cases where one desktop
+	// spells a path differently across distros.
+	//
+	// [...string], not [...#DistroID], and deliberately: these are the same free-form TAGS
+	// a candy's `distro:` list carries (box.cue does the same), not the closed guest-distro
+	// id a VM source is validated against. #DistroID is also `@go(-)` — it generates no Go
+	// type — so a list of it would emit a reference to a type that does not exist.
+	Distro []string `yaml:"distro,omitempty" json:"distro,omitempty"`
+}
+
+// #Session is a compositor's RENDERER VOCABULARY — the exact `init:`/`service:` mirror.
+//
+// The kind says HOW a construct is spelled; the candy's `desktop:` block says WHICH
+// constructs exist. That split is what lets one authored keybinding reach Hyprland's Lua,
+// sway's config syntax and labwc's XML without the author knowing any of them.
+//
+// A compositor that cannot express a construct simply omits its template, and entries of
+// that kind are dropped with a diagnostic — the same way supervisord ignores `wanted_by`.
+type Session struct {
+	// compositor is the binary this session runs, e.g. "Hyprland", "sway", "labwc".
+	Compositor string `yaml:"compositor,omitempty" json:"compositor"`
+
+	// syntax is a label for diagnostics and for choosing an escaping strategy.
+	Syntax string `yaml:"syntax,omitempty" json:"syntax,omitempty"`
+
+	// config_path_template is where the rendered config lands, as a Go template so a
+	// compositor that keys off its own name does not need a second field.
+	ConfigPathTemplate string `yaml:"config_path_template,omitempty" json:"config_path_template"`
+
+	// model says whether the constructs concatenate into ONE file (assembly) or each render
+	// to its own (file_set). Hyprland and sway are assembly; labwc is a file set.
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+
+	// The per-construct templates. Each renders once per authored entry. A compositor that
+	// has no notion of a construct omits the template.
+	MonitorTemplate string `yaml:"monitor_template,omitempty" json:"monitor_template,omitempty"`
+
+	BindTemplate string `yaml:"bind_template,omitempty" json:"bind_template,omitempty"`
+
+	InputTemplate string `yaml:"input_template,omitempty" json:"input_template,omitempty"`
+
+	ExecTemplate string `yaml:"exec_template,omitempty" json:"exec_template,omitempty"`
+
+	EnvTemplate string `yaml:"env_template,omitempty" json:"env_template,omitempty"`
+
+	RuleTemplate string `yaml:"rule_template,omitempty" json:"rule_template,omitempty"`
+
+	IncludeTemplate string `yaml:"include_template,omitempty" json:"include_template,omitempty"`
+
+	// extra_file is for the parts of a session that are not one of the constructs above —
+	// a bootstrap loader, a portal config.
+	ExtraFiles []ThemeRender `yaml:"extra_file,omitempty" json:"extra_file,omitempty"`
+
+	// session_desktop is the /usr/share/wayland-sessions entry a display manager offers.
+	// Its `id` is what a displaymanager's `session:` must match, and that cross-check is
+	// enforced at load: an autologin naming a session file nothing installed is a black
+	// screen at boot with nothing in any log.
+	SessionDesktop SessionDesktop `yaml:"session_desktop,omitempty" json:"session_desktop,omitempty"`
+
+	// theme_render lets a session pull colours from a theme entity by name, so a compositor
+	// config can be themed without the theme knowing the compositor exists.
+	ThemeRender []string `yaml:"theme_render,omitempty" json:"theme_render,omitempty"`
+}
+
+// #SessionDesktop is the wayland-sessions entry.
+type SessionDesktop struct {
+	Id string `yaml:"id,omitempty" json:"id"`
+
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Exec string `yaml:"exec,omitempty" json:"exec"`
+
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+}
+
+// #DisplayManager is the greeter: which one, which session it starts, and whether it logs a
+// user in without asking.
+//
+// The load-time cross-check is the point: `session` must match a #SessionDesktop.id that
+// some session entity in the same project declares. An autologin pointing at a session file
+// nothing installed produces a black screen and an empty journal, which is the single worst
+// failure this surface has.
+type DisplayManager struct {
+	Manager string `yaml:"manager,omitempty" json:"manager"`
+
+	// session is the #SessionDesktop.id to start. Cross-checked at load.
+	Session string `yaml:"session,omitempty" json:"session"`
+
+	Autologin AutoLogin `yaml:"autologin,omitempty" json:"autologin,omitempty"`
+
+	Numlock string `yaml:"numlock,omitempty" json:"numlock,omitempty"`
+
+	// theme names a greeter theme package or directory. Free-form: every greeter spells
+	// this differently and none of them validate it either.
+	Theme string `yaml:"theme,omitempty" json:"theme,omitempty"`
+
+	// config is the greeter's own files, rendered the same way a theme's are.
+	Config []ThemeRender `yaml:"config,omitempty" json:"config,omitempty"`
+
+	// unit is the systemd unit to enable. Named explicitly rather than derived from
+	// `manager`, because a distro may ship it under a different name and guessing would be
+	// the "renderer guesses the distro" failure this codebase already recorded.
+	Unit string `yaml:"unit,omitempty" json:"unit,omitempty"`
+}
+
+type AutoLogin struct {
+	User string `yaml:"user,omitempty" json:"user"`
+
+	// relogin controls whether the greeter logs the user back in after they log out.
+	// Default false: an operator who logs out usually means it.
+	Relogin bool `yaml:"relogin,omitempty" json:"relogin,omitempty"`
+}
+
+// #DesktopEntry is a freedesktop .desktop file.
+//
+// A .desktop file is a trivial INI, and this kind earns its keep on ONE ground: startup_wm_class
+// and window are consumed by the SESSION renderer through the render context, so a single
+// entity feeds both the applications menu and the compositor's window rules. Without that it
+// would be `write:` duplication and should be dropped.
+type DesktopEntry struct {
+	// entry_name is the file stem and the menu label source.
+	EntryName string `yaml:"entry_name,omitempty" json:"entry_name"`
+
+	// exec and url are mutually exclusive: `url` renders the browser --app=<url> form, which
+	// is all a "web app" installer does. Enforced by OpValidate rather than CUE so the error
+	// can say which one to remove.
+	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
+
+	URL string `yaml:"url,omitempty" json:"url,omitempty"`
+
+	// browser_arg are extra flags for the url form.
+	BrowserArgs []string `yaml:"browser_arg,omitempty" json:"browser_arg,omitempty"`
+
+	Icon DesktopIcon `yaml:"icon,omitempty" json:"icon,omitempty"`
+
+	// categories is CLOSED to the freedesktop registered main categories. A typo here does
+	// not error anywhere — the entry silently vanishes from every menu — which is exactly
+	// the class of failure a closed enum exists to catch.
+	Categories []DesktopCategory `yaml:"categories,omitempty" json:"categories,omitempty"`
+
+	MimeTypes []string `yaml:"mime_type,omitempty" json:"mime_type,omitempty"`
+
+	// startup_wm_class ties the launched window back to this entry. Also read by the session
+	// renderer's window rules, which is this kind's reason to exist.
+	StartupWMClass string `yaml:"startup_wm_class,omitempty" json:"startup_wm_class,omitempty"`
+
+	Window DesktopWindow `yaml:"window,omitempty" json:"window,omitempty"`
+
+	Terminal bool `yaml:"terminal,omitempty" json:"terminal,omitempty"`
+
+	Comment string `yaml:"comment,omitempty" json:"comment,omitempty"`
+}
+
+// #DesktopIcon is name XOR source: a stock icon name, or a candy-relative file that lowers
+// to `copy:` (an icon base64'd through a plan is neither readable nor small).
+type DesktopIcon struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Source string `yaml:"source,omitempty" json:"source,omitempty"`
+}
+
+// #DesktopCategory is the freedesktop registered MAIN categories, verbatim. Closed on
+// purpose — see the note on `categories`.
+type DesktopCategory string
+
+// #DesktopWindow is the placement the session renderer turns into a window rule.
+type DesktopWindow struct {
+	Placement string `yaml:"placement,omitempty" json:"placement,omitempty"`
+
+	Workspace string `yaml:"workspace,omitempty" json:"workspace,omitempty"`
+
+	Size string `yaml:"size,omitempty" json:"size,omitempty"`
+}
+
 type Distro struct {
 	Inherits string `yaml:"inherits,omitempty" json:"inherits,omitempty"`
 
@@ -4649,7 +5033,11 @@ type Distro struct {
 
 	Bootloader *Bootloader `yaml:"bootloader,omitempty" json:"bootloader,omitempty"`
 
+	DiskLayout *DiskLayout `yaml:"disk_layout,omitempty" json:"disk_layout,omitempty"`
+
 	Dnf *Dnf `yaml:"dnf,omitempty" json:"dnf,omitempty"`
+
+	Installer *DistroInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
 }
 
 type Format struct {
@@ -4695,6 +5083,43 @@ type DistroResolveInput struct {
 // #DistroResolveReply wraps the resolved distro.
 type DistroResolveReply struct {
 	Resolved *ResolvedDistro `yaml:"resolved,omitempty" json:"resolved,omitempty"`
+}
+
+// #InstallerSeedContext is what a #DistroInstallerFile.content template renders
+// against. Host-computed. The PLAINTEXT password never appears here: the caller
+// crypt()s it first, so no plaintext reaches a template, a log, or a temp file.
+type InstallerSeedContext struct {
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
+
+	Keyboard string `yaml:"keyboard,omitempty" json:"keyboard,omitempty"`
+
+	Username string `yaml:"username,omitempty" json:"username,omitempty"`
+
+	FullName string `yaml:"full_name,omitempty" json:"full_name,omitempty"`
+
+	Email string `yaml:"email,omitempty" json:"email,omitempty"`
+
+	PasswordHash string `yaml:"password_hash,omitempty" json:"password_hash,omitempty"`
+
+	Disk string `yaml:"disk,omitempty" json:"disk,omitempty"`
+
+	Encrypt bool `yaml:"encrypt,omitempty" json:"encrypt,omitempty"`
+
+	// encryption_password is the LUKS passphrase, and it is plaintext by necessity:
+	// the installer needs it to create the volume. It is only ever set when
+	// encrypt is true, and it makes the rendered answers volume a secret.
+	EncryptionPassword string `yaml:"encryption_password,omitempty" json:"encryption_password,omitempty"`
+
+	SSHAuthorizedKeys []string `yaml:"ssh_authorized_key,omitempty" json:"ssh_authorized_key,omitempty"`
+
+	DeferProvisioning bool `yaml:"defer_provisioning,omitempty" json:"defer_provisioning,omitempty"`
+
+	// answer carries the vm entity's per-distro extras verbatim.
+	Answers map[string]string `yaml:"answer,omitempty" json:"answer,omitempty"`
 }
 
 // #CredentialHealth is the credential-store health snapshot. Rendered into the
@@ -8240,6 +8665,68 @@ type VmChecksum struct {
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 
 	Value string `yaml:"value,omitempty" json:"value,omitempty"`
+}
+
+// #VmInstaller — the unattended-install ANSWERS for a `source.kind: iso` VM.
+//
+// Distro-AGNOSTIC on purpose: every field here is a question EVERY installer asks.
+// Distro-SPECIFIC extras go in `answer:` (typed-open — a distro's installer vocabulary
+// is that distro's business, not vm.cue's), reachable from a #DistroInstaller template
+// as {{index .Answers "key"}}. The FORMAT that renders these into files lives on the
+// distro (#DistroInstaller), exactly as `init:` renders `service:`: archinstall JSON,
+// kickstart, preseed, Subiquity autoinstall and AutoYaST are five real formats, each
+// keyed by distro and by nothing else.
+//
+// password ⊻ password_hash is enforced by the vm kind's OWN OpValidate, not by CUE —
+// the same reason validateSourceDistro lives there: the host's value gate is
+// closedness-only by design, and a disjunction over two optional strings cannot
+// express "exactly one present".
+type VmInstaller struct {
+	Username string `yaml:"username,omitempty" json:"username,omitempty"`
+
+	Full_name string `yaml:"full_name,omitempty" json:"full_name,omitempty"`
+
+	Email string `yaml:"email,omitempty" json:"email,omitempty"`
+
+	// password is PLAINTEXT. The renderer crypt()s it before it reaches any template,
+	// so the plaintext exists only in memory and never lands on the answers volume.
+	Password string `yaml:"password,omitempty" json:"password,omitempty"`
+
+	Password_hash string `yaml:"password_hash,omitempty" json:"password_hash,omitempty"`
+
+	// disk is the target block device the installer wipes. It is the guest's view
+	// (/dev/vda), not a host path.
+	Disk string `yaml:"disk,omitempty" json:"disk,omitempty"`
+
+	// encrypt requests full-disk encryption. NOTE: an encrypted unattended install is
+	// not fully unattended — someone still types the LUKS passphrase at first boot —
+	// and the passphrase is written in PLAINTEXT onto the answers volume, which makes
+	// that volume a secret. Source it from the secrets backend, never a committed
+	// literal.
+	Encrypt bool `yaml:"encrypt,omitempty" json:"encrypt,omitempty"`
+
+	Keyboard string `yaml:"keyboard,omitempty" json:"keyboard,omitempty"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
+
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+
+	// ssh_authorized_key seeds the created account's ~/.ssh/authorized_keys. On a
+	// distro whose installer honours it this is what makes the guest reachable at all
+	// (a stock Omarchy install ships openssh with the service disabled and the port
+	// closed), so charly defaults it to the public half of the per-VM generated key.
+	Ssh_authorized_key []string `yaml:"ssh_authorized_key,omitempty" json:"ssh_authorized_key,omitempty"`
+
+	// defer_provisioning installs with NO personal details, leaving the first person
+	// to boot the machine to create their own user — the imaging-rig mode. Mutually
+	// exclusive with the credential fields; enforced in OpValidate.
+	Defer_provisioning bool `yaml:"defer_provisioning,omitempty" json:"defer_provisioning,omitempty"`
+
+	// answer carries per-distro extras the common fields do not model (a Tailscale
+	// auth key, a proxy, a licence). Typed-open by design.
+	Answer map[string]string `yaml:"answer,omitempty" json:"answer,omitempty"`
 }
 
 type VmKeyInjection struct {

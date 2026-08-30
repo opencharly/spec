@@ -288,6 +288,11 @@ type VmSource struct {
 	Package          []string   `yaml:"package,omitempty" json:"package,omitempty"`
 	BootstrapArch    string     `yaml:"bootstrap_arch,omitempty" json:"bootstrap_arch,omitempty"`
 	BootstrapVariant string     `yaml:"bootstrap_variant,omitempty" json:"bootstrap_variant,omitempty"`
+
+	// iso arm. Installer carries the unattended-install ANSWERS; the distro owns the
+	// FORMAT that renders them (Distro.Installer / #DistroInstaller).
+	Installer      *VmInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
+	InstallTimeout string       `yaml:"install_timeout,omitempty" json:"install_timeout,omitempty"`
 }
 
 // VmSsh is the guest SSH access config (port XOR port_auto is a Go cross-field
