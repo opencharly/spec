@@ -402,8 +402,46 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 	if err != nil {
 		return LocalImageResolution{}, err
 	}
+	labelCands, nameCands := gatherResolverCandidates(images, shortName, requestedTag)
 
-	var labelCands, nameCands []resolverCandidate
+	// A MISS against the CACHED list is the one answer staleness can get wrong in the
+	// harmful direction. ListLocalImages serves a 5-minute persistent cache; a stale HIT
+	// still names an image that exists, but a stale MISS reports "not available locally"
+	// for an image that was built seconds ago.
+	//
+	// That is not hypothetical. In a group bed with two image-backed members the phase
+	// order is: build A, check A, build B, check B. Checking A repopulates the cache from
+	// a snapshot taken BEFORE B was tagged, so checking B — a separate process, and now a
+	// cache HIT — cannot see its OWN freshly built image, and the bed dies with
+	// `image "<box>:<tag>" is not available locally`. Reproduced deterministically on
+	// consecutive runs: the passing member logs a cache miss, the failing one logs none.
+	//
+	// So confirm a miss against reality before believing it: drop the cache and gather
+	// once more. The cost is one enumeration on a path that was already about to fail,
+	// and it cannot mask a real absence — the second gather is authoritative.
+	if len(labelCands) == 0 && len(nameCands) == 0 {
+		InvalidateImageCache()
+		if fresh, ferr := ListLocalImages(engine); ferr == nil {
+			labelCands, nameCands = gatherResolverCandidates(fresh, shortName, requestedTag)
+		}
+	}
+
+	cands := labelCands
+	if len(cands) == 0 {
+		cands = nameCands
+	}
+	if len(cands) == 0 {
+		return LocalImageResolution{}, fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
+	}
+	return electResolvedImage(cands, labelCands, nameCands, input, shortName, requestedTag)
+}
+
+// gatherResolverCandidates collects the refs that could answer shortName[:requestedTag],
+// as two families: label-preferred (ai.opencharly.box equals the short name) and a name
+// fallback. Split out of ResolveLocalImage so the resolver can run it twice — once against
+// the cached image list, once against a freshly fetched one when the first pass found
+// nothing. Both families are returned because the newest-BUILD staleness probe spans them.
+func gatherResolverCandidates(images []LocalImageInfo, shortName, requestedTag string) (labelCands, nameCands []resolverCandidate) {
 	for _, img := range images {
 		labelCalVer := img.Labels[spec.LabelVersion] // content-derived EffectiveVersion (primary key)
 		// Label-preferred: ai.opencharly.image equals the short name.
@@ -459,14 +497,12 @@ func ResolveLocalImage(engine, input string) (LocalImageResolution, error) {
 		}
 	}
 
-	cands := labelCands
-	if len(cands) == 0 {
-		cands = nameCands
-	}
-	if len(cands) == 0 {
-		return LocalImageResolution{}, fmt.Errorf("%w: %s", spec.ErrImageNotLocal, input)
-	}
+	return labelCands, nameCands
+}
 
+// electResolvedImage orders the candidates and elects the winner, then runs the
+// newest-BUILD staleness probe across BOTH families.
+func electResolvedImage(cands, labelCands, nameCands []resolverCandidate, input, shortName, requestedTag string) (LocalImageResolution, error) {
 	// Sort newest-first. The label-CalVer (the content-derived
 	// ai.opencharly.version) is the PRIMARY key — it ALWAYS takes priority
 	// over the tag-CalVer. The tag-CalVer (the per-build YYYY.DDD.HHMM
