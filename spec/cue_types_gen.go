@@ -7029,6 +7029,19 @@ type CheckRunRequest struct {
 	NoAgent bool `yaml:"no_agent,omitempty" json:"no_agent,omitempty"`
 
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	// --- snapshot-anchored check-run mode (§5.3.1) ---
+	// anchor: the snapshot name to revert before the checks (the golden disk).
+	// keep_venue: keep the VM between runs (batch loop). variant: the VM-config
+	// variant name to boot over the shared golden disk. vars: per-run variable
+	// passthrough (e.g. pr=9345).
+	Anchor string `yaml:"anchor,omitempty" json:"anchor,omitempty"`
+
+	KeepVenue bool `yaml:"keep_venue,omitempty" json:"keep_venue,omitempty"`
+
+	Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
+
+	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty"`
 }
 
 // #CheckVenueResolveRequest asks plugin-check to CLASSIFY a check target's venue — the kind-decode
