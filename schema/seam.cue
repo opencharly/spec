@@ -545,6 +545,16 @@
 	timeout?:  string @go(Timeout)
 	no_agent?: bool @go(NoAgent)
 	plan?: [...#Step] @go(Plan) // "score" mode: the substituted scoring plan pluginRunCheckLive walks
+
+	// --- snapshot-anchored check-run mode (§5.3.1) ---
+	// anchor: the snapshot name to revert before the checks (the golden disk).
+	// keep_venue: keep the VM between runs (batch loop). variant: the VM-config
+	// variant name to boot over the shared golden disk. vars: per-run variable
+	// passthrough (e.g. pr=9345).
+	anchor?:      string @go(Anchor)
+	keep_venue?:  bool @go(KeepVenue)
+	variant?:     string @go(Variant)
+	vars?:        {[=~"^[^.]+$"]: string} @go(Vars,type=map[string]string)
 }
 
 // #CheckRunResults / #StepScore / #ScoreSummary — the AI-harness SCORING result model
