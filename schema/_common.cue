@@ -340,3 +340,31 @@
 	verify?:             bool
 	builder_image?:      string & !="" @go(BuilderImage)
 }
+
+// #VmSnapshotPolicy — the check-bed snapshot-anchoring policy (§5.3.1). Extends
+// the existing from_snapshot: (boot from a backing chain) with capture-and-reset
+// semantics for check runs: capture at install finalize (on_finalize), revert
+// before every check run (reset_before_check), optionally quiesced (consistent),
+// internal or external mode, and keep_venue for batch loops.
+#VmSnapshotPolicy: {
+	on_finalize?:        string & !="" @go(OnFinalize)
+	reset_before_check?: string & !="" @go(ResetBeforeCheck)
+	mode?:               *"internal" | "external" @go(Mode)
+	consistent?:         bool @go(Consistent)
+	keep_venue?:         bool @go(KeepVenue)
+}
+
+// #VmVariant — a named VM-config override that boots the SAME golden disk with a
+// different shape. Only VM-shape fields are legal (cpus/memory/video/gpu/
+// display/devices/attachments); any change to source: or disk identity is
+// rejected at validate time, because the disk comes exclusively from the shared
+// snapshot chain.
+#VmVariant: {
+	cpus?:       int & >=1 @go(,type=int)
+	memory?:     #VmSize
+	video?:      string & !="" @go(Video)
+	gpu?:       {hostdev?: *"auto" | "none" | string @go(Hostdev), vendor?: string & !="" @go(Vendor)} @go(Gpu,optional=nillable)
+	display?:    string & !="" @go(Display)
+	devices?:    [...string] @go(Devices)
+	attachments?: [...string] @go(Attachments)
+}

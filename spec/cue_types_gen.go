@@ -313,6 +313,48 @@ type InstallOpts struct {
 	BuilderImage string `yaml:"builder_image,omitempty" json:"builder_image,omitempty"`
 }
 
+// #VmSnapshotPolicy — the check-bed snapshot-anchoring policy (§5.3.1). Extends
+// the existing from_snapshot: (boot from a backing chain) with capture-and-reset
+// semantics for check runs: capture at install finalize (on_finalize), revert
+// before every check run (reset_before_check), optionally quiesced (consistent),
+// internal or external mode, and keep_venue for batch loops.
+type VmSnapshotPolicy struct {
+	OnFinalize string `yaml:"on_finalize,omitempty" json:"on_finalize,omitempty"`
+
+	ResetBeforeCheck string `yaml:"reset_before_check,omitempty" json:"reset_before_check,omitempty"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	Consistent bool `yaml:"consistent,omitempty" json:"consistent,omitempty"`
+
+	KeepVenue bool `yaml:"keep_venue,omitempty" json:"keep_venue,omitempty"`
+}
+
+// #VmVariant — a named VM-config override that boots the SAME golden disk with a
+// different shape. Only VM-shape fields are legal (cpus/memory/video/gpu/
+// display/devices/attachments); any change to source: or disk identity is
+// rejected at validate time, because the disk comes exclusively from the shared
+// snapshot chain.
+type VmVariant struct {
+	Cpus int `yaml:"cpus,omitempty" json:"cpus,omitempty"`
+
+	Memory VmSize `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Video string `yaml:"video,omitempty" json:"video,omitempty"`
+
+	Gpu *struct {
+		Hostdev *string `yaml:"hostdev,omitempty" json:"hostdev,omitempty"`
+
+		Vendor *string `yaml:"vendor,omitempty" json:"vendor,omitempty"`
+	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+
+	Display string `yaml:"display,omitempty" json:"display,omitempty"`
+
+	Devices []string `yaml:"devices,omitempty" json:"devices,omitempty"`
+
+	Attachments []string `yaml:"attachments,omitempty" json:"attachments,omitempty"`
+}
+
 type Agent struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
@@ -4325,6 +4367,19 @@ type Deploy struct {
 	CloudInitClean bool `yaml:"cloud_init_clean,omitempty" json:"cloud_init_clean,omitempty"`
 
 	VmState *VmDeployState `yaml:"vm_state,omitempty" json:"vm_state,omitempty"`
+
+	// snapshot — the check-bed snapshot-anchoring policy (§5.3.1): capture at
+	// install finalize and reset before every check run, so a batch of PR runs
+	// shares ONE golden disk (revert ≈ seconds vs fresh install ≈ 20-30 min).
+	// VM-only (the substrate-word checks reject it on other substrates).
+	Snapshot *VmSnapshotPolicy `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
+
+	// variants — named VM-config overrides that boot the SAME golden disk with a
+	// different shape (cpus/memory/video/gpu/display/devices/attachments). A
+	// variant may ONLY change VM shape — any change to source: or disk identity
+	// is rejected, because the disk comes exclusively from the shared snapshot
+	// chain. The unnamed default variant equals the bed's own vm: attributes.
+	Variants map[string]*VmVariant `yaml:"variants,omitempty" json:"variants,omitempty"`
 
 	Disposable *bool `yaml:"disposable,omitempty" json:"disposable,omitempty"`
 
