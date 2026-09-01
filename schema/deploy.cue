@@ -179,6 +179,18 @@
 	cloud_init_clean?: bool           @go(CloudInitClean)
 	vm_state?:         #VmDeployState @go(VmState,type=*VmDeployState)
 
+	// snapshot — the check-bed snapshot-anchoring policy (§5.3.1): capture at
+	// install finalize and reset before every check run, so a batch of PR runs
+	// shares ONE golden disk (revert ≈ seconds vs fresh install ≈ 20-30 min).
+	// VM-only (the substrate-word checks reject it on other substrates).
+	snapshot?: #VmSnapshotPolicy @go(Snapshot,optional=nillable)
+	// variants — named VM-config overrides that boot the SAME golden disk with a
+	// different shape (cpus/memory/video/gpu/display/devices/attachments). A
+	// variant may ONLY change VM shape — any change to source: or disk identity
+	// is rejected, because the disk comes exclusively from the shared snapshot
+	// chain. The unnamed default variant equals the bed's own vm: attributes.
+	variants?: {[=~"^[^.]+$"]: #VmVariant} @go(Variants,type=map[string]*VmVariant)
+
 	disposable?:  bool @go(,type=*bool)
 	lifecycle?:   "scratch" | "dev" | "test" | "qa" | "staging" | "prod" | "custom"
 	ephemeral?:   #Ephemeral   @go(Ephemeral,type=*EphemeralLifetime)
