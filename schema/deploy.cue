@@ -156,6 +156,13 @@
 
 	plan?: [...#Step]
 	iterate?: #Iterate @go(Iterate,optional=nillable)
+	// record — the bed-level whole-run recording wrap (G5 follow-up): when set,
+	// the check-run runner starts a recording on the venue before the live
+	// phases and stops it after, landing the artifact in the bed's run evidence
+	// (recordings.yml beside summary.yml). terminal/desktop select the recorder
+	// lane; fps + record_env pass through to the record verb (desktop sessions
+	// on VM venues need XDG_RUNTIME_DIR/WAYLAND_DISPLAY).
+	record?: #RecordWrap @go(Record,optional=nillable)
 
 	add_candy?: [...(string & !="")] @go(AddCandy)
 	install_opts?: #InstallOpts @go(InstallOpts,optional=nillable)
@@ -193,6 +200,17 @@
 
 	disposable?:  bool @go(,type=*bool)
 	lifecycle?:   "scratch" | "dev" | "test" | "qa" | "staging" | "prod" | "custom"
+	// RecordWrap is the whole-run recording wrap (deploy record: field).
+	#RecordWrap: {
+		terminal?:       bool
+		desktop?:        bool
+		fps?:            int & >=1
+		record_name?:    string & !=""
+		settle_ms?:      int & >=0
+		record_env?:     {[string]: string}
+		artifact?:       string & !=""
+		artifact_min_bytes?: int & >=0
+	}
 	ephemeral?:   #Ephemeral   @go(Ephemeral,type=*EphemeralLifetime)
 	preemptible?: #Preemptible @go(Preemptible,type=*PreemptibleConfig)
 	requires_exclusive?: [...(string & !="")] @go(RequiresExclusive)
