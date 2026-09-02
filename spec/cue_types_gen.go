@@ -4336,6 +4336,14 @@ type Deploy struct {
 
 	Iterate *Iterate `yaml:"iterate,omitempty" json:"iterate,omitempty"`
 
+	// record — the bed-level whole-run recording wrap (G5 follow-up): when set,
+	// the check-run runner starts a recording on the venue before the live
+	// phases and stops it after, landing the artifact in the bed's run evidence
+	// (recordings.yml beside summary.yml). terminal/desktop select the recorder
+	// lane; fps + record_env pass through to the record verb (desktop sessions
+	// on VM venues need XDG_RUNTIME_DIR/WAYLAND_DISPLAY).
+	Record *Deploy_RecordWrap `yaml:"record,omitempty" json:"record,omitempty"`
+
 	AddCandy []string `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
 
 	InstallOpts *InstallOpts `yaml:"install_opts,omitempty" json:"install_opts,omitempty"`
@@ -4422,6 +4430,25 @@ type Iterate struct {
 	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
 
 	MCPEndpoint *string `yaml:"mcp_endpoint,omitempty" json:"mcp_endpoint,omitempty"`
+}
+
+// RecordWrap is the whole-run recording wrap (deploy record: field).
+type Deploy_RecordWrap struct {
+	Terminal bool `yaml:"terminal,omitempty" json:"terminal,omitempty"`
+
+	Desktop bool `yaml:"desktop,omitempty" json:"desktop,omitempty"`
+
+	Fps int64 `yaml:"fps,omitempty" json:"fps,omitempty"`
+
+	Record_name string `yaml:"record_name,omitempty" json:"record_name,omitempty"`
+
+	Settle_ms int64 `yaml:"settle_ms,omitempty" json:"settle_ms,omitempty"`
+
+	Record_env map[string]string `yaml:"record_env,omitempty" json:"record_env,omitempty"`
+
+	Artifact string `yaml:"artifact,omitempty" json:"artifact,omitempty"`
+
+	Artifact_min_bytes int64 `yaml:"artifact_min_bytes,omitempty" json:"artifact_min_bytes,omitempty"`
 }
 
 type KubernetesDeploy struct {
