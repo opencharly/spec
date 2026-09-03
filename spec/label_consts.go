@@ -61,4 +61,10 @@ const (
 	LabelService          = "ai.opencharly.service"
 	LabelShell            = "ai.opencharly.shell"
 	LabelCheckLevel       = "ai.opencharly.check_level"
+
+	// VM-box metadata contract (the cutover task 2 label): the WHOLE spec.VmBoxMetadata
+	// marshaled as one JSON label, like LabelService does for CapabilityService. A NEW
+	// label with no byte-freeze anchor — its json tags (CUE-sourced, vm_box_metadata.cue)
+	// ARE the wire contract.
+	LabelVmBox = "ai.opencharly.vm.box"
 )
