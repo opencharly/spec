@@ -48,7 +48,11 @@ import (
 const (
 	LatestTagTTL     = 24 * time.Hour
 	DefaultBranchTTL = 24 * time.Hour
-	ResolveRefTTL    = 5 * time.Minute
+	// ResolveRefTTL keeps resolved SHAs for one hour. The eval-batch reality: a 16-lane,
+	// multi-phase check run re-resolves the same refs hundreds of times; a 5-minute TTL
+	// re-probes mid-batch (measured: 152 concurrent git ls-remote -> GitHub throttling ->
+	// the deploy-add stall). Branches move at most hourly; plan-pinned eval heads never move.
+	ResolveRefTTL = time.Hour
 )
 
 // GitClient is the centralized git layer. Construct once per process (or per
