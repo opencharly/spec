@@ -361,8 +361,8 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 }
 func (g *GitClient) ResolveRef(repoURL, ref string) (string, error) {
 	key := repoURL + " " + ref
+	g.mu.Lock()
 	if !g.disabled {
-		g.mu.Lock()
 		if v := cached(g.resolvedRefs, key, ResolveRefTTL); v != "" {
 			g.mu.Unlock()
 			return v, nil
@@ -380,11 +380,6 @@ func (g *GitClient) ResolveRef(repoURL, ref string) (string, error) {
 	g.mu.Unlock()
 	return sha, nil
 }
-
-// WarmUp prefetches the latest tag and default branch for a set of repo URLs,
-// printing a progress line to stderr on the first (cold) run so the user knows
-// charly is fetching git metadata. It is the "first startup" feedback the CLI
-// shows before a command that will need the refs.
 func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	var cold []string
 	for _, u := range repoURLs {
