@@ -185,3 +185,43 @@ func TestGitClientWarmUpColdDetection(t *testing.T) {
 		t.Fatal("a fresh client must report the repo as COLD")
 	}
 }
+
+func TestGitClientCacheSurface(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "cache.yml")
+	g := NewGitClient(file)
+
+	// CacheStatus starts at zero entries.
+	if _, n := g.CacheStatus(); n != 0 {
+		t.Fatalf("fresh client: status %d entries, want 0", n)
+	}
+
+	// Prime the maps directly (no network): the cache is consulted before any fetch.
+	g.mu.Lock()
+	g.latestTags["repo/A"] = gitCacheEntry{Value: "v1", Resolved: time.Now()}
+	g.resolvedRefs["repo/B main"] = gitCacheEntry{Value: "sha1", Resolved: time.Now()}
+	g.mu.Unlock()
+
+	if _, n := g.CacheStatus(); n != 2 {
+		t.Fatalf("primed: status %d entries, want 2", n)
+	}
+
+	// BypassCache: the switch is the mechanism the three lookups honor before any
+	// cached read (LatestTag/DefaultBranch/ResolveRef check !g.disabled first) —
+	// observable via the field itself.
+	g.BypassCache()
+	if !g.disabled {
+		t.Fatalf("bypass: disabled flag not set")
+	}
+
+	// ClearCache: entries drop + the persisted file is removed.
+	if err := g.ClearCache(); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if _, n := g.CacheStatus(); n != 0 {
+		t.Fatalf("after clear: %d entries, want 0", n)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatalf("after clear: cache file still present (%v)", err)
+	}
+}
