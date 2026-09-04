@@ -141,7 +141,11 @@ func (g *GitClient) load() {
 // system:, …), and writes back atomically (tempfile + rename).
 // BypassCache disables every cached lookup — the next resolutions are fresh
 // (an operator on-demand truth: a new tag just released, a moved branch).
-func (g *GitClient) BypassCache() { g.disabled = true }
+func (g *GitClient) BypassCache() {
+	g.mu.Lock()
+	g.disabled = true
+	g.mu.Unlock()
+}
 
 // CacheStatus reports the cache file path and the number of cached git answers
 // (the operator-facing `charly cache status` surface).
@@ -316,14 +320,14 @@ func cached(entries map[string]gitCacheEntry, key string, ttl time.Duration) str
 
 // LatestTag returns the highest semver tag of repoURL, cached (tags are immutable).
 func (g *GitClient) LatestTag(repoURL string) (string, error) {
+	g.mu.Lock()
 	if !g.disabled {
-		g.mu.Lock()
 		if v := cached(g.latestTags, repoURL, LatestTagTTL); v != "" {
 			g.mu.Unlock()
 			return v, nil
 		}
-		g.mu.Unlock()
 	}
+	g.mu.Unlock()
 
 	tag, err := GitLatestTag(repoURL)
 	if err != nil {
@@ -344,8 +348,8 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 			g.mu.Unlock()
 			return v, nil
 		}
-		g.mu.Unlock()
 	}
+	g.mu.Unlock()
 
 	branch, err := GitDefaultBranch(repoURL)
 	if err != nil {
@@ -368,8 +372,8 @@ func (g *GitClient) ResolveRef(repoURL, ref string) (string, error) {
 			g.mu.Unlock()
 			return v, nil
 		}
-		g.mu.Unlock()
 	}
+	g.mu.Unlock()
 
 	sha, err := GitResolveRef(repoURL, ref)
 	if err != nil {
