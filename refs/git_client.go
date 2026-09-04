@@ -339,11 +339,9 @@ func (g *GitClient) LatestTag(repoURL string) (string, error) {
 	g.mu.Unlock()
 	return tag, nil
 }
-
-// DefaultBranch returns the default branch of repoURL, cached (the name is stable).
 func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
+	g.mu.Lock()
 	if !g.disabled {
-		g.mu.Lock()
 		if v := cached(g.defaultBranches, repoURL, DefaultBranchTTL); v != "" {
 			g.mu.Unlock()
 			return v, nil
@@ -361,9 +359,6 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 	g.mu.Unlock()
 	return branch, nil
 }
-
-// ResolveRef resolves a ref to a commit SHA, cached with a SHORT TTL (the freshness
-// contract: a mutable branch can move, but not on every invocation).
 func (g *GitClient) ResolveRef(repoURL, ref string) (string, error) {
 	key := repoURL + " " + ref
 	if !g.disabled {
