@@ -198,6 +198,32 @@
 	// chain. The unnamed default variant equals the bed's own vm: attributes.
 	variants?: {[=~"^[^.]+$"]: #VmVariant} @go(Variants,type=map[string]*VmVariant)
 
+	// update_gate — the check-bed's declarative R10 fresh-update change-class
+	// switch: how the Step-5 acceptance gate re-verifies the bed (the declarative
+	// twin of `charly check run --no-rebuild`). Check-bed only (like snapshot:);
+	// meaningless on a plain deploy.
+	//   full (default)         — the canonical destroy+recreate gate: `charly
+	//                            update` rebuilds the venue from scratch (a VM
+	//                            domain is destroyed + recreated, a pod image
+	//                            rebuilt + container recreated, a group rebuilds
+	//                            every member image) and re-checks it.
+	//   restart-only           — replace the destroy/recreate with a plain venue
+	//                            RESTART (a VM BOOTs its existing clone again, a
+	//                            pod restarts its container, a group cycles its
+	//                            members WITHOUT rebuilding images) and re-runs
+	//                            the check-live pass against the restarted
+	//                            venue. The change class for runtime-PR-injection
+	//                            software evals: a rebuild cannot alter a
+	//                            runtime-injected artifact, so the full gate
+	//                            spends its destroy/recreate time (~38s in the
+	//                            measured omarchy PR-eval lane) proving nothing.
+	//   skip                   — no update phase and no post-update pass (the
+	//                            declarative twin of --no-rebuild). --no-rebuild
+	//                            / --anchor still force skip structurally.
+	// In-place (local/external) beds have no restartable venue: restart-only
+	// leaves the gate step unchanged there (the in-place re-apply), same as full.
+	update_gate?: *"full" | "restart-only" | "skip" @go(UpdateGate)
+
 	disposable?:  bool @go(,type=*bool)
 	lifecycle?:   "scratch" | "dev" | "test" | "qa" | "staging" | "prod" | "custom"
 	// RecordWrap is the whole-run recording wrap (deploy record: field).
