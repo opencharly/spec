@@ -44,17 +44,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Cache TTLs (see the freshness policy above).
+// Cache TTLs (see the freshness policy above). One default — the eval-batch reality:
+// a 16-lane, multi-phase check run re-resolves the same refs hundreds of times, so a
+// shorter TTL re-probes mid-batch (measured: 152 concurrent git ls-remote -> GitHub
+// throttling -> the deploy-add stall); a release or branch move is seen within the hour.
 const (
-	LatestTagTTL     = 24 * time.Hour
-	DefaultBranchTTL = 24 * time.Hour
-	ResolveRefTTL    = 5 * time.Minute
+	DefaultRefsCacheTTL = time.Hour
+	LatestTagTTL        = DefaultRefsCacheTTL
+	DefaultBranchTTL    = DefaultRefsCacheTTL
+	ResolveRefTTL       = DefaultRefsCacheTTL
 )
 
 // GitClient is the centralized git layer. Construct once per process (or per
 // project) and share it — the cache is the point.
 type GitClient struct {
 	cacheFile string // the per-host charly.yml path holding the `cache:` section
+	disabled  bool   // BypassCache() — every lookup misses, so the next resolution is fresh
 
 	mu              sync.Mutex
 	latestTags      map[string]gitCacheEntry
@@ -134,6 +139,40 @@ func (g *GitClient) load() {
 // advisory lock (best-effort). It reads the CURRENT file, updates only the
 // `cache:` key (preserving every other key — deploy:, provides:, ledger:,
 // system:, …), and writes back atomically (tempfile + rename).
+// BypassCache disables every cached lookup — the next resolutions are fresh
+// (an operator on-demand truth: a new tag just released, a moved branch).
+func (g *GitClient) BypassCache() {
+	g.mu.Lock()
+	g.disabled = true
+	g.mu.Unlock()
+}
+
+// CacheStatus reports the cache file path and the number of cached git answers
+// (the operator-facing `charly cache status` surface).
+func (g *GitClient) CacheStatus() (string, int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.cacheFile, len(g.latestTags) + len(g.defaultBranches) + len(g.resolvedRefs) + len(g.downloads)
+}
+
+// ClearCache drops every cached git answer (the in-memory entries and the persisted
+// file), so the next resolutions are fresh — the `charly cache clear/refresh` surface.
+func (g *GitClient) ClearCache() error {
+	g.mu.Lock()
+	g.latestTags = map[string]gitCacheEntry{}
+	g.defaultBranches = map[string]gitCacheEntry{}
+	g.resolvedRefs = map[string]gitCacheEntry{}
+	g.downloads = map[string]gitCacheEntry{}
+	file := g.cacheFile
+	g.mu.Unlock()
+	if file != "" {
+		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 func (g *GitClient) save() {
 	unlock, err := lock.AcquireFileLock(g.cacheLockPath(), true)
 	if err != nil {
@@ -282,9 +321,11 @@ func cached(entries map[string]gitCacheEntry, key string, ttl time.Duration) str
 // LatestTag returns the highest semver tag of repoURL, cached (tags are immutable).
 func (g *GitClient) LatestTag(repoURL string) (string, error) {
 	g.mu.Lock()
-	if v := cached(g.latestTags, repoURL, LatestTagTTL); v != "" {
-		g.mu.Unlock()
-		return v, nil
+	if !g.disabled {
+		if v := cached(g.latestTags, repoURL, LatestTagTTL); v != "" {
+			g.mu.Unlock()
+			return v, nil
+		}
 	}
 	g.mu.Unlock()
 
@@ -298,13 +339,13 @@ func (g *GitClient) LatestTag(repoURL string) (string, error) {
 	g.mu.Unlock()
 	return tag, nil
 }
-
-// DefaultBranch returns the default branch of repoURL, cached (the name is stable).
 func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 	g.mu.Lock()
-	if v := cached(g.defaultBranches, repoURL, DefaultBranchTTL); v != "" {
-		g.mu.Unlock()
-		return v, nil
+	if !g.disabled {
+		if v := cached(g.defaultBranches, repoURL, DefaultBranchTTL); v != "" {
+			g.mu.Unlock()
+			return v, nil
+		}
 	}
 	g.mu.Unlock()
 
@@ -318,15 +359,14 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 	g.mu.Unlock()
 	return branch, nil
 }
-
-// ResolveRef resolves a ref to a commit SHA, cached with a SHORT TTL (the freshness
-// contract: a mutable branch can move, but not on every invocation).
 func (g *GitClient) ResolveRef(repoURL, ref string) (string, error) {
 	key := repoURL + " " + ref
 	g.mu.Lock()
-	if v := cached(g.resolvedRefs, key, ResolveRefTTL); v != "" {
-		g.mu.Unlock()
-		return v, nil
+	if !g.disabled {
+		if v := cached(g.resolvedRefs, key, ResolveRefTTL); v != "" {
+			g.mu.Unlock()
+			return v, nil
+		}
 	}
 	g.mu.Unlock()
 
@@ -340,11 +380,6 @@ func (g *GitClient) ResolveRef(repoURL, ref string) (string, error) {
 	g.mu.Unlock()
 	return sha, nil
 }
-
-// WarmUp prefetches the latest tag and default branch for a set of repo URLs,
-// printing a progress line to stderr on the first (cold) run so the user knows
-// charly is fetching git metadata. It is the "first startup" feedback the CLI
-// shows before a command that will need the refs.
 func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	var cold []string
 	for _, u := range repoURLs {
