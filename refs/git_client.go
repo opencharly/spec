@@ -44,15 +44,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Cache TTLs (see the freshness policy above).
+// Cache TTLs (see the freshness policy above). One default — the eval-batch reality:
+// a 16-lane, multi-phase check run re-resolves the same refs hundreds of times, so a
+// shorter TTL re-probes mid-batch (measured: 152 concurrent git ls-remote -> GitHub
+// throttling -> the deploy-add stall); a release or branch move is seen within the hour.
 const (
-	LatestTagTTL     = 24 * time.Hour
-	DefaultBranchTTL = 24 * time.Hour
-	// ResolveRefTTL keeps resolved SHAs for one hour. The eval-batch reality: a 16-lane,
-	// multi-phase check run re-resolves the same refs hundreds of times; a 5-minute TTL
-	// re-probes mid-batch (measured: 152 concurrent git ls-remote -> GitHub throttling ->
-	// the deploy-add stall). Branches move at most hourly; plan-pinned eval heads never move.
-	ResolveRefTTL = time.Hour
+	DefaultRefsCacheTTL = time.Hour
+	LatestTagTTL        = DefaultRefsCacheTTL
+	DefaultBranchTTL    = DefaultRefsCacheTTL
+	ResolveRefTTL       = DefaultRefsCacheTTL
 )
 
 // GitClient is the centralized git layer. Construct once per process (or per
