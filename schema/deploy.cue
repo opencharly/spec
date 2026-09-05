@@ -225,6 +225,16 @@
 	update_gate?: *"full" | "restart-only" | "skip" @go(UpdateGate)
 
 	disposable?:  bool @go(,type=*bool)
+	// instrument — run-scoped observation entries on this SUBSTRATE-NODE body
+	// (the nested-capture instrument surface, Cutover A): each entry carries a
+	// capture verb (ANY plugin word, authored as the `<word>: <input>` sugar),
+	// a run-phase bracket, and an optional post-run pipeline. Owned by the bed
+	// runner across run phases; evidence lands in
+	// .check/<bed>/<calver>/evidence.yml. Valid on ANY deployable node body —
+	// pod and vm venues alike; each entry validates against its venue kind
+	// through the verb's OWN served context rules (the runner never branches on
+	// capture kind).
+	instrument?: [...#Instrument]
 	lifecycle?:   "scratch" | "dev" | "test" | "qa" | "staging" | "prod" | "custom"
 	// RecordWrap is the whole-run recording wrap (deploy record: field).
 	#RecordWrap: {
