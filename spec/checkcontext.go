@@ -124,6 +124,11 @@ type CheckContext interface {
 	// (a bare-Op run) or pid<=0. Used by a verb that fire-and-forgets a host process
 	// (the `command` verb's background path).
 	AddBackground(pid int)
+	// InvokeProvider dispatches a provider invocation over the SAME single-broker
+	// connection this CheckContext already dialed (the one-dial doctrine: a second Dial
+	// hangs - sdk/checkverb.go). Session/service verbs reach the runner registry through
+	// it in both placements.
+	InvokeProvider(ctx context.Context, class, word, op string, paramsJSON, env []byte) ([]byte, error)
 }
 
 // CheckHTTPRequest is the host-vantage HTTP request a check verb hands cc.HTTPDo. It carries
