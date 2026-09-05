@@ -10,10 +10,13 @@ package refs
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -24,6 +27,107 @@ import (
 	"github.com/opencharly/spec/lock"
 	"github.com/opencharly/spec/spec"
 )
+
+// ---------------------------------------------------------------------------
+// Bounded git-op runner: every NETWORK git subprocess in this package executes
+// through runGitOp — a context deadline plus a small bounded retry.
+//
+// Before this, a `git ls-remote`/`git fetch` whose connection died in a GitHub
+// HTTP/2 reset window (curl error 92 CANCEL / "RPC failed; HTTP/2 stream 5
+// reset") blocked its caller FOREVER: exec.Command carries no deadline and git's
+// libcurl starts with no timeout, so the pre-deploy @github ref-resolution hung
+// indefinitely on a dead socket (r9 wave forensics: three 16-lane eval check
+// runs froze before deploy-add — 21 threads, 20x futex_wait + 1x do_epoll_wait
+// on the killed connection). The deadline turns the hang into an error; the
+// bounded retry re-issues the op so a transiently-killed connection re-resolves
+// instead of hanging a lane forever.
+//
+// Deadline split: ref METADATA (ls-remote) is a tiny request-response — 30s is
+// a generous bound. TRANSFER (clone/fetch/submodule init) moves real bytes — a
+// 60s bound still fires on a stalled connection while leaving a legitimately
+// slow-but-moving transfer room. Both are variables (not constants) only so the
+// tests can shrink them; production code never mutates them.
+// ---------------------------------------------------------------------------
+
+var (
+	gitOpMetadataTimeout = 30 * time.Second // ref metadata: ls-remote (resolve/latest-tag/default-branch)
+	gitOpTransferTimeout = 60 * time.Second // transfer: clone / fetch / submodule update
+	gitOpRetries         = 2                // bounded retries AFTER the first attempt
+	gitOpBackoff         = 500 * time.Millisecond
+)
+
+// gitOpTransientRe matches git's stderr signatures for a connection killed in a
+// reset window or otherwise-flaky network — the exact curl-error-92 /
+// "RPC failed; HTTP/2 stream 5 reset" class that introduced this runner. A
+// permanently-missing repo ("Repository not found", URL error 404/403) does NOT
+// match and is NOT retried: retrying a permanent failure would mask the real
+// error and triple its latency.
+var gitOpTransientRe = regexp.MustCompile(
+	`(?i)(rpc failed|http/2|connection (reset|refused|closed|aborted)|could not resolve host|failed to connect to|timed out|early eof|network is unreachable|transfer closed with outstanding|hung up unexpectedly|unexpected disconnect|empty reply from server|returned error: 5\d\d)`,
+)
+
+// runGitOp executes one `git` subprocess under a context deadline with a bounded
+// retry. transfer selects the transfer (60s) vs metadata (30s) timeout; dir is
+// the working directory ("" = process cwd); tee (may be nil) receives git's
+// stderr live (clone progress) IN ADDITION to the capture that is folded into
+// the returned error on failure. Returns the stdout bytes of the first attempt
+// that completes within the deadline. A permanent failure (non-transient error)
+// fails fast without retrying.
+func runGitOp(transfer bool, dir string, tee io.Writer, args ...string) ([]byte, error) {
+	timeout := gitOpMetadataTimeout
+	if transfer {
+		timeout = gitOpTransferTimeout
+	}
+	var (
+		out        []byte
+		lastErr    error
+		lastDetail string
+		timedOut   bool
+	)
+	for attempt := 0; attempt <= gitOpRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(gitOpBackoff * time.Duration(attempt)) // short backoff: 1x, 2x
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		var stderr bytes.Buffer
+		cmd := exec.CommandContext(ctx, "git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		if tee != nil {
+			cmd.Stderr = io.MultiWriter(&stderr, tee)
+		} else {
+			cmd.Stderr = &stderr
+		}
+		var err error
+		out, err = cmd.Output()
+		// Capture the deadline verdict BEFORE cancel(): after cancel, `ctx.Err()` is
+		// always Canceled even when the deadline fired, which would otherwise hide
+		// the hang case and, worse, skip the stderr-signature check for fast
+		// failures (a killed connection reports "Empty reply from server" etc.
+		// before any deadline).
+		timedOut = ctx.Err() == context.DeadlineExceeded
+		cancel()
+		if err == nil {
+			return out, nil
+		}
+		lastErr, lastDetail = err, strings.TrimSpace(stderr.String())
+		if !timedOut && !gitOpTransientRe.MatchString(lastDetail) {
+			break // permanent failure — retrying cannot help
+		}
+	}
+	wrapped := lastErr
+	if timedOut {
+		wrapped = fmt.Errorf("timed out after %s", timeout)
+	}
+	// Bare error: every caller wraps with its own "git <op> <url>" context
+	// (e.g. GitLatestTag: "git ls-remote --tags %s"), so a prefix here would
+	// duplicate (the pre-runGitOp callers already name the op).
+	if lastDetail != "" {
+		return nil, fmt.Errorf("%w\n%s", wrapped, lastDetail)
+	}
+	return nil, wrapped
+}
 
 // GitResolveRef resolves a git reference (tag, branch, or commit) to a full commit hash.
 // Uses git ls-remote for tags/branches; for commit hashes, validates length and returns as-is.
@@ -40,8 +144,7 @@ func GitResolveRef(repoURL string, ref string) (string, error) {
 
 	// Query the ref AND its peeled ^{} form so an ANNOTATED tag resolves to the
 	// underlying COMMIT (refs/tags/X^{}), not the tag object (refs/tags/X).
-	cmd := exec.Command("git", "ls-remote", repoURL, ref, "refs/tags/"+ref, "refs/tags/"+ref+"^{}", "refs/heads/"+ref)
-	out, err := cmd.Output()
+	out, err := runGitOp(false, "", nil, "ls-remote", repoURL, ref, "refs/tags/"+ref, "refs/tags/"+ref+"^{}", "refs/heads/"+ref)
 	if err != nil {
 		return "", fmt.Errorf("git ls-remote %s %s: %w", repoURL, ref, err)
 	}
@@ -115,9 +218,7 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 	}
 
 	// Fallback: clone by ref name (servers that don't allow fetch-by-sha).
-	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", ref, repoURL, targetDir)
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if _, err := runGitOp(true, "", os.Stderr, "clone", "--depth", "1", "--branch", ref, repoURL, targetDir); err != nil {
 		_ = os.RemoveAll(targetDir) // clean up partial clone
 		return fmt.Errorf("git clone --branch %s %s: %w", ref, repoURL, err)
 	}
@@ -170,21 +271,14 @@ func populateSubmodules(targetDir string) error {
 	if _, err := os.Stat(gm); err != nil {
 		return nil // no submodules declared — nothing to populate
 	}
-	cmd := exec.Command("git",
+	if _, err := runGitOp(true, targetDir, nil,
 		"-c", "url.https://github.com/.insteadOf=git@github.com:",
 		"-c", "advice.detachedHead=false",
-		"submodule", "update", "--init", "--depth", "1", "-q")
-	cmd.Dir = targetDir
-	// Capture rather than pass through: git names the offending submodule and the
-	// reason (auth, missing ref, unreachable host) on stderr, and that is the only
-	// thing that makes this failure actionable. Passing it to os.Stderr would print
-	// it detached from the error the caller reports.
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if detail := strings.TrimSpace(stderr.String()); detail != "" {
-			return fmt.Errorf("populating submodules in %s: %w\n%s", targetDir, err, detail)
-		}
+		"submodule", "update", "--init", "--depth", "1", "-q"); err != nil {
+		// runGitOp captures git stderr into the error: git names the offending
+		// submodule and the reason (auth, missing ref, unreachable host) — the only
+		// thing that makes this failure actionable (the same reason the old code
+		// captured rather than passed stderr through).
 		return fmt.Errorf("populating submodules in %s: %w", targetDir, err)
 	}
 	return nil
@@ -201,19 +295,21 @@ func gitCloneByCommit(repoURL string, commit string, targetDir string) error {
 		// -c init.defaultBranch suppresses git's "using 'master' ... suppress
 		// this warning" hint; -q + advice.detachedHead=false silence the
 		// remaining init / fetch / detached-checkout chatter.
-		{"git", "-c", "init.defaultBranch=main", "init", "-q"},
-		{"git", "remote", "add", "origin", repoURL},
-		{"git", "fetch", "--depth", "1", "-q", "origin", commit},
-		{"git", "-c", "advice.detachedHead=false", "checkout", "-q", "FETCH_HEAD"},
+		{"-c", "init.defaultBranch=main", "init", "-q"},
+		{"remote", "add", "origin", repoURL},
+		{"fetch", "--depth", "1", "-q", "origin", commit}, // the ONE network step
+		{"-c", "advice.detachedHead=false", "checkout", "-q", "FETCH_HEAD"},
 	}
 
 	for _, args := range cmds {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = targetDir
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		// Only the fetch moves bytes across the network: it gets the transfer
+		// (60s) deadline + retry; the local steps are routed through the same
+		// bounded runner purely for uniformity — they cannot hang, and their
+		// failures carry no transient stderr signature, so they never retry.
+		transfer := args[0] == "fetch"
+		if _, err := runGitOp(transfer, targetDir, os.Stderr, args...); err != nil {
 			_ = os.RemoveAll(targetDir) // clean up on failure
-			return fmt.Errorf("git %s: %w", strings.Join(args[1:], " "), err)
+			return fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 		}
 	}
 
@@ -489,8 +585,7 @@ func downloadRepoFrom(repoURL, repoPath, version string) (string, error) {
 // goes through GitClient.DefaultBranch. The former per-primitive cache
 // (latest-tags.json) is DELETED — one cache, one layer (R3/R5).
 func GitDefaultBranch(repoURL string) (string, error) {
-	cmd := exec.Command("git", "ls-remote", "--symref", repoURL, "HEAD")
-	out, err := cmd.Output()
+	out, err := runGitOp(false, "", nil, "ls-remote", "--symref", repoURL, "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("git ls-remote --symref %s HEAD: %w", repoURL, err)
 	}
@@ -527,8 +622,7 @@ func parseDefaultBranch(output string) string {
 // `cache:` section of the per-host charly.yml. The former per-primitive cache
 // (latest-tags.json) is DELETED — one cache, one layer (R3/R5).
 func GitLatestTag(repoURL string) (string, error) {
-	cmd := exec.Command("git", "ls-remote", "--tags", repoURL)
-	out, err := cmd.Output()
+	out, err := runGitOp(false, "", nil, "ls-remote", "--tags", repoURL)
 	if err != nil {
 		return "", fmt.Errorf("git ls-remote --tags %s: %w", repoURL, err)
 	}
