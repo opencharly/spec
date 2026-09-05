@@ -3396,6 +3396,8 @@ type CacheConfig struct {
 // refs, and repo downloads. Each entry records the value and when it was
 // resolved (RFC3339), so the TTL policy can decide freshness.
 type GitCache struct {
+	Bypass bool `yaml:"bypass,omitempty" json:"bypass,omitempty"`
+
 	LatestTags map[string]GitCacheEntry `yaml:"latest_tags,omitempty" json:"latest_tags,omitempty"`
 
 	DefaultBranches map[string]GitCacheEntry `yaml:"default_branches,omitempty" json:"default_branches,omitempty"`

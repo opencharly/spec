@@ -18,6 +18,7 @@
 // refs, and repo downloads. Each entry records the value and when it was
 // resolved (RFC3339), so the TTL policy can decide freshness.
 #GitCache: {
+	bypass?:          bool                   @go(Bypass)
 	latest_tags?:      {[string]: #GitCacheEntry} @go(LatestTags)
 	default_branches?: {[string]: #GitCacheEntry} @go(DefaultBranches)
 	resolved_refs?:    {[string]: #GitCacheEntry} @go(ResolvedRefs)
