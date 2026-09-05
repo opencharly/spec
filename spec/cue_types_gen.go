@@ -4421,6 +4421,17 @@ type Deploy struct {
 
 	Disposable *bool `yaml:"disposable,omitempty" json:"disposable,omitempty"`
 
+	// instrument — run-scoped observation entries on this SUBSTRATE-NODE body
+	// (the nested-capture instrument surface, Cutover A): each entry carries a
+	// capture verb (ANY plugin word, authored as the `<word>: <input>` sugar),
+	// a run-phase bracket, and an optional post-run pipeline. Owned by the bed
+	// runner across run phases; evidence lands in
+	// .check/<bed>/<calver>/evidence.yml. Valid on ANY deployable node body —
+	// pod and vm venues alike; each entry validates against its venue kind
+	// through the verb's OWN served context rules (the runner never branches on
+	// capture kind).
+	Instrument []Instrument `yaml:"instrument,omitempty" json:"instrument,omitempty"`
+
 	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
 
 	Ephemeral *EphemeralLifetime `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty"`
@@ -4559,6 +4570,63 @@ type DeployProbes struct {
 	Readiness *Op `yaml:"readiness,omitempty" json:"readiness,omitempty"`
 
 	Startup *Op `yaml:"startup,omitempty" json:"startup,omitempty"`
+}
+
+// #Instrument — one run-scoped observation entry on a substrate-node body
+// (`instrument:` beside `disposable:`). CLOSED: a misspelled field is a typo.
+// The capture verb is the generic plugin sugar `<word>: <input>` — the same
+// discriminator pattern #Step uses: the parse-time desugar rewrites it into
+// the internal plugin/plugin_input pair BEFORE this def validates, so a plugin
+// word never appears here (authoring plugin:/plugin_input: directly is a hard
+// load error, run: charly migrate) and exactly-one-verb-per-instrument is the
+// parse-time + closedness discipline (a second verb sugar key is an unknown
+// field). The venue an instrument captures is DERIVED from its node's
+// fleet-tree position (like a step's venue) — never authored here.
+type Instrument struct {
+	// id — the authored observation identity; the bed runner scopes it per
+	// venue (`<bed>.<member>.<id>`).
+	ID string `yaml:"id,omitempty" json:"id,omitempty"`
+
+	// phase — the run-phase brackets this instrument captures in. Default
+	// ["live"] (the common single-run observation); a [live, update] span
+	// yields TWO evidence segments across the R10 rebuild (the venue is
+	// recreated — honest, never re-attached).
+	Phase []string `yaml:"phase,omitempty" json:"phase,omitempty"`
+
+	// pipeline — post-run word dispatches over the instrument's artifacts
+	// (e.g. `- transcode: {to: mp4}` → plugin-media), executed in the
+	// evidence phase BEFORE venue teardown. Blind dispatches: the runner owns
+	// zero format knowledge; a new pipeline verb joins by serving its own
+	// schema, with no core change.
+	Pipeline []PipelineWord `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+
+	// --- the desugared verb pair — INTERNAL-ONLY, mirroring #Op's exact
+	// declarations (the authored `<word>: <input>` sugar rewrites here) ---
+	Plugin string `yaml:"plugin,omitempty" json:"plugin,omitempty"`
+
+	PluginInput map[string]any `yaml:"plugin_input,omitempty" json:"plugin_input,omitempty"`
+
+	// --- the shared modifiers an instrument meaningfully shares with #Op ---
+	Timeout Duration `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+
+	Context []Context `yaml:"context,omitempty" json:"context,omitempty"`
+}
+
+// #PipelineWord — ONE post-run pipeline stage: a single plugin-VERB dispatch,
+// authored in its sugar form `<word>: <input>` (the plan's
+// `pipeline: [{transcode: {to: mp4}}]` shape — a map whose single key is the
+// verb and whose value is that verb's own input) and desugared at parse time
+// into the internal plugin/plugin_input pair below — the EXACT desugar
+// contract plan steps use (see #Op's pair in _common.cue). CLOSED: the
+// desugar consumed the OPEN verb word, so the desugared entry validates
+// against just the pair; a two-verb-key entry is at-most-one-verb-violating
+// and cannot reach this def (the parse-time desugar hard-errors it — the same
+// exactly-one-verb discipline #Step/#Op enforce). plugin_input is validated by
+// the PLUGIN's own served CUE schema (not this def).
+type PipelineWord struct {
+	Plugin string `yaml:"plugin,omitempty" json:"plugin,omitempty"`
+
+	PluginInput map[string]any `yaml:"plugin_input,omitempty" json:"plugin_input,omitempty"`
 }
 
 // #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same FleetNode
@@ -5760,6 +5828,71 @@ type InitResolveRequest struct {
 	Render *ServiceRenderInput `yaml:"render,omitempty" json:"render,omitempty"`
 
 	Config *InitResolveInput `yaml:"config,omitempty" json:"config,omitempty"`
+}
+
+// #EvidenceRow — ONE machine-written evidence-manifest row
+// (.check/<bed>/<calver>/evidence.yml), emitted by the bed runner + the
+// session providers through the shared evidence path. CLOSED: a misspelled
+// field on an emitted row is a typo. Segment elements carry the open `...`
+// tail (machine-written spans evolve forward; the #VmDeployState precedent).
+type EvidenceRow struct {
+	// instrument — the venue-scoped capture identity this row belongs to
+	// (`<bed>.<member>.<id>`).
+	Instrument string `yaml:"instrument,omitempty" json:"instrument"`
+
+	// origin — where the capture came from: a background SESSION the runner
+	// owned, a plan STEP that recorded inline, or a structured SUB-RUN
+	// (aggregate include).
+	Origin string `yaml:"origin,omitempty" json:"origin"`
+
+	// verb — the capture verb word that produced the artifacts ("spice",
+	// "record", "wl", "vnc", "transcode", ...). OPEN — it names a dispatched
+	// word, never a closed enum.
+	Verb string `yaml:"verb,omitempty" json:"verb"`
+
+	// venue — the fleet-tree venue identity the capture ran on (the derived
+	// venue word, matching the step venue vocabulary #Op.venue).
+	Venue string `yaml:"venue,omitempty" json:"venue"`
+
+	// phase — the run-phase bracket the capture segment sat in.
+	Phase string `yaml:"phase,omitempty" json:"phase,omitempty"`
+
+	// segment — the capture span(s): ONE per run-phase bracket an instrument
+	// spanned (a [live, update] instrument yields two).
+	Segment []EvidenceSegment `yaml:"segment,omitempty" json:"segment,omitempty"`
+
+	// artifact — the produced files: absolute/run-relative path + an OPEN kind
+	// word ("mjpeg"|"mp4"|"cast"|"gif"|... — never a closed enum: new capture
+	// kinds join the model freely) + optional validator expectations.
+	Artifact []EvidenceArtifact `yaml:"artifact,omitempty" json:"artifact,omitempty"`
+
+	// pipeline — the post-run word dispatches executed over these artifacts
+	// (the executed form of the instrument's pipeline; same desugared shape).
+	Pipeline []PipelineWord `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+}
+
+// #EvidenceSegment — ONE capture span (start → stop) with optional frame/byte
+// counts. start/stop are flexible strings: a canonical CalVer (#CanonCalVer)
+// OR any wall-clock timestamp — the capture span is run time, not a schema
+// stamp, so the type is deliberately never pattern-constrained. Machine-
+// written; the open `...` tail is the forward-evolution hatch for a state
+// record (the #VmDeployState precedent) — which degrades the whole def for
+// gengotypes, so the generated `EvidenceRow.Segment []EvidenceSegment` IS
+// `[]map[string]any`: the flexible shape the machine-written rows need, with
+// CUE still validating start/stop/frames/bytes when present.
+type EvidenceSegment map[string]any /* CUE top */
+
+// #EvidenceArtifact — one produced capture artifact. CLOSED: the path + the
+// OPEN kind word + the optional validator map (validator semantics — RDD-3
+// binding: artifact_not_uniform on video evaluates SOURCE frames pre-encode or
+// a pixel-delta threshold on decoded output; exact hashes of transcoded frames
+// are vacuous and MUST NOT be authored).
+type EvidenceArtifact struct {
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	Kind string `yaml:"kind,omitempty" json:"kind"`
+
+	Validators map[string]any/* CUE top */ `yaml:"validators,omitempty" json:"validators,omitempty"`
 }
 
 // #KubernetesGenInput is the pure-generation input the caller ships to plugin-k8sgen

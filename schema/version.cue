@@ -58,8 +58,16 @@
 // `reshapeGraphicsGL` reshaper hook in candy/plugin-migrate: the scalar sits at
 // vm.libvirt.devices.graphics[].gl, a field inside a LIST element, which none of
 // the four key-transform ops can reach.
+// Bumped again by the run-scoped-instruments cutover (Cutover A, task 1):
+// NEW authored wire surface — `instrument?:` on every deployable
+// substrate-node body (deploy.cue, beside disposable:), each entry carrying
+// id/phase/pipeline + the plugin-verb sugar pair, and the machine-written
+// evidence-manifest contract (#EvidenceRow → .check/<bed>/<calver>/evidence.yml
+// with segment/artifact/pipeline rows). An authored WIRE-key change (new fields
+// open on the deploy surface + a new evidence-file format), migrated by the
+// companion `record:`-harvest cutover entry in candy/plugin-migrate.
 // Re-stamped to the merge-time CalVer by the fresh pr-validator.
-#SchemaVersion: #CanonCalVer & "2026.240.1943" @go(-)
+#SchemaVersion: #CanonCalVer & "2026.248.1030" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
 // the migration-baseline reset it EQUALS #SchemaVersion — the deleted 47-step chain
