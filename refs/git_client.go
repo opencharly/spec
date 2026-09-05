@@ -36,6 +36,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -59,7 +60,8 @@ const (
 // project) and share it — the cache is the point.
 type GitClient struct {
 	cacheFile string // the per-host charly.yml path holding the `cache:` section
-	disabled  bool   // BypassCache() — every lookup misses, so the next resolution is fresh
+	disabled  bool   // BypassCache()/SetBypass — every lookup misses, so the next resolution is fresh
+	bypass    bool   // the PERSISTED bypass flag (SetBypass) — honored by a fresh client at construction
 
 	mu              sync.Mutex
 	latestTags      map[string]gitCacheEntry
@@ -108,6 +110,7 @@ func (g *GitClient) load() {
 	var doc struct {
 		Cache *struct {
 			Git *struct {
+				Bypass          bool                      `yaml:"bypass"`
 				LatestTags      map[string]gitCacheEntry `yaml:"latest_tags"`
 				DefaultBranches map[string]gitCacheEntry `yaml:"default_branches"`
 				ResolvedRefs    map[string]gitCacheEntry `yaml:"resolved_refs"`
@@ -133,6 +136,10 @@ func (g *GitClient) load() {
 	if doc.Cache.Git.Downloads != nil {
 		g.downloads = doc.Cache.Git.Downloads
 	}
+	if doc.Cache.Git.Bypass {
+		g.disabled = true
+		g.bypass = true
+	}
 }
 
 // save persists the `cache:` section into the per-host charly.yml under the
@@ -141,10 +148,26 @@ func (g *GitClient) load() {
 // system:, …), and writes back atomically (tempfile + rename).
 // BypassCache disables every cached lookup — the next resolutions are fresh
 // (an operator on-demand truth: a new tag just released, a moved branch).
+// Runtime-only: the flag does not survive the process (see SetBypass for the
+// persisted form).
 func (g *GitClient) BypassCache() {
 	g.mu.Lock()
 	g.disabled = true
 	g.mu.Unlock()
+}
+
+// SetBypass persists the bypass flag in the cache: git: section of the per-host
+// charly.yml — the `charly cache bypass` operator surface. When on, every cached
+// lookup is disabled (fresh resolutions) until turned off, and a NEW process (a
+// fresh GitClient) honors it at construction (load reads the flag). When off, the
+// flag is cleared and the cache resumes.
+func (g *GitClient) SetBypass(on bool) error {
+	g.mu.Lock()
+	g.disabled = on
+	g.bypass = on
+	g.mu.Unlock()
+	g.save()
+	return nil
 }
 
 // CacheStatus reports the cache file path and the number of cached git answers
@@ -225,8 +248,10 @@ func (g *GitClient) save() {
 		cacheVal = root.Content[len(root.Content)-1]
 	}
 
-	// Build the cache: git: {latest_tags, default_branches, resolved_refs, downloads}.
+	// Build the cache: git: {bypass, latest_tags, default_branches, resolved_refs, downloads}.
 	gitVal := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "bypass"},
+		{Kind: yaml.ScalarNode, Value: strconv.FormatBool(g.bypass)},
 		{Kind: yaml.ScalarNode, Value: "latest_tags"},
 		entryMapNode(g.latestTags),
 		{Kind: yaml.ScalarNode, Value: "default_branches"},

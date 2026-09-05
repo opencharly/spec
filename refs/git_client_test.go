@@ -225,3 +225,31 @@ func TestGitClientCacheSurface(t *testing.T) {
 		t.Fatalf("after clear: cache file still present (%v)", err)
 	}
 }
+
+func TestGitClientSetBypassPersists(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "cache.yml")
+
+	// SetBypass(true) persists the flag: a FRESH client (a new process) honors it.
+	g := NewGitClient(file)
+	if err := g.SetBypass(true); err != nil {
+		t.Fatalf("set bypass: %v", err)
+	}
+	if !g.disabled {
+		t.Fatalf("set bypass: disabled flag not set")
+	}
+
+	fresh := NewGitClient(file)
+	if !fresh.disabled {
+		t.Fatalf("fresh client after SetBypass(true): bypass not honored at construction")
+	}
+
+	// SetBypass(false) clears it: a fresh client resumes the cache.
+	if err := g.SetBypass(false); err != nil {
+		t.Fatalf("clear bypass: %v", err)
+	}
+	fresh2 := NewGitClient(file)
+	if fresh2.disabled {
+		t.Fatalf("fresh client after SetBypass(false): bypass still set")
+	}
+}
