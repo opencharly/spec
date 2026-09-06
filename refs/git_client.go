@@ -336,7 +336,7 @@ func entryMapNode(entries map[string]gitCacheEntry) *yaml.Node {
 // DefaultRefsCacheTTL (the const block above documents the one-default reality), but a
 // future per-ref freshness divergence splits the constants without touching this function.
 //
-//nolint:unparam // ttl stays a parametER BY DESIGN: every TTL currently aliases
+//nolint:unparam // ttl stays a parameter BY DESIGN: every TTL currently aliases
 func cached(entries map[string]gitCacheEntry, key string, ttl time.Duration) string {
 	e, ok := entries[key]
 	if !ok {
