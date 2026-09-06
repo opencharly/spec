@@ -6649,6 +6649,13 @@ type VmBuildRequest struct {
 	Console bool `yaml:"console,omitempty" json:"console,omitempty"`
 
 	Force bool `yaml:"force,omitempty" json:"force,omitempty"`
+
+	// from_snapshot: the unified from: name:tag functional half (Cutover A addendum) —
+	// build the entity as a CLONE of its own golden at the named snapshot
+	// (`charly vm build <entity> --from-snapshot <tag>`). The deploy's from: name:tag
+	// (tag = snapshot name) flows here; the build dispatch runs BuildClone with
+	// from_vm = the entity itself.
+	FromSnapshot string `yaml:"from_snapshot,omitempty" json:"from_snapshot,omitempty"`
 }
 
 // #VmBuildReply is the resolveVmBuild reply (P8b-rest — the former "vm-build"
@@ -7414,6 +7421,11 @@ type CheckBedReply struct {
 	// resolveDeployRefLocal resolved_image overlay preference), not the base
 	// image's own --tag build ref.
 	VMTemplate string `yaml:"vm_template,omitempty" json:"vm_template,omitempty"`
+
+	// from_snapshot: the deploy's from: name:tag snapshot (Cutover A addendum) — flows to
+	// `charly vm build <entity> --from-snapshot <tag>` so the bed builds the entity as a
+	// CLONE of its own golden at the named snapshot.
+	FromSnapshot string `yaml:"from_snapshot,omitempty" json:"from_snapshot,omitempty"`
 
 	BedDomain string `yaml:"bed_domain,omitempty" json:"bed_domain,omitempty"`
 
