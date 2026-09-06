@@ -66,8 +66,21 @@
 // with segment/artifact/pipeline rows). An authored WIRE-key change (new fields
 // open on the deploy surface + a new evidence-file format), migrated by the
 // companion `record:`-harvest cutover entry in candy/plugin-migrate.
+// Bumped again by the group-kind removal cutover (Cutover C task 1): `group`
+// is removed from #ResourceKind (the targetless deploy-group node kind dies —
+// pod/vm/kubernetes/local/android remain; #105 removed the schema arm and
+// Deploy.IsGroup, this bump widens the migratable window for the consumer
+// half). Authored `group:` deploy nodes are rewritten by the
+// `unrollGroupDeploy` reshaper hook in candy/plugin-migrate (the FIRST member
+// becomes the deploy primary and inherits the group scalars —
+// disposable/lifecycle/description — the REMAINING members become deploy-level
+// siblings, nested groups rewrite recursively). The migration-table row needs
+// a head above the previous one: the table is strictly ascending within
+// [Floor, Head] and the previous row (record-field-to-instrument) already sat
+// AT 2026.248.1030, so a residual-config rewrite is impossible without this
+// bump.
 // Re-stamped to the merge-time CalVer by the fresh pr-validator.
-#SchemaVersion: #CanonCalVer & "2026.248.1030" @go(-)
+#SchemaVersion: #CanonCalVer & "2026.249.2125" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
 // the migration-baseline reset it EQUALS #SchemaVersion — the deleted 47-step chain
