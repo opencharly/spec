@@ -27,6 +27,26 @@ func TestVmBuildRequestFromSnapshotRoundTrip(t *testing.T) {
 	}
 }
 
+// TestCheckBedMemberFromSnapshotRoundTrip proves CheckBedMember.from_snapshot survives too —
+// a group bed's VM members carry the unified from: name:tag into their vm-build leg.
+func TestCheckBedMemberFromSnapshotRoundTrip(t *testing.T) {
+	mem := CheckBedMember{Key: "b", IsVM: true, From: "cachyos-vm", FromSnapshot: "golden"}
+	data, err := yaml.Marshal(&mem)
+	if err != nil {
+		t.Fatalf("marshalling CheckBedMember: %v", err)
+	}
+	var back CheckBedMember
+	if err := yaml.Unmarshal(data, &back); err != nil {
+		t.Fatalf("unmarshalling CheckBedMember: %v", err)
+	}
+	if back.FromSnapshot != "golden" {
+		t.Fatalf("from_snapshot did not survive the round trip: got %q want golden", back.FromSnapshot)
+	}
+	if back.From != "cachyos-vm" {
+		t.Fatalf("from did not survive the round trip: got %q", back.From)
+	}
+}
+
 // TestCheckBedReplyFromSnapshotRoundTrip proves CheckBedReply.from_snapshot survives too —
 // the runner reads it to thread the snapshot into the vm-build step.
 func TestCheckBedReplyFromSnapshotRoundTrip(t *testing.T) {
