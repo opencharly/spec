@@ -7347,6 +7347,15 @@ type CheckLoadPluginsRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
 	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+
+	// extra_words: ADDITIONAL plugin words the caller references OUTSIDE the plan-step
+	// surface — the instrument pipeline verbs (Cutover A addendum, RCA 2026-09-06). The
+	// plan-step scan (collectReferencedPluginWords) never sees the instrument pipeline
+	// (a SEPARATE plugin-reference surface on the deploy node), so without this the
+	// evidence phase's blind word dispatch fails with "no provider registered" for a
+	// pipeline verb (transcode). The host unions these into the reference scan — the
+	// SAME mechanism the plan steps use, no compiled-in bloat.
+	ExtraWords []string `yaml:"extra_words,omitempty" json:"extra_words,omitempty"`
 }
 
 // #CheckLoadPluginsReply is empty on success — connect failures are best-effort WARNINGS on the

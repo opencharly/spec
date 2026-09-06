@@ -693,6 +693,14 @@
 #CheckLoadPluginsRequest: {
 	name!: string @go(Name) // the deploy/bed name whose plan drives the reference scan
 	dir?:  string @go(Dir)  // project dir (empty -> host cwd), matching LoadUnified(dir)
+	// extra_words: ADDITIONAL plugin words the caller references OUTSIDE the plan-step
+	// surface — the instrument pipeline verbs (Cutover A addendum, RCA 2026-09-06). The
+	// plan-step scan (collectReferencedPluginWords) never sees the instrument pipeline
+	// (a SEPARATE plugin-reference surface on the deploy node), so without this the
+	// evidence phase's blind word dispatch fails with "no provider registered" for a
+	// pipeline verb (transcode). The host unions these into the reference scan — the
+	// SAME mechanism the plan steps use, no compiled-in bloat.
+	extra_words?: [...string] @go(ExtraWords)
 }
 
 // #CheckLoadPluginsReply is empty on success — connect failures are best-effort WARNINGS on the
