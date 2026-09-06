@@ -301,8 +301,8 @@
 }
 
 // ---------------------------------------------------------------------------
-// Calamares package surface (PackageItem/DistroPackages/AURPackages) — shared by
-// candy + group. `repo` is the genuine typed-open passthrough (#RepoBlock).
+// Calamares package surface (PackageItem/DistroPackages/AURPackages) — the candy
+// package surface. `repo` is the genuine typed-open passthrough (#RepoBlock).
 // ---------------------------------------------------------------------------
 // bare scalar shorthand XOR object form.
 #PackageItem: ((string & !="") | {

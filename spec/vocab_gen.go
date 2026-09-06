@@ -16,7 +16,6 @@ var ResourceKinds = []string{
 	"kubernetes",
 	"local",
 	"android",
-	"group",
 }
 
 // DocDirectives is the reserved document directives (#NodeDoc top-level keys).

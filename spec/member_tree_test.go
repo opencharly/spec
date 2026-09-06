@@ -164,8 +164,11 @@ func TestValidateDeployRequiresBoxMemberExemption(t *testing.T) {
 	}
 }
 
-// TestHasMembersAndIsGroupUniform pins the predicates on the ONE list.
-func TestHasMembersAndIsGroupUniform(t *testing.T) {
+// TestHasMembersUniform pins the member predicate on the ONE list. (The former IsGroup
+// predicate died with the group kind — the dual-representation cutover: a targetless
+// member-bearing deploy is no longer an authorable shape, the first member is the deploy's
+// primary substrate node.)
+func TestHasMembersUniform(t *testing.T) {
 	root := memberTree()
 	if !root.HasMembers() {
 		t.Fatal("HasMembers = false, want true")
@@ -174,13 +177,11 @@ func TestHasMembersAndIsGroupUniform(t *testing.T) {
 	if empty.HasMembers() {
 		t.Fatal("nil HasMembers must be false")
 	}
-	g := Deploy{Member: root.Member}
-	if !g.IsGroup() {
-		t.Fatal("targetless node with members must be a group")
-	}
-	g.Target = "pod"
-	if g.IsGroup() {
-		t.Fatal("targeted node with members must not be a group")
+	// The post-migrate spelling: a member-bearing deploy always carries its primary
+	// substrate target — the former group fixture (targetless + members) is gone.
+	g := Deploy{Target: "pod", Member: root.Member}
+	if !g.HasMembers() {
+		t.Fatal("targeted node with members must report HasMembers")
 	}
 }
 
