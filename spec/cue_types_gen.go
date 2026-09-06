@@ -4275,7 +4275,7 @@ type Deploy struct {
 	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
 	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
 	// (source:) OR a deploy (from:) under ONE arm — the disjunction #Vm|#Deploy.
-	From EntityRef `yaml:"from,omitempty" json:"from,omitempty"`
+	From string `yaml:"from,omitempty" json:"from,omitempty"`
 
 	Image string `yaml:"image,omitempty" json:"image,omitempty"`
 
