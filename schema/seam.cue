@@ -783,6 +783,9 @@
 	is_vm?: bool   @go(IsVM)  // vm member — build its disk via `charly vm build <from>` (bringUpMembers does vm create)
 	image?: string @go(Image) // pod member box ref ("" for a vm member)
 	from?:  string @go(From)  // vm member kind:vm entity (the build/spec source; entity-scoped, NOT --domain)
+	// from_snapshot: the member deploy's unified from: name:tag snapshot — the member
+	// vm-build leg passes it: `charly vm build <from> --from-snapshot <tag>`.
+	from_snapshot?: string @go(FromSnapshot)
 }
 
 // #CheckBedPrereqSkip — a bed the host skips for an absent HOST prerequisite (a GPU resource
