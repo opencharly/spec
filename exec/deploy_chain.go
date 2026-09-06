@@ -85,15 +85,15 @@ func ResolveDeployChain(roots map[string]spec.FleetNode, dotted string, root spe
 	// Walk remaining segments, stacking one hop per segment.
 	for i, seg := range parts[1:] {
 		traversed := strings.Join(parts[:i+1], ".")
-		if len(current.Children) == 0 {
-			return nil, nil, fmt.Errorf("path %q: %q has no nested children", dotted, traversed)
+		if len(current.Member) == 0 {
+			return nil, nil, fmt.Errorf("path %q: %q has no members", dotted, traversed)
 		}
-		child, ok := current.Children[seg]
-		if !ok || child == nil {
-			return nil, nil, fmt.Errorf("path %q: nested child %q not found under %q%s",
-				dotted, seg, traversed, didYouMeanNestedChild(seg, current.Children))
+		member := current.MemberByName(seg)
+		if member == nil || member.Node == nil {
+			return nil, nil, fmt.Errorf("path %q: member %q not found under %q%s",
+				dotted, seg, traversed, didYouMeanMember(seg, current))
 		}
-		current = child
+		current = member.Node
 		// Container names flatten the FULL path so far (parts[:i+2]); seg is the
 		// leaf segment, used for a pod deployed standalone inside a VM guest.
 		flatPath := strings.Join(parts[:i+2], "_")
@@ -325,17 +325,18 @@ func didYouMeanDeploy(missed string, roots map[string]spec.FleetNode) string {
 	return "; available deployments: " + strings.Join(names, ", ")
 }
 
-// didYouMeanNestedChild renders a hint listing nested child keys under
-// a given node. Empty when the parent has no nested children.
-func didYouMeanNestedChild(missed string, nested map[string]*spec.FleetNode) string {
+// didYouMeanMember renders a hint listing member keys under a given node
+// (sorted for a stable hint — the tree itself keeps authored order).
+// Empty when the parent has no members.
+func didYouMeanMember(missed string, node *spec.FleetNode) string {
 	_ = missed
-	if len(nested) == 0 {
+	if node == nil || len(node.Member) == 0 {
 		return ""
 	}
-	names := make([]string, 0, len(nested))
-	for k := range nested {
-		names = append(names, k)
+	names := make([]string, 0, len(node.Member))
+	for i := range node.Member {
+		names = append(names, node.Member[i].Name)
 	}
 	sort.Strings(names)
-	return "; available nested children: " + strings.Join(names, ", ")
+	return "; available members: " + strings.Join(names, ", ")
 }

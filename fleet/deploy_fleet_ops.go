@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/opencharly/spec/spec"
@@ -37,12 +36,12 @@ func ResolveNodePath(roots map[string]spec.FleetNode, path string) (*spec.FleetN
 	var ancestors []*spec.FleetNode
 	for i := 1; i < len(parts); i++ {
 		ancestors = append(ancestors, current)
-		next, ok := current.Children[parts[i]]
-		if !ok {
+		member := current.MemberByName(parts[i])
+		if member == nil || member.Node == nil {
 			prefix := strings.Join(parts[:i], ".")
-			return nil, nil, fmt.Errorf("no child %q under %q", parts[i], prefix)
+			return nil, nil, fmt.Errorf("no member %q under %q", parts[i], prefix)
 		}
-		current = next
+		current = member.Node
 	}
 	return current, ancestors, nil
 }
@@ -101,17 +100,8 @@ func nodeDescentVenue(n *spec.FleetNode) string {
 	return ""
 }
 
-// SortedNestedKeys returns the keys of a children map in deterministic order so traversal
-// produces stable output across runs.
-func SortedNestedKeys(children map[string]*spec.FleetNode) []string {
-	out := make([]string, 0, len(children))
-	for k := range children {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
+// The uniform ordered member tree (Cutover C task 0) needs no sorted-key helper:
+// the ONE ordered Member list is already deterministic in authored order.
 // HostRooted reports whether node's stamped descent trait is host-rooted — the substrate's own
 // ROOT executor runs directly on the host (a local/SSH-shell venue, not a container/VM venue).
 // Reads the wire-stamped node.Descent directly (every node a LoadUnified'd project produces is
@@ -157,43 +147,49 @@ func ExternalInPlaceVenue(node *spec.FleetNode) bool {
 	return v == "parent" || v == "none"
 }
 
-// DeployNestedLocalChildren deploys a parent venue's nested target:local children via the
-// dotted-path dispatch — each host-rooted (local/SSH-shell) child applies its candies in place.
+// DeployNestedLocalChildren deploys a parent venue's IN-SUBSTRATE target:local members via the
+// dotted-path dispatch — each host-rooted (local/SSH-shell) member applies its candies in place.
 // Promoted from sdk/deploykit (#55 U4), now that HostRooted is a spec predicate; deploykit keeps a
 // re-export forwarder so its charly callers compile unchanged.
 //
-// plugin-deploy-vm's PostApply brings up nested target:pod children as in-guest quadlets, but it
-// SKIPS target:local children — they carry no image, they apply candies in place. Without this
-// loop a nested local child never deploys, and a deploy-scope check against it either fails or
+// plugin-deploy-vm's PostApply brings up nested target:pod members as in-guest quadlets, but it
+// SKIPS target:local members — they carry no image, they apply candies in place. Without this
+// loop a nested local member never deploys, and a deploy-scope check against it either fails or
 // (worse) silently checks nothing.
 //
 // Both sites that own a VM venue call it: the isVM bed ROOT and bringUpMembers' VM-member branch.
-// They differ only in how a child deploy is executed (the root wraps it in a recorded step(); a
+// They differ only in how a member deploy is executed (the root wraps it in a recorded step(); a
 // member shells out directly), so that is the injected apply func.
-func DeployNestedLocalChildren(parent string, children map[string]*spec.FleetNode, apply func(childKey, dotted string) error) error {
-	for _, childKey := range SortedNestedKeys(children) {
-		child := children[childKey]
-		if child == nil || !HostRooted(child) { // local (host-rooted shell venue) only
-			continue // container/vm children handled in-guest by plugin-deploy-vm's PostApply
+func DeployNestedLocalChildren(parent string, node *spec.FleetNode, apply func(memberKey, dotted string) error) error {
+	if node == nil {
+		return nil
+	}
+	for _, m := range node.InSubstrateMembers() { // the deploy-into position only
+		if m.Node == nil || !HostRooted(m.Node) { // local (host-rooted shell venue) only
+			continue // container/vm members handled in-guest by plugin-deploy-vm's PostApply
 		}
-		if err := apply(childKey, parent+"."+childKey); err != nil {
-			return fmt.Errorf("deploy nested local child %s.%s: %w", parent, childKey, err)
+		if err := apply(m.Name, parent+"."+m.Name); err != nil {
+			return fmt.Errorf("deploy nested local member %s.%s: %w", parent, m.Name, err)
 		}
 	}
 	return nil
 }
 
 // BedCheckLiveRefs returns the ordered `charly check live` targets for a bed: the substrate
-// itself first, then each nested child as a sorted dotted path. A `target: android` child shares
-// the parent pod's venue (Descent.Venue == "parent") and has no own image — its app-presence
-// checks are baked into the parent ref, so it is skipped. Pure + unit-tested.
-func BedCheckLiveRefs(name string, children map[string]*spec.FleetNode) []string {
+// itself first, then each IN-SUBSTRATE member as a dotted path in authored order. A
+// `target: android` member shares the parent pod's venue (Descent.Venue == "parent") and has no
+// own image — its app-presence checks are baked into the parent ref, so it is skipped. Pure +
+// unit-tested.
+func BedCheckLiveRefs(name string, node *spec.FleetNode) []string {
+	if node == nil {
+		return []string{name}
+	}
 	refs := []string{name}
-	for _, k := range SortedNestedKeys(children) {
-		if c := children[k]; c != nil && nodeDescentVenue(c) == "parent" { // android (parent venue)
+	for _, m := range node.InSubstrateMembers() {
+		if m.Node != nil && nodeDescentVenue(m.Node) == "parent" { // android (parent venue)
 			continue
 		}
-		refs = append(refs, name+"."+k)
+		refs = append(refs, name+"."+m.Name)
 	}
 	return refs
 }
@@ -211,9 +207,9 @@ func DescriptionInfo(d string) string {
 }
 
 // MergeFleetNode overlays src onto dst: every authored (yaml-tagged, non-zero) field of src
-// wins, and the loader-DERIVED structural TREE fields (Target/Children/Members) merge explicitly
-// (src non-zero wins) because the reflect loop skips yaml:"-" fields. Pure (reflect over the
-// spec.FleetNode value type).
+// wins, and the loader-DERIVED structural TREE fields (Target, the uniform ordered Member
+// tree) merge explicitly (src non-zero wins). Pure (reflect over the spec.FleetNode value
+// type).
 func MergeFleetNode(dst, src spec.FleetNode) spec.FleetNode {
 	dstV := reflect.ValueOf(&dst).Elem()
 	srcV := reflect.ValueOf(src)
@@ -232,16 +228,13 @@ func MergeFleetNode(dst, src spec.FleetNode) spec.FleetNode {
 		}
 		dstV.Field(i).Set(sv)
 	}
-	// Children/Members/Target are loader-DERIVED (yaml:"-") yet are real TREE DATA that must
-	// merge across project + per-host overlay: src non-zero wins, else dst passes through.
+	// Target + the uniform ordered Member tree are loader-DERIVED yet are real TREE DATA that
+	// must merge across project + per-host overlay: src non-zero wins, else dst passes through.
 	if src.Target != "" {
 		dst.Target = src.Target
 	}
-	if len(src.Children) > 0 {
-		dst.Children = src.Children
-	}
-	if len(src.Members) > 0 {
-		dst.Members = src.Members
+	if len(src.Member) > 0 {
+		dst.Member = src.Member
 	}
 	return dst
 }

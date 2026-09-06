@@ -736,8 +736,9 @@
 	is_local?:    bool   @go(IsLocal)
 	is_group?:    bool   @go(IsGroup)
 	is_external?: bool   @go(IsExternal) // in-place external (fleet-del teardown)
-	// node_json is the bed ROOT FleetNode (spec.Deploy) serialized — including its nested
-	// Members peer map (each member's full FleetNode, with stamped Descent) — so the plugin
+	// node_json is the bed ROOT FleetNode (spec.Deploy) serialized — including its
+	// uniform ordered member tree (each member entry's full FleetNode, with stamped
+	// Descent) — so the plugin
 	// bed runner can call deploykit.PersistBedDeployOverrides PLUGIN-SIDE for the bed root AND
 	// each member (#55 coneC-dsh β1 — the bed-root + member persist relocate off the host seam;
 	// the host-side persistBedDeployOverrides wrapper + its deploykit import shed). The plugin

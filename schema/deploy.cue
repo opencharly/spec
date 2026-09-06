@@ -84,12 +84,11 @@
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
 	target?: ("pod" | "vm" | "kubernetes" | "local" | "android") @go(Target,type=string) // loader-DERIVED (yaml:"-")
 
-	// member_of + inside are loader-DERIVED runtime fields (never authored;
-	// rejected by #DeployValue): member_of marks a folded sibling-member entry,
-	// inside names the venue a nested resource deploys into. Generated for the Go
-	// tree-walker, forbidden in authoring.
+	// member_of is a loader-DERIVED runtime field (never authored; rejected by
+	// #DeployValue): it marks a folded deploy-level member entry registered as a
+	// top-level addressable Fleet entry at load. Generated for the Go tree-walker,
+	// forbidden in authoring.
 	member_of?: string @go(MemberOf)
-	inside?:    string @go(Inside)
 
 	// agent_provisioned marks a resource member/child the AI deploys at run time
 	// (the iterate-benchmark contract): image-less (no box:), not folded to a
@@ -257,12 +256,37 @@
 	requires_exclusive?: [...(string & !="")] @go(RequiresExclusive)
 	requires_shared?: [...(string & !="")] @go(RequiresShared)
 
-	// nested/peer map keys carry no dots (validateDeploymentName). Loader-built
-	// runtime tree maps (Children = nested-inside venue; Members = brought-up
-	// alongside on the shared network) — gengotypes can't express a pattern-keyed
-	// self-referential map, so the Go type is pinned explicitly.
-	nested?: {[=~"^[^.]+$"]: #Deploy} @go(Children,type=map[string]*Deploy)
-	peer?: {[=~"^[^.]+$"]: #Deploy} @go(Members,type=map[string]*Deploy)
+	// member is the ONE uniform ordered member tree per node (Cutover C task 0):
+	// EVERY member child of this deploy — a deploy-level sibling of the kind key
+	// AND an in-substrate entity key inside the kind body alike — hangs here
+	// exactly once, in authored order. The former dual runtime tree maps
+	// (Children = nested-inside venue; Members = brought-up alongside on the
+	// shared network) DIED: alongside-vs-deploy-into is DERIVED from the entry's
+	// position (see #Member), never stored as a tree branch. Loader-built (never
+	// authored); the fold stamps the position from the authored depth alone.
+	member?: [...#Member] @go(Member)
+}
+
+// #Member is ONE entry in a deploy node's uniform ordered member tree (Cutover C
+// task 0) — the singular replacement of the dual Children/Members maps. The tree
+// is uniform: ONE ordered member list per node, ONE entry shape, no per-class
+// branches. position records WHERE the member hung in the authored document;
+// alongside-vs-deploy-into is DERIVED from it at every consult site — never
+// re-derived from the node's kind (the dead root-kind branch), never stored as a
+// branch of the tree.
+#Member: {
+	// name is the member's tree key. Dot-free (validateDeploymentName): dots are
+	// reserved for dotted-path CLI addressing (charly fleet add a.b.c).
+	name: string & !=""
+	// position is the member's authored POSITION (the fold stamps it from the
+	// authored depth alone):
+	//   deploy-level — a sibling of the kind key: a deploy-level MEMBER, brought
+	//                  up alongside its parent on the shared network.
+	//   in-substrate — an entity key inside the kind body: a NESTED member,
+	//                  deployed into the parent's venue.
+	position: ("deploy-level" | "in-substrate") @go(Position,type=string)
+	// node is the member's own deploy node (the recursive tree edge).
+	node: #Deploy
 }
 
 // #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same FleetNode

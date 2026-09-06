@@ -31,7 +31,7 @@ func ValidateDeploymentTree(deploy map[string]FleetNode) error {
 		if err := ValidateDeploymentName(name, ""); err != nil {
 			return err
 		}
-		if err := ValidateDeploymentChildren(name, &node); err != nil {
+		if err := ValidateDeploymentMembers(name, &node); err != nil {
 			return err
 		}
 	}
@@ -87,7 +87,7 @@ func ValidateDeployRequiresBox(deploy map[string]FleetNode) error {
 			// box of its own — its member nodes each declare their box and are
 			// validated as folded top-level entries. Only a LEAF pod-workload
 			// (no members) must declare box.
-			if len(node.Members) > 0 || len(node.Children) > 0 {
+			if len(node.Member) > 0 {
 				continue
 			}
 			return fmt.Errorf(
@@ -99,21 +99,23 @@ func ValidateDeployRequiresBox(deploy map[string]FleetNode) error {
 	return nil
 }
 
-// ValidateDeploymentChildren recurses ValidateDeploymentName over node's
-// nested-deployment children.
-func ValidateDeploymentChildren(path string, node *FleetNode) error {
-	if node == nil || len(node.Children) == 0 {
+// ValidateDeploymentMembers recurses ValidateDeploymentName over node's uniform
+// ordered member tree (Cutover C task 0): every member entry's key — deploy-level
+// and in-substrate alike — is validated at every level.
+func ValidateDeploymentMembers(path string, node *FleetNode) error {
+	if node == nil || len(node.Member) == 0 {
 		return nil
 	}
-	for childName, child := range node.Children {
-		childPath := childName
+	for i := range node.Member {
+		m := &node.Member[i]
+		childPath := m.Name
 		if path != "" {
-			childPath = path + "." + childName
+			childPath = path + "." + m.Name
 		}
-		if err := ValidateDeploymentName(childName, path); err != nil {
+		if err := ValidateDeploymentName(m.Name, path); err != nil {
 			return err
 		}
-		if err := ValidateDeploymentChildren(childPath, child); err != nil {
+		if err := ValidateDeploymentMembers(childPath, m.Node); err != nil {
 			return err
 		}
 	}

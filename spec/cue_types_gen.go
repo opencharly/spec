@@ -4241,13 +4241,11 @@ type Deploy struct {
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
 	Target string `yaml:"target,omitempty" json:"target,omitempty"`
 
-	// member_of + inside are loader-DERIVED runtime fields (never authored;
-	// rejected by #DeployValue): member_of marks a folded sibling-member entry,
-	// inside names the venue a nested resource deploys into. Generated for the Go
-	// tree-walker, forbidden in authoring.
+	// member_of is a loader-DERIVED runtime field (never authored; rejected by
+	// #DeployValue): it marks a folded deploy-level member entry registered as a
+	// top-level addressable Fleet entry at load. Generated for the Go tree-walker,
+	// forbidden in authoring.
 	MemberOf string `yaml:"member_of,omitempty" json:"member_of,omitempty"`
-
-	Inside string `yaml:"inside,omitempty" json:"inside,omitempty"`
 
 	// agent_provisioned marks a resource member/child the AI deploys at run time
 	// (the iterate-benchmark contract): image-less (no box:), not folded to a
@@ -4447,13 +4445,15 @@ type Deploy struct {
 
 	RequiresShared []string `yaml:"requires_shared,omitempty" json:"requires_shared,omitempty"`
 
-	// nested/peer map keys carry no dots (validateDeploymentName). Loader-built
-	// runtime tree maps (Children = nested-inside venue; Members = brought-up
-	// alongside on the shared network) — gengotypes can't express a pattern-keyed
-	// self-referential map, so the Go type is pinned explicitly.
-	Children map[string]*Deploy `yaml:"nested,omitempty" json:"nested,omitempty"`
-
-	Members map[string]*Deploy `yaml:"peer,omitempty" json:"peer,omitempty"`
+	// member is the ONE uniform ordered member tree per node (Cutover C task 0):
+	// EVERY member child of this deploy — a deploy-level sibling of the kind key
+	// AND an in-substrate entity key inside the kind body alike — hangs here
+	// exactly once, in authored order. The former dual runtime tree maps
+	// (Children = nested-inside venue; Members = brought-up alongside on the
+	// shared network) DIED: alongside-vs-deploy-into is DERIVED from the entry's
+	// position (see #Member), never stored as a tree branch. Loader-built (never
+	// authored); the fold stamps the position from the authored depth alone.
+	Member []Member `yaml:"member,omitempty" json:"member,omitempty"`
 }
 
 type DeploySecret struct {
@@ -4632,6 +4632,31 @@ type PipelineWord struct {
 	Plugin string `yaml:"plugin,omitempty" json:"plugin,omitempty"`
 
 	PluginInput map[string]any `yaml:"plugin_input,omitempty" json:"plugin_input,omitempty"`
+}
+
+// #Member is ONE entry in a deploy node's uniform ordered member tree (Cutover C
+// task 0) — the singular replacement of the dual Children/Members maps. The tree
+// is uniform: ONE ordered member list per node, ONE entry shape, no per-class
+// branches. position records WHERE the member hung in the authored document;
+// alongside-vs-deploy-into is DERIVED from it at every consult site — never
+// re-derived from the node's kind (the dead root-kind branch), never stored as a
+// branch of the tree.
+type Member struct {
+	// name is the member's tree key. Dot-free (validateDeploymentName): dots are
+	// reserved for dotted-path CLI addressing (charly fleet add a.b.c).
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	// position is the member's authored POSITION (the fold stamps it from the
+	// authored depth alone):
+	//
+	//	deploy-level — a sibling of the kind key: a deploy-level MEMBER, brought
+	//	               up alongside its parent on the shared network.
+	//	in-substrate — an entity key inside the kind body: a NESTED member,
+	//	               deployed into the parent's venue.
+	Position string `yaml:"position,omitempty" json:"position"`
+
+	// node is the member's own deploy node (the recursive tree edge).
+	Node *Deploy `yaml:"node,omitempty" json:"node"`
 }
 
 // #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same FleetNode
@@ -7406,8 +7431,9 @@ type CheckBedReply struct {
 
 	IsExternal bool `yaml:"is_external,omitempty" json:"is_external,omitempty"`
 
-	// node_json is the bed ROOT FleetNode (spec.Deploy) serialized — including its nested
-	// Members peer map (each member's full FleetNode, with stamped Descent) — so the plugin
+	// node_json is the bed ROOT FleetNode (spec.Deploy) serialized — including its
+	// uniform ordered member tree (each member entry's full FleetNode, with stamped
+	// Descent) — so the plugin
 	// bed runner can call deploykit.PersistBedDeployOverrides PLUGIN-SIDE for the bed root AND
 	// each member (#55 coneC-dsh β1 — the bed-root + member persist relocate off the host seam;
 	// the host-side persistBedDeployOverrides wrapper + its deploykit import shed). The plugin

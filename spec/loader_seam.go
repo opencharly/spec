@@ -386,10 +386,13 @@ type ProjectLoader interface {
 	EntityBodyJSON(pn ParsedNode) (json.RawMessage, error)
 	// BuildFleetNode recursively builds a FleetNode from a fleet/resource node.
 	BuildFleetNode(pn ParsedNode, t Threaded) (*FleetNode, error)
-	// BuildResourceMemberChildren decodes pn's RESOURCE-MEMBER entity children into a
-	// name→*FleetNode map via the SAME BuildFleetNode recursion — the SINGLE source of truth for
-	// authored member-tree decode.
-	BuildResourceMemberChildren(pn ParsedNode, t Threaded) (map[string]*FleetNode, error)
+	// BuildResourceMemberChildren decodes pn's RESOURCE-MEMBER entity children into
+	// the uniform ordered member ENTRIES (authored order preserved — pn.Children is a
+	// slice) via the SAME BuildFleetNode recursion — the SINGLE source of truth for
+	// authored member-tree decode. Each entry carries Name + Node; the FOLD stamps
+	// Position from the authored depth alone (deploy-level sibling vs in-body key)
+	// before attaching the entries to the node's ONE Member list.
+	BuildResourceMemberChildren(pn ParsedNode, t Threaded) ([]Member, error)
 	// BuildFleetNodeInto builds pn into a FleetNode and registers it in acc's Fleet map — the
 	// fallback for a recognized-but-not-yet-connected external deploy substrate word
 	// (MaterializeSeams.BuildFleetEntity's implementation).
