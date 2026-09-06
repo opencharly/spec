@@ -106,6 +106,11 @@
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
 	// kubernetes:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
 	//   from  — inherit a SAME-kind template by name (vm/kubernetes/local/android deploys).
+	//          A VM deploy may carry the unified NAME:TAG spelling `from: vm-name:snapshot`
+	//          (tag = snapshot name): the loader splits the last `:` into from + from_snapshot,
+	//          so `from: base:golden` == `from: base` + `from_snapshot: golden`. A VM entity
+	//          name may not contain `:` — the split is unambiguous. Pod/kubernetes/image
+	//          refs (ImageBacked) are NOT split (image tags legitimately contain `:`).
 	//   image — the box/OCI artifact a pod/kubernetes/android RUNS (the former `box:`).
 	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
 	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
