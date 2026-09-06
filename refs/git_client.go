@@ -24,8 +24,12 @@ package refs
 // file-lock primitive the repo fetch uses.
 //
 // Freshness policy (the load-bearing contract):
-//   - latest-tag: tags are IMMUTABLE and add-only → a cached value is valid until a
-//     newer tag appears; a long TTL (24h) is safe, and the next expiry refreshes.
+//   - latest-tag: tags are IMMUTABLE and add-only, but a NEW tag can appear at any
+//     moment (this org tags releases minutes apart) — the persisted entries are an
+//     OFFLINE FALLBACK served ONLY when the network fetch fails, never fresh data;
+//     the in-process cache (1h) is the batch-dedupe layer. A fresh process with a
+//     reachable network ALWAYS re-probes, so a fresh run never serves a stale tag
+//     list (the former 1h persisted-TTL reuse was the stale-latest-tag bug).
 //   - default-branch: the branch NAME is stable → a TTL (24h) is safe.
 //   - resolve-ref (the DownloadRepo freshness check): a mutable branch can move, so
 //     this is cached with a SHORT TTL (5m) — the freshness contract requires seeing
@@ -48,7 +52,9 @@ import (
 // Cache TTLs (see the freshness policy above). One default — the eval-batch reality:
 // a 16-lane, multi-phase check run re-resolves the same refs hundreds of times, so a
 // shorter TTL re-probes mid-batch (measured: 152 concurrent git ls-remote -> GitHub
-// throttling -> the deploy-add stall); a release or branch move is seen within the hour.
+// throttling -> the deploy-add stall). LatestTagTTL bounds ONLY the in-process
+// batch-dedupe cache; the persisted latest_tags entries are the offline fallback
+// (served on fetch failure only), never TTL-fresh data.
 const (
 	DefaultRefsCacheTTL = time.Hour
 	LatestTagTTL        = DefaultRefsCacheTTL
@@ -63,8 +69,19 @@ type GitClient struct {
 	disabled  bool   // BypassCache()/SetBypass — every lookup misses, so the next resolution is fresh
 	bypass    bool   // the PERSISTED bypass flag (SetBypass) — honored by a fresh client at construction
 
-	mu              sync.Mutex
-	latestTags      map[string]gitCacheEntry
+	mu sync.Mutex
+	// latestTags is the IN-PROCESS fresh-data cache: only entries this process
+	// fetched live here (the batch-dedupe layer). Persisted entries from disk
+	// NEVER land here — see persistedTags.
+	latestTags map[string]gitCacheEntry
+	// persistedTags is the OFFLINE FALLBACK loaded from the per-host charly.yml at
+	// construction: resilience data, never fresh data. It is served ONLY when the
+	// network fetch fails (with a loud stderr line) and is preserved on save (the
+	// on-disk latest_tags map is the union of persistedTags and latestTags, fresh
+	// values winning). The former model — serving persisted entries as fresh for
+	// the 1h TTL — was the stale-latest-tag bug: a fresh process minutes after a
+	// tag push served the still-cached old tag.
+	persistedTags   map[string]gitCacheEntry
 	defaultBranches map[string]gitCacheEntry
 	resolvedRefs    map[string]gitCacheEntry
 	downloads       map[string]gitCacheEntry
@@ -86,6 +103,7 @@ func NewGitClient(cacheFile string) *GitClient {
 	g := &GitClient{
 		cacheFile:       cacheFile,
 		latestTags:      map[string]gitCacheEntry{},
+		persistedTags:   map[string]gitCacheEntry{},
 		defaultBranches: map[string]gitCacheEntry{},
 		resolvedRefs:    map[string]gitCacheEntry{},
 		downloads:       map[string]gitCacheEntry{},
@@ -124,8 +142,10 @@ func (g *GitClient) load() {
 	if doc.Cache == nil || doc.Cache.Git == nil {
 		return
 	}
+	// The persisted latest_tags entries are the OFFLINE FALLBACK (never fresh
+	// data) — they load into persistedTags, never into the in-process fresh cache.
 	if doc.Cache.Git.LatestTags != nil {
-		g.latestTags = doc.Cache.Git.LatestTags
+		g.persistedTags = doc.Cache.Git.LatestTags
 	}
 	if doc.Cache.Git.DefaultBranches != nil {
 		g.defaultBranches = doc.Cache.Git.DefaultBranches
@@ -175,7 +195,7 @@ func (g *GitClient) SetBypass(on bool) error {
 func (g *GitClient) CacheStatus() (string, int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.cacheFile, len(g.latestTags) + len(g.defaultBranches) + len(g.resolvedRefs) + len(g.downloads)
+	return g.cacheFile, len(g.mergedLatestTags()) + len(g.defaultBranches) + len(g.resolvedRefs) + len(g.downloads)
 }
 
 // ClearCache drops every cached git answer (the in-memory entries and the persisted
@@ -183,6 +203,7 @@ func (g *GitClient) CacheStatus() (string, int) {
 func (g *GitClient) ClearCache() error {
 	g.mu.Lock()
 	g.latestTags = map[string]gitCacheEntry{}
+	g.persistedTags = map[string]gitCacheEntry{}
 	g.defaultBranches = map[string]gitCacheEntry{}
 	g.resolvedRefs = map[string]gitCacheEntry{}
 	g.downloads = map[string]gitCacheEntry{}
@@ -253,7 +274,7 @@ func (g *GitClient) save() {
 		{Kind: yaml.ScalarNode, Value: "bypass"},
 		{Kind: yaml.ScalarNode, Value: strconv.FormatBool(g.bypass)},
 		{Kind: yaml.ScalarNode, Value: "latest_tags"},
-		entryMapNode(g.latestTags),
+		entryMapNode(g.mergedLatestTags()),
 		{Kind: yaml.ScalarNode, Value: "default_branches"},
 		entryMapNode(g.defaultBranches),
 		{Kind: yaml.ScalarNode, Value: "resolved_refs"},
@@ -360,7 +381,37 @@ func cached(entries map[string]gitCacheEntry, key string, ttl time.Duration) str
 	return e.Value
 }
 
-// LatestTag returns the highest semver tag of repoURL, cached (tags are immutable).
+// mergedLatestTags returns the persisted offline-fallback entries overlaid with the
+// in-process fresh resolutions (fresh values winning) — the map save() writes, so a
+// process that never fetched a repo's tags still preserves the fallback entries on
+// disk (a DefaultBranch save must not wipe latest_tags offline resilience).
+func (g *GitClient) mergedLatestTags() map[string]gitCacheEntry {
+	merged := make(map[string]gitCacheEntry, len(g.persistedTags)+len(g.latestTags))
+	for k, v := range g.persistedTags {
+		merged[k] = v
+	}
+	for k, v := range g.latestTags {
+		merged[k] = v
+	}
+	return merged
+}
+
+// gitLatestTagFetch is the network fetch seam LatestTag drives (package var so the
+// offline-fallback tests inject fetch outcomes without shelling git).
+var gitLatestTagFetch = GitLatestTag
+
+// LatestTag returns the highest semver tag of repoURL.
+//
+// Freshness contract (the offline-fallback cutover): the IN-PROCESS cache is the
+// only fresh-data cache (batch dedupe within one process — the 152-concurrent-
+// ls-remote throttling storm was a within-one-process fanout, solved by this
+// layer). The PERSISTED latest_tags entries are an OFFLINE FALLBACK, never fresh
+// data: a fresh process with a reachable network re-probes, so a tag pushed
+// minutes ago is always seen. (The former model — serving persisted entries as
+// fresh for the 1h TTL — was the stale-latest-tag bug: a fresh run resolved
+// plugin refs to a tag list up to an hour old.) The persisted entry is served
+// ONLY when the network fetch fails, with a loud stderr line — resilience, not
+// freshness.
 func (g *GitClient) LatestTag(repoURL string) (string, error) {
 	g.mu.Lock()
 	if !g.disabled {
@@ -371,8 +422,15 @@ func (g *GitClient) LatestTag(repoURL string) (string, error) {
 	}
 	g.mu.Unlock()
 
-	tag, err := GitLatestTag(repoURL)
+	tag, err := gitLatestTagFetch(repoURL)
 	if err != nil {
+		g.mu.Lock()
+		fallback, ok := g.persistedTags[repoURL]
+		g.mu.Unlock()
+		if ok && fallback.Value != "" {
+			fmt.Fprintf(os.Stderr, "charly: git latest-tag fetch for %s failed (%v); serving the persisted OFFLINE-FALLBACK tag %s (resolved %s)\n", repoURL, err, fallback.Value, fallback.Resolved.UTC().Format(time.RFC3339))
+			return fallback.Value, nil
+		}
 		return "", err
 	}
 	g.mu.Lock()
