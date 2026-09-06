@@ -46,6 +46,15 @@ type Threaded struct {
 	// the byte-exact predicate is threaded, never approximated. A word absent from the set is
 	// NOT an external deploy substrate (isExternalDeploySubstrate would return false for it).
 	ExternalDeploySubstrates map[string]bool
+	// StructuralDeclaredFields is the STRUCTURAL kind word → its declared input-schema body FIELD
+	// NAMES set (the parent-disc channel for the in-body member scan): the host fills it from the
+	// plugin's REGISTERED schema (the capability's InputDef, e.g. plugin-group's #GroupInput) —
+	// never a hand-maintained word list. The parse consults it to keep a structural body's
+	// DECLARED fields as data even when a field name could collide with a kind word (group's
+	// `iterate:`), so a structural body's kind-word keys are members EXCEPT the kind's own
+	// declared fields. A kind word absent from the map (no declared schema threaded) falls back
+	// to every kind-word key being a member — the documented no-declared-schema fallback.
+	StructuralDeclaredFields map[string]map[string]bool
 }
 
 // The former CueSchema handle type is GONE (K-wave 2, cone R1, ruling 1). The compiled CUE schema
