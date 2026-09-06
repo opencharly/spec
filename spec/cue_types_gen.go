@@ -7481,6 +7481,10 @@ type CheckBedMember struct {
 	Image string `yaml:"image,omitempty" json:"image,omitempty"`
 
 	From string `yaml:"from,omitempty" json:"from,omitempty"`
+
+	// from_snapshot: the member deploy's unified from: name:tag snapshot — the member
+	// vm-build leg passes it: `charly vm build <from> --from-snapshot <tag>`.
+	FromSnapshot string `yaml:"from_snapshot,omitempty" json:"from_snapshot,omitempty"`
 }
 
 // #DeployCompileRequest is the per-node COMPILE seam (K4-B / K4 unit B): the host asks the
