@@ -331,6 +331,18 @@ func entryMapNode(entries map[string]gitCacheEntry) *yaml.Node {
 	return n
 }
 
+// dirUsable reports whether a cached DOWNLOAD path still holds its materialized export
+// (a directory). The downloads cache serves PATHS from a persisted map; a wiped or evicted
+// repo-cache dir would otherwise be served for the whole TTL — a cache result is only valid
+// while its CONTENT is valid (the same principle the materialized-tree cache's component
+// drift-detection enforces). A missing or non-directory path is a miss, so the downloader
+// repopulates it. Only the download path-map carries dirs; the tag/branch caches hold
+// non-path values and keep the plain freshness check.
+func dirUsable(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
+}
+
 // cached returns the cached value for key if fresh, or "".
 //
 // DefaultRefsCacheTTL (the const block above documents the one-default reality), but a
@@ -452,14 +464,19 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 }
 
 // Download fetches repoPath@version into the repo cache and returns the cache path,
-// CACHED with a short TTL. A mutable ref (a branch or the default branch) can move,
-// so the freshness contract requires re-resolving eventually — but not on every
-// invocation. The 5m TTL means a command run twice in quick succession (e.g. the
-// status fan-out resolving the envelope multiple times) pays the download once.
+// CACHED with a short TTL (ResolveRefTTL — aliasing DefaultRefsCacheTTL today, the
+// const block above documents the one-default reality and the future-divergence seam).
+// A mutable ref (a branch or the default branch) can move, so the freshness contract
+// requires re-resolving eventually — but not on every invocation: the TTL means a command
+// run twice in quick succession (e.g. the status fan-out resolving the envelope multiple
+// times) pays the download once. The cached PATH is additionally validated against its
+// CONTENT (dirUsable): a wiped or evicted repo-cache dir must never be served for the
+// TTL (the content-validity principle — the same class the materialized-tree cache
+// fixed with component drift detection).
 func (g *GitClient) Download(repoPath, version string, download func(repoPath, version string) (string, error)) (string, error) {
 	key := repoPath + "@" + version
 	g.mu.Lock()
-	if v := cached(g.downloads, key, ResolveRefTTL); v != "" {
+	if v := cached(g.downloads, key, ResolveRefTTL); v != "" && dirUsable(v) {
 		g.mu.Unlock()
 		return v, nil
 	}
