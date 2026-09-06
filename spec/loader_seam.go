@@ -55,6 +55,17 @@ type Threaded struct {
 	// declared fields. A kind word absent from the map (no declared schema threaded) falls back
 	// to every kind-word key being a member — the documented no-declared-schema fallback.
 	StructuralDeclaredFields map[string]map[string]bool
+	// DeployDeclaredFields is the DEPLOY-SUBSTRATE word → its declared body FIELD NAMES set
+	// (the substrate-side channel for the in-substrate member scan, the #Deploy-schema twin of
+	// StructuralDeclaredFields above): the host fills it from the substrate's REGISTERED schema
+	// (the capability's InputDef — for pod/vm/local/android/kubernetes that is the #Deploy
+	// family) — never a hand-maintained word list. The parse consults it to keep a substrate
+	// body's DECLARED fields as data even when the field's VALUE SHAPE would classify as an
+	// in-substrate member (pod body's `iterate:` carrying an `agent:` kind-word key — the
+	// canonical ADE-iterate-bed regression): a declared field's value is NEVER looked inside.
+	// A substrate word absent from the map (no declared schema threaded) keeps the documented
+	// value-shape scan unchanged — the no-declared-schema fallback.
+	DeployDeclaredFields map[string]map[string]bool
 }
 
 // The former CueSchema handle type is GONE (K-wave 2, cone R1, ruling 1). The compiled CUE schema
