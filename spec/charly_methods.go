@@ -308,12 +308,6 @@ func (c Deploy) IsDisposable() bool {
 	return (c.Disposable != nil && *c.Disposable) || c.IsEphemeral()
 }
 
-// IsGroup reports whether this is a GROUP fleet — no workload cross-ref but
-// with member children (the cross-deployment subject+driver shape).
-func (c Deploy) IsGroup() bool {
-	return c.Target == "" && len(c.Member) > 0
-}
-
 // IsEphemeral reports whether this deploy is marked ephemeral.
 func (c Deploy) IsEphemeral() bool {
 	return c.Ephemeral != nil

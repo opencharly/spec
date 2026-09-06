@@ -48,10 +48,10 @@ type Threaded struct {
 	ExternalDeploySubstrates map[string]bool
 	// StructuralDeclaredFields is the STRUCTURAL kind word → its declared input-schema body FIELD
 	// NAMES set (the parent-disc channel for the in-body member scan): the host fills it from the
-	// plugin's REGISTERED schema (the capability's InputDef, e.g. plugin-group's #GroupInput) —
+	// plugin's REGISTERED schema (the capability's InputDef, the plugin's own #XInput) —
 	// never a hand-maintained word list. The parse consults it to keep a structural body's
-	// DECLARED fields as data even when a field name could collide with a kind word (group's
-	// `iterate:`), so a structural body's kind-word keys are members EXCEPT the kind's own
+	// DECLARED fields as data even when a field name could collide with a kind word, so a
+	// structural body's kind-word keys are members EXCEPT the kind's own
 	// declared fields. A kind word absent from the map (no declared schema threaded) falls back
 	// to every kind-word key being a member — the documented no-declared-schema fallback.
 	StructuralDeclaredFields map[string]map[string]bool
@@ -364,7 +364,7 @@ type ProjectLoader interface {
 	// external deploy substrate word (t.DeploySubstrates).
 	IsResourceDisc(d string, t Threaded) bool
 	// FleetTargetForDisc maps a node discriminator to the FleetNode Target — DATA-driven via
-	// t.DeployTraits: a word with no declared deploy traits is TARGETLESS (e.g. group).
+	// t.DeployTraits: a word with no declared deploy traits is TARGETLESS.
 	FleetTargetForDisc(d string, t Threaded) string
 	// SetFleetCrossRef sets the deploy's cross-ref from a scalar discriminator value — DATA-driven
 	// via t.DeployTraits' ImageBacked trait (image-backed → dn.Image; otherwise → dn.From). A

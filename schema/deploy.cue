@@ -19,7 +19,7 @@
 	//   ssh       — an ssh hop into the guest (vm).
 	//   shell     — the substrate's own root executor runs on the host (local; kubernetes host-side).
 	//   parent    — reached via the parent's venue, no own executor (android).
-	//   none      — external-in-place (zero value / group).
+	//   none      — external-in-place (zero value).
 	venue?: ("container" | "ssh" | "shell" | "parent" | "none") @go(Venue, type=string)
 	// image_backed: the substrate runs a baked OCI image (pod).
 	image_backed?: bool @go(ImageBacked)
@@ -103,7 +103,8 @@
 	descent?: #DescentDescriptor @go(Descent,optional=nillable)
 
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
-	// kubernetes:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
+	// kubernetes:/local:/android: — the former targetless group: kind is REMOVED, the member-tree
+	// cutover), so the deploy carries only NON-kind cross-refs:
 	//   from  — inherit a SAME-kind template by name (vm/kubernetes/local/android deploys).
 	//          A VM deploy may carry the unified NAME:TAG spelling `from: vm-name:snapshot`
 	//          (tag = snapshot name): the loader splits the last `:` into from + from_snapshot,
@@ -209,12 +210,10 @@
 	//   full (default)         — the canonical destroy+recreate gate: `charly
 	//                            update` rebuilds the venue from scratch (a VM
 	//                            domain is destroyed + recreated, a pod image
-	//                            rebuilt + container recreated, a group rebuilds
-	//                            every member image) and re-checks it.
+	//                            rebuilt + container recreated) and re-checks it.
 	//   restart-only           — replace the destroy/recreate with a plain venue
 	//                            RESTART (a VM BOOTs its existing clone again, a
-	//                            pod restarts its container, a group cycles its
-	//                            members WITHOUT rebuilding images) and re-runs
+	//                            pod restarts its container) and re-runs
 	//                            the check-live pass against the restarted
 	//                            venue. The change class for runtime-PR-injection
 	//                            software evals: a rebuild cannot alter a
