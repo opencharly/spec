@@ -15,7 +15,6 @@ func TestVmBuildRequestFromSnapshotRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshalling VmBuildRequest: %v", err)
 	}
-	t.Logf("marshalled: %s", data)
 	var back VmBuildRequest
 	if err := yaml.Unmarshal(data, &back); err != nil {
 		t.Fatalf("unmarshalling VmBuildRequest: %v", err)
@@ -25,5 +24,25 @@ func TestVmBuildRequestFromSnapshotRoundTrip(t *testing.T) {
 	}
 	if back.Box != "cachyos-vm" {
 		t.Fatalf("box did not survive the round trip: got %q", back.Box)
+	}
+}
+
+// TestCheckBedReplyFromSnapshotRoundTrip proves CheckBedReply.from_snapshot survives too —
+// the runner reads it to thread the snapshot into the vm-build step.
+func TestCheckBedReplyFromSnapshotRoundTrip(t *testing.T) {
+	rep := CheckBedReply{VMTemplate: "cachyos-vm", FromSnapshot: "golden"}
+	data, err := yaml.Marshal(&rep)
+	if err != nil {
+		t.Fatalf("marshalling CheckBedReply: %v", err)
+	}
+	var back CheckBedReply
+	if err := yaml.Unmarshal(data, &back); err != nil {
+		t.Fatalf("unmarshalling CheckBedReply: %v", err)
+	}
+	if back.FromSnapshot != "golden" {
+		t.Fatalf("from_snapshot did not survive the round trip: got %q want %q", back.FromSnapshot, "golden")
+	}
+	if back.VMTemplate != "cachyos-vm" {
+		t.Fatalf("vm_template did not survive the round trip: got %q", back.VMTemplate)
 	}
 }

@@ -7427,6 +7427,11 @@ type CheckBedReply struct {
 	// image's own --tag build ref.
 	VMTemplate string `yaml:"vm_template,omitempty" json:"vm_template,omitempty"`
 
+	// from_snapshot: the deploy's unified from: name:tag snapshot (node.FromSnapshot) — the
+	// runner's vm-build step passes it through: `charly vm build <entity> --from-snapshot <tag>`
+	// (the bed builds the entity as a CLONE of its own golden at that snapshot).
+	FromSnapshot string `yaml:"from_snapshot,omitempty" json:"from_snapshot,omitempty"`
+
 	BedDomain string `yaml:"bed_domain,omitempty" json:"bed_domain,omitempty"`
 
 	ImageTag string `yaml:"image_tag,omitempty" json:"image_tag,omitempty"`

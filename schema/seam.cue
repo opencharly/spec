@@ -753,6 +753,10 @@
 	// resolveDeployRefLocal resolved_image overlay preference), not the base
 	// image's own --tag build ref.
 	vm_template?: string @go(VMTemplate) // node.From for a vm bed (the ENTITY — `charly vm build` builds off it)
+	// from_snapshot: the deploy's unified from: name:tag snapshot (node.FromSnapshot) — the
+	// runner's vm-build step passes it through: `charly vm build <entity> --from-snapshot <tag>`
+	// (the bed builds the entity as a CLONE of its own golden at that snapshot).
+	from_snapshot?: string @go(FromSnapshot)
 	bed_domain?:  string @go(BedDomain)  // per-deploy live domain identity (`charly vm create/destroy/start … --domain <this>`, post-P33)
 	image_tag?:   string @go(ImageTag)   // per-RUN bed-scoped image tag (<bed-root>-<runCalver>); every `charly box build` + deploy in the run passes it as --tag, so concurrent beds building the SAME fixture image name never collide on the store-global short-name→newest-local-CalVer resolution (#75 — the tag analogue of bed_domain=deploy-name)
 	local_ref?:   string @go(LocalRef)   // node.From for a local bed
