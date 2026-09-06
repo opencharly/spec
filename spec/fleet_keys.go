@@ -17,19 +17,6 @@ func SortedDeployKeys(m map[string]FleetNode) []string {
 	return keys
 }
 
-// SortedMemberKeys returns the member keys of a node in deterministic order.
-func SortedMemberKeys(members map[string]*FleetNode) []string {
-	if len(members) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(members))
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 // VenueIsAgentProvisioned reports whether the deploy node named venue (a child or member anywhere in
 // the fleet tree) is flagged AgentProvisioned — the ONE genuinely fleet-tree-coupled predicate the
 // check-run preflight needs to skip an agent-provisioned image's local-storage ensure.
@@ -42,19 +29,12 @@ func VenueIsAgentProvisioned(uf *UnifiedFile, venue string) bool {
 		if n == nil {
 			return false
 		}
-		for k, child := range n.Children {
-			if k == venue && child.AgentProvisioned {
+		for i := range n.Member {
+			m := &n.Member[i]
+			if m.Name == venue && m.Node != nil && m.Node.AgentProvisioned {
 				return true
 			}
-			if walk(child) {
-				return true
-			}
-		}
-		for k, member := range n.Members {
-			if k == venue && member.AgentProvisioned {
-				return true
-			}
-			if walk(member) {
+			if walk(m.Node) {
 				return true
 			}
 		}

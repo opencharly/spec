@@ -309,9 +309,9 @@ func (c Deploy) IsDisposable() bool {
 }
 
 // IsGroup reports whether this is a GROUP fleet — no workload cross-ref but
-// with sibling members (the cross-deployment subject+driver shape).
+// with member children (the cross-deployment subject+driver shape).
 func (c Deploy) IsGroup() bool {
-	return c.Target == "" && len(c.Members) > 0
+	return c.Target == "" && len(c.Member) > 0
 }
 
 // IsEphemeral reports whether this deploy is marked ephemeral.
@@ -346,11 +346,6 @@ func (c Deploy) RequiredShared() []string {
 // LifecycleTag returns the deploy's lifecycle tag.
 func (c Deploy) LifecycleTag() string {
 	return c.Lifecycle
-}
-
-// HasChildren reports whether this node has any nested deployments.
-func (n *Deploy) HasChildren() bool {
-	return n != nil && len(n.Children) > 0
 }
 
 // ---------------------------------------------------------------------------

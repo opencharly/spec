@@ -42,9 +42,11 @@ func BedVmDomains(name string, node spec.FleetNode) []string {
 	if node.Descent != nil && node.Descent.Venue == "ssh" { // vm (ssh venue) root
 		add(spec.VmDomainIdentity(name))
 	}
-	for memberKey, m := range node.Members {
-		if m != nil && m.Descent != nil && m.Descent.Venue == "ssh" {
-			add(spec.VmDomainIdentity(memberKey))
+	for _, m := range node.DeployLevelMembers() { // ALONGSIDE members only: an
+		// in-substrate member's domain runs inside its parent's venue, never a
+		// host-global libvirt domain to contend on.
+		if m.Node != nil && m.Node.Descent != nil && m.Node.Descent.Venue == "ssh" {
+			add(spec.VmDomainIdentity(m.Name))
 		}
 	}
 	sort.Strings(out)

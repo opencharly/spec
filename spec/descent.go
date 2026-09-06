@@ -17,9 +17,10 @@ package spec
 // it (kit.StampDescent/DescentFromTraits) so existing plugin call sites are untouched.
 
 // StampDescent stamps node.Descent from the substrate's DECLARED traits (resolved by
-// `traitsFor(node.Target)`) and recurses into the whole nested (Children) + peer (Members)
-// subtree, so every node the deploy chain can descend into carries a descriptor. Idempotent —
-// re-stamping with the same traitsFor writes the same value. traitsFor must never be nil; it
+// `traitsFor(node.Target)`) and recurses into the whole uniform member subtree
+// (Cutover C task 0: the ONE ordered member list, both positions), so every node the
+// deploy chain can descend into carries a descriptor. Idempotent — re-stamping with
+// the same traitsFor writes the same value. traitsFor must never be nil; it
 // returns nil for a word with no declared substrate traits (a targetless group / empty target),
 // which DescentFromTraits maps to the external-in-place default.
 func StampDescent(node *Deploy, traitsFor func(word string) *DeployTraits) {
@@ -27,11 +28,8 @@ func StampDescent(node *Deploy, traitsFor func(word string) *DeployTraits) {
 		return
 	}
 	node.Descent = DescentFromTraits(traitsFor(node.Target))
-	for _, child := range node.Children {
-		StampDescent(child, traitsFor)
-	}
-	for _, member := range node.Members {
-		StampDescent(member, traitsFor)
+	for i := range node.Member {
+		StampDescent(node.Member[i].Node, traitsFor)
 	}
 }
 
