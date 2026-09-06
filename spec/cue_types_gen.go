@@ -4265,6 +4265,11 @@ type Deploy struct {
 	// kubernetes:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
 	//
 	//	from  — inherit a SAME-kind template by name (vm/kubernetes/local/android deploys).
+	//	       A VM deploy may carry the unified NAME:TAG spelling `from: vm-name:snapshot`
+	//	       (tag = snapshot name): the loader splits the last `:` into from + from_snapshot,
+	//	       so `from: base:golden` == `from: base` + `from_snapshot: golden`. A VM entity
+	//	       name may not contain `:` — the split is unambiguous. Pod/kubernetes/image
+	//	       refs (ImageBacked) are NOT split (image tags legitimately contain `:`).
 	//	image — the box/OCI artifact a pod/kubernetes/android RUNS (the former `box:`).
 	//
 	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
@@ -6649,6 +6654,13 @@ type VmBuildRequest struct {
 	Console bool `yaml:"console,omitempty" json:"console,omitempty"`
 
 	Force bool `yaml:"force,omitempty" json:"force,omitempty"`
+
+	// from_snapshot: build the entity as a CLONE of its own golden at the named
+	// snapshot — the unified from: name:tag functional half. The deploy's
+	// from_snapshot (split from `from: vm-name:snapshot` at load) flows here:
+	// `charly vm build <entity> --from-snapshot <tag>` dispatches BuildClone with
+	// from_vm = the entity itself (a COW overlay over its own snapshot).
+	FromSnapshot string `yaml:"from_snapshot,omitempty" json:"from_snapshot,omitempty"`
 }
 
 // #VmBuildReply is the resolveVmBuild reply (P8b-rest — the former "vm-build"

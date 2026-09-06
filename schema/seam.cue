@@ -84,6 +84,12 @@
 	transport?: string @go(Transport)
 	console?:   bool   @go(Console)
 	force?:     bool   @go(Force)
+	// from_snapshot: build the entity as a CLONE of its own golden at the named
+	// snapshot — the unified from: name:tag functional half. The deploy's
+	// from_snapshot (split from `from: vm-name:snapshot` at load) flows here:
+	// `charly vm build <entity> --from-snapshot <tag>` dispatches BuildClone with
+	// from_vm = the entity itself (a COW overlay over its own snapshot).
+	from_snapshot?: string @go(FromSnapshot)
 }
 
 // #VmBuildReply is the resolveVmBuild reply (P8b-rest — the former "vm-build"

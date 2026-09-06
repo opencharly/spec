@@ -110,7 +110,7 @@ func (g *GitClient) load() {
 	var doc struct {
 		Cache *struct {
 			Git *struct {
-				Bypass          bool                      `yaml:"bypass"`
+				Bypass          bool                     `yaml:"bypass"`
 				LatestTags      map[string]gitCacheEntry `yaml:"latest_tags"`
 				DefaultBranches map[string]gitCacheEntry `yaml:"default_branches"`
 				ResolvedRefs    map[string]gitCacheEntry `yaml:"resolved_refs"`
