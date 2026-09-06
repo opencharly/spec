@@ -27,14 +27,20 @@ func TestGitClientCacheAndPersist(t *testing.T) {
 	client.save()
 	client.mu.Unlock()
 
-	// A NEW client (same cache file) must see the persisted values.
+	// A NEW client (same cache file) must see the persisted values — with the
+	// offline-fallback cutover, the persisted LATEST TAG loads as the FALLBACK
+	// (never fresh data: a fresh process re-probes), while the other maps stay
+	// plain TTL caches.
 	client2 := NewGitClient(cacheFile)
 	client2.mu.Lock()
 	client2.load()
 	client2.mu.Unlock()
 
-	if v := cached(client2.latestTags, "https://github.com/opencharly/example", LatestTagTTL); v != "v2026.240.0001" {
-		t.Fatalf("cached latest tag = %q, want v2026.240.0001", v)
+	if v := cached(client2.latestTags, "https://github.com/opencharly/example", LatestTagTTL); v != "" {
+		t.Fatalf("persisted latest tag leaked into the in-process fresh cache = %q, want empty (the persisted entry is the offline fallback, never fresh data)", v)
+	}
+	if v := client2.persistedTags["https://github.com/opencharly/example"].Value; v != "v2026.240.0001" {
+		t.Fatalf("persisted offline-fallback latest tag = %q, want v2026.240.0001", v)
 	}
 	if v := cached(client2.defaultBranches, "https://github.com/opencharly/example", DefaultBranchTTL); v != "main" {
 		t.Fatalf("cached default branch = %q, want main", v)
