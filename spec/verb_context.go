@@ -160,7 +160,7 @@ var VerbCatalog = map[string]VerbSpec{
 // this map.
 var InstallVerbs = map[string]bool{
 	"mkdir": true, "copy": true, "write": true, "link": true,
-	"download": true, "setcap": true, "build": true,
+	"download": true, "setcap": true, "build": true, "config": true,
 	// `command` is NOT here — it is a plugin verb now; its build/deploy install path is
 	// the dedicated `plugin == "command"` emitCmd branch, accepted by opActsInBuildDeploy
 	// directly (not via this map, which is keyed by the verb the Op resolves to, never
