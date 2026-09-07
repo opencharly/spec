@@ -86,6 +86,11 @@ var VerbCatalog = map[string]VerbSpec{
 	"download": {ctxBuildDeploy, DoAct, true},
 	"setcap":   {ctxBuildDeploy, DoAct, false},
 	"build":    {ctxBuildDeploy, DoAct, false},
+	// config — BUILD-only CONFIG-RENDER verb (the install verb that renders a
+	// config file from the candy's declared values at generate time, with
+	// optional egress-schema validation). No deploy/live-runtime form: the
+	// deploy PutFile lowering does not apply to a render-at-generate verb.
+	"config":   {[]ExecContext{CtxBuild}, DoAct, false},
 
 	// `command` is NOT here — it is an extracted plugin verb (plugin: command +
 	// #CommandInput). It left #OpVerb/spec.OpVerbs/VerbCatalog; the check dispatches via
