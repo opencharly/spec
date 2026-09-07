@@ -12,6 +12,7 @@ package refs
 import (
 	"bytes"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,12 +31,13 @@ import (
 // vars is race-free.
 func useFastGitOp(t *testing.T) {
 	t.Helper()
-	savedTimeout, savedRetries, savedBackoff := gitOpMetadataTimeout, gitOpRetries, gitOpBackoff
+	savedTimeout, savedRetries, savedBackoff, savedWaitDelay := gitOpMetadataTimeout, gitOpRetries, gitOpBackoff, gitOpWaitDelay
 	gitOpMetadataTimeout = 300 * time.Millisecond
 	gitOpRetries = 1
 	gitOpBackoff = 30 * time.Millisecond
+	gitOpWaitDelay = 100 * time.Millisecond
 	t.Cleanup(func() {
-		gitOpMetadataTimeout, gitOpRetries, gitOpBackoff = savedTimeout, savedRetries, savedBackoff
+		gitOpMetadataTimeout, gitOpRetries, gitOpBackoff, gitOpWaitDelay = savedTimeout, savedRetries, savedBackoff, savedWaitDelay
 	})
 }
 
@@ -49,16 +51,31 @@ type gitBackend struct {
 	requests int
 	hangOn   map[int]bool
 	dropOn   map[int]bool
-	root     string // GIT_PROJECT_ROOT
+	authOn   map[int]bool // respond 401 + WWW-Authenticate (the credential-challenge class)
+	holdOn   map[int]bool // hijack the connection and hold it open FOREVER (the descendant-pipe class)
+	holdAll  bool         // hold EVERY connection forever (the permanent-stall variant)
+	conns    []net.Conn   // held connections, closed by releaseConns at test cleanup
+	root     string       // GIT_PROJECT_ROOT
 }
 
-// record assigns the request ordinal and returns whether it must hang/drop.
-func (g *gitBackend) record() (n int, hang, drop bool) {
+// releaseConns closes every connection the backend hijacked and held open
+// forever, so a test server does not leak goroutines past the test.
+func (g *gitBackend) releaseConns() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, c := range g.conns {
+		_ = c.Close()
+	}
+	g.conns = nil
+}
+
+// record assigns the request ordinal and returns whether it must hang/drop/auth/hold.
+func (g *gitBackend) recordAll() (n int, hang, drop, auth, hold bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.requests++
 	n = g.requests
-	return n, g.hangOn[n], g.dropOn[n]
+	return n, g.hangOn[n], g.dropOn[n], g.authOn[n], g.holdOn[n] || g.holdAll
 }
 
 // Count returns the number of served requests.
@@ -69,7 +86,33 @@ func (g *gitBackend) Count() int {
 }
 
 func (g *gitBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_, hang, drop := g.record()
+	_, hang, drop, auth, hold := g.recordAll()
+	if auth {
+		w.Header().Set("WWW-Authenticate", `Basic realm="git"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if hold {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "hijack unsupported", http.StatusInternalServerError)
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			return
+		}
+		g.mu.Lock()
+		g.conns = append(g.conns, conn)
+		g.mu.Unlock()
+		// Hold FOREVER: accept the request, never read to completion, never
+		// respond, never close. Unlike hangOn (bounded server-side so the
+		// deadline suffices), this is the production stall shape — libcurl has
+		// no default response timeout, so ONLY the runner's deadline ends the
+		// git process, and the surviving git-remote-http descendant keeps the
+		// inherited pipes open. Bounded only if the runner is.
+		return
+	}
 	if hang || drop {
 		hj, ok := w.(http.Hijacker)
 		if !ok {
@@ -154,6 +197,99 @@ func newBareGitRepo(t *testing.T) string {
 	// The CGI root is the PARENT — http-backend joins the URL path
 	// ("/repo.git/info/refs") onto GIT_PROJECT_ROOT to find the bare repo.
 	return dir
+}
+
+// TestGitOpBoundsSurvivingDescendantPipes is the 194-repo warmup hang: the
+// server accepts the request and NEVER responds (libcurl has no default
+// response timeout, so only the runner's deadline ends the git process).
+// The deadline SIGKILLs git — but git's git-remote-http descendant survives
+// (stuck in its own curl read), INHERITS the stdout/stderr pipe write-ends,
+// and never closes them. exec.CommandContext kills only the DIRECT child;
+// without WaitDelay, Output() waits for pipe EOF forever — the deadline is
+// dead code and the WarmUp worker goroutine wedges until the process dies
+// ("fetching git metadata for 194 repo(s)" followed by eternal silence; the
+// r9 dead-socket freeze was this same shape). The runner must return in
+// bounded time even when a descendant outlives the killed child.
+func TestGitOpBoundsSurvivingDescendantPipes(t *testing.T) {
+	useFastGitOp(t)
+	backend := &gitBackend{root: newBareGitRepo(t), holdOn: map[int]bool{1: true}}
+	ts := httptest.NewServer(backend)
+	defer ts.Close()
+	t.Cleanup(backend.releaseConns)
+
+	verdict := make(chan error, 1)
+	start := time.Now()
+	go func() {
+		_, err := GitLatestTag(ts.URL + "/repo.git")
+		verdict <- err
+	}()
+	select {
+	case <-verdict:
+		// Either the retry succeeded (the first held request consumed the
+		// deadline; the second request was served) or it errored. BOTH are
+		// correct — the regression is the PRE-fix behavior, where the op
+		// NEVER returned at all because the surviving git-remote-http
+		// descendant held the inherited pipes past the killed child.
+		if elapsed := time.Since(start); elapsed > 5*time.Second {
+			t.Fatalf("GitLatestTag took %v against a never-responding server — not bounded", elapsed)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("GitLatestTag never returned: the deadline-killed git left git-remote-http holding the inherited pipes and Output() blocked forever — the 194-repo warmup hang")
+	}
+}
+
+// TestGitOpBoundsPermanentDescendantHold is the sharpened form: EVERY
+// connection is held open forever, so no retry can succeed — each attempt
+// burns deadline + descendant-pipe grace and the op must still end with the
+// deadline-reported error in bounded wall time ((retries+1) × (deadline +
+// WaitDelay) + backoff), not hang forever.
+func TestGitOpBoundsPermanentDescendantHold(t *testing.T) {
+	useFastGitOp(t)
+	backend := &gitBackend{root: newBareGitRepo(t), holdAll: true}
+	ts := httptest.NewServer(backend)
+	defer ts.Close()
+	t.Cleanup(backend.releaseConns)
+
+	start := time.Now()
+	_, err := GitLatestTag(ts.URL + "/repo.git")
+	if err == nil {
+		t.Fatal("GitLatestTag against a permanently-held server must error")
+	}
+	if !strings.Contains(err.Error(), "timed out after") {
+		t.Fatalf("error = %q, want it to report the deadline", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("permanent descendant hold took %v — not bounded by deadline + WaitDelay", elapsed)
+	}
+}
+
+// TestGitOpFailsFastOnCredentialChallenge: an auth-challenged repo (a private
+// or renamed @github import) must fail FAST, not silently block on an
+// interactive username/password prompt. The prompt is written to /dev/tty —
+// invisible when runGitOp captures stderr — so a prompt would burn the full
+// deadline ×(retries+1) per op per bad repo in a 194-repo warmup and read as
+// a hang. The runner disables git's terminal prompts (GIT_TERMINAL_PROMPT=0,
+// overriding any operator env), so the challenge is a permanent failure:
+// exactly ONE request, no retry, bounded wall time — even when the parent
+// env asks for prompts.
+func TestGitOpFailsFastOnCredentialChallenge(t *testing.T) {
+	t.Setenv("GIT_TERMINAL_PROMPT", "1") // simulate an operator env that wants prompts
+	useFastGitOp(t)
+	backend := &gitBackend{root: newBareGitRepo(t), authOn: map[int]bool{1: true}}
+	ts := httptest.NewServer(backend)
+	defer ts.Close()
+
+	start := time.Now()
+	_, err := GitLatestTag(ts.URL + "/repo.git")
+	if err == nil {
+		t.Fatal("GitLatestTag against a credential challenge must error")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("credential challenge took %v — the runner blocked on interactive input", elapsed)
+	}
+	if n := backend.Count(); n != 1 {
+		t.Fatalf("backend served %d requests, want exactly 1 (a credential challenge is permanent, not transient)", n)
+	}
 }
 
 func mustGit(t *testing.T, dir string, args ...string) {
