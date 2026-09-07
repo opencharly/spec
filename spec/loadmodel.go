@@ -17,9 +17,9 @@ import (
 // UnifiedFile stay in sdk/loaderkit. The projection METHODS below (ProjectConfig,
 // ProjectTemplates, the PluginKinds accessors, ResolvePluginKindViaPlugin/
 // DecodePluginKindMap) need nothing beyond uf's own fields + other spec types, so
-// they travel with the type. The ONE method that could NOT move — ProjectFleetConfig
-// (returns *deploykit.FleetConfig, and spec must never import a mechanism kit) — is a
-// deploykit FREE FUNCTION now: deploykit.ProjectFleetConfig(uf). loaderkit's
+// they travel with the type. The ONE method that could NOT move — ProjectDeployConfig
+// (returns *deploykit.DeployConfig, and spec must never import a mechanism kit) — is a
+// deploykit FREE FUNCTION now: deploykit.ProjectDeployConfig(uf). loaderkit's
 // ResolveOpts stays put too: it embeds *buildkit.{Init,Distro,Builder}Config mechanism
 // config, so it is correctly-placed loader mechanism, not a wire type.
 
@@ -42,9 +42,9 @@ type UnifiedFile struct {
 	Box BoxMap `yaml:"box,omitempty" json:"box,omitempty"`
 	// Candy is the generic kind-keyed LAYER map: name → opaque marshaled InlineCandy.
 	Candy map[string]json.RawMessage `yaml:"candy,omitempty" json:"candy,omitempty"`
-	// Fleet is the flat name-keyed deploy map (the canonical `deploy:` surface).
-	Fleet    map[string]FleetNode `yaml:"deploy,omitempty" json:"deploy,omitempty"`
-	Provides *ProvidesConfig      `yaml:"provides,omitempty" json:"provides,omitempty"`
+	// Deploy is the flat name-keyed deploy map (the canonical `deploy:` surface).
+	Deploy   map[string]DeployNode `yaml:"deploy,omitempty" json:"deploy,omitempty"`
+	Provides *ProvidesConfig       `yaml:"provides,omitempty" json:"provides,omitempty"`
 
 	// Cache is the per-host LOCAL cache status (git metadata cache). Lives in the
 	// per-host charly.yml (~/.config/charly/charly.yml) — the single home for local
@@ -150,15 +150,15 @@ func (uf *UnifiedFile) Local() map[string]json.RawMessage      { return uf.Plugi
 func (uf *UnifiedFile) Android() map[string]json.RawMessage    { return uf.PluginKinds["android"] }
 
 // CheckBeds returns the disposable R10 beds keyed by name. In the unified node-form model a bed
-// IS a `disposable: true` fleet, so the bed set is derived directly from the disposable fleets
-// in the Fleet map. Members are instruments (brought up alongside a driver), never standalone
+// IS a `disposable: true` deploy, so the bed set is derived directly from the disposable deploys
+// in the Deploy map. Members are instruments (brought up alongside a driver), never standalone
 // beds. Single enumeration source for `charly check run <bed>` (and the /verify-beds fan-out).
-func (uf *UnifiedFile) CheckBeds() map[string]FleetNode {
+func (uf *UnifiedFile) CheckBeds() map[string]DeployNode {
 	if uf == nil {
 		return nil
 	}
-	beds := map[string]FleetNode{}
-	for name, node := range uf.Fleet {
+	beds := map[string]DeployNode{}
+	for name, node := range uf.Deploy {
 		if node.IsDisposable() && node.MemberOf == "" {
 			beds[name] = node
 		}

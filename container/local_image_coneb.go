@@ -136,7 +136,7 @@ func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 }
 
 // InvalidateImageCache clears the persistent image-list cache. Called by the
-// build and deploy commands (charly box build / fleet add / update) — every
+// build and deploy commands (charly box build / deploy add / update) — every
 // operation that creates or pulls an image — so the next status run re-fetches
 // the fresh image list instead of serving a stale cache.
 func InvalidateImageCache() {
@@ -808,7 +808,7 @@ func ResolveNewestLocalCalVer(engine, short string) (string, error) {
 // the engine resolves it locally first (matching any single local tag) or errors.
 // (P14: relocated from charly/shell.go's resolveShellImageRef, which now delegates here — R3,
 // single source for every caller: candy/plugin-box's `merge` command plus charly core's own
-// fleet_add/config_image/ensure_image/remote_image/pod_lifecycle_resolve/update_deploy_dispatch.)
+// deploy_add/config_image/ensure_image/remote_image/pod_lifecycle_resolve/update_deploy_dispatch.)
 func ResolveShellImageRef(registry, name, tag string) string {
 	if tag == "" {
 		// Try local CalVer resolution. Best-effort: if nothing local matches, fall back to a

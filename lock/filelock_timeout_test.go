@@ -8,7 +8,7 @@ import (
 )
 
 // TestAcquireFileLock_FailsFastOnContendedLock is the regression guard for the
-// fleet-del stall: a blocking acquire on a lock held by another process must
+// deploy-del stall: a blocking acquire on a lock held by another process must
 // not hang the caller forever — it fails fast after lockTimeout.
 func TestAcquireFileLock_FailsFastOnContendedLock(t *testing.T) {
 	old := lockTimeout

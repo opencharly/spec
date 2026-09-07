@@ -47,7 +47,7 @@
 // load error, run: charly migrate) and exactly-one-verb-per-instrument is the
 // parse-time + closedness discipline (a second verb sugar key is an unknown
 // field). The venue an instrument captures is DERIVED from its node's
-// fleet-tree position (like a step's venue) — never authored here.
+// deploy-tree position (like a step's venue) — never authored here.
 #Instrument: {
 	// id — the authored observation identity; the bed runner scopes it per
 	// venue (`<bed>.<member>.<id>`).
@@ -89,7 +89,7 @@
 	// "record", "wl", "vnc", "transcode", ...). OPEN — it names a dispatched
 	// word, never a closed enum.
 	verb!: string & !=""
-	// venue — the fleet-tree venue identity the capture ran on (the derived
+	// venue — the deploy-tree venue identity the capture ran on (the derived
 	// venue word, matching the step venue vocabulary #Op.venue).
 	venue!: string & !=""
 	// phase — the run-phase bracket the capture segment sat in.

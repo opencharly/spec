@@ -2,8 +2,8 @@
 // generic, sdk-expressible RESOLVED/MATERIALIZED projection of a whole project — the third and
 // final member of the envelope SPINE (spec.ParsedProject → #LoadedProject → #ResolvedProject).
 // #LoadedProject is the PARSED, un-materialized stage; #ResolvedProject is what the host's resolve
-// engines (ResolveBox / ScanAllCandy / the folded uf.Fleet deploy tree) already COMPUTE, serialized
-// as ONE generic view the ~20k of K5 IOU consumers (inspect/list, the fleet-add box graph, status,
+// engines (ResolveBox / ScanAllCandy / the folded uf.Deploy deploy tree) already COMPUTE, serialized
+// as ONE generic view the ~20k of K5 IOU consumers (inspect/list, the deploy-add box graph, status,
 // the bed runner) read INSTEAD of the host types (*ResolvedBox / runtime Candy). It carries ONLY
 // CONFIG+RESOLVE DATA: the host-only RESOLVE-time compute-cache pointers (DistroConfig / DistroDef /
 // BuilderConfig / InitSystem / InitDef / CandyCaps — the 6 json:"-" fields of buildkit.ResolvedBox)
@@ -80,7 +80,7 @@
 
 	// box-AUTHORED deploy-overlay surfaces ExportAllBox reads (K5-Unit-1, the #67 keystone): the
 	// box entity's OWN authored env / env_file / security / network / raw description — the fields
-	// `charly fleet export --all` projects into a FleetConfig so the deploy-state model can be
+	// `charly deploy export --all` projects into a DeployConfig so the deploy-state model can be
 	// built from the RESOLVED-PROJECT ENVELOPE, not the live *Config graph. description is the RAW
 	// authored string (distinct from info above, which is its descriptionInfo first-line summary);
 	// env/env_file/security are the box-authored deploy-overlay defaults. network is already carried
@@ -209,7 +209,7 @@
 }
 
 // #ResolvedProject — the whole resolved projection: the schema version, the resolved boxes keyed by
-// name, the resolved candy graph keyed by name, and the deploy tree (uf.Fleet verbatim — already
+// name, the resolved candy graph keyed by name, and the deploy tree (uf.Deploy verbatim — already
 // map[string]spec.Deploy). The deploy map is @go-pinned to a pointer map so `cue exp gengotypes`
 // generates map[string]*Deploy (recursive tree, faithful). provides/sidecar are additive later
 // members of this same envelope (added by the consumer unit that first needs them).

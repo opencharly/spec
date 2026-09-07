@@ -299,7 +299,7 @@ func (s ApkPackageSpec) EffectiveArch() string {
 }
 
 // ---------------------------------------------------------------------------
-// Deploy (FleetNode) — the pure tree/classification predicates. WalkPreOrder /
+// Deploy (DeployNode) — the pure tree/classification predicates. WalkPreOrder /
 // WalkPostOrder reach package-main's sortedNestedKeys and stay free functions.
 // ---------------------------------------------------------------------------
 

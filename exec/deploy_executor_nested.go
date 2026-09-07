@@ -146,7 +146,7 @@ const nestedShellProbe = `sh -c 'if command -v bash >/dev/null 2>&1; then exec b
 //
 // TestWrapWithJump_SurvivesTransportReparse pins both depths by running the
 // emitted line through transport stubs that model each hand-off, so a
-// "simplification" back to a single form fails the suite rather than the fleet.
+// "simplification" back to a single form fails the suite rather than the deploy.
 func jumpShell(kind JumpKind, asRoot bool) string {
 	shell := nestedShellProbe
 	if asRoot {

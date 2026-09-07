@@ -246,7 +246,7 @@ type EmitOpts struct {
 
 	// ParentExec is the DeployExecutor of the parent deployment in a
 	// nested tree. Non-nil iff this target is dispatched as a child of
-	// another — FleetAddCmd's tree walker builds the chain root-first
+	// another — DeployAddCmd's tree walker builds the chain root-first
 	// and passes the immediate ancestor's executor here. Targets that
 	// support being nested (host, container, vm) compose their own
 	// executor over ParentExec via NestedExecutor; leaf-only targets
@@ -258,11 +258,11 @@ type EmitOpts struct {
 	// to have no `children:`.
 	ParentExec DeployExecutor
 
-	// ParentNode is the FleetNode above this target in the tree.
+	// ParentNode is the DeployNode above this target in the tree.
 	// Useful for targets that need parent-level context beyond the
 	// executor (e.g. a vm child wants to know its parent container's
 	// name to wire network forwarding). nil at the root.
-	ParentNode *FleetNode
+	ParentNode *DeployNode
 
 	// Path is the dotted-path identifier of this node (e.g.
 	// "stack.web.db"). Used for logging + ledger keying.

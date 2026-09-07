@@ -11,7 +11,7 @@ import (
 // exported field on spec.VmBoxMetadata has a VmBoxLabelMap entry. Adding a new VM-box
 // metadata field without a label mapping is a build break — enforces the invariant
 // "every VM-box metadata field rides the ai.opencharly.vm.box label" so a future
-// `charly fleet from-box vm:<ref>` can reconstruct the full contract from a pushed box
+// `charly deploy from-box vm:<ref>` can reconstruct the full contract from a pushed box
 // image.
 func TestVmBoxLabelCompleteness(t *testing.T) {
 	if err := CheckVmBoxLabelCompleteness(); err != nil {

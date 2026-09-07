@@ -243,7 +243,7 @@ func writeVocab(dir, out string) error {
 	}
 	// AuthoringVerbs — the AUTHORABLE #Op field vocabulary: every #Op field MINUS
 	// the runtime-derived fields that are never authored (origin is OCI-label
-	// reporting state; venue is stamped from a step's fleet-tree position;
+	// reporting state; venue is stamped from a step's deploy-tree position;
 	// intent_do is stamped from the step keyword). The #Step arms forbid venue +
 	// intent_do, and origin is yaml:"-" in Go — none is an authoring surface.
 	authoringVerbs := excludeFrom(opFields, opRuntimeDerivedFields)
@@ -278,7 +278,7 @@ func writeVocab(dir, out string) error {
 
 // opRuntimeDerivedFields are the #Op fields that are NEVER authored — excluded
 // from AuthoringVerbs. origin is OCI-label reporting state (yaml:"-"); venue is
-// stamped from a step's fleet-tree position; intent_do is stamped from the step
+// stamped from a step's deploy-tree position; intent_do is stamped from the step
 // keyword; plugin/plugin_input are the INTERNAL wire pair the parse-time desugar
 // rewrites every `<word>: <input>` sugar key into (authoring them is a hard load
 // error); command is the internal rehydration target the command plugin's

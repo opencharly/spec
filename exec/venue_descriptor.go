@@ -65,7 +65,7 @@ func ContainerChainFromDescriptor(engine, containerName string) spec.DeployExecu
 //
 // The bed-regression fix this promotion serves (FIX ROUND, S3b follow-up): a NESTED external
 // deploy's ancestor executor (deploykit.RootExecutorForDeployNode's "ssh" result, threaded core-
-// side as spec.EmitOpts.ParentExec via the ancestor-chain walk in charly/fleet_add_cmd.go's
+// side as spec.EmitOpts.ParentExec via the ancestor-chain walk in charly/deploy_add_cmd.go's
 // deriveChildExecutorForPath) is ALWAYS a plain ShellExecutor/*SSHExecutor for a single hop into a
 // vm guest — never a NestedExecutor — so it round-trips through this exact pair of functions.
 // charly/unified_targets.go's pluginDeployTarget.Add uses this to convert that live ancestor

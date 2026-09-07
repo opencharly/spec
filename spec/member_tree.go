@@ -8,7 +8,7 @@ package spec
 // sibling of the kind key vs an entity key inside the kind body).
 // Alongside-vs-deploy-into is DERIVED from that position at every consult site —
 // never stored as a tree branch, never re-derived from the node's kind (the dead
-// root-kind branch, sdk/loaderkit BuildFleetNode).
+// root-kind branch, sdk/loaderkit BuildDeployNode).
 
 // Member positions — the authored-tree position vocabulary (the fold stamps
 // Position from the authored depth alone).

@@ -1,4 +1,4 @@
-package fleet
+package deploy
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/opencharly/spec/spec"
 )
 
-// deploy_fleet_ops_candykey_test.go — CandyMapKey for the ROOT-LEVEL remote candy
+// deploy_ops_candykey_test.go — CandyMapKey for the ROOT-LEVEL remote candy
 // (the candy de-submodule cutover): a standalone candy repo's manifest lives at
 // the repo root (SubPathPrefix ""), so the map key is the repo path itself —
 // appending the name would double it. The sub-path form is unchanged. The

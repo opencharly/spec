@@ -1,5 +1,5 @@
 // CUE schema for the `deploy` AND `check` kinds. Both validate ONE
-// FleetNode (charly/deploy.go): a `deploy:` map entry, or a `kind: check`
+// DeployNode (charly/deploy.go): a `deploy:` map entry, or a `kind: check`
 // bed (disposable:true + usually iterate:/plan:). #Deploy is the base node;
 // #Check narrows it to the bed invariants. CLOSED. Shared defs REFERENCED, not
 // redefined (R3): #Step/#Op/#Security/#InstallOpts/#Duration/#CalVer/
@@ -77,7 +77,7 @@
 	description?: string & !=""
 
 	// target is DERIVED from the node's discriminator kind + cross-ref at load
-	// (buildFleetNode/inferFleetTarget) — NOT authored in node-form. Optional
+	// (buildDeployNode/inferDeployTarget) — NOT authored in node-form. Optional
 	// here so #Check's arms can pin it; the #DeployValue arm (node.cue) rejects an
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
@@ -86,7 +86,7 @@
 
 	// member_of is a loader-DERIVED runtime field (never authored; rejected by
 	// #DeployValue): it marks a folded deploy-level member entry registered as a
-	// top-level addressable Fleet entry at load. Generated for the Go tree-walker,
+	// top-level addressable Deploy entry at load. Generated for the Go tree-walker,
 	// forbidden in authoring.
 	member_of?: string @go(MemberOf)
 
@@ -275,7 +275,7 @@
 // branch of the tree.
 #Member: {
 	// name is the member's tree key. Dot-free (validateDeploymentName): dots are
-	// reserved for dotted-path CLI addressing (charly fleet add a.b.c).
+	// reserved for dotted-path CLI addressing (charly deploy add a.b.c).
 	name: string & !=""
 	// position is the member's authored POSITION (the fold stamps it from the
 	// authored depth alone):
@@ -288,15 +288,15 @@
 	node: #Deploy
 }
 
-// #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same FleetNode
+// #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same DeployNode
 // Go struct), so it is a plain reference (R3 — no field duplication; stays CLOSED
 // because #Deploy is closed). The bed-mode invariants the former `& (A|B|C)`
 // disjunction expressed — disposable required + bed-legal target ∈ {pod,vm,local,
 // android} for the deterministic/ephemeral modes, the iterate AI-benchmark mode,
 // and the ephemeral⇒disposable promotion — are enforced in GO at load time
 // (loaderkit.ValidateCheckBeds + the ephemeral validator beside it), which is the
-// SINGLE source of truth for the actual fleet-form beds (a node-form check bed
-// is a `fleet:` node validated via #DeployValue=#Deploy, so the disjunction was
+// SINGLE source of truth for the actual deploy-form beds (a node-form check bed
+// is a `deploy:` node validated via #DeployValue=#Deploy, so the disjunction was
 // only ever applied to the legacy root-shape `check:` collection). Relaxing it to
 // the alias removes that divergent parallel spec and lets gengotypes emit a real
 // Check struct instead of an empty `struct{}`.
@@ -343,7 +343,7 @@
 	// sibling of ssh_port. Validation-only (the Go type is hand-mirrored, @go(-)).
 	port_forwards?: {[string]: int}
 	// ephemeral persists the FINAL/K5 unit 6a cross-substrate ephemeral-instance lifecycle
-	// state (candy/plugin-fleet/ephemeral.go's RegisterEphemeralLifecycle /
+	// state (candy/plugin-deploy/ephemeral.go's RegisterEphemeralLifecycle /
 	// persistEphemeralRuntime) — machine-written, so EVERY field is optional to tolerate
 	// legacy/partial entries (an ephemeral registered before a field existed, or interrupted
 	// mid-write never has a required-field gap to violate). Mirrors spec.EphemeralRuntime
@@ -360,7 +360,7 @@
 		status?:           string
 		instance_name?:    string
 		// deploy_address is the CLI-addressable deploy identity (the dotted tree path for a
-		// nested deploy — `charly fleet del <deploy_address>`), DISTINCT from the dc.Fleet
+		// nested deploy — `charly deploy del <deploy_address>`), DISTINCT from the dc.Deploy
 		// map key this entry is stored under (a dot-sanitized "vm:<domain-id>" form — see
 		// spec.ValidateDeploymentName + sdk/vmshared.VmDomainIdentity). RCA #2,
 		// FINAL/K5 unit 6a.
@@ -706,7 +706,7 @@
 // Exactly one of Deploy / Template / Box / Candy is set, matching Shape.
 #StandaloneLoad: {
 	shape!: string @go(Shape) // "deploy" | "template" | "candy-image" | "candy-layer"
-	deploy?:   #Deploy @go(Deploy,optional=nillable)   // Shape=="deploy": the full pre-decoded FleetNode
+	deploy?:   #Deploy @go(Deploy,optional=nillable)   // Shape=="deploy": the full pre-decoded DeployNode
 	template?: bytes   @go(Template,type=RawBody)      // Shape=="template": the pre-decoded typed template value's JSON
 	box?:      #Box    @go(Box,optional=nillable)      // Shape=="candy-image": the pre-decoded IMAGE (spec.Box)
 	candy?:    #Candy  @go(Candy,optional=nillable)    // Shape=="candy-layer": the pre-decoded LAYER (spec.Candy)

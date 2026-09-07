@@ -47,7 +47,7 @@ func WireView(p *InstallPlan) InstallPlanView {
 
 // PlanFromView re-materializes the rich in-core *InstallPlan from its JSON-roundtrippable
 // InstallPlanView wire form — the REVERSE of WireView, used by the host to reconstruct
-// []*InstallPlan from the command:fleet plugin's OpCompile reply (K4-B). Steps round-trip
+// []*InstallPlan from the command:deploy plugin's OpCompile reply (K4-B). Steps round-trip
 // through the SINGLE stepsFromView converter (install_step_view.go), already proven round-trip-faithful
 // by TestStepView_RoundTrip. The host re-materialized plan is byte-equivalent to the former
 // in-proc compile output (the K4-B parity golden proves it via DeepEqual against the OLD
@@ -74,14 +74,14 @@ func PlansFromViews(viewsJSON json.RawMessage) ([]*InstallPlan, error) {
 }
 
 // ReconstructParentExec re-derives the ancestor executor chain from ROOT-FIRST ancestor
-// path/node lists (spec/fleet.ResolveNodePath's contract, EXCLUDING the target itself), applying
+// path/node lists (spec/deploy.ResolveNodePath's contract, EXCLUDING the target itself), applying
 // derive to each ancestor. derive is the registry-coupled per-ancestor hop (core's
 // deriveChildExecutorForPath) — the loop itself is pure, so it lives here once (K-wave 2 cone R2
 // bank D thin: the resolve-target-add seam's former reconstructParentExec).
-func ReconstructParentExec(ancestorPaths []string, ancestorNodes []FleetNode, derive func(string, *FleetNode, DeployExecutor) (DeployExecutor, error)) (DeployExecutor, error) {
+func ReconstructParentExec(ancestorPaths []string, ancestorNodes []DeployNode, derive func(string, *DeployNode, DeployExecutor) (DeployExecutor, error)) (DeployExecutor, error) {
 	var parentExec DeployExecutor
 	for i, ap := range ancestorPaths {
-		var anc *FleetNode
+		var anc *DeployNode
 		if i < len(ancestorNodes) {
 			anc = &ancestorNodes[i]
 		}

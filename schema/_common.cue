@@ -81,7 +81,7 @@
 	command?: string
 	context?: [...#Context]
 	// `pod:` (per-step container venue) is RETIRED — a step's execution venue is
-	// derived ENTIRELY from its position in the fleet tree (flattenFleetVenues
+	// derived ENTIRELY from its position in the deploy tree (flattenVenuesByPosition
 	// → Op.venue, yaml:"-"). Authoring it is a closed-schema rejection (run:
 	// charly migrate).
 	depends_on?: [...string] @go(DependsOn)
@@ -119,7 +119,7 @@
 	retry_interval?:  #Duration @go(RetryInterval)
 	// `on:` (cross-member driver dispatch) is RETIRED — a step that drives a
 	// peer/driver is authored as a step CHILD of that member node; its venue is
-	// derived from position (flattenFleetVenues → Op.venue). Authoring `on:` is
+	// derived from position (flattenVenuesByPosition → Op.venue). Authoring `on:` is
 	// a closed-schema rejection (run: charly migrate).
 	tag?: [...string]
 
@@ -131,7 +131,7 @@
 	origin?: string @go(Origin)
 
 	// venue + intent_do are RUNTIME-DERIVED, never authored: venue is stamped
-	// from a step's fleet-tree position (flattenFleetVenues), intent_do from
+	// from a step's deploy-tree position (flattenVenuesByPosition), intent_do from
 	// the enclosing Step's keyword (run→act / check→assert / agent→instruct).
 	// They are generated onto the Go struct (the check runner persists them on
 	// the Op-by-value passed to runOne / EffectiveDo), but the #Step authoring

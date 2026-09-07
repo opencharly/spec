@@ -1,4 +1,4 @@
-package fleet
+package deploy
 
 import (
 	"fmt"
@@ -9,20 +9,20 @@ import (
 	"github.com/opencharly/spec/spec"
 )
 
-// deploy_fleet_ops.go — the pure deploy-tree / deploy-path / candy-stage / preempt-resolve /
+// deploy_ops.go — the pure deploy-tree / deploy-path / candy-stage / preempt-resolve /
 // task-var value HELPERS, sliced out of the spec contract module's spec/spec catch-all
-// (#55 CHECK-ENGINE cone Option A — the deploy-fleet cone). Every one carries NO mechanism
+// (#55 CHECK-ENGINE cone Option A — the deploy cone). Every one carries NO mechanism
 // dependency (stdlib + spec's own value types only), so they are spec-hosted contract helpers
 // an import-clean charly file can reach without an sdk mechanism-kit import — the FUNCTION
-// analogue of the value TYPES (spec.FleetNode, spec.CandyReader) that stay in spec/spec.
-// sdk/deploykit keeps thin re-export aliases (deploy_fleet_ops_aliases.go) so its own callers +
-// tests + the deploy candies compile unchanged; charly repoints to spec/fleet.X directly.
+// analogue of the value TYPES (spec.DeployNode, spec.CandyReader) that stay in spec/spec.
+// sdk/deploykit keeps thin re-export aliases (deploy_ops_aliases.go) so its own callers +
+// tests + the deploy candies compile unchanged; charly repoints to spec/deploy.X directly.
 
 // --- deploy-path helpers ---
 
 // ResolveNodePath resolves a dotted deployment path against a root map, returning the leaf node,
 // its ancestor chain, and any lookup error.
-func ResolveNodePath(roots map[string]spec.FleetNode, path string) (*spec.FleetNode, []*spec.FleetNode, error) {
+func ResolveNodePath(roots map[string]spec.DeployNode, path string) (*spec.DeployNode, []*spec.DeployNode, error) {
 	parts := SplitDottedPath(path)
 	if len(parts) == 0 {
 		return nil, nil, fmt.Errorf("empty or malformed deployment path %q", path)
@@ -33,7 +33,7 @@ func ResolveNodePath(roots map[string]spec.FleetNode, path string) (*spec.FleetN
 		return nil, nil, fmt.Errorf("no deployment named %q", rootName)
 	}
 	current := &rootEntry
-	var ancestors []*spec.FleetNode
+	var ancestors []*spec.DeployNode
 	for i := 1; i < len(parts); i++ {
 		ancestors = append(ancestors, current)
 		member := current.MemberByName(parts[i])
@@ -74,10 +74,10 @@ func PathLeaf(path string) string {
 
 // ClassifyNodeTarget picks the target discriminator for a node. Uses node.Target when non-empty
 // (canonical pod|vm|kubernetes|local|android, set from the node-form kind by the loader's
-// fleetTargetForDisc). For ref-based deploys with no charly.yml entry, the deploy name itself is
+// deployTargetForDisc). For ref-based deploys with no charly.yml entry, the deploy name itself is
 // the hint: a literal `host`/`local` LEAF → local target; anything else → pod. A pure function of
 // node+path with no LoadUnified/executor dependency.
-func ClassifyNodeTarget(node *spec.FleetNode, path string) string {
+func ClassifyNodeTarget(node *spec.DeployNode, path string) string {
 	if node != nil && node.Target != "" {
 		return node.Target
 	}
@@ -90,10 +90,10 @@ func ClassifyNodeTarget(node *spec.FleetNode, path string) string {
 // nodeDescentVenue reads a node's stamped descent VENUE trait (P9) nil-safely — the pure-data
 // half of the former core-only nodeTraits/deployTraitDescent pair. A node with no stamped
 // descent yields "" (the external-in-place default). This unifies the former deploykit
-// deployNodeVenue(*FleetNode) + nodeVenue(FleetNode value) helpers into one (R3); a node
+// deployNodeVenue(*DeployNode) + nodeVenue(DeployNode value) helpers into one (R3); a node
 // sourced from LoadUnified/materialize or the resolved-project envelope is always stamped before
 // any consult site sees it, so this needs no registry fallback.
-func nodeDescentVenue(n *spec.FleetNode) string {
+func nodeDescentVenue(n *spec.DeployNode) string {
 	if n != nil && n.Descent != nil {
 		return n.Descent.Venue
 	}
@@ -108,8 +108,8 @@ func nodeDescentVenue(n *spec.FleetNode) string {
 // Descent-stamped by StampDescent), so it needs no registry access. Promoted from sdk/deploykit's
 // former private host-rooted predicate (#55 U4) so DeployNestedLocalChildren + the bed-session
 // apply path (PersistBedDeployOverrides) share ONE predicate over the spec value type; deploykit
-// callers repoint to spec/fleet.HostRooted directly.
-func HostRooted(node *spec.FleetNode) bool {
+// callers repoint to spec/deploy.HostRooted directly.
+func HostRooted(node *spec.DeployNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.HostRooted
 }
 
@@ -117,19 +117,19 @@ func HostRooted(node *spec.FleetNode) bool {
 // HostRooted's shape (#55 W3 A4) — promoted so a plugin-side deploy-orchestration consumer
 // (sdk/deploykit's BringUpMembers/TearDownMembers) and any future caller share ONE predicate over
 // the wire-stamped node.Descent, instead of each re-deriving the venue check independently.
-func IsVmVenue(node *spec.FleetNode) bool {
+func IsVmVenue(node *spec.DeployNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.Venue == "ssh"
 }
 
 // IsContainerVenue reports whether node's stamped venue is the container-exec (pod) substrate.
 // Mirrors HostRooted's shape (#55 W3 A4) — see IsVmVenue.
-func IsContainerVenue(node *spec.FleetNode) bool {
+func IsContainerVenue(node *spec.DeployNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.Venue == "container"
 }
 
 // ExternalInPlaceVenue reports whether node's stamped venue is an EXTERNAL deploy substrate that
 // applies its workload IN PLACE — local-like: no container image to build, no `charly
-// config`/`charly start`, teardown via `charly fleet del` (replay the recorded reverse ops).
+// config`/`charly start`, teardown via `charly deploy del` (replay the recorded reverse ops).
 // local/android/kubernetes/exampledeploy are in-place (parent/none venues); pod is the one externalized
 // substrate that is NOT in-place (excluded by requiring venue != container implicitly, since
 // parent/none never equals container). Mirrors HostRooted's shape (#55 W3 B2-full) — the
@@ -139,7 +139,7 @@ func IsContainerVenue(node *spec.FleetNode) bool {
 // redundant with data already on the wire (the SAME finding candy/plugin-fleet's
 // externalInPlaceFromDescent already proved for a bed's sibling MEMBERS — this promotes that one
 // shared predicate for the bed ROOT too, R3).
-func ExternalInPlaceVenue(node *spec.FleetNode) bool {
+func ExternalInPlaceVenue(node *spec.DeployNode) bool {
 	if node == nil || node.Descent == nil {
 		return false
 	}
@@ -160,7 +160,7 @@ func ExternalInPlaceVenue(node *spec.FleetNode) bool {
 // Both sites that own a VM venue call it: the isVM bed ROOT and bringUpMembers' VM-member branch.
 // They differ only in how a member deploy is executed (the root wraps it in a recorded step(); a
 // member shells out directly), so that is the injected apply func.
-func DeployNestedLocalChildren(parent string, node *spec.FleetNode, apply func(memberKey, dotted string) error) error {
+func DeployNestedLocalChildren(parent string, node *spec.DeployNode, apply func(memberKey, dotted string) error) error {
 	if node == nil {
 		return nil
 	}
@@ -180,7 +180,7 @@ func DeployNestedLocalChildren(parent string, node *spec.FleetNode, apply func(m
 // `target: android` member shares the parent pod's venue (Descent.Venue == "parent") and has no
 // own image — its app-presence checks are baked into the parent ref, so it is skipped. Pure +
 // unit-tested.
-func BedCheckLiveRefs(name string, node *spec.FleetNode) []string {
+func BedCheckLiveRefs(name string, node *spec.DeployNode) []string {
 	if node == nil {
 		return []string{name}
 	}
@@ -206,11 +206,11 @@ func DescriptionInfo(d string) string {
 	return d
 }
 
-// MergeFleetNode overlays src onto dst: every authored (yaml-tagged, non-zero) field of src
+// MergeDeployNode overlays src onto dst: every authored (yaml-tagged, non-zero) field of src
 // wins, and the loader-DERIVED structural TREE fields (Target, the uniform ordered Member
-// tree) merge explicitly (src non-zero wins). Pure (reflect over the spec.FleetNode value
+// tree) merge explicitly (src non-zero wins). Pure (reflect over the spec.DeployNode value
 // type).
-func MergeFleetNode(dst, src spec.FleetNode) spec.FleetNode {
+func MergeDeployNode(dst, src spec.DeployNode) spec.DeployNode {
 	dstV := reflect.ValueOf(&dst).Elem()
 	srcV := reflect.ValueOf(src)
 	t := dstV.Type()
@@ -268,9 +268,9 @@ func CandyStageDirName(layer spec.CandyReader) string {
 // --- preempt-resolve helpers ---
 
 // HolderAddrFor derives the resource-arbiter holder address for a deploy-tree node — servable off
-// a plain map[string]spec.FleetNode (the shape both a freshly-loaded uf.Fleet and a resolved-project
+// a plain map[string]spec.DeployNode (the shape both a freshly-loaded uf.Deploy and a resolved-project
 // envelope's Deploy map carry).
-func HolderAddrFor(name string, node spec.FleetNode) spec.HolderAddr {
+func HolderAddrFor(name string, node spec.DeployNode) spec.HolderAddr {
 	base, instance := spec.ParseDeployKey(name)
 	target := node.Target
 	if target == "" {
@@ -287,13 +287,13 @@ func HolderAddrFor(name string, node spec.FleetNode) spec.HolderAddr {
 }
 
 // FindVMClaimant returns the first node claiming the given VM entity via requires_exclusive.
-func FindVMClaimant(tree map[string]spec.FleetNode, vmEntity string) (string, spec.FleetNode, bool) {
+func FindVMClaimant(tree map[string]spec.DeployNode, vmEntity string) (string, spec.DeployNode, bool) {
 	for name, node := range tree {
 		if nodeDescentVenue(&node) == "ssh" && node.From == vmEntity && len(node.RequiredExclusive()) > 0 {
 			return name, node, true
 		}
 	}
-	return "", spec.FleetNode{}, false
+	return "", spec.DeployNode{}, false
 }
 
 // --- task-var helpers ---

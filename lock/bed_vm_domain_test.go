@@ -12,10 +12,10 @@ import (
 // — an in-substrate member's domain runs inside its parent's venue.
 func TestBedVmDomainsAlongsideOnly(t *testing.T) {
 	ssh := &spec.DescentDescriptor{Transport: "ssh", Venue: "ssh"}
-	node := spec.FleetNode{
+	node := spec.DeployNode{
 		Member: []spec.Member{
-			{Name: "peer-vm", Position: spec.PositionDeployLevel, Node: &spec.FleetNode{Descent: ssh}},
-			{Name: "inner-vm", Position: spec.PositionInSubstrate, Node: &spec.FleetNode{Descent: ssh}},
+			{Name: "peer-vm", Position: spec.PositionDeployLevel, Node: &spec.DeployNode{Descent: ssh}},
+			{Name: "inner-vm", Position: spec.PositionInSubstrate, Node: &spec.DeployNode{Descent: ssh}},
 		},
 	}
 	got := BedVmDomains("bed", node)
