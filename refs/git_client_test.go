@@ -1,6 +1,7 @@
 package refs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -189,6 +190,66 @@ func TestGitClientWarmUpColdDetection(t *testing.T) {
 	client.mu.Unlock()
 	if have {
 		t.Fatal("a fresh client must report the repo as COLD")
+	}
+}
+
+// TestWarmUpSkipsPrefetchWhenPersistedFallbackExists pins the prefetch cold-check's
+// persisted-awareness (the #108 warm-up-hang fix): a client whose PERSISTED latest_tags
+// fallback already carries the repo must NOT re-probe the network in WarmUp — the
+// pre-#108 model served the persisted entry as fresh, so the prefetch found the repo
+// warm and returned instantly; #108 moved persisted entries to the offline-fallback
+// map, WarmUp kept consulting only the in-process maps, and every fresh process
+// re-probed the ENTIRE corpus (the observed 194-repo "first run" on every load). The
+// prefetch is a UX batch, not a resolution: skipping it never serves stale data — the
+// on-demand LatestTag keeps the strict re-probe contract (asserted by the fetch seam
+// below staying un-called AND by the offline-fallback tests).
+func TestWarmUpSkipsPrefetchWhenPersistedFallbackExists(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "charly.yml")
+	repo := "https://github.com/opencharly/example"
+
+	// Persist a latest_tags fallback entry the way a prior process's save() does:
+	// through the real write path (LatestTag's save under the file lock), then read
+	// it back in a FRESH client — the cross-process shape the bug lived in.
+	{
+		g := NewGitClient(file)
+		g.mu.Lock()
+		g.persistedTags[repo] = gitCacheEntry{Value: "v0.1.0", Resolved: time.Now().Add(-time.Hour)}
+		// default_branches load into the live map and keep the TTL freshness
+		// contract — seed FRESH (the 1h DefaultRefsCacheTTL), or the prefetch
+		// correctly re-probes a stale default-branch answer.
+		g.defaultBranches[repo] = gitCacheEntry{Value: "main", Resolved: time.Now()}
+		g.save()
+		g.mu.Unlock()
+	}
+
+	g := NewGitClient(file)
+	g.mu.Lock()
+	fallback := g.persistedTags[repo].Value
+	g.mu.Unlock()
+	if fallback != "v0.1.0" {
+		t.Fatalf("fresh client loaded persisted tag %q, want v0.1.0", fallback)
+	}
+
+	// The fetch seam must stay UNCALLED: WarmUp skips the repo entirely.
+	fetches := 0
+	origFetch := gitLatestTagFetch
+	gitLatestTagFetch = func(url string) (string, error) {
+		fetches++
+		return "", fmt.Errorf("unexpected network fetch for %s", url)
+	}
+	t.Cleanup(func() { gitLatestTagFetch = origFetch })
+
+	g.WarmUp([]string{repo}, nil)
+	if fetches != 0 {
+		t.Fatalf("WarmUp fetched %d time(s) despite a persisted latest_tags fallback", fetches)
+	}
+
+	// A repo with NO persisted entry stays cold: the prefetch still fires for it
+	// (the true first run), driving the (injected) fetch seam exactly once.
+	g.WarmUp([]string{"https://github.com/opencharly/never-seen"}, nil)
+	if fetches != 1 {
+		t.Fatalf("WarmUp fetch count = %d, want 1 for the genuinely cold repo", fetches)
 	}
 }
 
