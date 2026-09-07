@@ -484,7 +484,20 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	var cold []string
 	for _, u := range repoURLs {
 		g.mu.Lock()
-		have := cached(g.latestTags, u, LatestTagTTL) != "" && cached(g.defaultBranches, u, DefaultBranchTTL) != ""
+		// The prefetch cold-check treats a PERSISTED latest_tags entry as
+		// prefetch-warm. This does NOT weaken the freshness contract: the persisted
+		// entries remain the OFFLINE FALLBACK, never fresh data — every on-demand
+		// LatestTag call still re-probes the network in a fresh process (the
+		// offline-fallback cutover, #108). WarmUp is a UX batch, not a resolution:
+		// skipping the prefetch for a repo the fallback already knows only defers
+		// the probe to the on-demand path (which for a repo pinned at immutable
+		// tags never fires at all). Without this, a fresh process with a fully
+		// persisted cache reported EVERY repo cold and re-probed the entire corpus
+		// on every project load — the observed 194-repo warm-up hang under the
+		// multi-bed wave (the pre-#108 model served the persisted entry as fresh,
+		// so the prefetch found one cold repo and returned instantly).
+		have := (cached(g.latestTags, u, LatestTagTTL) != "" || g.persistedTags[u].Value != "") &&
+			cached(g.defaultBranches, u, DefaultBranchTTL) != ""
 		g.mu.Unlock()
 		if !have {
 			cold = append(cold, u)
