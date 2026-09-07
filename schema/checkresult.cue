@@ -73,6 +73,12 @@
 	// the check env so the out-of-process mcp: check verb can resolve the endpoint
 	// for VM/host venues (no OCI label).
 	mcp_provide?:     [...#CandyMCPProvide] @go(MCPProvide)
+	// candy_dirs: the host threads the candy name → resolved source-dir map (from
+	// the check-run's candy source scan) so the host-side committed-APK anchor
+	// (checkhost.ResolveCommittedApk via resolveCheckApk) can resolve a relative
+	// `apk:` path against the AUTHORING candy's source tree for in-venue steps of a
+	// baked live plan — the out-of-process verb has no CandyDirs of its own.
+	candy_dirs?:      {string: string} @go(CandyDirs)
 	dial_timeout_ns?: int      @go(DialTimeoutNs, type=int64)
 }
 
