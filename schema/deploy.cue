@@ -228,6 +228,13 @@
 	update_gate?: *"full" | "restart-only" | "skip" @go(UpdateGate)
 
 	disposable?:  bool @go(,type=*bool)
+	// parallel — the SUBSTRATE scalar covering the deploy's MEMBERS (Cutover C
+	// task 3): when true, the check walk runs the deploy's whole-member plans as
+	// INDEPENDENT Runner instances CONCURRENTLY (A4 — never share one Runner)
+	// instead of the sequential member walk. Does NOT interact with `stage:` —
+	// when a bed carries stages, stages dominate (stage groups execute in order;
+	// within a stage, members run concurrently ALWAYS, by construction).
+	parallel?:    bool @go(Parallel,type=bool)
 	// instrument — run-scoped observation entries on this SUBSTRATE-NODE body
 	// (the nested-capture instrument surface, Cutover A): each entry carries a
 	// capture verb (ANY plugin word, authored as the `<word>: <input>` sugar),

@@ -72,6 +72,16 @@
 	description?: string
 	skip?:        bool
 	timeout?:     #Duration
+	// stage — the shared STAGE-GROUPING step modifier (Cutover C task 3): a bed's
+	// plan step may declare the stage it belongs to. When a bed carries stages,
+	// the check walk groups steps by stage and executes the stage groups in
+	// first-seen order; within a stage, steps on DIFFERENT members run as
+	// INDEPENDENT Runner instances CONCURRENTLY (A4 — never share one Runner),
+	// same-member steps keep authored order. Dot-free: '.' is reserved (like
+	// deployment keys, dotted-path addressing). All-or-nothing per bed: if any
+	// step of a bed carries stage:, every step of that bed must (validated at
+	// load).
+	stage?:       string & =~"^[^.]+$"
 	// command — INTERNAL-ONLY rehydration target (never authored): the `command`
 	// plugin verb's INSTALL-EMIT copies plugin_input.command here for emitCmd
 	// (build) / renderOpCommand (deploy). Authored `command:` on a step IS the
