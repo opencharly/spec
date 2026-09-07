@@ -47,6 +47,17 @@ type Op struct {
 
 	Timeout Duration `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 
+	// stage — the shared STAGE-GROUPING step modifier (Cutover C task 3): a bed's
+	// plan step may declare the stage it belongs to. When a bed carries stages,
+	// the check walk groups steps by stage and executes the stage groups in
+	// first-seen order; within a stage, steps on DIFFERENT members run as
+	// INDEPENDENT Runner instances CONCURRENTLY (A4 — never share one Runner),
+	// same-member steps keep authored order. Dot-free: '.' is reserved (like
+	// deployment keys, dotted-path addressing). All-or-nothing per bed: if any
+	// step of a bed carries stage:, every step of that bed must (validated at
+	// load).
+	Stage string `yaml:"stage,omitempty" json:"stage,omitempty"`
+
 	// command — INTERNAL-ONLY rehydration target (never authored): the `command`
 	// plugin verb's INSTALL-EMIT copies plugin_input.command here for emitCmd
 	// (build) / renderOpCommand (deploy). Authored `command:` on a step IS the
@@ -4476,6 +4487,14 @@ type Deploy struct {
 	UpdateGate string `yaml:"update_gate,omitempty" json:"update_gate,omitempty"`
 
 	Disposable *bool `yaml:"disposable,omitempty" json:"disposable,omitempty"`
+
+	// parallel — the SUBSTRATE scalar covering the deploy's MEMBERS (Cutover C
+	// task 3): when true, the check walk runs the deploy's whole-member plans as
+	// INDEPENDENT Runner instances CONCURRENTLY (A4 — never share one Runner)
+	// instead of the sequential member walk. Does NOT interact with `stage:` —
+	// when a bed carries stages, stages dominate (stage groups execute in order;
+	// within a stage, members run concurrently ALWAYS, by construction).
+	Parallel bool `yaml:"parallel,omitempty" json:"parallel,omitempty"`
 
 	// instrument — run-scoped observation entries on this SUBSTRATE-NODE body
 	// (the nested-capture instrument surface, Cutover A): each entry carries a
