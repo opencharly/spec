@@ -417,14 +417,16 @@ type ProjectLoader interface {
 	// fallback for a recognized-but-not-yet-connected external deploy substrate word
 	// (MaterializeSeams.BuildDeployEntity's implementation).
 	BuildDeployNodeInto(pn ParsedNode, t Threaded, acc *MaterializedProject) error
-	// IsDeployShape reports whether a substrate node is a DEPLOY (vs a standalone template).
+	// IsDeployShape reports whether a substrate node is a DEPLOY (vs a standalone template) — the
+	// ONE deploy-shape classifier (parser consolidation F1.2/F1.4): its data arms are the
+	// resource-member child channel (any parsed member child — the ONE member classification),
+	// the scalar cross-ref, the from:/image: mapping body, and the agent_provisioned: true
+	// imageless spelling (the Deploy gate's box exemption). It subsumed the former
+	// ResourceChildren walk (deleted with the host's OR-composite).
 	IsDeployShape(pn ParsedNode) bool
 	// DecodeStandaloneTemplateJSON canonicalizes pn (a substrate TEMPLATE node) to the JSON the
 	// host threads to the substrate plugin, GENERICALLY — with NO concrete-kind Go type.
 	DecodeStandaloneTemplateJSON(pn ParsedNode, t Threaded) (json.RawMessage, error)
-	// ResourceChildren returns pn's children whose discriminator is itself a resource/deploy kind
-	// (the CUE-derived #ResourceKind vocab).
-	ResourceChildren(pn ParsedNode) []ParsedNode
 
 	// -- K1 unit 3c: the box-validate entity-tree walk (completes the K1 unit 2 deferral) — the
 	// `charly box validate` candy-manifest entry point + its node-form step-typo walk. t/parser are

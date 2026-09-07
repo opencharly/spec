@@ -78,7 +78,7 @@
 	// (checkhost.ResolveCommittedApk via resolveCheckApk) can resolve a relative
 	// `apk:` path against the AUTHORING candy's source tree for in-venue steps of a
 	// baked live plan — the out-of-process verb has no CandyDirs of its own.
-	candy_dirs?:      {string: string} @go(CandyDirs)
+	candy_dirs?:      {[string]: string} @go(CandyDirs)
 	dial_timeout_ns?: int      @go(DialTimeoutNs, type=int64)
 }
 
