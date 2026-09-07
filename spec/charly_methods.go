@@ -75,6 +75,9 @@ func (c *Op) VerbsSet() []string {
 	if c.Build != "" {
 		set = append(set, "build")
 	}
+	if c.Config != "" {
+		set = append(set, "config")
+	}
 	// `file` is NO LONGER a verb — it left #OpVerb in the file→plugin extraction (a file
 	// check/run is now `plugin: file` + #FileInput; exists/owner/group_of/filetype/contains/
 	// sha256 moved into plugin_input, and the SHARED `mode` rides plugin_input on a file step
@@ -105,7 +108,7 @@ func (c *Op) VerbsSet() []string {
 // StringFields returns pointers to every string-valued modifier field, for the
 // in-place ${VAR} expansion driven by ExpandVars (free function in main).
 func (c *Op) StringFields() []*string {
-	return []*string{
+	fields := []*string{
 		&c.Command,
 		&c.ID, &c.Description, &c.Timeout,
 		// `mode` is the SHARED file/copy/write modifier kept on #Op (owner/group_of/filetype/
@@ -124,7 +127,15 @@ func (c *Op) StringFields() []*string {
 		// verbatim bytes, never ${VAR}-substituted (matches the task rule).
 		&c.Mkdir, &c.Copy, &c.Write, &c.Link, &c.Download, &c.Setcap, &c.Build,
 		&c.RunAs, &c.To, &c.Extract,
+		// config: the destination PATH expands like any path field; content
+		// expands ONLY for config ops (write: bodies stay verbatim bytes —
+		// config exists precisely for generate-time substitution).
+		&c.Config, &c.Validate,
 	}
+	if c.Config != "" {
+		fields = append(fields, &c.Content)
+	}
+	return fields
 }
 
 // ---------------------------------------------------------------------------

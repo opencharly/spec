@@ -15,7 +15,7 @@
 // field (the schemagen gate "OpVerbs ⊆ AuthoringVerbs" proves it) and MUST have a
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
-#OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
+#OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" | "config" |
 	"plugin") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -57,6 +57,14 @@
 	download?:       string
 	setcap?:         string
 	build?:          string
+	// config — the CONFIG-RENDER verb: `config: <dest-path>` renders a config
+	// file from the candy's declared values. Unlike write:, config SUBSTITUTES
+	// ${VAR} refs in content: at generate time (candy var: ∪ auto-exports;
+	// unresolved refs fail `charly box validate`). Rendered bytes are staged
+	// content-addressed and delivered via COPY — no shell, exactly the write:
+	// safety contract (substitution happens in the generator, never bash).
+	// validate: names a vendored CUE format schema the rendered file must satisfy.
+	config?:         string
 	// plugin — the generic PLUGIN-VERB discriminator, INTERNAL-ONLY: the
 	// parse-time desugar rewrites every authored `<word>: <input>` sugar key
 	// into this plugin/plugin_input pair, and authoring plugin:/plugin_input:
@@ -162,6 +170,13 @@
 	// file step's plugin_input while LEAVING it here for copy/write (the shared-companion
 	// pattern, like gid between unix_group and user).
 	mode?: string & =~"^0[0-7]{3,4}$"
+
+	// validate — the shared CONFIG-VERB modifier: names a vendored CUE format
+	// schema (the egress schema set, e.g. "crabbox-yaml") that the rendered
+	// config's bytes are validated against at GENERATE time (R3: the same
+	// ValidateEgress machinery the deploy-time writers use). Read only by the
+	// config verb — other verbs ignore it. Must be non-empty when set.
+	validate?: string & !=""
 
 	// exclude_distro — a SHARED step-level skip filter read by the generic runOne for
 	// EVERY verb (skip the step when any image distro tag intersects the list), NOT a

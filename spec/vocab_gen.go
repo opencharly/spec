@@ -147,6 +147,7 @@ var OpFields = []string{
 	"caps",
 	"command",
 	"comment",
+	"config",
 	"content",
 	"context",
 	"copy",
@@ -181,6 +182,7 @@ var OpFields = []string{
 	"to",
 	"uninstall",
 	"unless_exists",
+	"validate",
 	"venue",
 	"write",
 }
@@ -194,6 +196,7 @@ var OpVerbs = []string{
 	"download",
 	"setcap",
 	"build",
+	"config",
 	"plugin",
 }
 
@@ -203,6 +206,7 @@ var AuthoringVerbs = []string{
 	"cache",
 	"caps",
 	"comment",
+	"config",
 	"content",
 	"context",
 	"copy",
@@ -233,6 +237,7 @@ var AuthoringVerbs = []string{
 	"to",
 	"uninstall",
 	"unless_exists",
+	"validate",
 	"write",
 }
 
