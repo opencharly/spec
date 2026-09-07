@@ -2719,6 +2719,30 @@ type Packaging struct {
 
 	// formats — per-format (nFPM name) dependency + default-variant metadata.
 	Formats map[string]*PackagingFormat `yaml:"formats,omitempty" json:"formats,omitempty"`
+
+	// systemd — non-autostarting systemd units shipped in the package (system + user
+	// scope). Rendered to /usr/lib/systemd/{system,user}/<name>.service. NEVER enabled
+	// at install (no post-install enable script; optional preset files, see §3.3).
+	Systemd []*PackagingSystemdUnit `yaml:"systemd,omitempty" json:"systemd,omitempty"`
+
+	// config — a system-wide project charly.yml shipped in the package (e.g.
+	// /etc/charly/charly.yml) carrying the plugin config the systemd MCP server uses.
+	Config *PackagingConfig `yaml:"config,omitempty" json:"config,omitempty"`
+}
+
+// #PackagingConfig — a system-wide project charly.yml shipped in the package
+// (e.g. /etc/charly/charly.yml) carrying the plugin config the systemd MCP
+// server uses, so the server resolves a local project instead of falling back
+// to a network fetch.
+type PackagingConfig struct {
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	Version string `yaml:"version,omitempty" json:"version"`
+
+	Description string `yaml:"description,omitempty" json:"description"`
+
+	// plugins — the plugin candy refs the MCP server needs (e.g. plugin-mcp).
+	Plugins []string `yaml:"plugins,omitempty" json:"plugins,omitempty"`
 }
 
 // #PackageSection — a generic format-specific package section (rpm/deb/pac/aur). Raw carries the
@@ -3638,6 +3662,31 @@ type PackagingFormat struct {
 
 	// properties — the msix Properties (msix-specific).
 	Properties map[string]string `yaml:"properties,omitempty" json:"properties,omitempty"`
+}
+
+// #PackagingSystemdUnit — one systemd unit shipped in the package (system or
+// user scope). Rendered to /usr/lib/systemd/{system,user}/<name>.service. The
+// unit is INSTALLED but NEVER enabled at install (no post-install enable
+// script; optional preset files, see §3.3) — the operator starts it on demand
+// with `systemctl start <name>` / `systemctl --user start <name>`.
+type PackagingSystemdUnit struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Scope string `yaml:"scope,omitempty" json:"scope"`
+
+	Exec string `yaml:"exec,omitempty" json:"exec"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Restart string `yaml:"restart,omitempty" json:"restart,omitempty"`
+
+	After []string `yaml:"after,omitempty" json:"after,omitempty"`
+
+	Wants []string `yaml:"wants,omitempty" json:"wants,omitempty"`
+
+	Environment map[string]string `yaml:"environment,omitempty" json:"environment,omitempty"`
+
+	Working_directory string `yaml:"working_directory,omitempty" json:"working_directory,omitempty"`
 }
 
 // #MCPProvideEntry is a RESOLVED mcp_provide entry — a CandyMCPProvide (the raw baked label
