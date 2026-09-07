@@ -24,7 +24,7 @@ type (
 	BoxConfig      = Box
 	CandyYAML      = Candy
 	VmSpec         = Vm
-	FleetNode      = Deploy
+	DeployNode     = Deploy
 	LocalSpec      = Local
 	PodSpec        = Pod
 	KubernetesSpec = Kubernetes

@@ -1,4 +1,4 @@
-package fleet
+package deploy
 
 import (
 	"reflect"
@@ -10,14 +10,14 @@ import (
 // memberTreeFixture builds a bed node carrying both member positions: an
 // in-substrate local member (zulu), a deploy-level local member (alpha), and an
 // in-substrate android member (skipped by the live-ref gather).
-func memberTreeFixture() *spec.FleetNode {
+func memberTreeFixture() *spec.DeployNode {
 	hostRooted := &spec.DescentDescriptor{Transport: "none", HostRooted: true}
-	return &spec.FleetNode{
+	return &spec.DeployNode{
 		Descent: &spec.DescentDescriptor{Transport: "ssh"},
 		Member: []spec.Member{
-			{Name: "zulu", Position: spec.PositionInSubstrate, Node: &spec.FleetNode{Descent: hostRooted}},
-			{Name: "alpha", Position: spec.PositionDeployLevel, Node: &spec.FleetNode{Descent: hostRooted}},
-			{Name: "android-child", Position: spec.PositionInSubstrate, Node: &spec.FleetNode{Descent: &spec.DescentDescriptor{Transport: "none", Venue: "parent"}}},
+			{Name: "zulu", Position: spec.PositionInSubstrate, Node: &spec.DeployNode{Descent: hostRooted}},
+			{Name: "alpha", Position: spec.PositionDeployLevel, Node: &spec.DeployNode{Descent: hostRooted}},
+			{Name: "android-child", Position: spec.PositionInSubstrate, Node: &spec.DeployNode{Descent: &spec.DescentDescriptor{Transport: "none", Venue: "parent"}}},
 		},
 	}
 }
@@ -25,7 +25,7 @@ func memberTreeFixture() *spec.FleetNode {
 // TestResolveNodePathUniformMemberTree pins dotted resolution over the ONE
 // member list (both positions addressable).
 func TestResolveNodePathUniformMemberTree(t *testing.T) {
-	roots := map[string]spec.FleetNode{
+	roots := map[string]spec.DeployNode{
 		"bed": *memberTreeFixture(),
 	}
 	node, ancestors, err := ResolveNodePath(roots, "bed.zulu")
@@ -70,17 +70,17 @@ func TestBedCheckLiveRefsUniform(t *testing.T) {
 	}
 }
 
-// TestMergeFleetNodeMemberTree pins the structural merge: the uniform ordered
+// TestMergeDeployNodeMemberTree pins the structural merge: the uniform ordered
 // Member tree merges as real tree data (src non-zero wins).
-func TestMergeFleetNodeMemberTree(t *testing.T) {
-	dst := spec.FleetNode{Target: "pod"}
-	src := spec.FleetNode{
+func TestMergeDeployNodeMemberTree(t *testing.T) {
+	dst := spec.DeployNode{Target: "pod"}
+	src := spec.DeployNode{
 		Target: "vm",
 		Member: []spec.Member{
-			{Name: "zulu", Position: spec.PositionDeployLevel, Node: &spec.FleetNode{}},
+			{Name: "zulu", Position: spec.PositionDeployLevel, Node: &spec.DeployNode{}},
 		},
 	}
-	got := MergeFleetNode(dst, src)
+	got := MergeDeployNode(dst, src)
 	if got.Target != "vm" || len(got.Member) != 1 || got.Member[0].Name != "zulu" {
 		t.Fatalf("merge = %+v, want Target vm + [zulu]", got)
 	}

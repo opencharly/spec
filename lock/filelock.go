@@ -25,7 +25,7 @@ var ErrLockBusy = errors.New("file lock held by another process")
 
 // lockTimeout bounds the BLOCKING acquire wait. Under heavy concurrent load (parallel bed runs),
 // a peer holding the lock can stall; an unbounded flock would hang the caller forever (the
-// recurring fleet-del stall). A package var (not a const) so a test can shorten it.
+// recurring deploy-del stall). A package var (not a const) so a test can shorten it.
 var lockTimeout = 2 * time.Minute
 
 // flockBounded acquires an exclusive flock, failing fast after lockTimeout instead of blocking

@@ -9,14 +9,14 @@ import (
 )
 
 // deploy_chain.go — the executor-CHAIN constructors: pure fabric functions that, given a
-// deployment node (spec.FleetNode) or a dotted deployment path, build the spec/exec DeployExecutor
+// deployment node (spec.DeployNode) or a dotted deployment path, build the spec/exec DeployExecutor
 // chain (ShellExecutor / SSHExecutor / NestedExecutor) that reaches the leaf. They belong beside the
 // executors they construct (a floor primitive, #55 K4 — relocated from sdk/deploykit, which now
 // RE-EXPORTS them for its plugin-side callers; kind-blind, no registry/loader/host-state coupling).
 //
 // Pre-cutover (2026-04), four call sites built executor chains (or partial
 // chains) independently:
-//   - charly fleet add  → deriveChildExecutorForPath in deploy_add_cmd.go
+//   - charly deploy add  → deriveChildExecutorForPath in deploy_add_cmd.go
 //   - charly check live <name> → ad-hoc executor construction in check_cmd.go
 //   - charly check live parent.child → resolveNestedNode + a *flat* VmTestExecutor
 //                            (silent single-hop bug — leaf tests ran on the
@@ -32,7 +32,7 @@ import (
 
 // ResolveDeployChain walks `dotted` through `roots` (typically the merged
 // deployment tree from ResolveMergedTreeViaExecutor) and returns the leaf
-// FleetNode + a composed DeployExecutor chain that reaches it from
+// DeployNode + a composed DeployExecutor chain that reaches it from
 // `root`.
 //
 // `root` is typically &ShellExecutor{} (the operator's host, or
@@ -57,7 +57,7 @@ import (
 //
 // Returns clear errors with available-name hints when a segment fails
 // to resolve.
-func ResolveDeployChain(roots map[string]spec.FleetNode, dotted string, root spec.DeployExecutor) (*spec.FleetNode, spec.DeployExecutor, error) {
+func ResolveDeployChain(roots map[string]spec.DeployNode, dotted string, root spec.DeployExecutor) (*spec.DeployNode, spec.DeployExecutor, error) {
 	if dotted == "" {
 		return nil, nil, fmt.Errorf("ResolveDeployChain: empty path")
 	}
@@ -109,7 +109,7 @@ func ResolveDeployChain(roots map[string]spec.FleetNode, dotted string, root spe
 
 // appendHopForNode is the root-segment variant — uses `name` for the
 // container target (no flattening needed at the root).
-func appendHopForNode(chain spec.DeployExecutor, node *spec.FleetNode, name string) (spec.DeployExecutor, error) {
+func appendHopForNode(chain spec.DeployExecutor, node *spec.DeployNode, name string) (spec.DeployExecutor, error) {
 	return AppendHopForFlatPath(chain, node, name, name)
 }
 
@@ -134,7 +134,7 @@ func chainEntersVMGuest(chain spec.DeployExecutor) bool {
 // underscores — the host-side container name suffix; leaf is the final path
 // segment (the node's own key), used for a pod deployed STANDALONE inside a VM
 // guest (which has no parent-path concept — see the pod case).
-func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.FleetNode, flatPath, leaf string) (spec.DeployExecutor, error) {
+func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.DeployNode, flatPath, leaf string) (spec.DeployExecutor, error) {
 	// The venue-hop is selected by the loader-stamped descent-descriptor's generic
 	// TRANSPORT (the descent de-type, Cutover H) — never by switching on the
 	// substrate kind word. A node reaching here without a descriptor was not folded
@@ -155,7 +155,7 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.FleetNode, flatP
 		// Container name convention: "charly-<flat-path>" — matches quadlet
 		// emission, which deploys a HOST-side nested pod as "charly-<seg1>_<seg2>".
 		// EXCEPTION — a pod nested inside a VM guest: it is deployed by the
-		// guest's OWN `charly fleet from-box <ref> <childKey>`
+		// guest's OWN `charly deploy from-box <ref> <childKey>`
 		// (plugin-deploy-vm's PostApply), so the in-guest container is "charly-<childKey>"
 		// (the leaf). The guest never sees the host-side bed/VM-entity prefix, so
 		// once the chain has crossed into a VM guest the podman-exec hop must
@@ -218,7 +218,7 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.FleetNode, flatP
 // RootExecutorForDeployNode selects the ROOT DeployExecutor for a
 // `target: local` deployment node from its `host:` field — the single source
 // of truth for "where does a local deploy's work run?", shared by
-// `charly fleet add` (the local deploy target.Add) and `charly check live`
+// `charly deploy add` (the local deploy target.Add) and `charly check live`
 // (runLocalCheck) so neither re-implements the selection (R3):
 //
 //	host: ""  / "local"        → ShellExecutor{} (this machine, direct shell)
@@ -228,7 +228,7 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.FleetNode, flatP
 // It does NOT handle the nested-inside-a-parent case (opts.ParentExec); that
 // stays in the local deploy target.Add because it's deploy-execution-specific.
 // Returns ShellExecutor{} for a nil node.
-func RootExecutorForDeployNode(node *spec.FleetNode) (spec.DeployExecutor, error) {
+func RootExecutorForDeployNode(node *spec.DeployNode) (spec.DeployExecutor, error) {
 	if node == nil {
 		return ShellExecutor{}, nil
 	}
@@ -269,7 +269,7 @@ func RootExecutorForDeployNode(node *spec.FleetNode) (spec.DeployExecutor, error
 // the alias distinct per bed and matches the stanza vm create actually wrote. A
 // direct create (deploy == entity) resolves to `charly-<entity>` naturally, and
 // VmDomainIdentity flattens a dotted member path consistently with the domain the
-// lifecycle named (fleet_members.go's `vmDomainIdentity(memberKey)`).
+// lifecycle named (deploy_members.go's `vmDomainIdentity(memberKey)`).
 func VmChildExecutor(parentExec spec.DeployExecutor, deployName string) (spec.DeployExecutor, error) {
 	ssh := SSHParamsForVm(spec.VmDomainIdentity(deployName))
 	// If parent is localhost-equivalent, use a direct SSHExecutor —
@@ -296,7 +296,7 @@ func VmChildExecutor(parentExec spec.DeployExecutor, deployName string) (spec.De
 // ssh-config alias (charly-<domainID>) — the caller passes the per-deploy
 // DOMAIN IDENTITY (VmDomainIdentity of the deploy), NOT the shared kind:vm
 // entity (P33). All connection details — User, Port, IdentityFile, host-key
-// checking — live in the Host stanza that `charly vm create` / `charly fleet
+// checking — live in the Host stanza that `charly vm create` / `charly deploy
 // add` published into ~/.config/charly/ssh_config; ssh(1) reads them from there.
 // Our SSHExecutor needs only the alias as Host.
 func SSHParamsForVm(domainID string) *SSHExecutor {
@@ -309,7 +309,7 @@ func SSHParamsForVm(domainID string) *SSHExecutor {
 // didYouMeanDeploy returns a "; available deployments: a, b, c" hint
 // listing top-level deploy names sorted alphabetically. Empty when no
 // candidates exist.
-func didYouMeanDeploy(missed string, roots map[string]spec.FleetNode) string {
+func didYouMeanDeploy(missed string, roots map[string]spec.DeployNode) string {
 	_ = missed // reserved for future fuzzy-matching
 	if len(roots) == 0 {
 		return ""
@@ -328,7 +328,7 @@ func didYouMeanDeploy(missed string, roots map[string]spec.FleetNode) string {
 // didYouMeanMember renders a hint listing member keys under a given node
 // (sorted for a stable hint — the tree itself keeps authored order).
 // Empty when the parent has no members.
-func didYouMeanMember(missed string, node *spec.FleetNode) string {
+func didYouMeanMember(missed string, node *spec.DeployNode) string {
 	_ = missed
 	if node == nil || len(node.Member) == 0 {
 		return ""

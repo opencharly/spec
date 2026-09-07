@@ -11,7 +11,7 @@ package spec
 type MaterializeProjectSeams struct {
 	// MaterializeProject folds ONE document's parsed entity nodes into uf via the registered
 	// Materializer (registry kind-decode + the per-node not-found policy). uf already carries the
-	// document's decoded reserved directives; this adds the Box/Candy/Fleet/PluginKinds entities,
+	// document's decoded reserved directives; this adds the Box/Candy/Deploy/PluginKinds entities,
 	// accumulating across the document's node list.
 	MaterializeProject func(pp *ParsedProject, uf *UnifiedFile) error
 	// FoldDiscoveredManifests folds every discovered manifest's parsed nodes into uf — a LAYER candy

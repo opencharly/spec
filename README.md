@@ -21,7 +21,7 @@ program so core depends only on the contract, never on a mechanism kit.
 | `loader/` | The loader discover/scan shape (`LoaderDiscover`, `ScanSpec`) — sliced out of `spec/` |
 | `matchers/` | The goss-style matcher evaluation engine (`MatchAll`) over the `spec.Matcher` value type — sliced out of `spec/` |
 | `poll/` | The unified poll/readiness subsystem (`PollUntil`, `PollCondition`, `ReadinessProvider`, poll bounds) — sliced out of `spec/` |
-| `fleet/` | Fleet-node operations over the `spec.FleetNode` value type (`ResolveNodePath`, `ClassifyNodeTarget`, `MergeFleetNode`, …) — sliced out of `spec/` |
+| `deploy/` | Deploy-node operations over the `spec.DeployNode` value type (`ResolveNodePath`, `ClassifyNodeTarget`, `MergeDeployNode`, …) — sliced out of `spec/` |
 | `http/` | HTTP check helpers over the `spec.CheckHTTP*` wire types — sliced out of `spec/` |
 | `shellquote/` | The canonical POSIX single-quoter (`ShellQuote`) — sliced out of `spec/` |
 | `exec/`, `proc/`, `transport/`, `sshx/`, `exitcode/` | Executor / process / transport / ssh / exit-code helpers |

@@ -148,7 +148,7 @@ func TestValidateDeploymentMembers(t *testing.T) {
 // uniform list: a pod node carrying members (a venue, no own workload) needs no
 // box; a pod LEAF without one is rejected.
 func TestValidateDeployRequiresBoxMemberExemption(t *testing.T) {
-	group := map[string]FleetNode{
+	group := map[string]DeployNode{
 		"venue": {Target: "pod", Member: []Member{
 			{Name: "svc", Position: PositionInSubstrate, Node: &Deploy{Target: "pod", Image: "img"}},
 		}},
@@ -156,7 +156,7 @@ func TestValidateDeployRequiresBoxMemberExemption(t *testing.T) {
 	if err := ValidateDeployRequiresBox(group); err != nil {
 		t.Fatalf("member-bearing venue rejected: %v", err)
 	}
-	leaf := map[string]FleetNode{
+	leaf := map[string]DeployNode{
 		"lonely": {Target: "pod"},
 	}
 	if err := ValidateDeployRequiresBox(leaf); err == nil {
@@ -188,7 +188,7 @@ func TestHasMembersUniform(t *testing.T) {
 // TestValidateDeploymentTreeUniform pins the tree entry point over the uniform
 // member tree.
 func TestValidateDeploymentTreeUniform(t *testing.T) {
-	tree := map[string]FleetNode{
+	tree := map[string]DeployNode{
 		"bed": {Target: "pod", Member: []Member{
 			{Name: "alpha", Position: PositionInSubstrate, Node: &Deploy{Target: "pod", Image: "img"}},
 		}},
@@ -196,7 +196,7 @@ func TestValidateDeploymentTreeUniform(t *testing.T) {
 	if err := ValidateDeploymentTree(tree); err != nil {
 		t.Fatalf("valid tree rejected: %v", err)
 	}
-	bad := map[string]FleetNode{
+	bad := map[string]DeployNode{
 		"bed": {Target: "pod", Member: []Member{
 			{Name: "dotted.key", Position: PositionDeployLevel, Node: &Deploy{Target: "vm"}},
 		}},

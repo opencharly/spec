@@ -48,7 +48,7 @@ type ProvidedCapability struct {
 	// deleted in the R3 unification (ONE StepContract, not two).
 	StepContract *spec.StepContract
 	// Structural is set ONLY for Class=="kind" (F5): the kind decodes a STRUCTURAL entity —
-	// its OpLoad returns a spec.Deploy member tree the host folds into uf.Fleet — rather than
+	// its OpLoad returns a spec.Deploy member tree the host folds into uf.Deploy — rather than
 	// a FLAT body landed opaquely in uf.PluginKinds (F4). false for every other class/kind.
 	Structural bool
 	// Lifecycle is set ONLY for Class=="deploy" (F6): the substrate brings its OWN host-side

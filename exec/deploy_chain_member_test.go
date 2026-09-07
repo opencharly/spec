@@ -14,15 +14,15 @@ func TestResolveDeployChainUniformMemberTree(t *testing.T) {
 	container := func() *spec.DescentDescriptor {
 		return &spec.DescentDescriptor{Transport: "container-exec"}
 	}
-	roots := map[string]spec.FleetNode{
+	roots := map[string]spec.DeployNode{
 		"web": {
 			Target:  "pod",
 			Descent: container(),
 			Member: []spec.Member{
 				// Authored order non-alphabetical: order must not matter to the
 				// dotted-path lookup.
-				{Name: "zulu", Position: spec.PositionDeployLevel, Node: &spec.FleetNode{Target: "vm", Descent: &spec.DescentDescriptor{Transport: "ssh"}}},
-				{Name: "db", Position: spec.PositionInSubstrate, Node: &spec.FleetNode{Target: "pod", Descent: container()}},
+				{Name: "zulu", Position: spec.PositionDeployLevel, Node: &spec.DeployNode{Target: "vm", Descent: &spec.DescentDescriptor{Transport: "ssh"}}},
+				{Name: "db", Position: spec.PositionInSubstrate, Node: &spec.DeployNode{Target: "pod", Descent: container()}},
 			},
 		},
 	}

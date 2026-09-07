@@ -2,25 +2,25 @@ package spec
 
 import "encoding/json"
 
-// fleet_config.go — SPIKE: FleetConfig relocated from sdk/deploykit/deploy_state.go
+// deploy_config.go — SPIKE: DeployConfig relocated from sdk/deploykit/deploy_state.go
 // (#55 value-type relocation spike, cluster 2). Every field already resolved to a
-// spec.* type (Provides=*spec.ProvidesConfig, Fleet=map[string]spec.FleetNode(=Deploy),
+// spec.* type (Provides=*spec.ProvidesConfig, Deploy=map[string]spec.DeployNode(=Deploy),
 // Sidecar=map[string]json.RawMessage) so the type carries zero deploykit-only content.
-// deploykit.FleetConfig becomes a type alias onto this type. Only the two PURE
+// deploykit.DeployConfig becomes a type alias onto this type. Only the two PURE
 // methods (Lookup/LookupKey, plain map access) moved with the type — the three
 // methods that reach sdk/kit (DeployedContainerNames/OccupiedHostPorts/
-// GlobalEnvForImage) stay in deploykit as free functions taking *spec.FleetConfig
+// GlobalEnvForImage) stay in deploykit as free functions taking *spec.DeployConfig
 // (spec can never import sdk/kit — the method-set cycle the spike flagged).
 
-// FleetConfig represents per-machine deployment overrides (~/.config/charly/charly.yml).
+// DeployConfig represents per-machine deployment overrides (~/.config/charly/charly.yml).
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
 //
 // Schema v4: the top-level map key is `deployment:` (singular, flat). The
 // legacy `images:` / `deployments.images.*` nesting is gone — all target
 // kinds (host / vm / pod / kubernetes) live under the single `deployment:` map.
-type FleetConfig struct {
-	Provides *ProvidesConfig      `yaml:"provides,omitempty" json:"provides,omitempty"`
-	Fleet    map[string]FleetNode `yaml:"deploy" json:"deploy"`
+type DeployConfig struct {
+	Provides *ProvidesConfig       `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Deploy   map[string]DeployNode `yaml:"deploy" json:"deploy"`
 	// Sidecar carries the project's sidecar-template library as OPAQUE bodies
 	// (the raw PluginKinds["sidecar"] map). candy/plugin-sidecar's OpResolve merges
 	// these UNDER each deploy node's own overrides; the kernel reads no fields
@@ -35,28 +35,28 @@ type FleetConfig struct {
 	System *SystemInfo `yaml:"system,omitempty" json:"system,omitempty"`
 }
 
-// Lookup returns the FleetNode for (deployName, instance), or
+// Lookup returns the DeployNode for (deployName, instance), or
 // (zero, false) when the entry is absent. Safe to call on a nil
-// *FleetConfig — lets callers chain
+// *DeployConfig — lets callers chain
 // `loadDeployConfigForRead(...).Lookup(deployName, instance)` without a
 // separate nil check. deployName is the charly.yml key base the caller is
 // operating on (typically c.Image), NOT the baked image short-name — for a
 // kind:check bed or Pattern-B deploy the two differ. Pass the deploy key, never
 // a value derived from an image label (see MergeDeployOntoMetadata).
-func (dc *FleetConfig) Lookup(deployName, instance string) (FleetNode, bool) {
+func (dc *DeployConfig) Lookup(deployName, instance string) (DeployNode, bool) {
 	if dc == nil {
-		return FleetNode{}, false
+		return DeployNode{}, false
 	}
-	entry, ok := dc.Fleet[DeployKey(deployName, instance)]
+	entry, ok := dc.Deploy[DeployKey(deployName, instance)]
 	return entry, ok
 }
 
 // LookupKey looks up a deploy entry by its full charly.yml key (e.g.
 // "foo", "foo/instance", "vm:name"). Safe on nil receiver.
-func (dc *FleetConfig) LookupKey(key string) (FleetNode, bool) {
+func (dc *DeployConfig) LookupKey(key string) (DeployNode, bool) {
 	if dc == nil {
-		return FleetNode{}, false
+		return DeployNode{}, false
 	}
-	entry, ok := dc.Fleet[key]
+	entry, ok := dc.Deploy[key]
 	return entry, ok
 }

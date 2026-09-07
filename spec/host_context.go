@@ -52,7 +52,7 @@ type HostContext struct {
 
 	// ActiveInitName/ActiveInit carry the MachineVenue's preresolved active init system —
 	// resolved ONCE per whole-deploy compile plugin-side off the resolved-project envelope's
-	// rp.Init (candy/plugin-fleet/compile.go). compileServiceSteps reads these instead of
+	// rp.Init (candy/plugin-deploy/compile.go). compileServiceSteps reads these instead of
 	// re-deriving the active init per-candy or guessing via a container-oriented auto-detect
 	// heuristic (which cannot disambiguate a machine venue's init from a plain custom-exec
 	// service entry — proven live 2026-07-20). Nil/empty for a direct BuildDeployPlan caller /

@@ -78,8 +78,8 @@ type EphemeralRuntime struct {
 	Status          string `yaml:"status,omitempty" json:"status,omitempty"`
 	InstanceName    string `yaml:"instance_name,omitempty" json:"instance_name,omitempty"`
 	// DeployAddress is the CLI-addressable deploy identity (the dotted tree path for a nested
-	// deploy, e.g. "parent.child" — `charly fleet del <DeployAddress>`), DISTINCT from the
-	// dc.Fleet MAP KEY this entry is stored under (which is a dot-SANITIZED "vm:<domain-id>"
+	// deploy, e.g. "parent.child" — `charly deploy del <DeployAddress>`), DISTINCT from the
+	// dc.Deploy MAP KEY this entry is stored under (which is a dot-SANITIZED "vm:<domain-id>"
 	// form — a literal '.' is illegal in a map key, see
 	// ValidateDeploymentName (deploy_tree_validate.go); FINAL/K5 unit 6a RCA #2). A nested-ephemeral-child teardown scan
 	// (candy/plugin-fleet's teardownChildrenRec) has ONLY this struct to recover the real

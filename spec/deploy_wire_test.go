@@ -61,7 +61,7 @@ func TestLifecycleOptsFromEmit_SurvivesTheWireRegardlessOfParentExec(t *testing.
 		AssumeYes: true, Verify: true, Pull: true, SkipIncompatible: true,
 		BuilderImageOverride: "fedora.fedora-builder",
 		ParentExec:           fakeParentExec{}, // the field that must NEVER cross the wire
-		ParentNode:           &FleetNode{},
+		ParentNode:           &DeployNode{},
 	}
 	b, err := json.Marshal(LifecycleOptsFromEmit(o))
 	if err != nil {

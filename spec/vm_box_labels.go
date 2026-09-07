@@ -4,7 +4,7 @@
 // per-field ai.opencharly.* label family the pod side names via deploykit's
 // CapabilityLabelMap. Every exported field of VmBoxMetadata MUST have a VmBoxLabelMap
 // entry: the map is the struct ↔ label sync table proving the WHOLE contract rides the
-// one label, so a future source-less VM deploy (`charly fleet from-box vm:<ref>` /
+// one label, so a future source-less VM deploy (`charly deploy from-box vm:<ref>` /
 // VmCapabilitiesFromLabels) can reconstruct every field from a pushed box image.
 // Maintained alongside #VmBoxMetadata (CUE-sourced, schema/vm_box_metadata.cue) —
 // adding a field to spec.VmBoxMetadata without an entry here trips

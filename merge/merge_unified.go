@@ -13,7 +13,7 @@ import (
 // The host materialize (charly/materialize.go) and loaderkit's MaterializeLoadedProject
 // replay the walk's documents in order — the root file first, then its flat imports —
 // calling merge.MergeUnified for each, so the root file's values are present before any
-// import's fields are considered (root-wins). The doc MERGE types (UnifiedFile, FleetNode,
+// import's fields are considered (root-wins). The doc MERGE types (UnifiedFile, DeployNode,
 // BoxConfig) stay in spec/spec; the pure merge behavior lives HERE in spec/merge, so
 // charly core reaches it WITHOUT importing loaderkit — the same import-purity route
 // MaterializeProjectSeams and MergePluginKindsMap already took.
@@ -56,7 +56,7 @@ func MergeUnified(dst, src *spec.UnifiedFile, srcDir string) {
 	// mergeDistroMap/mergeBuilderMap/mergeInitMap/mergeResourceMap/mergeTargetMap calls
 	// are subsumed by this one generic merge.
 	spec.MergePluginKindsMap(&dst.PluginKinds, src.PluginKinds)
-	mergeDeployMaps(&dst.Fleet, src.Fleet)
+	mergeDeployMaps(&dst.Deploy, src.Deploy)
 	if dst.Provides == nil && src.Provides != nil {
 		dst.Provides = src.Provides
 	}
@@ -85,12 +85,12 @@ func mergeRawTemplateMap(dst *map[string]json.RawMessage, src map[string]json.Ra
 // Field-singular cutover: replaces the legacy mergeDeployments which
 // took *DeploymentsSection wrappers. Provides now lives at UnifiedFile
 // root and is merged separately by MergeUnified.
-func mergeDeployMaps(dst *map[string]spec.FleetNode, src map[string]spec.FleetNode) {
+func mergeDeployMaps(dst *map[string]spec.DeployNode, src map[string]spec.DeployNode) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]spec.FleetNode)
+		*dst = make(map[string]spec.DeployNode)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
