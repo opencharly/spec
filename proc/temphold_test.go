@@ -209,9 +209,22 @@ func TestTempIsHeld_ReleasesOnProcessDeath(t *testing.T) {
 // which the kernel reports fully resolved.
 func altTempRoot(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp(".", "spec-proc-tmproot-")
+	// The package directory is the root a Go test can rely on being outside /tmp: `go test` runs
+	// each test binary with its working directory set to the package's source directory. Symlinks
+	// are resolved because openedFilesByAnyProcess compares against /proc/<pid>/fd readlink targets,
+	// which the kernel reports fully resolved.
+	//
+	// A checkout that ITSELF lives under /tmp (a worktree) breaks that premise — the package dir
+	// is inside the very directory the pre-fix hardcode covers. Fall back to /var/tmp, which is
+	// still outside the hardcoded "/tmp" glob, so the premise (a root the pre-fix hardcode does
+	// NOT cover) holds from any checkout location.
+	base := "."
+	if abs, err := filepath.Abs("."); err == nil && strings.HasPrefix(abs, "/tmp/") {
+		base = "/var/tmp"
+	}
+	dir, err := os.MkdirTemp(base, "spec-proc-tmproot-")
 	if err != nil {
-		t.Fatalf("creating an alternate temp root in the package dir: %v", err)
+		t.Fatalf("creating an alternate temp root in %s: %v", base, err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	root, err := filepath.EvalSymlinks(dir)
