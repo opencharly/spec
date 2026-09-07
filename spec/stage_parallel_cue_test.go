@@ -29,6 +29,32 @@ func loadStageParallelSchema(t *testing.T) cue.Value {
 	return v
 }
 
+// assertStepDefRejectAccept runs ONE accept/reject case against a schema def:
+// the table-runner body shared by the stage/parallel schema tests (R3 — the
+// pre-CC3 main-lint dupl failure duplicated this block in each test).
+func assertStepDefRejectAccept(t *testing.T, schema cue.Value, defPath, label, value string, reject bool) {
+	t.Helper()
+	def := schema.LookupPath(cue.ParsePath(defPath))
+	if err := def.Err(); err != nil {
+		t.Fatalf("lookup %s: %v", defPath, err)
+	}
+	val := schema.Context().CompileString(value)
+	if err := val.Err(); err != nil {
+		t.Fatalf("compile value: %v", err)
+	}
+	unified := def.Unify(val)
+	got := unified.Validate(cue.Concrete(false), cue.Final())
+	if reject && got == nil {
+		t.Errorf("ACCEPTED %s — %s is not schematized", value, label)
+	}
+	if !reject && got != nil {
+		t.Errorf("rejected a valid %s value %s: %v", label, value, got)
+	}
+	if reject && got != nil && !strings.Contains(got.Error(), label) {
+		t.Logf("note: rejection message does not name the %s field: %v", label, got)
+	}
+}
+
 // TestOpStageModifierSchematized — Cutover C task 3 validation: the `stage:` shared step
 // modifier is TYPED (a dot-free string) in CUE (`=~"^[^.]+$"`). gengotypes renders it as a
 // plain Go `string`, so only the CUE level can see the constraint — a Go-level round-trip
@@ -50,27 +76,7 @@ func TestOpStageModifierSchematized(t *testing.T) {
 		{"empty stage rejected", `{run: "x", stage: ""}`, true},
 		{"absent stage still accepted", `{run: "x"}`, false},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			def := schema.LookupPath(cue.ParsePath("#Step"))
-			if err := def.Err(); err != nil {
-				t.Fatalf("lookup #Step: %v", err)
-			}
-			val := schema.Context().CompileString(tc.value)
-			if err := val.Err(); err != nil {
-				t.Fatalf("compile value: %v", err)
-			}
-			unified := def.Unify(val)
-			got := unified.Validate(cue.Concrete(false), cue.Final())
-			if tc.reject && got == nil {
-				t.Errorf("ACCEPTED %s — the stage modifier is not schematized", tc.value)
-			}
-			if !tc.reject && got != nil {
-				t.Errorf("rejected a valid stage value %s: %v", tc.value, got)
-			}
-			if tc.reject && got != nil && !strings.Contains(got.Error(), "stage") {
-				t.Logf("note: rejection message does not name the stage field: %v", got)
-			}
-		})
+		assertStepDefRejectAccept(t, schema, "#Step", "stage", tc.value, tc.reject)
 	}
 }
 
@@ -92,27 +98,7 @@ func TestDeployParallelScalarTyped(t *testing.T) {
 		{"parallel non-bool rejected", `{parallel: "yes"}`, true},
 		{"parallel int rejected", `{parallel: 1}`, true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			def := schema.LookupPath(cue.ParsePath("#DeployValue"))
-			if err := def.Err(); err != nil {
-				t.Fatalf("lookup #DeployValue: %v", err)
-			}
-			val := schema.Context().CompileString(tc.value)
-			if err := val.Err(); err != nil {
-				t.Fatalf("compile value: %v", err)
-			}
-			unified := def.Unify(val)
-			got := unified.Validate(cue.Concrete(false), cue.Final())
-			if tc.reject && got == nil {
-				t.Errorf("ACCEPTED %s — parallel is not typed", tc.value)
-			}
-			if !tc.reject && got != nil {
-				t.Errorf("rejected a valid parallel value %s: %v", tc.value, got)
-			}
-			if tc.reject && got != nil && !strings.Contains(got.Error(), "parallel") {
-				t.Logf("note: rejection message does not name the parallel field: %v", got)
-			}
-		})
+		assertStepDefRejectAccept(t, schema, "#DeployValue", "parallel", tc.value, tc.reject)
 	}
 }
 
