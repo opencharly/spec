@@ -3841,6 +3841,13 @@ type CheckEnv struct {
 	// for VM/host venues (no OCI label).
 	MCPProvide []CandyMCPProvide `yaml:"mcp_provide,omitempty" json:"mcp_provide,omitempty"`
 
+	// candy_dirs: the host threads the candy name → resolved source-dir map (from
+	// the check-run's candy source scan) so the host-side committed-APK anchor
+	// (checkhost.ResolveCommittedApk via resolveCheckApk) can resolve a relative
+	// `apk:` path against the AUTHORING candy's source tree for in-venue steps of a
+	// baked live plan — the out-of-process verb has no CandyDirs of its own.
+	CandyDirs map[string]string `yaml:"candy_dirs,omitempty" json:"candy_dirs,omitempty"`
+
 	DialTimeoutNs int64 `yaml:"dial_timeout_ns,omitempty" json:"dial_timeout_ns,omitempty"`
 }
 
