@@ -162,6 +162,13 @@
 	variants?: {[string]: #PackagingVariant} @go(Variants,type=map[string]*PackagingVariant)
 	// formats — per-format (nFPM name) dependency + default-variant metadata.
 	formats?: {[string]: #PackagingFormat} @go(Formats,type=map[string]*PackagingFormat)
+	// systemd — non-autostarting systemd units shipped in the package (system + user
+	// scope). Rendered to /usr/lib/systemd/{system,user}/<name>.service. NEVER enabled
+	// at install (no post-install enable script; optional preset files, see §3.3).
+	systemd?: [...#PackagingSystemdUnit] @go(Systemd,type=[]*PackagingSystemdUnit)
+	// config — a system-wide project charly.yml shipped in the package (e.g.
+	// /etc/charly/charly.yml) carrying the plugin config the systemd MCP server uses.
+	config?: #PackagingConfig @go(Config,optional=nillable)
 }
 
 // #PackagingVariant — one named plugin-set variant.
@@ -187,6 +194,35 @@
 	publisher?: string & !="" @go(Publisher)
 	// properties — the msix Properties (msix-specific).
 	properties?: {[string]: string} @go(Properties,type=map[string]string)
+}
+
+// #PackagingSystemdUnit — one systemd unit shipped in the package (system or
+// user scope). Rendered to /usr/lib/systemd/{system,user}/<name>.service. The
+// unit is INSTALLED but NEVER enabled at install (no post-install enable
+// script; optional preset files, see §3.3) — the operator starts it on demand
+// with `systemctl start <name>` / `systemctl --user start <name>`.
+#PackagingSystemdUnit: {
+	name:        string & !=""
+	scope:       "system" | "user"
+	exec:        string & !=""
+	description?: string & !=""
+	restart?:    "no" | "on-failure" | "always" | "unless-stopped"
+	after?:      [...(string & !="")]
+	wants?:      [...(string & !="")]
+	environment?: {[string]: string} @go(Environment,type=map[string]string)
+	working_directory?: string & !=""
+}
+
+// #PackagingConfig — a system-wide project charly.yml shipped in the package
+// (e.g. /etc/charly/charly.yml) carrying the plugin config the systemd MCP
+// server uses, so the server resolves a local project instead of falling back
+// to a network fetch.
+#PackagingConfig: {
+	path:        string & !=""          // e.g. /etc/charly/charly.yml
+	version:     string & !=""          // the SCHEMA version of the packaged charly (see §3.4)
+	description: string & !=""
+	// plugins — the plugin candy refs the MCP server needs (e.g. plugin-mcp).
+	plugins?:    [...(string & !="")]
 }
 
 // ServiceEntry (spec). use_packaged XOR exec is a Go cross-field
