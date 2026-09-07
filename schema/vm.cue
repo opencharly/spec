@@ -50,6 +50,10 @@
 	network?:    #VmNetwork    @go(Network,optional=nillable)
 	ssh?:        #VmSsh        @go(SSH,type=*VmSsh)
 	cloud_init?: #VmCloudInit  @go(CloudInit,optional=nillable)
+	// mcp_provide: a kind:vm entity declares its MCP servers (e.g. the
+	// systemd-started charly mcp server) exactly like a box does — the P4
+	// substrate-neutral surface.
+	mcp_provide?: [...#CandyMCPProvide] @go(MCPProvide)
 	libvirt?:    #LibvirtDomain @go(Libvirt,type=*LibvirtDomain)
 
 	plan?: [...#Step]

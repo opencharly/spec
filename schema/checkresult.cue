@@ -69,6 +69,10 @@
 	distros?:         [...string] @go(Distros)
 	venue?:           string   @go(Venue)      // r.Exec.Venue()
 	venue_kind?:      string   @go(VenueKind)  // r.Exec.Kind()
+	// mcp_provide: the host threads the deployment's mcp_provide declarations into
+	// the check env so the out-of-process mcp: check verb can resolve the endpoint
+	// for VM/host venues (no OCI label).
+	mcp_provide?:     [...#CandyMCPProvide] @go(MCPProvide)
 	dial_timeout_ns?: int      @go(DialTimeoutNs, type=int64)
 }
 

@@ -3809,6 +3809,11 @@ type CheckEnv struct {
 
 	VenueKind string `yaml:"venue_kind,omitempty" json:"venue_kind,omitempty"`
 
+	// mcp_provide: the host threads the deployment's mcp_provide declarations into
+	// the check env so the out-of-process mcp: check verb can resolve the endpoint
+	// for VM/host venues (no OCI label).
+	MCPProvide []CandyMCPProvide `yaml:"mcp_provide,omitempty" json:"mcp_provide,omitempty"`
+
 	DialTimeoutNs int64 `yaml:"dial_timeout_ns,omitempty" json:"dial_timeout_ns,omitempty"`
 }
 
@@ -9012,6 +9017,11 @@ type Vm struct {
 	SSH *VmSsh `yaml:"ssh,omitempty" json:"ssh,omitempty"`
 
 	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
+
+	// mcp_provide: a kind:vm entity declares its MCP servers (e.g. the
+	// systemd-started charly mcp server) exactly like a box does — the P4
+	// substrate-neutral surface.
+	MCPProvide []CandyMCPProvide `yaml:"mcp_provide,omitempty" json:"mcp_provide,omitempty"`
 
 	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 
