@@ -54,6 +54,19 @@ var (
 	gitOpTransferTimeout = 60 * time.Second // transfer: clone / fetch / submodule update
 	gitOpRetries         = 2                // bounded retries AFTER the first attempt
 	gitOpBackoff         = 500 * time.Millisecond
+	// gitOpWaitDelay bounds how long Wait may keep waiting for the command's
+	// I/O pipes AFTER the process has exited. Without it the deadline is dead
+	// code whenever a DESCENDANT outlives the killed child: exec kills only
+	// the direct git process, but git's git-remote-http(s) helper inherits the
+	// stdout/stderr pipe write-ends and — stuck in its own libcurl read (curl
+	// has no default response timeout) — never closes them, so Output() sees
+	// no EOF and blocks FOREVER despite the fired context. That is the
+	// 194-repo warmup hang: one stalled connection during the loader's cold
+	// WarmUp wedged a worker goroutine permanently and the whole check run
+	// froze at "fetching git metadata for 194 repo(s)". After the process
+	// exits, the pipes are force-closed gitOpWaitDelay later; the wait ends
+	// and the deadline becomes real.
+	gitOpWaitDelay = 5 * time.Second
 )
 
 // gitOpTransientRe matches git's stderr signatures for a connection killed in a
@@ -91,6 +104,8 @@ func runGitOp(transfer bool, dir string, tee io.Writer, args ...string) ([]byte,
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		var stderr bytes.Buffer
 		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.WaitDelay = gitOpWaitDelay
+		cmd.Env = nonInteractiveGitEnv()
 		if dir != "" {
 			cmd.Dir = dir
 		}
@@ -127,6 +142,29 @@ func runGitOp(transfer bool, dir string, tee io.Writer, args ...string) ([]byte,
 		return nil, fmt.Errorf("%w\n%s", wrapped, lastDetail)
 	}
 	return nil, wrapped
+}
+
+// nonInteractiveGitEnv returns the parent environment with git's terminal
+// credential prompts disabled. A network git op that hits an auth challenge
+// (a private or renamed repo — GitHub answers 401) otherwise blocks on an
+// interactive username/password prompt written to /dev/tty — INVISIBLE here,
+// because runGitOp captures stderr into the error buffer, so the operator
+// sees nothing but silence while the prompt eats the full deadline, and a
+// 194-repo cold warmup with one bad repo reads as a hang. Disabling the
+// prompt turns the challenge into an immediate permanent failure
+// ("terminal prompts disabled") whose error the caller can report. The
+// operator's own GIT_TERMINAL_PROMPT is stripped so an exported =1 cannot
+// re-introduce the interactive block; an askpass helper, when the operator
+// configures one deliberately, still works (this does not touch GIT_ASKPASS).
+func nonInteractiveGitEnv() []string {
+	env := make([]string, 0, len(os.Environ())+1)
+	for _, kv := range os.Environ() {
+		if before, _, ok := strings.Cut(kv, "="); ok && before == "GIT_TERMINAL_PROMPT" {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "GIT_TERMINAL_PROMPT=0")
 }
 
 // GitResolveRef resolves a git reference (tag, branch, or commit) to a full commit hash.
