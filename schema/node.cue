@@ -181,6 +181,16 @@
 	// data in the embedded charly.yml. Read by generate.go to emit .containerignore /
 	// .dockerignore; a project's defaults.context_ignore still overlays on top.
 	context_ignore_baseline?: [...string]
+	// verb_primaries — the compiled-in PLATFORM-verb scalar-sugar primaries (verb word ->
+	// primary input field), the data-declared replacement for the deleted frozen 11-entry
+	// table (parser consolidation F2.6). The live-container verb plugins are served
+	// out-of-process, so their `method` primary cannot be read from a compiled-in unit at
+	// init — the binary's OWN embedded declaration carries it, and init() seeds the
+	// parse-time desugar table from it (parse-time determinism preserved BY DATA).
+	// Recognized here so a document carrying it is not mis-read as a node named
+	// "verb_primaries". The served/external manifest declarations must agree with it
+	// (pinned by charly's node_desugar_test.go parity assertion).
+	verb_primaries?: {[string]: string}
 	// ovmf_paths — distro family (fedora|arch|debian) → secure/nonsecure ordered OVMF
 	// firmware candidate path pairs, formerly inline literals in ovmf_paths.go. The
 	// alias→family resolution + secure selection + unknown-distro union stay Go logic;

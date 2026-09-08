@@ -33,6 +33,7 @@ var DocDirectives = []string{
 	"provides",
 	"repo",
 	"system",
+	"verb_primaries",
 	"version",
 }
 
