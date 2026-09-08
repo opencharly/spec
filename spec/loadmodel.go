@@ -122,20 +122,16 @@ func (uf *UnifiedFile) HasBox(name string) bool { _, ok := uf.Box[name]; return 
 // BoxNames returns the image names, sorted.
 func (uf *UnifiedFile) BoxNames() []string { return BoxNamesOf(uf.Box) }
 
-// SetBox stores an authored image config under name (marshaling it opaque).
+// SetBox stores an authored image config under name (marshaling it opaque) — the shared
+// SetBoxInto fold (R3, parser consolidation F2.4).
 func (uf *UnifiedFile) SetBox(name string, b BoxConfig) {
-	if uf.Box == nil {
-		uf.Box = BoxMap{}
-	}
-	uf.Box[name] = EncodeBox(b)
+	uf.Box = SetBoxInto(uf.Box, name, b)
 }
 
-// SetCandy stores a layer under name (marshaling it opaque).
+// SetCandy stores a layer under name (marshaling it opaque) — the shared
+// SetCandyInto fold (R3, parser consolidation F2.4).
 func (uf *UnifiedFile) SetCandy(name string, il *InlineCandy) {
-	if uf.Candy == nil {
-		uf.Candy = map[string]json.RawMessage{}
-	}
-	uf.Candy[name] = EncodeInlineCandy(il)
+	uf.Candy = SetCandyInto(uf.Candy, name, il)
 }
 
 // VM/Pod/Kubernetes/Local/Android are DERIVED accessors over uf.PluginKinds[disc] — the 5
