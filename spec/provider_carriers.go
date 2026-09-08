@@ -45,6 +45,16 @@ type StructuralKindCarrier interface {
 	IsStructuralKind() bool
 }
 
+// CandyKindCarrier is a word-keyed capability carrier: a provider serving the `candy`
+// box⊻layer factory kind (class:kind, word:candy) answers IsCandyKind() true. The
+// kind-blind dispatch asks the PROVIDER (never compares pn.Disc to the literal), so the
+// kernel/plugin boundary law's "no kind-word switch in the kernel" holds even for the
+// bootstrap-critical candy routing (C2-candy). capMeta implements it from its own
+// declared word; a provider can only claim it by carrying the candy kind capability.
+type CandyKindCarrier interface {
+	IsCandyKind() bool
+}
+
 // ValidatingKindCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider
 // compiled-in) that carries a class:kind capability's VALIDATES flag (F7/C8). true → the host
 // dispatches OpValidate to the kind at load (a deep plugin-owned check returning Diagnostics,

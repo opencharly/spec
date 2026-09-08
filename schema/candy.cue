@@ -522,4 +522,18 @@
 
 // #PluginCapability — a "<class>:<word>" capability string. class ∈ the closed
 // ProviderClass set; word is lowercase-hyphenated.
-#PluginCapability: string & =~"^(kind|deploy|verb|step|build|builder|command|loader|refs|agent-runtime|terminal):[a-z0-9][a-z0-9_-]*$"
+// #ProviderClassNames — the CLOSED provider-class vocabulary (the classes a
+// `plugin.providers:` capability may name). THE single source: schemagen emits
+// spec.ProviderClasses from it (the Go closed set both charly's providerClasses and
+// plugin-box's validPluginClasses derive from — parser consolidation F4.2), and
+// #PluginCapability's regex derives from the same list, so the CUE-side capability
+// gate can never drift from the Go-side class set.
+#ProviderClassNames: ["kind", "deploy", "verb", "step", "build", "builder", "command", "loader", "refs", "agent-runtime", "terminal"] @go(-)
+
+// #ProviderClassPattern — the class alternation derived from #ProviderClassNames
+// (the ONE hand-maintained list; the regex is computed, never authored).
+#ProviderClassPattern: "^(" + strings.Join(#ProviderClassNames, "|") + "):[a-z0-9][a-z0-9_-]*$" @go(-)
+
+// #PluginCapability — a "<class>:<word>" capability string. class ∈ #ProviderClassNames;
+// word is lowercase-hyphenated.
+#PluginCapability: string & =~#ProviderClassPattern
