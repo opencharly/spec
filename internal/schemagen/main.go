@@ -190,6 +190,10 @@ func writeVocab(dir, out string) error {
 		return fmt.Errorf("compile schema: %v", errors.Details(schema.Err(), nil))
 	}
 
+	providerClasses, err := listValues(schema, "#ProviderClassNames")
+	if err != nil {
+		return err
+	}
 	kinds, err := nodeDiscriminators(schema)
 	if err != nil {
 		return err
@@ -256,6 +260,7 @@ func writeVocab(dir, out string) error {
 	code := renderVocab(vocabSets{
 		kinds:              kinds,
 		resourceKinds:      resourceKinds,
+		providerClasses:    providerClasses,
 		distroIDs:          distroIDs,
 		distroFormats:      distroFormats,
 		distroSSHUnits:     distroSSHUnits,
@@ -429,6 +434,30 @@ func enumValues(schema cue.Value, def string) ([]string, error) {
 	return out, nil
 }
 
+// listValues returns the string-literal elements of a CUE LIST def
+// (#ProviderClassNames / #ProviderClassNames-style vocab, in source order). Distinct from
+// enumValues (a disjunction): a list is the natural shape for a vocabulary emitted as a Go
+// slice with NO disjunction semantics.
+func listValues(schema cue.Value, def string) ([]string, error) {
+	v := schema.LookupPath(cue.ParsePath(def))
+	if v.Err() != nil {
+		return nil, fmt.Errorf("%s not found: %w", def, v.Err())
+	}
+	it, err := v.List()
+	if err != nil {
+		return nil, fmt.Errorf("%s is not a list: %w", def, err)
+	}
+	out := make([]string, 0, 11)
+	for it.Next() {
+		s, err := it.Value().String()
+		if err != nil {
+			return nil, fmt.Errorf("%s element is not a string literal: %w", def, err)
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
 func sortedKeys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -442,6 +471,7 @@ func sortedKeys(m map[string]bool) []string {
 type vocabSets struct {
 	kinds              []string
 	resourceKinds      []string
+	providerClasses    []string
 	distroIDs          []string
 	distroFormats      map[string]string
 	distroSSHUnits     map[string]string
@@ -467,6 +497,7 @@ func renderVocab(s vocabSets) string {
 
 	writeStrSlice(&b, "KindWords", "the reserved kind keywords (the #Node disjunction discriminators).", s.kinds)
 	writeStrSlice(&b, "ResourceKinds", "the DEPLOYABLE subset of the kind keywords — the kinds whose #Node arm nests a sub-ENTITY (resource) child (#ResourceKind).", s.resourceKinds)
+	writeStrSlice(&b, "ProviderClasses", "the CLOSED provider-class vocabulary (#ProviderClassNames) — the classes a `plugin.providers:` capability may name. charly/provider.go's providerClasses and plugin-box's validPluginClasses derive from it; the #PluginCapability regex derives from the same list (never a hand-maintained copy anywhere).", s.providerClasses)
 	writeStrSlice(&b, "DocDirectives", "the reserved document directives (#NodeDoc top-level keys).", s.directives)
 	writeStrSlice(&b, "DistroIDs", "the CLOSED guest-distro id vocabulary, derived from #Distros' own keys (schema/distro_vocab.cue).", s.distroIDs)
 	writeStrMap(&b, "DistroFormats", "each distro id's native package format (#Distros[id].format). The SINGLE table — hostenv.FormatForDistroID reads it; there is no hand-written Go copy.", s.distroFormats)

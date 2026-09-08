@@ -18,6 +18,21 @@ var ResourceKinds = []string{
 	"android",
 }
 
+// ProviderClasses is the CLOSED provider-class vocabulary (#ProviderClassNames) — the classes a `plugin.providers:` capability may name. charly/provider.go's providerClasses and plugin-box's validPluginClasses derive from it; the #PluginCapability regex derives from the same list (never a hand-maintained copy anywhere).
+var ProviderClasses = []string{
+	"kind",
+	"deploy",
+	"verb",
+	"step",
+	"build",
+	"builder",
+	"command",
+	"loader",
+	"refs",
+	"agent-runtime",
+	"terminal",
+}
+
 // DocDirectives is the reserved document directives (#NodeDoc top-level keys).
 var DocDirectives = []string{
 	"cache",

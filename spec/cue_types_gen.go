@@ -3648,8 +3648,8 @@ type Plugin struct {
 	Primary map[string]string `yaml:"primary,omitempty" json:"primary,omitempty"`
 }
 
-// #PluginCapability — a "<class>:<word>" capability string. class ∈ the closed
-// ProviderClass set; word is lowercase-hyphenated.
+// #PluginCapability — a "<class>:<word>" capability string. class ∈ #ProviderClassNames;
+// word is lowercase-hyphenated.
 type PluginCapability string
 
 // RouteYAML — generic service-route metadata (traefik / tunnel).
