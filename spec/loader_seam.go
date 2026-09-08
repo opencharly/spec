@@ -310,6 +310,12 @@ type ProjectLoader interface {
 	// loader's own cue.Context so the result can Unify against its compiled schema (K1 unit 2
 	// relocation; the host-threaded schema handle was dropped in K-wave 2 cone R1).
 	CueDocFromYAML(path string, data []byte) (cue.Value, error)
+	// CueDocFromJSON ingests one canonical JSON body (a parsed node's kind-value body, pn.Body)
+	// into a cue.Value — the JSON twin of CueDocFromYAML (parser consolidation F2.3: the
+	// validateKindValueCUE gate's deleted gn→yaml.Marshal→CueDocFromYAML round trip is
+	// restated as a direct canonical-JSON ingest, so the raw authored value is validated with no
+	// genericNode reconstruction and no YAML re-marshal).
+	CueDocFromJSON(path string, data []byte) (cue.Value, error)
 	// ValidateNodeDocCUE validates a unified node-form document (raw YAML bytes) by unifying EACH
 	// top-level entity node against #Node — the load-time "validate-before-execute" structural gate
 	// (K1 unit 2 relocation).
@@ -427,6 +433,21 @@ type ProjectLoader interface {
 	// DecodeStandaloneTemplateJSON canonicalizes pn (a substrate TEMPLATE node) to the JSON the
 	// host threads to the substrate plugin, GENERICALLY — with NO concrete-kind Go type.
 	DecodeStandaloneTemplateJSON(pn ParsedNode, t Threaded) (json.RawMessage, error)
+	// CandyIsImage reports whether a candy: node is a full IMAGE (the former box:): its authored
+	// JSON body carries the box base⊻from marker — `base:` (an external base) or `from:` (a
+	// builder ref). A LAYER fragment has neither. The PARSED-NODE restatement of the deleted
+	// genericNode yaml-key scan (parser consolidation F2.1: the JSON-body scan replaces
+	// genericNode.discValue's yaml-Node content walk); the dedicated candy KindProvider
+	// (plugin_candy.go) calls it in-proc to pick uf.Box vs uf.Candy, and the discovered-candy
+	// pre-check (materialize.go) uses it to distinguish a lazy LAYER ref from an eager IMAGE
+	// decode.
+	CandyIsImage(pn ParsedNode) bool
+	// BuildCandy turns a candy-discriminator parsed node into an InlineCandy — decoded via the
+	// SAME shared CUE entity decoder (DecodeNodeValue) every candy/kind decode goes through. The
+	// candy name is the node name (the entity-map key), stamped onto the returned InlineCandy
+	// (the node-form body carries no name:). The PARSED-NODE restatement of the deleted
+	// genericNode re-conversion (parser consolidation F2.1).
+	BuildCandy(pn ParsedNode) (string, *InlineCandy, error)
 
 	// -- K1 unit 3c: the box-validate entity-tree walk (completes the K1 unit 2 deferral) — the
 	// `charly box validate` candy-manifest entry point + its node-form step-typo walk. t/parser are
@@ -440,6 +461,15 @@ type ProjectLoader interface {
 	// sub-entity's) assembled body against its closed per-kind def — the step-typo gate for
 	// candies, boxes, pods, deploys, and check beds alike.
 	ValidateNodeFormSteps(path string, data []byte, t Threaded, parser DocParser) error
+	// ParseDocStream runs the ONE per-document pipeline (kit.ClassifyDoc → #NodeDoc gate →
+	// registered DocParser → directive serialization → import/discover collection) over an
+	// in-memory multi-document YAML stream — the loaderkit doc-stream composer (parser
+	// consolidation F2.5) driving BOTH the file walk's per-file parse (walk.parseDocs) and the
+	// binary-embedded default-vocabulary stream (materializeDocStream). Returns every parsed
+	// node-form document (wire-safe spec.LoadedDoc), the concatenated flat-import queue, and the
+	// anchored discover scan-specs; the FILE walk consumes all three, an embedded stream consumes
+	// the docs alone. seams carries the host Parser/Threaded/GateDoc callbacks (WalkSeams).
+	ParseDocStream(data []byte, srcLabel, srcDir string, seams WalkSeams) ([]LoadedDoc, ImportList, []ScanSpec, error)
 
 	// -- K1 unit 4 / K-wave 2 cone R1: the remote-repo fetch ORCHESTRATION + candy-ref collection
 	// mechanism — EnsureRepoDownloaded (local-override short-circuit, cache-hit check, cache-miss

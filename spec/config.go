@@ -76,6 +76,30 @@ func EncodeBox(b BoxConfig) json.RawMessage {
 	return raw
 }
 
+// SetBoxInto stores an authored image config under name in m (allocating m when nil) and returns
+// the possibly-newly-allocated map — the SHARED set-body fold (R3, parser consolidation F2.4)
+// Config.SetBox, UnifiedFile.SetBox AND the foldCandyKind dispatch all perform, so the
+// box⊻layer factory writes acc.Box through the SAME helper the typed map accessors use.
+func SetBoxInto(m BoxMap, name string, b BoxConfig) BoxMap {
+	if m == nil {
+		m = BoxMap{}
+	}
+	m[name] = EncodeBox(b)
+	return m
+}
+
+// SetCandyInto stores a layer under name in m (allocating m when nil) and returns the
+// possibly-newly-allocated map — the SHARED set-body fold (R3, parser consolidation F2.4)
+// UnifiedFile.SetCandy AND the foldCandyKind dispatch both perform, so the box⊻layer factory
+// writes acc.Candy through the SAME helper the typed map accessor uses.
+func SetCandyInto(m map[string]json.RawMessage, name string, il *InlineCandy) map[string]json.RawMessage {
+	if m == nil {
+		m = map[string]json.RawMessage{}
+	}
+	m[name] = EncodeInlineCandy(il)
+	return m
+}
+
 // BoxConfigFrom decodes name's image config from a generic image map.
 func BoxConfigFrom(m BoxMap, name string) (BoxConfig, bool) {
 	raw, ok := m[name]
@@ -101,12 +125,10 @@ func (c *Config) BoxConfig(name string) (BoxConfig, bool) { return BoxConfigFrom
 // HasBox reports whether an image named name is present.
 func (c *Config) HasBox(name string) bool { _, ok := c.Box[name]; return ok }
 
-// SetBox stores an authored image config under name (marshaling it opaque).
+// SetBox stores an authored image config under name (marshaling it opaque) — the shared
+// SetBoxInto fold (R3, parser consolidation F2.4).
 func (c *Config) SetBox(name string, b BoxConfig) {
-	if c.Box == nil {
-		c.Box = BoxMap{}
-	}
-	c.Box[name] = EncodeBox(b)
+	c.Box = SetBoxInto(c.Box, name, b)
 }
 
 // AllBoxNames returns every image name (enabled or not), sorted — the raw-map view BoxNames
