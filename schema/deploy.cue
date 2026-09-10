@@ -115,7 +115,7 @@
 	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
 	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
 	// (source:) OR a deploy (from:) under ONE arm — the disjunction #Vm|#Deploy.
-	from?: string & =~"^[a-z0-9]+(-[a-z0-9]+)*(:[a-zA-Z0-9._-]+)?$" // the same-kind template ref, or the unified NAME:TAG spelling (VM deploys: the loader splits the last ':' into from + from_snapshot)
+	from?: string & =~"^[a-z0-9]+([.-][a-z0-9]+)*(:[a-zA-Z0-9._-]+)?$" // the same-kind template ref, or the unified NAME:TAG spelling (VM deploys: the loader splits the last colon into from + from_snapshot); the entity part allows the NAMESPACE-QUALIFIED form (ns.entity, a git-linked import ref)
 	image?: string & !=""
 
 	kind?:     "service" | "daemon" | "batch" | "scheduled" | "oneshot"
