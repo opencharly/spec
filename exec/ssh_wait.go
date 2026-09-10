@@ -74,19 +74,53 @@ func (a SSHArgs) ScpBaseArgs() []string {
 // WaitForSSH polls `ssh <alias> true` until sshd answers (BINARY/EDGE readiness: refused→up), under
 // the injected poll's bounds. ConnectTimeout=2 bounds each connect; ServerAlive* bound a
 // connected-then-blackholed session; the injected poll's per-attempt context is the never-hang bound.
-func WaitForSSH(ctx context.Context, ssh SSHArgs, poll PollFunc) error {
-	if err := poll(ctx, func(actx context.Context) (bool, float64, error) {
+func WaitForSSH(ctx context.Context, ssh SSHArgs, pollFn PollFunc) error {
+	if err := pollFn(ctx, func(actx context.Context) (bool, float64, error) {
 		args := ssh.BaseArgs()
 		args = append(args, "-o", "BatchMode=yes", "-o", "ConnectTimeout=2",
 			"-o", "ServerAliveInterval=2", "-o", "ServerAliveCountMax=2", "true")
 		cmd := exec.CommandContext(actx, "ssh", args...)
 		cmd.Stdout = nil
-		cmd.Stderr = nil
-		return cmd.Run() == nil, 0, nil
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if cmd.Run() == nil {
+			return true, 0, nil
+		}
+		// A PERMANENT failure can never be fixed by polling — retrying burns the
+		// whole readiness cap on a condition that will never become ready. The
+		// poll contract's ErrPollFatal aborts immediately; anything else is
+		// transient (sshd not up yet) and keeps polling. The managed alias
+		// missing ("Could not resolve hostname") and a stale known_hosts entry
+		// ("Host key verification failed") are both permanent: the alias is
+		// written by publishVmSshAlias at create, and the per-VM known_hosts is
+		// cleared on every create — neither heals by waiting.
+		if msg := stderr.String(); isPermanentSSHFailure(msg) {
+			return false, 0, fmt.Errorf("%w: %s", poll.ErrPollFatal, strings.TrimSpace(msg))
+		}
+		return false, 0, nil
 	}); err != nil {
 		return fmt.Errorf("waiting for sshd on %s:%d: %w", ssh.Host, ssh.Port, err)
 	}
 	return nil
+}
+
+// isPermanentSSHFailure reports whether an ssh failure is permanent (polling can
+// never recover) rather than transient (sshd not up yet). The managed alias
+// missing and a changed host key are permanent; "Permission denied" is NOT — a
+// first-boot guest's authorized_keys is seeded by cloud-init AFTER sshd comes
+// up, so auth refusal is transient during the boot window.
+func isPermanentSSHFailure(stderr string) bool {
+	for _, pat := range []string{
+		"Could not resolve hostname",
+		"Name or service not known",
+		"Host key verification failed",
+		"REMOTE HOST IDENTIFICATION HAS CHANGED",
+	} {
+		if strings.Contains(stderr, pat) {
+			return true
+		}
+	}
+	return false
 }
 
 // WaitForCloudInit polls `sudo cloud-init status` (as root — charly guests have passwordless sudo)
