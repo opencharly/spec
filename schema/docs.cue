@@ -51,7 +51,7 @@
 	// charly.yml at the umbrella root).
 	compiled_plugins_path?: *"charly/charly.yml" | string & !="" @go(CompiledPluginsPath)
 	// go_mod_path — the go.mod require: source for the release_repos resolution.
-	go_mod_path?: *"charly/charly/go.mod" | string & !="" @go(GoModPath)
+	go_mod_path?: *"charly/go.mod" | string & !="" @go(GoModPath)
 })
 
 // #DocsMarketplace — the marketplace repo layout (the `marketplace generate` input).
