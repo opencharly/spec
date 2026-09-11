@@ -486,6 +486,20 @@ type ProjectLoader interface {
 	// EnsureRepoDownloaded downloads repoPath@version if not already cached and returns the cache
 	// path, auto-migrating it to the latest schema CalVer.
 	EnsureRepoDownloaded(ctx context.Context, repoPath, version string) (string, error)
+	// RepoOverrideDir returns the configured local override directory for repoPath — the
+	// CHARLY_REPO_OVERRIDE local-tree redirection EnsureRepoDownloaded short-circuits on — or
+	// ("", false, nil) when no override applies to repoPath. A malformed entry, an empty override
+	// directory, or a missing/non-directory target is a hard error: the override was set
+	// deliberately, so a typo must fail loud rather than silently fall through to a remote fetch.
+	//
+	// The signature takes ONLY repoPath: the env value is read on the IMPLEMENTATION side (the
+	// loader plugin owns the env plumbing), so this seam carries loaderkit's ONE override parser
+	// to a consumer that must NOT import the sdk — charly core's provenance logging asks whether a
+	// run was served from a local override and which tree, and core is import-purity-bound to the
+	// spec module alone (charly/import_purity_test.go). The parse itself stays in its single copy
+	// (loaderkit.RepoOverrideDir); this method is a transit for it, never a re-derivation (R3 — a
+	// second env parse in any consumer is a divergence waiting to happen).
+	RepoOverrideDir(repoPath string) (string, bool, error)
 	// ResolveProjectRepo turns a --repo spec ("owner/repo", "owner/repo@ref", a host-qualified
 	// path, or the "default" literal) into a local cache path a caller can chdir into. It is the
 	// SAME clone-and-cache machinery EnsureRepoDownloaded drives, with the spec normalization and
