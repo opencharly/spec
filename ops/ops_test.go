@@ -116,3 +116,36 @@ func TestInvokeProviderOptsSet(t *testing.T) {
 		t.Fatalf("ExtraRef = %q", o.ExtraRef)
 	}
 }
+
+// ParseResultJSON is the decoder beside the ResultJSON encoder, so the round-trip IS the contract.
+func TestParseResultJSONRoundTrip(t *testing.T) {
+	r, err := ResultJSON("pass", "wrote 67 bytes to /tmp/screencap.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, message, err := ParseResultJSON(r)
+	if err != nil {
+		t.Fatalf("ParseResultJSON: %v", err)
+	}
+	if status != "pass" || message != "wrote 67 bytes to /tmp/screencap.png" {
+		t.Fatalf("round-trip = (%q, %q)", status, message)
+	}
+	// The NON-pass direction is the one that gates a consumer's tail, so it round-trips too.
+	rf, _ := ResultJSON("fail", "adb: screencap: dimensions 1080x2424 < required min 4000x4000")
+	if s, m, _ := ParseResultJSON(rf); s != "fail" || m == "" {
+		t.Fatalf("fail round-trip = (%q, %q)", s, m)
+	}
+}
+
+// The empty cases are explicit: NO result is not a decode FAILURE — only malformed JSON is.
+func TestParseResultJSONEmptyAndMalformed(t *testing.T) {
+	if s, m, err := ParseResultJSON(nil); s != "" || m != "" || err != nil {
+		t.Fatalf("nil reply = (%q, %q, %v), want empty and no error", s, m, err)
+	}
+	if s, m, err := ParseResultJSON(&pb.InvokeReply{}); s != "" || m != "" || err != nil {
+		t.Fatalf("empty reply = (%q, %q, %v), want empty and no error", s, m, err)
+	}
+	if _, _, err := ParseResultJSON(&pb.InvokeReply{ResultJson: []byte("not-json")}); err == nil {
+		t.Fatal("a malformed payload must return a non-nil error")
+	}
+}

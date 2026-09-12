@@ -203,6 +203,24 @@ func ResultJSON(status, msg string) (*pb.InvokeReply, error) {
 	return &pb.InvokeReply{ResultJson: j}, nil
 }
 
+// ParseResultJSON decodes the {status,message} wire that ResultJSON builds — the counterpart of
+// the encoder directly above, so the contract module owns BOTH directions of this wire surface
+// (R3: one declaration per wire surface). A consumer that hand-rolls the shape duplicates the
+// contract; this is the shared decoder it should call instead. status ∈ "pass" | "fail" | "skip".
+//
+// A nil reply or an empty ResultJson decodes to ("", "", nil) — the verb produced no result,
+// which callers distinguish from a malformed payload by the non-nil error.
+func ParseResultJSON(reply *pb.InvokeReply) (status, message string, err error) {
+	if reply == nil || len(reply.GetResultJson()) == 0 {
+		return "", "", nil
+	}
+	var w resultWire
+	if err := json.Unmarshal(reply.GetResultJson(), &w); err != nil {
+		return "", "", err
+	}
+	return w.Status, w.Message, nil
+}
+
 // InvokeProviderOpts carries the OPTIONAL extras to an InvokeProvider peer-dispatch call. The zero
 // value is byte-identical to the pre-S1 behavior: no venue descriptor, so the host threads the
 // CALLING plugin's own enclosing executor (if any) onto the target — exactly as before this field
