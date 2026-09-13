@@ -23,15 +23,39 @@ import (
 // lock. Callers detect it with errors.Is to render a precise "already in progress" message.
 var ErrLockBusy = errors.New("file lock held by another process")
 
-// lockTimeout bounds the BLOCKING acquire wait. Under heavy concurrent load (parallel bed runs),
-// a peer holding the lock can stall; an unbounded flock would hang the caller forever (the
-// recurring deploy-del stall). A package var (not a const) so a test can shorten it.
-var lockTimeout = 2 * time.Minute
+// lockTimeout bounds the BLOCKING acquire wait. Under heavy concurrent load (parallel bed runs), a
+// peer holding the lock can stall; an unbounded flock would hang the caller forever (the recurring
+// deploy-del stall). A package var (not a const) so a test can shorten it.
+//
+// It must exceed the longest LEGITIMATE hold, or a healthy peer is reported as a failure. The
+// per-image build lock is held across a whole `podman build`: a COLD image build measured up to
+// ~26 minutes in the check beds (pod-immich-ml/cachyos, 1529 s), while a cache-hit is seconds. The
+// original 2 m bound — chosen against the deploy-del stall, which is about a STUCK holder, not a
+// slow one — is shorter than one cold build, so a second builder of the SAME image failed HARD
+// (measured: `acquiring build lock for githubrunner: flock
+// ~/.cache/charly/locks/image-<sha8>.lock: lock held by another process for > 2m0s`, check run
+// 2026.255.2310) although the correct behaviour is to QUEUE: the peer finishes and the waiter then
+// cache-hits. 30 m covers the longest measured cold build with headroom and stays BOUNDED.
+var lockTimeout = 30 * time.Minute
 
-// flockBounded acquires an exclusive flock, failing fast after lockTimeout instead of blocking
-// forever on a contended lock.
+// lockWaitReportInterval is how often a WAITING blocking acquire reports what it is waiting on
+// (holder pid + command, elapsed, the bound). Without it a legitimate 26-minute queue is
+// indistinguishable from a hang — the report is the difference between a reported wait and a
+// silent stall. A package var (not a const) so a test can shorten it.
+var lockWaitReportInterval = 30 * time.Second
+
+// flockBounded acquires an exclusive flock, QUEUEING behind a contended lock: it polls LOCK_NB,
+// reports periodically what it is waiting on, and — if the lock is still held when lockTimeout
+// elapses — fails with a message that NAMES the holder (pid + command, resolved from the kernel;
+// see holder.go) and says what to do.
+//
+// The bounded POLL is deliberate on both counts: a blocking flock(2) cannot be given a deadline
+// portably, and an UNBOUNDED wait is exactly what the original bound was added to prevent (the
+// recurring deploy-del stall). So the wait is bounded-but-long and VISIBLE rather than silent.
 func flockBounded(f *os.File, path string) error {
 	deadline := time.Now().Add(lockTimeout)
+	start := time.Now()
+	nextReport := start.Add(lockWaitReportInterval)
 	for {
 		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
@@ -40,8 +64,13 @@ func flockBounded(f *os.File, path string) error {
 		if err != syscall.EWOULDBLOCK {
 			return fmt.Errorf("flock %s: %w", path, err)
 		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("flock %s: lock held by another process for > %s", path, lockTimeout)
+		now := time.Now()
+		if now.After(deadline) {
+			return fmt.Errorf("flock %s: still held by %s after %s — that process is still running; wait for it to finish and retry (the kernel releases the lock when it exits, so there is nothing to clean up)", path, holderDescription(path), lockTimeout)
+		}
+		if now.After(nextReport) {
+			fmt.Fprintf(os.Stderr, "charly: waiting %s for file lock %s — held by %s; giving up after %s\n", now.Sub(start).Round(time.Second), path, holderDescription(path), lockTimeout)
+			nextReport = now.Add(lockWaitReportInterval)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -51,7 +80,8 @@ func flockBounded(f *os.File, path string) error {
 // returns a release closure that unlocks + closes.
 //
 // blocking selects the contention behavior:
-//   - true  → LOCK_EX: wait until the lock is free, failing fast after lockTimeout (bounded, never hangs).
+//   - true  → LOCK_EX: QUEUE until the lock is free — reporting periodically what it is waiting on
+//     and failing after lockTimeout with the holder named (bounded, never hangs, never silent).
 //   - false → LOCK_EX|LOCK_NB: return ErrLockBusy immediately when another holder exists.
 //
 // The lock file is deliberately NOT unlinked on release (unlinking a held lock races a waiter
@@ -95,6 +125,11 @@ func AcquireFileLock(path string, blocking bool) (release func() error, err erro
 	// candy/plugin-check) without ever naming it, so no grep on this identifier reaches them.
 	// A lock taken through a wrapper carried the line just the same, which is why the population
 	// this claim is about is acquisitions rather than direct calls.
+	//
+	// A WAITER that times out still names the holder — from the KERNEL, not from these bytes
+	// (holder.go: /proc/<pid>/fdinfo carries the inode + the flock). That is why the deletion
+	// stays deleted: the identity a waiter needs is published by the kernel, so writing it here
+	// would only resurrect the pidfile illusion the tests in this package pin shut.
 	_ = f.Truncate(0)
 	return func() error {
 		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)

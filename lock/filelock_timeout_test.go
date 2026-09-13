@@ -7,10 +7,13 @@ import (
 	"time"
 )
 
-// TestAcquireFileLock_FailsFastOnContendedLock is the regression guard for the
+// TestAcquireFileLock_BoundedOnContendedLock is the regression guard for the
 // deploy-del stall: a blocking acquire on a lock held by another process must
-// not hang the caller forever — it fails fast after lockTimeout.
-func TestAcquireFileLock_FailsFastOnContendedLock(t *testing.T) {
+// not hang the caller forever — it QUEUES and then fails after lockTimeout
+// (renamed from ...FailsFast...: the bound still exists and still terminates,
+// but "fast" stopped being true once a legitimate cold image build — the
+// per-image lock's normal hold — measured ~26 minutes; see lockTimeout).
+func TestAcquireFileLock_BoundedOnContendedLock(t *testing.T) {
 	old := lockTimeout
 	lockTimeout = 200 * time.Millisecond
 	defer func() { lockTimeout = old }()
