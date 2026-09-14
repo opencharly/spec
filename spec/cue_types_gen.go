@@ -4511,6 +4511,15 @@ type Deploy struct {
 
 	Disposable *bool `yaml:"disposable,omitempty" json:"disposable,omitempty"`
 
+	// keep_on_failure — whether a check bed that FAILS keeps its venue alive for
+	// debugging. DEFAULT false: a failed (or timed-out) bed tears its venue down on
+	// every exit path, so a stalled/failed lane never leaks a running VM/container
+	// that spins CPU. Set true to retain the venue after a failure (the operator
+	// then inspects it and destroys it explicitly). Distinct from the ephemeral
+	// lifetime's own keep_on_failure (that one governs the TTL reaper's disposition
+	// of an ephemeral deploy); this one governs the CHECK BED runner's failure tail.
+	KeepOnFailure bool `yaml:"keep_on_failure,omitempty" json:"keep_on_failure,omitempty"`
+
 	// parallel — the SUBSTRATE scalar covering the deploy's MEMBERS (Cutover C
 	// task 3): when true, the check walk runs the deploy's whole-member plans as
 	// INDEPENDENT Runner instances CONCURRENTLY (A4 — never share one Runner)
