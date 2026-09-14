@@ -56,6 +56,11 @@ type RuntimeVmConfig struct {
 	Cpus      int    `yaml:"cpus,omitempty" json:"cpus,omitempty"`           // default CPU count
 	Rootfs    string `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`       // root filesystem type
 	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"` // image transport (registry, containers-storage)
+	// ImageDir is the root directory for built VM disk images (the per-VM
+	// base disks `charly vm build` writes and every deployed overlay backs
+	// onto). A relative value is resolved against the working project; an
+	// absolute value pins it globally. Default "image".
+	ImageDir string `yaml:"image_dir,omitempty" json:"image_dir,omitempty"`
 }
 
 // EngineConfig specifies which container engine to use
