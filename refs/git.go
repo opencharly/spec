@@ -457,12 +457,6 @@ func submodulesPopulated(cachePath string) bool {
 	return result
 }
 
-// submoduleCacheTTL is how long a cached submodule-populated verdict is trusted.
-// The repo cache dirs change only on a re-fetch, so a 1-hour TTL makes
-// consecutive status runs fast while still seeing a re-fetched repo within an
-// hour.
-const submoduleCacheTTL = time.Hour
-
 // submoduleCacheValue is the cached verdict for one cache path.
 type submoduleCacheValue struct {
 	Populated bool `json:"populated"`
@@ -478,15 +472,19 @@ func submoduleCachePath() (string, error) {
 	return filepath.Join(filepath.Dir(cfg), "cache", "submodules.json"), nil
 }
 
-// readSubmoduleCache returns the cached verdict for cachePath if fresh, else
-// (false, false). A corrupt/absent file is a cache miss.
+// readSubmoduleCache returns the cached verdict for cachePath, else
+// (false, false). A corrupt/absent file is a cache miss. The verdict is a
+// function of the repo-cache dir's CONTENT (its .gitmodules + the submodule
+// working trees): the key is the cache path PLUS a content stamp of that dir, so
+// a re-fetch that populates the submodules changes the stamp and misses
+// immediately — the Docker content-address model, no TTL.
 func readSubmoduleCache(cachePath string) (bool, bool) {
 	path, err := submoduleCachePath()
 	if err != nil {
 		return false, false
 	}
 	var v submoduleCacheValue
-	if !cache.Read(path, cachePath, submoduleCacheTTL, &v) {
+	if !cache.Read(path, submoduleCacheKey(cachePath), &v) {
 		return false, false
 	}
 	return v.Populated, true
@@ -498,7 +496,46 @@ func writeSubmoduleCache(cachePath string, populated bool) {
 	if err != nil {
 		return
 	}
-	cache.Write(path, cachePath, submoduleCacheValue{Populated: populated})
+	cache.Write(path, submoduleCacheKey(cachePath), submoduleCacheValue{Populated: populated})
+}
+
+// submoduleCacheKey is the content address of the verdict: the cache path plus
+// the dir's content stamp (the .gitmodules bytes and whether each declared
+// submodule dir holds content). Any re-fetch that changes the populated set
+// changes the stamp -> a new key -> an immediate miss.
+func submoduleCacheKey(cachePath string) string {
+	stamp := submoduleContentStamp(cachePath)
+	return cache.Key("submodules", cachePath, stamp)
+}
+
+// submoduleContentStamp is a cheap content stamp of a repo-cache dir: the
+// .gitmodules bytes (or its absence) plus, for every declared submodule path,
+// whether that path holds content. It is the signal that a repo re-fetch is a
+// different cache input.
+func submoduleContentStamp(cachePath string) string {
+	gm := filepath.Join(cachePath, ".gitmodules")
+	gmBytes, err := os.ReadFile(gm)
+	if err != nil {
+		return "no-gitmodules"
+	}
+	parts := []string{"gitmodules", string(gmBytes)}
+	if out, cerr := exec.Command("git", "config", "-f", gm, "--get-regexp", `submodule\..*\.path`).Output(); cerr == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			f := strings.Fields(line)
+			if len(f) < 2 {
+				continue
+			}
+			sub := filepath.Join(cachePath, f[1])
+			populated := "0"
+			if st, serr := os.Stat(sub); serr == nil && st.IsDir() {
+				if entries, derr := os.ReadDir(sub); derr == nil && len(entries) > 0 {
+					populated = "1"
+				}
+			}
+			parts = append(parts, f[1]+"="+populated)
+		}
+	}
+	return cache.Key(parts...)
 }
 
 func submodulesPopulatedUncached(cachePath string) bool {

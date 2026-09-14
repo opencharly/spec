@@ -23,17 +23,19 @@ package refs
 // of just the `cache:` key (preserving every other key), under the same advisory
 // file-lock primitive the repo fetch uses.
 //
-// Freshness policy (the load-bearing contract):
-//   - latest-tag: tags are IMMUTABLE and add-only, but a NEW tag can appear at any
-//     moment (this org tags releases minutes apart) — the persisted entries are an
-//     OFFLINE FALLBACK served ONLY when the network fetch fails, never fresh data;
-//     the in-process cache (1h) is the batch-dedupe layer. A fresh process with a
-//     reachable network ALWAYS re-probes, so a fresh run never serves a stale tag
-//     list (the former 1h persisted-TTL reuse was the stale-latest-tag bug).
-//   - default-branch: the branch NAME is stable → a TTL (24h) is safe.
-//   - resolve-ref (the DownloadRepo freshness check): a mutable branch can move, so
-//     this is cached with a SHORT TTL (5m) — the freshness contract requires seeing
-//     the live commit of a mutable branch, but not on every single invocation.
+// Freshness policy (the load-bearing contract — the Docker model, NO TTL):
+//   - every remote answer (latest-tag, default-branch, resolve-ref, download-path)
+//     is a function of REMOTE state that can move with no local content change, so
+//     it is NOT content-addressable locally and is NEVER reused across processes.
+//     The in-process maps are LIFETIME MEMOS: they dedupe the within-process
+//     re-resolutions a single command/wave performs, and a fresh process re-probes
+//     on demand (this is what `docker pull` does — it does not serve a 1h-old
+//     remote digest).
+//   - latest-tag: the persisted entry is an OFFLINE FALLBACK served ONLY when the
+//     network fetch fails, with a loud stderr line — never fresh data (the former
+//     1h persisted-TTL reuse was the stale-latest-tag bug).
+//   - download-path: the cached path is served only while its CONTENT is present
+//     (dirUsable) — the content-validity half.
 
 import (
 	"fmt"
@@ -49,18 +51,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Cache TTLs (see the freshness policy above). One default — the eval-batch reality:
-// a 16-lane, multi-phase check run re-resolves the same refs hundreds of times, so a
-// shorter TTL re-probes mid-batch (measured: 152 concurrent git ls-remote -> GitHub
-// throttling -> the deploy-add stall). LatestTagTTL bounds ONLY the in-process
-// batch-dedupe cache; the persisted latest_tags entries are the offline fallback
-// (served on fetch failure only), never TTL-fresh data.
-const (
-	DefaultRefsCacheTTL = time.Hour
-	LatestTagTTL        = DefaultRefsCacheTTL
-	DefaultBranchTTL    = DefaultRefsCacheTTL
-	ResolveRefTTL       = DefaultRefsCacheTTL
-)
+// NO TTL. Remote ref resolution is NOT content-addressable locally (a branch or a
+// tag on the remote can move with no local content change to hash), so — exactly
+// like `docker pull` — there is no cross-process reuse of a remote answer. The
+// in-process maps are LIFETIME MEMOS: they dedupe the many re-resolutions a single
+// command/wave performs (the measured 152-concurrent-ls-remote throttling storm was
+// a WITHIN-one-process fanout), and a fresh process re-probes on demand. The
+// persisted latest_tags entry is an OFFLINE FALLBACK only (served when the fetch
+// fails, with a loud stderr line) — never a fresh answer.
+//
+// The local repo-cache DIR is the content-addressed half: Download serves a cached
+// path only while dirUsable (the fetched content is present), the same
+// content-validity rule the image/label caches use.
 
 // GitClient is the centralized git layer. Construct once per process (or per
 // project) and share it — the cache is the point.
@@ -78,9 +80,8 @@ type GitClient struct {
 	// construction: resilience data, never fresh data. It is served ONLY when the
 	// network fetch fails (with a loud stderr line) and is preserved on save (the
 	// on-disk latest_tags map is the union of persistedTags and latestTags, fresh
-	// values winning). The former model — serving persisted entries as fresh for
-	// the 1h TTL — was the stale-latest-tag bug: a fresh process minutes after a
-	// tag push served the still-cached old tag.
+	// values winning). Serving persisted entries as fresh was the stale-latest-tag
+	// bug: a fresh process minutes after a tag push served the still-cached old tag.
 	persistedTags   map[string]gitCacheEntry
 	defaultBranches map[string]gitCacheEntry
 	resolvedRefs    map[string]gitCacheEntry
@@ -352,30 +353,24 @@ func entryMapNode(entries map[string]gitCacheEntry) *yaml.Node {
 	return n
 }
 
-// dirUsable reports whether a cached DOWNLOAD path still holds its materialized export
-// (a directory). The downloads cache serves PATHS from a persisted map; a wiped or evicted
-// repo-cache dir would otherwise be served for the whole TTL — a cache result is only valid
-// while its CONTENT is valid (the same principle the materialized-tree cache's component
-// drift-detection enforces). A missing or non-directory path is a miss, so the downloader
-// repopulates it. Only the download path-map carries dirs; the tag/branch caches hold
-// non-path values and keep the plain freshness check.
+// dirUsable reports whether a cached DOWNLOAD path still holds its materialized
+// export (a directory). The downloads map serves PATHS; a wiped or evicted
+// repo-cache dir must never be served — a cache result is only valid while its
+// CONTENT is valid (the same content-validity rule the image/label and
+// materialized-tree caches enforce). A missing or non-directory path is a miss,
+// so the downloader repopulates it.
 func dirUsable(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && st.IsDir()
 }
 
-// cached returns the cached value for key if fresh, or "".
-//
-// DefaultRefsCacheTTL (the const block above documents the one-default reality), but a
-// future per-ref freshness divergence splits the constants without touching this function.
-//
-//nolint:unparam // ttl stays a parameter BY DESIGN: every TTL currently aliases
-func cached(entries map[string]gitCacheEntry, key string, ttl time.Duration) string {
+// memo returns the in-process lifetime memo for key, or "". There is NO time
+// validity: the entry lives for the life of the client (one process/command),
+// deduping the within-process re-resolutions; a fresh process re-probes. This is
+// the Docker-like model for remote mutable state — no cross-process reuse.
+func memo(entries map[string]gitCacheEntry, key string) string {
 	e, ok := entries[key]
 	if !ok {
-		return ""
-	}
-	if time.Since(e.Resolved) > ttl {
 		return ""
 	}
 	return e.Value
@@ -402,20 +397,19 @@ var gitLatestTagFetch = GitLatestTag
 
 // LatestTag returns the highest semver tag of repoURL.
 //
-// Freshness contract (the offline-fallback cutover): the IN-PROCESS cache is the
-// only fresh-data cache (batch dedupe within one process — the 152-concurrent-
-// ls-remote throttling storm was a within-one-process fanout, solved by this
-// layer). The PERSISTED latest_tags entries are an OFFLINE FALLBACK, never fresh
-// data: a fresh process with a reachable network re-probes, so a tag pushed
-// minutes ago is always seen. (The former model — serving persisted entries as
-// fresh for the 1h TTL — was the stale-latest-tag bug: a fresh run resolved
-// plugin refs to a tag list up to an hour old.) The persisted entry is served
-// ONLY when the network fetch fails, with a loud stderr line — resilience, not
-// freshness.
+// Freshness contract (the offline-fallback cutover): the IN-PROCESS map is the
+// only fresh-data cache (a LIFETIME MEMO deduping within one process — the
+// 152-concurrent-ls-remote throttling storm was a within-one-process fanout,
+// solved by this layer). The PERSISTED latest_tags entries are an OFFLINE
+// FALLBACK, never fresh data: a fresh process with a reachable network re-probes,
+// so a tag pushed minutes ago is always seen. (Serving persisted entries as fresh
+// was the stale-latest-tag bug: a fresh run resolved plugin refs to a tag list up
+// to an hour old.) The persisted entry is served ONLY when the network fetch
+// fails, with a loud stderr line — resilience, not freshness.
 func (g *GitClient) LatestTag(repoURL string) (string, error) {
 	g.mu.Lock()
 	if !g.disabled {
-		if v := cached(g.latestTags, repoURL, LatestTagTTL); v != "" {
+		if v := memo(g.latestTags, repoURL); v != "" {
 			g.mu.Unlock()
 			return v, nil
 		}
@@ -442,7 +436,7 @@ func (g *GitClient) LatestTag(repoURL string) (string, error) {
 func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 	g.mu.Lock()
 	if !g.disabled {
-		if v := cached(g.defaultBranches, repoURL, DefaultBranchTTL); v != "" {
+		if v := memo(g.defaultBranches, repoURL); v != "" {
 			g.mu.Unlock()
 			return v, nil
 		}
@@ -463,7 +457,7 @@ func (g *GitClient) ResolveRef(repoURL, ref string) (string, error) {
 	key := repoURL + " " + ref
 	g.mu.Lock()
 	if !g.disabled {
-		if v := cached(g.resolvedRefs, key, ResolveRefTTL); v != "" {
+		if v := memo(g.resolvedRefs, key); v != "" {
 			g.mu.Unlock()
 			return v, nil
 		}
@@ -496,8 +490,8 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		// on every project load — the observed 194-repo warm-up hang under the
 		// multi-bed wave (the pre-#108 model served the persisted entry as fresh,
 		// so the prefetch found one cold repo and returned instantly).
-		have := (cached(g.latestTags, u, LatestTagTTL) != "" || g.persistedTags[u].Value != "") &&
-			cached(g.defaultBranches, u, DefaultBranchTTL) != ""
+		have := (memo(g.latestTags, u) != "" || g.persistedTags[u].Value != "") &&
+			memo(g.defaultBranches, u) != ""
 		g.mu.Unlock()
 		if !have {
 			cold = append(cold, u)
@@ -534,20 +528,17 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	fmt.Fprintf(stderr, "charly: git metadata cached.\n")
 }
 
-// Download fetches repoPath@version into the repo cache and returns the cache path,
-// CACHED with a short TTL (ResolveRefTTL — aliasing DefaultRefsCacheTTL today, the
-// const block above documents the one-default reality and the future-divergence seam).
-// A mutable ref (a branch or the default branch) can move, so the freshness contract
-// requires re-resolving eventually — but not on every invocation: the TTL means a command
-// run twice in quick succession (e.g. the status fan-out resolving the envelope multiple
-// times) pays the download once. The cached PATH is additionally validated against its
-// CONTENT (dirUsable): a wiped or evicted repo-cache dir must never be served for the
-// TTL (the content-validity principle — the same class the materialized-tree cache
-// fixed with component drift detection).
+// Download fetches repoPath@version into the repo cache and returns the cache path.
+// The in-process map is a LIFETIME MEMO: a command that resolves the envelope several
+// times (the status fan-out) pays the download once, while a fresh process re-resolves.
+// The cached PATH is validated against its CONTENT (dirUsable): a wiped or evicted
+// repo-cache dir is a miss, so the downloader repopulates it (the content-validity
+// rule — the same class the materialized-tree cache enforces via component drift
+// detection).
 func (g *GitClient) Download(repoPath, version string, download func(repoPath, version string) (string, error)) (string, error) {
 	key := repoPath + "@" + version
 	g.mu.Lock()
-	if v := cached(g.downloads, key, ResolveRefTTL); v != "" && dirUsable(v) {
+	if v := memo(g.downloads, key); v != "" && dirUsable(v) {
 		g.mu.Unlock()
 		return v, nil
 	}

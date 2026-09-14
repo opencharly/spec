@@ -33,23 +33,27 @@ func TestImageCacheRoundTrip(t *testing.T) {
 	}
 }
 
-func TestImageCacheTTLExpiry(t *testing.T) {
+// TestImageCacheServedRegardlessOfAge proves the content-addressing contract:
+// there is NO time validity, so a very old entry is still served while its key
+// is present. Validity ends at an explicit store mutation (InvalidateImageCache),
+// never at a timer.
+func TestImageCacheServedRegardlessOfAge(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "images.json")
 	images := []LocalImageInfo{{ID: "sha256:abc"}}
 	writeImageCache(path, "podman", images)
-	// Backdate the entry beyond the TTL via the shared cache file.
+	// Backdate the entry's RECLAMATION stamp by a year; it must still be served.
 	data, _ := os.ReadFile(path)
 	var cf cache.File
 	_ = json.Unmarshal(data, &cf)
 	for k, e := range cf.Entries {
-		e.Resolved = time.Now().Add(-2 * imageCacheTTL)
+		e.Written = time.Now().AddDate(-1, 0, 0)
 		cf.Entries[k] = e
 	}
 	out, _ := json.Marshal(cf)
 	_ = os.WriteFile(path, out, 0o644)
-	if _, ok := readImageCache(path, "podman"); ok {
-		t.Fatal("readImageCache: stale entry should miss")
+	if _, ok := readImageCache(path, "podman"); !ok {
+		t.Fatal("readImageCache: a present key must be served regardless of age (no TTL)")
 	}
 }
 

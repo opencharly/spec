@@ -13,8 +13,9 @@ import (
 
 // git_client_test.go — the centralized git layer: caching, persistence, and the
 // freshness policy. The cache must (1) return a cached value without a network call,
-// (2) persist across client instances, and (3) expire per the TTL policy. The cache
-// lives in the `cache:` section of the per-host charly.yml — NOT a separate JSON file.
+// (2) persist across client instances, and (3) never reuse remote state across
+// processes (the Docker model — only latest-tags persists, as an offline
+// fallback). The cache lives in the `cache:` section of the per-host charly.yml.
 
 func TestGitClientCacheAndPersist(t *testing.T) {
 	dir := t.TempDir()
@@ -30,20 +31,20 @@ func TestGitClientCacheAndPersist(t *testing.T) {
 
 	// A NEW client (same cache file) must see the persisted values — with the
 	// offline-fallback cutover, the persisted LATEST TAG loads as the FALLBACK
-	// (never fresh data: a fresh process re-probes), while the other maps stay
-	// plain TTL caches.
+	// (never fresh data: a fresh process re-probes), while the in-process maps
+	// start empty and memoize only for the life of the process.
 	client2 := NewGitClient(cacheFile)
 	client2.mu.Lock()
 	client2.load()
 	client2.mu.Unlock()
 
-	if v := cached(client2.latestTags, "https://github.com/opencharly/example", LatestTagTTL); v != "" {
+	if v := memo(client2.latestTags, "https://github.com/opencharly/example"); v != "" {
 		t.Fatalf("persisted latest tag leaked into the in-process fresh cache = %q, want empty (the persisted entry is the offline fallback, never fresh data)", v)
 	}
 	if v := client2.persistedTags["https://github.com/opencharly/example"].Value; v != "v2026.240.0001" {
 		t.Fatalf("persisted offline-fallback latest tag = %q, want v2026.240.0001", v)
 	}
-	if v := cached(client2.defaultBranches, "https://github.com/opencharly/example", DefaultBranchTTL); v != "main" {
+	if v := memo(client2.defaultBranches, "https://github.com/opencharly/example"); v != "main" {
 		t.Fatalf("cached default branch = %q, want main", v)
 	}
 
@@ -165,17 +166,21 @@ func TestGitClientFreshFileGetsVersionStamp(t *testing.T) {
 	}
 }
 
-func TestGitClientTTLExpiry(t *testing.T) {
+// TestGitClientMemoServedRegardlessOfAge proves the NO-TTL contract for remote
+// answers: an in-process memo is served for the life of the client however old
+// its Resolved stamp (that stamp is persistence/reclamation data only), because
+// validity is the process lifetime, not a timer. A fresh process re-probes
+// (asserted by the fetch-seam tests).
+func TestGitClientMemoServedRegardlessOfAge(t *testing.T) {
 	dir := t.TempDir()
 	client := NewGitClient(filepath.Join(dir, "charly.yml"))
 
 	client.mu.Lock()
-	client.latestTags["https://github.com/opencharly/example"] = gitCacheEntry{Value: "v1", Resolved: time.Now().Add(-2 * LatestTagTTL)}
+	client.latestTags["https://github.com/opencharly/example"] = gitCacheEntry{Value: "v1", Resolved: time.Now().AddDate(-1, 0, 0)}
 	client.mu.Unlock()
 
-	// A stale entry must be ignored (the caller re-fetches).
-	if v := cached(client.latestTags, "https://github.com/opencharly/example", LatestTagTTL); v != "" {
-		t.Fatalf("stale cache entry should be ignored, got %q", v)
+	if v := memo(client.latestTags, "https://github.com/opencharly/example"); v != "v1" {
+		t.Fatalf("a memoized entry must be served regardless of age (no TTL), got %q", v)
 	}
 }
 
@@ -183,10 +188,10 @@ func TestGitClientWarmUpColdDetection(t *testing.T) {
 	dir := t.TempDir()
 	client := NewGitClient(filepath.Join(dir, "charly.yml"))
 
-	// A repo with no cached entries is COLD.
+	// A repo with no memoized entries is COLD.
 	client.mu.Lock()
-	have := cached(client.latestTags, "https://github.com/opencharly/example", LatestTagTTL) != "" &&
-		cached(client.defaultBranches, "https://github.com/opencharly/example", DefaultBranchTTL) != ""
+	have := memo(client.latestTags, "https://github.com/opencharly/example") != "" &&
+		memo(client.defaultBranches, "https://github.com/opencharly/example") != ""
 	client.mu.Unlock()
 	if have {
 		t.Fatal("a fresh client must report the repo as COLD")
@@ -215,9 +220,8 @@ func TestWarmUpSkipsPrefetchWhenPersistedFallbackExists(t *testing.T) {
 		g := NewGitClient(file)
 		g.mu.Lock()
 		g.persistedTags[repo] = gitCacheEntry{Value: "v0.1.0", Resolved: time.Now().Add(-time.Hour)}
-		// default_branches load into the live map and keep the TTL freshness
-		// contract — seed FRESH (the 1h DefaultRefsCacheTTL), or the prefetch
-		// correctly re-probes a stale default-branch answer.
+		// default_branches load into the live in-process map (a lifetime memo in
+		// this process); seed it so the prefetch sees the repo as warm.
 		g.defaultBranches[repo] = gitCacheEntry{Value: "main", Resolved: time.Now()}
 		g.save()
 		g.mu.Unlock()

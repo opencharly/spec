@@ -94,21 +94,23 @@ type LocalImageInfo struct {
 }
 
 // ListLocalImages returns all images in the engine's local storage, CACHED
-// persistently (the image list does not change often — only a build or pull
-// mutates it). The first call after the TTL expires re-fetches with user
-// feedback; every subsequent call within the TTL reads the cache, so `charly
-// status` is sub-second after the first run. Package-level var for testability
-// (same pattern as LocalImageExists, DetectEngine).
+// persistently. Package-level var for testability (same pattern as
+// LocalImageExists, DetectEngine).
 var ListLocalImages = cachedListLocalImages
 
-// imageCacheTTL is how long a cached image list is trusted before a re-fetch.
-// The images change only on build/pull, so a 5-minute TTL makes consecutive
-// status runs fast while still seeing new images within a few minutes.
-const imageCacheTTL = 5 * time.Minute
-
 // cachedListLocalImages is the persistent-cache wrapper: it reads the cached
-// image list from the charly dir cache file when fresh, else re-fetches via
+// image list from the charly dir cache file, else re-fetches via
 // `{podman,docker} images --format json` and caches the result.
+//
+// CONTENT ADDRESSING (no TTL): the value is a function of the engine's image
+// store, and the store's mutation points are ALL known and explicit (build,
+// pull, update, remove) — each calls InvalidateImageCache. The cache key is the
+// engine identity (cache.Key("images", engine)); the entry is VALID until one of
+// those explicit mutations evicts it. There is no time validity: an unchanged
+// store is served however old the entry is, and a mutation is an immediate miss
+// — the Docker model (the daemon's store has no cache timer; mutations update
+// it). Computing a store digest here would require the listing we are trying to
+// avoid, so the mutation events ARE the content signal.
 func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 	cachePath, err := imageCachePath()
 	if err == nil {
@@ -138,13 +140,14 @@ func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 // InvalidateImageCache clears the persistent image-list cache. Called by the
 // build and deploy commands (charly box build / deploy add / update) — every
 // operation that creates or pulls an image — so the next status run re-fetches
-// the fresh image list instead of serving a stale cache.
+// the fresh image list. Belt-and-braces for those writers: the content key is
+// the primary mechanism, this is an immediate clear.
 func InvalidateImageCache() {
 	cachePath, err := imageCachePath()
 	if err != nil {
 		return
 	}
-	_ = os.Remove(cachePath)
+	cache.Invalidate(cachePath)
 }
 
 // imageCachePath returns the image-list cache file under the charly dir
@@ -163,11 +166,12 @@ type imageCacheValue struct {
 	Images []LocalImageInfo `json:"images"`
 }
 
-// readImageCache returns the cached image list if fresh for engine, else (nil,
-// false). A corrupt/absent file is a cache miss.
+// readImageCache returns the cached image list for engine, else (nil, false). A
+// corrupt/absent file is a cache miss. The key is the engine identity (content
+// addressing: validity ends at an explicit store mutation, never a timer).
 func readImageCache(path, engine string) ([]LocalImageInfo, bool) {
 	var v imageCacheValue
-	if !cache.Read(path, engine, imageCacheTTL, &v) || v.Engine != engine {
+	if !cache.Read(path, imageCacheKey(engine), &v) || v.Engine != engine {
 		return nil, false
 	}
 	return v.Images, true
@@ -175,8 +179,13 @@ func readImageCache(path, engine string) ([]LocalImageInfo, bool) {
 
 // writeImageCache persists the image list (best-effort).
 func writeImageCache(path, engine string, images []LocalImageInfo) {
-	cache.Write(path, engine, imageCacheValue{Engine: engine, Images: images})
+	cache.Write(path, imageCacheKey(engine), imageCacheValue{Engine: engine, Images: images})
 }
+
+// imageCacheKey is the content address of the image list: the engine identity.
+// The list's validity is bounded by the explicit store-mutation invalidations
+// (build/pull/update/remove), not by time.
+func imageCacheKey(engine string) string { return cache.Key("images", engine) }
 
 // listLocalImagesTimeout bounds the image enumeration. `podman images --format json`
 // walks the whole local store, so its cost scales with the store, not with what the
