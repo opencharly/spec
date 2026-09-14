@@ -286,14 +286,52 @@ func HolderAddrFor(name string, node spec.DeployNode) spec.HolderAddr {
 	return addr
 }
 
-// FindVMClaimant returns the first node claiming the given VM entity via requires_exclusive.
-func FindVMClaimant(tree map[string]spec.DeployNode, vmEntity string) (string, spec.DeployNode, bool) {
+// FindVMClaimant returns the node claiming the given VM entity via requires_exclusive.
+//
+// When claimantID (a deploy KEY or a VmDomainIdentity — both compared after
+// spec.VmDomainIdentity normalization) is non-empty, the lookup is IDENTITY-SCOPED:
+// it resolves ONLY that exact node, so a sibling deploy sharing the same `from:`
+// entity can never hijack this one's resource claim. This matters because MANY
+// deploys routinely share one kind:vm entity (a 16-bed suite all `from: omarchy-vm`,
+// exactly one of which carries `requires_exclusive: [nvidia-gpu]`) — an entity-wide
+// scan made EVERY sibling inherit that GPU requirement (RCA: `check-omarchy-iso-vm`,
+// a GPU-free bed, failed vm-create demanding an NVIDIA card present only on the
+// hybrid-GPU bed's host).
+//
+// Only when claimantID is EMPTY (the direct `charly vm create <entity>` path, which
+// carries no deploy identity) does the legacy entity-wide scan run. In that path an
+// entity claimed by more than one exclusive-resource node is AMBIGUOUS and returns
+// false rather than picking an arbitrary map-order winner — the caller then treats
+// the create as unclaimed, never as some other deploy's claim.
+func FindVMClaimant(tree map[string]spec.DeployNode, vmEntity, claimantID string) (string, spec.DeployNode, bool) {
+	if claimantID != "" {
+		want := spec.VmDomainIdentity(claimantID)
+		for name, node := range tree {
+			if nodeDescentVenue(&node) != "ssh" || node.From != vmEntity {
+				continue
+			}
+			if spec.VmDomainIdentity(name) == want && len(node.RequiredExclusive()) > 0 {
+				return name, node, true
+			}
+		}
+		return "", spec.DeployNode{}, false
+	}
+	found := ""
+	var foundNode spec.DeployNode
 	for name, node := range tree {
 		if nodeDescentVenue(&node) == "ssh" && node.From == vmEntity && len(node.RequiredExclusive()) > 0 {
-			return name, node, true
+			if found != "" {
+				// ambiguous: >1 node claims this entity exclusively, no identity to
+				// disambiguate — never pick an arbitrary map-order winner.
+				return "", spec.DeployNode{}, false
+			}
+			found, foundNode = name, node
 		}
 	}
-	return "", spec.DeployNode{}, false
+	if found == "" {
+		return "", spec.DeployNode{}, false
+	}
+	return found, foundNode, true
 }
 
 // --- task-var helpers ---
