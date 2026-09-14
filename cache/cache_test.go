@@ -100,7 +100,7 @@ func TestChangedComponentIsAMiss(t *testing.T) {
 func TestWriteIsAtomicAndPrunes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "c.json")
 	for i := 0; i < 5; i++ {
-		WriteMax(path, Key("k", string(rune('a'+i))), i, 3)
+		write(path, Key("k", string(rune('a'+i))), i, 3)
 	}
 	var cf File
 	if !readFile(t, path, &cf) {

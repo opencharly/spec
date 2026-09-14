@@ -129,11 +129,8 @@ func (g *GitClient) load() {
 	var doc struct {
 		Cache *struct {
 			Git *struct {
-				Bypass          bool                     `yaml:"bypass"`
-				LatestTags      map[string]gitCacheEntry `yaml:"latest_tags"`
-				DefaultBranches map[string]gitCacheEntry `yaml:"default_branches"`
-				ResolvedRefs    map[string]gitCacheEntry `yaml:"resolved_refs"`
-				Downloads       map[string]gitCacheEntry `yaml:"downloads"`
+				Bypass     bool                     `yaml:"bypass"`
+				LatestTags map[string]gitCacheEntry `yaml:"latest_tags"`
 			} `yaml:"git"`
 		} `yaml:"cache"`
 	}
@@ -143,19 +140,14 @@ func (g *GitClient) load() {
 	if doc.Cache == nil || doc.Cache.Git == nil {
 		return
 	}
-	// The persisted latest_tags entries are the OFFLINE FALLBACK (never fresh
-	// data) — they load into persistedTags, never into the in-process fresh cache.
+	// ONLY latest_tags persists — and only as the OFFLINE FALLBACK (served when
+	// the network fetch fails), never as fresh data. default_branches /
+	// resolved_refs / downloads are NOT loaded: they are remote mutable state,
+	// so a fresh process re-resolves them (the Docker model — no cross-process
+	// reuse of a remote answer). Any legacy persisted copies are ignored here and
+	// dropped by the next save().
 	if doc.Cache.Git.LatestTags != nil {
 		g.persistedTags = doc.Cache.Git.LatestTags
-	}
-	if doc.Cache.Git.DefaultBranches != nil {
-		g.defaultBranches = doc.Cache.Git.DefaultBranches
-	}
-	if doc.Cache.Git.ResolvedRefs != nil {
-		g.resolvedRefs = doc.Cache.Git.ResolvedRefs
-	}
-	if doc.Cache.Git.Downloads != nil {
-		g.downloads = doc.Cache.Git.Downloads
 	}
 	if doc.Cache.Git.Bypass {
 		g.disabled = true
@@ -270,18 +262,15 @@ func (g *GitClient) save() {
 		cacheVal = root.Content[len(root.Content)-1]
 	}
 
-	// Build the cache: git: {bypass, latest_tags, default_branches, resolved_refs, downloads}.
+	// Build the cache: git: {bypass, latest_tags}. ONLY latest_tags persists (the
+	// offline fallback); the remote mutable answers (default_branches,
+	// resolved_refs, downloads) are process-lifetime memos and are never written —
+	// their legacy persisted copies are dropped here (R5).
 	gitVal := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
 		{Kind: yaml.ScalarNode, Value: "bypass"},
 		{Kind: yaml.ScalarNode, Value: strconv.FormatBool(g.bypass)},
 		{Kind: yaml.ScalarNode, Value: "latest_tags"},
 		entryMapNode(g.mergedLatestTags()),
-		{Kind: yaml.ScalarNode, Value: "default_branches"},
-		entryMapNode(g.defaultBranches),
-		{Kind: yaml.ScalarNode, Value: "resolved_refs"},
-		entryMapNode(g.resolvedRefs),
-		{Kind: yaml.ScalarNode, Value: "downloads"},
-		entryMapNode(g.downloads),
 	}}
 	cacheVal.Kind = yaml.MappingNode
 	cacheVal.Tag = "!!map"
@@ -478,20 +467,18 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	var cold []string
 	for _, u := range repoURLs {
 		g.mu.Lock()
-		// The prefetch cold-check treats a PERSISTED latest_tags entry as
-		// prefetch-warm. This does NOT weaken the freshness contract: the persisted
-		// entries remain the OFFLINE FALLBACK, never fresh data — every on-demand
-		// LatestTag call still re-probes the network in a fresh process (the
-		// offline-fallback cutover, #108). WarmUp is a UX batch, not a resolution:
-		// skipping the prefetch for a repo the fallback already knows only defers
-		// the probe to the on-demand path (which for a repo pinned at immutable
-		// tags never fires at all). Without this, a fresh process with a fully
-		// persisted cache reported EVERY repo cold and re-probed the entire corpus
-		// on every project load — the observed 194-repo warm-up hang under the
-		// multi-bed wave (the pre-#108 model served the persisted entry as fresh,
-		// so the prefetch found one cold repo and returned instantly).
-		have := (memo(g.latestTags, u) != "" || g.persistedTags[u].Value != "") &&
-			memo(g.defaultBranches, u) != ""
+		// Warm is: the in-process memo has the answer, OR the persisted
+		// latest_tags OFFLINE FALLBACK already knows the repo. Only latest_tags is
+		// consulted — default_branches is not persisted (remote mutable state), so
+		// it cannot be a cross-process warm signal. This does NOT weaken the
+		// freshness contract: the persisted entry is the fallback, never fresh data,
+		// and every on-demand LatestTag still re-probes the network in a fresh
+		// process. WarmUp is a UX batch, not a resolution: skipping the prefetch for
+		// a repo the fallback already knows only defers the probe to the on-demand
+		// path. Without this, a fresh process with a fully persisted fallback
+		// reported EVERY repo cold and re-probed the entire corpus on every project
+		// load (the observed 194-repo warm-up hang under the multi-bed wave).
+		have := memo(g.latestTags, u) != "" || g.persistedTags[u].Value != ""
 		g.mu.Unlock()
 		if !have {
 			cold = append(cold, u)

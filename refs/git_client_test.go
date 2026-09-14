@@ -29,10 +29,10 @@ func TestGitClientCacheAndPersist(t *testing.T) {
 	client.save()
 	client.mu.Unlock()
 
-	// A NEW client (same cache file) must see the persisted values — with the
-	// offline-fallback cutover, the persisted LATEST TAG loads as the FALLBACK
-	// (never fresh data: a fresh process re-probes), while the in-process maps
-	// start empty and memoize only for the life of the process.
+	// A NEW client (same cache file) sees the persisted LATEST TAG as the
+	// OFFLINE FALLBACK only (never fresh data: a fresh process re-probes). The
+	// other remote answers (default_branches here) are NOT persisted and NOT
+	// loaded — they are remote mutable state, re-resolved per process.
 	client2 := NewGitClient(cacheFile)
 	client2.mu.Lock()
 	client2.load()
@@ -44,8 +44,8 @@ func TestGitClientCacheAndPersist(t *testing.T) {
 	if v := client2.persistedTags["https://github.com/opencharly/example"].Value; v != "v2026.240.0001" {
 		t.Fatalf("persisted offline-fallback latest tag = %q, want v2026.240.0001", v)
 	}
-	if v := memo(client2.defaultBranches, "https://github.com/opencharly/example"); v != "main" {
-		t.Fatalf("cached default branch = %q, want main", v)
+	if v := memo(client2.defaultBranches, "https://github.com/opencharly/example"); v != "" {
+		t.Fatalf("a persisted default_branch must NOT be reused across processes (remote mutable state), got %q", v)
 	}
 
 	// The cache must be persisted in the `cache:` section of the charly.yml.
@@ -220,9 +220,6 @@ func TestWarmUpSkipsPrefetchWhenPersistedFallbackExists(t *testing.T) {
 		g := NewGitClient(file)
 		g.mu.Lock()
 		g.persistedTags[repo] = gitCacheEntry{Value: "v0.1.0", Resolved: time.Now().Add(-time.Hour)}
-		// default_branches load into the live in-process map (a lifetime memo in
-		// this process); seed it so the prefetch sees the repo as warm.
-		g.defaultBranches[repo] = gitCacheEntry{Value: "main", Resolved: time.Now()}
 		g.save()
 		g.mu.Unlock()
 	}

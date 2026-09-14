@@ -102,15 +102,19 @@ var ListLocalImages = cachedListLocalImages
 // image list from the charly dir cache file, else re-fetches via
 // `{podman,docker} images --format json` and caches the result.
 //
-// CONTENT ADDRESSING (no TTL): the value is a function of the engine's image
-// store, and the store's mutation points are ALL known and explicit (build,
-// pull, update, remove) — each calls InvalidateImageCache. The cache key is the
-// engine identity (cache.Key("images", engine)); the entry is VALID until one of
-// those explicit mutations evicts it. There is no time validity: an unchanged
-// store is served however old the entry is, and a mutation is an immediate miss
-// — the Docker model (the daemon's store has no cache timer; mutations update
-// it). Computing a store digest here would require the listing we are trying to
-// avoid, so the mutation events ARE the content signal.
+// CONTENT ADDRESSING (no TTL): the value is the engine's image store, so the key
+// is that store's CONTENT IDENTITY. containers/storage maintains a monotonic
+// store GENERATION (`podman info`'s Store.ImageStore.Number), which changes on
+// EVERY store mutation — a build, a pull, a remove, by charly OR by any other
+// tool. That generation is the cache key component (imageStoreFingerprint), so a
+// store change is an immediate miss and an unchanged store is served however old
+// the entry is. No listing is needed to compute it (0.7s vs the ~9s/17MB full
+// listing), and no timer is involved — the Docker content-address model.
+//
+// Docker has no generation field; its fallback fingerprint is the store dir's
+// mtime + size (best-effort — a coarser content signal, still mutation-driven,
+// never a timer). InvalidateImageCache remains for charly's own mutations (an
+// immediate eviction, belt-and-braces over the generation).
 func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 	cachePath, err := imageCachePath()
 	if err == nil {
@@ -182,10 +186,55 @@ func writeImageCache(path, engine string, images []LocalImageInfo) {
 	cache.Write(path, imageCacheKey(engine), imageCacheValue{Engine: engine, Images: images})
 }
 
-// imageCacheKey is the content address of the image list: the engine identity.
-// The list's validity is bounded by the explicit store-mutation invalidations
-// (build/pull/update/remove), not by time.
-func imageCacheKey(engine string) string { return cache.Key("images", engine) }
+// imageCacheKey is the content address of the image list: the engine PLUS the
+// store's content fingerprint (imageStoreFingerprint). A store mutation changes
+// the fingerprint -> a new key -> an immediate miss. Never a timer.
+func imageCacheKey(engine string) string {
+	return cache.Key("images", engine, imageStoreFingerprint(engine))
+}
+
+// imageStoreFingerprint is a CHEAP content identity for the engine's image
+// store — the signal that the store changed, without paying for the full
+// listing. containers/storage maintains a monotonic generation
+// (`podman info` → Store.ImageStore.Number) that increments on EVERY mutation.
+// Docker exposes no generation, so its fallback is the store dir's mtime+size
+// (coarser, still mutation-driven). Either way the fingerprint is derived from
+// the store STATE, never from wall-clock time — a fingerprint-less failure
+// returns the empty string, and the caller then always re-lists (a safe miss).
+func imageStoreFingerprint(engine string) string {
+	bin := engine
+	if bin == "" {
+		bin = "podman"
+	}
+	// podman: the store generation (measured 0.7s vs ~9s/17MB for the listing).
+	if out, err := exec.Command(bin, "info", "--format", "{{.Store.ImageStore.Number}}").Output(); err == nil {
+		if s := strings.TrimSpace(string(out)); s != "" && s != "0" {
+			return "gen:" + s
+		}
+	}
+	// docker (no generation field): the store dir's identity, best-effort.
+	for _, root := range dockerRootCandidates(bin) {
+		if st, err := os.Stat(root); err == nil {
+			return "root:" + root + ":" + st.ModTime().UTC().Format("20060102150405")
+		}
+	}
+	return ""
+}
+
+// dockerRootCandidates returns the plausible engine-store roots for the
+// fingerprint fallback (docker's data-root, and the rootless/podman store). A
+// missing path is simply skipped.
+func dockerRootCandidates(engine string) []string {
+	roots := []string{}
+	switch engine {
+	case "docker":
+		roots = append(roots, "/var/lib/docker")
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		roots = append(roots, filepath.Join(home, ".local", "share", "containers", "storage"))
+	}
+	return roots
+}
 
 // listLocalImagesTimeout bounds the image enumeration. `podman images --format json`
 // walks the whole local store, so its cost scales with the store, not with what the

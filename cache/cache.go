@@ -34,15 +34,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 )
 
-// MaxEntriesDefault bounds a single cache file (the Docker builder
-// --keep-storage analogue). The write path reclaims the oldest entries beyond
-// the cap — storage-bound ONLY, never a validity input. A package var so
-// callers/tests can size it per cache.
-var MaxEntriesDefault = 64
+// maxEntries bounds a single cache file (the Docker builder --keep-storage
+// analogue). The write path reclaims the oldest entries beyond the cap —
+// storage-bound ONLY, never a validity input. A package var so a test can shrink
+// it (the established cache-bound pattern).
+var maxEntries = 64
 
 // File is the on-disk cache shape: key -> entry. The key is a content address
 // (Key(...)); the entry carries only the value and its write time (reclamation
@@ -99,13 +98,13 @@ func Read(path, key string, out any) bool {
 // Write persists value under key in the cache file, atomically (tempfile +
 // rename). Best-effort: a write failure is silent (the cache is an optimization,
 // never a correctness dependency). The entry is stored with the write time
-// (reclamation ordering only) and the file is pruned to MaxEntriesDefault.
+// (reclamation ordering only) and the file is pruned to the entry bound.
 func Write(path, key string, value any) {
-	WriteMax(path, key, value, MaxEntriesDefault)
+	write(path, key, value, maxEntries)
 }
 
-// WriteMax is Write with an explicit entry bound.
-func WriteMax(path, key string, value any, max int) {
+// write is Write with an explicit entry bound (the test seam).
+func write(path, key string, value any, max int) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}
@@ -175,12 +174,3 @@ func prune(entries map[string]Entry, max int) {
 func Invalidate(path string) {
 	_ = os.Remove(path)
 }
-
-// HashString is the content address of a single string (a convenience over Key
-// for the many callers whose input is one blob of content).
-func HashString(s string) string { return Key(s) }
-
-// HashStrings hashes an ordered list of strings (a convenience wrapper).
-func HashStrings(comp ...string) string { return Key(comp...) }
-
-var _ = strings.Join

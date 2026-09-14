@@ -86,16 +86,19 @@ func inspectImageLabelsUncached(engine, imageRef string) (map[string]string, err
 	return labels, nil
 }
 
-// imageLabelsCacheKey returns the image-label cache file + the content key (the
-// engine + the image ref). The labels are a function of the image ref's content:
-// the ref carries the image ID for a locally-built image, so a rebuild yields a
-// new ref (and thus a new key) — the Docker content-address model, no TTL.
+// imageLabelsCacheKey returns the image-label cache file + the content key. The
+// labels are a function of the image's CONTENT, so the key is the engine + the
+// ref + the STORE GENERATION (imageStoreFingerprint). The ref alone is NOT
+// sufficient: a mutable tag (":latest") names different content after a rebuild,
+// and only the store generation changes then — so a rebuild is an immediate miss
+// and an unchanged store is served however old the entry is. No TTL.
 func imageLabelsCacheKey(engine, imageRef string) (string, string) {
 	cfg, err := spec.DefaultDeployConfigPath()
 	if err != nil {
 		return "", ""
 	}
-	return filepath.Join(filepath.Dir(cfg), "cache", "labels.json"), cache.Key("labels", engine, imageRef)
+	return filepath.Join(filepath.Dir(cfg), "cache", "labels.json"),
+		cache.Key("labels", engine, imageRef, imageStoreFingerprint(engine))
 }
 
 // readImageLabelsCache returns the cached labels for key, else (nil, false). A
