@@ -6330,6 +6330,159 @@ type LedgerConfig struct {
 	Candies map[string]CandyRecord `yaml:"candies,omitempty" json:"candies,omitempty"`
 }
 
+// #LLMSpec is the endpoint + connection config for an OpenAI-compatible API.
+//
+// Resolution precedence is applied FIELD-WISE by the consumer (a lower layer fills
+// only what the higher layers left unset):
+//
+//	env override > stage/step block > entity block > built-in default
+//
+// The built-in default is the LOCAL ollama server so a consumer needs no authored
+// block to run. An empty api_key means ABSENT: the client sends NO Authorization
+// header at all (the local ollama needs none) — a missing secret can never zero
+// out another layer.
+//
+// api_key is REF-RESOLVED like every other authored string where the consumer
+// supports refs, so the correct authoring is a reference
+// (`api_key: $env.OPENAI_API_KEY` or a secret ref), never a literal committed key.
+type LLMSpec struct {
+	// base_url: the endpoint root INCLUDING the /v1 suffix
+	// (e.g. http://localhost:11434/v1). The client appends /chat/completions.
+	Base_url string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+
+	// model: the model identifier sent in the request (e.g. deepseek-v4.1-flash:cloud,
+	// or a vision model such as qwen3-vl:8b for image input).
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+
+	// api_key: bearer credential; empty/absent => NO auth header is sent.
+	Api_key string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
+
+	// organization / project: the OpenAI-Organization / OpenAI-Project headers.
+	Organization string `yaml:"organization,omitempty" json:"organization,omitempty"`
+
+	Project string `yaml:"project,omitempty" json:"project,omitempty"`
+
+	// timeout: a Go duration bounding the WHOLE request (e.g. "10m"). Empty means
+	// no whole-request deadline — the idle_timeout is the bound instead.
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+
+	// idle_timeout: a Go duration bounding the gap BETWEEN streaming chunks. This
+	// is the primary liveness bound for a streaming consumer: a slow-but-
+	// progressing generation is never cut off, while a silent provider fails in
+	// bounded time.
+	Idle_timeout string `yaml:"idle_timeout,omitempty" json:"idle_timeout,omitempty"`
+
+	// max_retries: automatic retries on a retryable HTTP status. Defaults to 2.
+	Max_retries *int64 `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
+
+	// headers: extra request headers (e.g. an OpenRouter HTTP-Referer/X-Title).
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+
+	// params: the general request parameters (see #LLMParams).
+	Params LLMParams `yaml:"params,omitempty" json:"params,omitempty"`
+}
+
+// #LLMParams is the general OpenAI chat-completions request-parameter block.
+// Field names match the wire API exactly. All fields are OPTIONAL: an omitted
+// field is not sent at all (the server's own default applies), so a consumer never
+// injects a value the author did not ask for.
+type LLMParams struct {
+	// temperature: sampling temperature (0..2).
+	Temperature *float64 `yaml:"temperature,omitempty" json:"temperature,omitempty"`
+
+	// top_p: nucleus sampling probability mass (0..1).
+	Top_p *float64 `yaml:"top_p,omitempty" json:"top_p,omitempty"`
+
+	// max_tokens: the completion token bound (ollama: num_predict).
+	Max_tokens *int64 `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty"`
+
+	// max_completion_tokens: the newer alias of max_tokens.
+	Max_completion_tokens *int64 `yaml:"max_completion_tokens,omitempty" json:"max_completion_tokens,omitempty"`
+
+	// frequency_penalty / presence_penalty: repetition controls (-2..2).
+	Frequency_penalty *float64 `yaml:"frequency_penalty,omitempty" json:"frequency_penalty,omitempty"`
+
+	Presence_penalty *float64 `yaml:"presence_penalty,omitempty" json:"presence_penalty,omitempty"`
+
+	// seed: requests a reproducible generation where the server supports it.
+	Seed *int64 `yaml:"seed,omitempty" json:"seed,omitempty"`
+
+	// stop: one stop sequence, or a list of them.
+	Stop any/* CUE disjunction: (string|list) */ `yaml:"stop,omitempty" json:"stop,omitempty"`
+
+	// response_format: the structured-output contract (text | json_object |
+	// json_schema).
+	Response_format LLMResponseFormat `yaml:"response_format,omitempty" json:"response_format,omitempty"`
+
+	// reasoning_effort: thinking control for reasoning models ("none" disables
+	// thinking where the server honours it).
+	Reasoning_effort string `yaml:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty"`
+
+	// reasoning: the object form of the same control (ollama accepts either).
+	Reasoning LLMReasoning `yaml:"reasoning,omitempty" json:"reasoning,omitempty"`
+
+	// stream_options: streaming response options.
+	Stream_options LLMStreamOptions `yaml:"stream_options,omitempty" json:"stream_options,omitempty"`
+
+	// parallel_tool_calls: permit the model to emit several tool calls per turn.
+	Parallel_tool_calls *bool `yaml:"parallel_tool_calls,omitempty" json:"parallel_tool_calls,omitempty"`
+
+	// tool_choice: "none" | "auto" | "required" | {function: {name}}.
+	Tool_choice any/* CUE disjunction: (string|struct) */ `yaml:"tool_choice,omitempty" json:"tool_choice,omitempty"`
+
+	// logprobs / top_logprobs: token log-probability reporting (unsupported by
+	// the local ollama OpenAI layer; authorable for a full OpenAI endpoint).
+	Logprobs *bool `yaml:"logprobs,omitempty" json:"logprobs,omitempty"`
+
+	Top_logprobs *int64 `yaml:"top_logprobs,omitempty" json:"top_logprobs,omitempty"`
+
+	// user: an end-user identifier for abuse monitoring.
+	User string `yaml:"user,omitempty" json:"user,omitempty"`
+
+	// metadata: arbitrary string metadata attached to the request.
+	Metadata map[string]string `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+
+	// logit_bias: per-token-id bias map.
+	Logit_bias map[string]int64 `yaml:"logit_bias,omitempty" json:"logit_bias,omitempty"`
+
+	// extra: undocumented request fields, merged into the request body verbatim as
+	// dotted JSON paths (sjson). The ONE legal place for an unknown key.
+	Extra map[string]any/* CUE top */ `yaml:"extra,omitempty" json:"extra,omitempty"`
+}
+
+// #LLMResponseFormat — the structured-output contract. type "json_schema" requires
+// the json_schema block; the schema field is the JSON Schema itself.
+type LLMResponseFormat struct {
+	Type string `yaml:"type,omitempty" json:"type"`
+
+	Json_schema struct {
+		Name string `yaml:"name,omitempty" json:"name"`
+
+		Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+		Schema map[string]any/* CUE top */ `yaml:"schema,omitempty" json:"schema"`
+
+		Strict bool `yaml:"strict,omitempty" json:"strict,omitempty"`
+	} `yaml:"json_schema,omitempty" json:"json_schema,omitempty"`
+}
+
+// #LLMReasoning — the object form of the reasoning/thinking control.
+type LLMReasoning struct {
+	Effort string `yaml:"effort,omitempty" json:"effort,omitempty"`
+}
+
+// #LLMStreamOptions — streaming response options.
+type LLMStreamOptions struct {
+	Include_usage *bool `yaml:"include_usage,omitempty" json:"include_usage,omitempty"`
+}
+
+// #LLMNamedToolChoice — force one named function tool.
+type LLMNamedToolChoice struct {
+	Function struct {
+		Name string `yaml:"name,omitempty" json:"name"`
+	} `yaml:"function,omitempty" json:"function"`
+}
+
 // #LoadedDoc — one parsed document of a namespace's flattened file tree (root file OR a flat
 // import), in merge order. `directives` is the RAW reserved-directive mapping bytes
 // (version/repo/defaults/provides/discover) the host yaml-decodes into a sub *UnifiedFile before
