@@ -49,9 +49,10 @@ func TestDeployShapeOverrideAcceptsCpuSingular(t *testing.T) {
 }
 
 // TestDeployShapeOverrideRejectsPluralCpus pins the cutover: the old `cpus:`
-// spelling is GONE from the #Deploy arm (it survives only on #Security and
-// #VmVariant, which are different defs). If a future edit reintroduces `cpus:`
-// as an accepted #Deploy key, this fails.
+// spelling is GONE from the #Deploy arm. It survives only on #Security (a
+// CPU-quota string) and the libvirt #LibvirtCPU.cpus — different defs entirely,
+// NOT #VmVariant, which this cutover aligned to `cpu:`. If a future edit
+// reintroduces `cpus:` as an accepted #Deploy key, this fails.
 func TestDeployShapeOverrideRejectsPluralCpus(t *testing.T) {
 	err := deployShape(t, `{from: "some-vm", cpus: 2}`)
 	if err == nil {
