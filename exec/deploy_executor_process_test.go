@@ -148,7 +148,7 @@ type processOnlyDeployExecutor struct {
 func TestNestedExecutorStartProcessComposesEveryHopAsArgv(t *testing.T) {
 	recorder := &recordingProcessExecutor{}
 	root := &processOnlyDeployExecutor{recordingProcessExecutor: recorder}
-	container := &NestedExecutor{Parent: root, Jump: NestedJump{Kind: JumpPodmanExec, Target: "box", ExtraArgs: []string{"--env", "A=B C"}}}
+	container := &NestedExecutor{Parent: root, Jump: NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "box", ExtraArgs: []string{"--env", "A=B C"}}}
 	leaf := &NestedExecutor{Parent: container, Jump: NestedJump{Kind: JumpSSH, Target: "agent@inner"}}
 	_, err := leaf.StartProcess(context.Background(), spec.ProcessLaunch{Argv: []string{"charly", "__agent-target", "serve", "--stdio"}})
 	if err != nil {

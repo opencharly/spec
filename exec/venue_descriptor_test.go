@@ -107,11 +107,11 @@ func TestDescriptorFromExecutor_Unrecognized(t *testing.T) {
 		},
 		"non-shell parent (composition)": {
 			Parent: &SSHExecutor{Host: "charly-arch"},
-			Jump:   NestedJump{Kind: JumpPodmanExec, Target: "child"},
+			Jump:   NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "child"},
 		},
 		"non-empty ExtraArgs": {
 			Parent: ShellExecutor{},
-			Jump:   NestedJump{Kind: JumpPodmanExec, Target: "child", ExtraArgs: []string{"--env", "FOO=bar"}},
+			Jump:   NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "child", ExtraArgs: []string{"--env", "FOO=bar"}},
 		},
 	}
 	for name, nested := range cases {

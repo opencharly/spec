@@ -42,8 +42,8 @@ import (
 // For each path segment, a single hop is added based on the node's
 // target classification:
 //
-//	target: pod / container → NestedExecutor with JumpPodmanExec /
-//	                          JumpDockerExec into "charly-<flat-path>".
+//	target: pod / container → NestedExecutor with JumpContainerExec
+//	                          (Engine = the deploy's engine) into "charly-<flat-path>".
 //	                          Container name flattens dot-separated
 //	                          paths to underscore-separated to remain
 //	                          a legal podman container name.

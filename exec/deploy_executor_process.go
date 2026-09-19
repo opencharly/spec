@@ -134,7 +134,7 @@ func (n *NestedExecutor) StartProcess(ctx context.Context, launch spec.ProcessLa
 	}
 	var outer []string
 	switch n.Jump.Kind {
-	case JumpContainerExec, JumpPodmanExec, JumpDockerExec:
+	case JumpContainerExec:
 		outer = []string{n.Jump.engineBinary(), "exec", "-i"}
 		// Deterministic session user/HOME (issue #149): see wrapWithJump.
 		if n.Jump.User != "" {

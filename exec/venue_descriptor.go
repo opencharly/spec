@@ -37,7 +37,7 @@ func VenueFromDescriptor(d spec.VenueDescriptor) (spec.DeployExecutor, error) {
 // importing sdk/deploykit (deploykit already imports kit; importing back would cycle).
 // deploykit.ContainerChain itself calls this (R3 — one construction, not two). engine is the
 // container-engine CLI (podman / docker / nerdctl); empty defaults to podman (matching the
-// historical JumpPodmanExec default).
+// historical default).
 func ContainerChainFromDescriptor(engine, containerName string) spec.DeployExecutor {
 	jump := NestedJump{Kind: JumpContainerExec, Engine: engine, Target: containerName}
 	// Deterministic exec user/HOME (issue #149): read the running container's
@@ -69,7 +69,7 @@ func ContainerChainFromDescriptor(engine, containerName string) spec.DeployExecu
 //
 // The "container" arm (K1-unblock W3 Unit B) recognizes the ONE enumerable *NestedExecutor shape
 // deploykit.ContainerChain always produces — Parent a plain ShellExecutor{}, a single
-// JumpPodmanExec/JumpDockerExec hop, no ExtraArgs — the venue every plain pod/container check
+// JumpContainerExec hop, no ExtraArgs — the venue every plain pod/container check
 // runs against (the check-runner family's most common case, needed so a plugin-constructed
 // ContainerChain venue can round-trip to the host over InvokeProvider's VenueDescriptor seam). Any
 // OTHER *NestedExecutor shape (a different Parent, JumpSSH/JumpVirshConsole, non-empty ExtraArgs —
