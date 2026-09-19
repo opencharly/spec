@@ -75,7 +75,13 @@ func TestDeploySecurityCpusStillLive(t *testing.T) {
 // rather than parked. A future reintroduction must fail this test until it ships
 // a real reader.
 func TestDeployRejectsVariants(t *testing.T) {
-	if err := deployShape(t, `{from: "some-vm", variants: {small: {cpu: 1}}}`); err == nil {
+	// An EMPTY variant body is deliberate: the pre-cutover schema accepts
+	// `variants: {small: {}}` (the map and its #VmVariant are valid), so this
+	// asserts the SURFACE is gone, not that some inner field is invalid. A body
+	// carrying a field like `cpu:` would be rejected by the OLD #VmVariant too
+	// (its shape fields were `cpus:`/`memory:`), so the test would pass before the
+	// cutover for the wrong reason and gate nothing.
+	if err := deployShape(t, `{from: "some-vm", variants: {small: {}}}`); err == nil {
 		t.Fatal("the deleted `variants:` surface was accepted on a #Deploy body")
 	}
 }
