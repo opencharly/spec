@@ -17,18 +17,13 @@ protocol: {
 		},
 		{
 			"name": "Capabilities"
+			"reserved_numbers": [2]
 			"fields": [
 				{
 					"name":   "calver"
 					"type":   "string"
 					"number": 1
 					"doc":    "the plugin's CalVer (CalVer is the version authority)"
-				},
-				{
-					"name":   "protocol_version"
-					"type":   "uint32"
-					"number": 2
-					"doc":    "thin secondary gate; never duplicates CalVer"
 				},
 				{
 					"name":     "provided"
