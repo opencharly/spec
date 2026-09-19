@@ -9,9 +9,9 @@ import (
 // TestAppendHopForFlatPathCarriesEngine pins that a container-exec hop carries the
 // node's ENGINE as DATA on the Jump (node.Engine is #EngineName): a nerdctl deploy
 // must yield JumpContainerExec with Engine "nerdctl", not a podman hop. This is the
-// branch that the engine-provider-class cutover rewrote (the former
-// JumpPodmanExec/JumpDockerExec enum arms became one data-carrying jump); without
-// the Engine field the value would silently default to podman in engineBinary().
+// branch that the engine-provider-class cutover rewrote (the former per-engine jump
+// arms became one data-carrying jump); without the Engine field the value would
+// silently default to podman in engineBinary().
 func TestAppendHopForFlatPathCarriesEngine(t *testing.T) {
 	node := &spec.Deploy{
 		Target:  "pod",
