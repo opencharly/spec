@@ -95,16 +95,14 @@ func IsUnitRunMode(mode string) bool { return contains(spec.EngineUnitRunModeWor
 // DirectRunMode returns the non-unit run mode — the one member of the CUE-owned
 // spec.EngineRunModes that is NOT unit-supervised. Derived as the set difference
 // (EngineRunModes − EngineUnitRunModeWords), so the name has NO literal home:
-// changing #EngineRunMode is the only edit. Falls back to the last mode in the
-// list if the vocabularies are ever malformed (never expected; unit-tested).
+// changing #EngineRunMode is the only edit. Returns "" if the vocabulary is
+// malformed (no non-unit mode); TestDirectRunModeDerived pins the real vocabulary
+// has exactly one.
 func DirectRunMode() string {
 	for _, m := range spec.EngineRunModes {
 		if !IsUnitRunMode(m) {
 			return m
 		}
-	}
-	if n := len(spec.EngineRunModes); n > 0 {
-		return spec.EngineRunModes[n-1]
 	}
 	return ""
 }
