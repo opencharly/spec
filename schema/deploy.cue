@@ -676,7 +676,7 @@
 // OpPrepareVenue / OpTeardownExecutor returns (F6). K1-unblock W3 Unit B added the
 // "container" kind (engine/container_name) so a plugin-constructed
 // deploykit.ContainerChain venue — a single-hop *NestedExecutor{Parent:ShellExecutor{},
-// Jump:{Kind:JumpPodmanExec|JumpDockerExec}}, the MOST COMMON check-runner venue — round-trips
+// Jump:{Kind:JumpContainerExec,Engine:podman|docker|nerdctl}}, the MOST COMMON check-runner venue — round-trips
 // through kit.DescriptorFromExecutor/VenueFromDescriptor exactly like "shell"/"ssh" already do.
 // This does NOT generalize to arbitrary N-hop composition (a genuinely multi-hop NestedExecutor
 // still degrades to the zero descriptor, unchanged) — it closes the one enumerable, well-known
@@ -689,7 +689,7 @@
 	args?: [...string] @go(Args)
 	connect_timeout?: int @go(ConnectTimeout,type=int)
 	// engine/container_name are set ONLY for kind "container": the container engine
-	// ("podman"/"docker", selecting JumpPodmanExec vs JumpDockerExec) and the target container
+	// ("podman"/"docker"/"nerdctl", carried as DATA on the jump) and the target container
 	// name ContainerChain jumps into.
 	engine?:         string @go(Engine)
 	container_name?: string @go(ContainerName)

@@ -139,7 +139,7 @@ type DeployExecutor interface {
 	// Kind returns a coarse classification of the venue used by the test
 	// runner for reporting and skip decisions. Values:
 	//   "host"      — ShellExecutor (operator's machine)
-	//   "container" — NestedExecutor with JumpPodmanExec / JumpDockerExec
+	//   "container" — NestedExecutor with JumpContainerExec (Engine carries podman/docker/nerdctl)
 	//   "vm"        — SSHExecutor or NestedExecutor with JumpSSH/JumpVirshConsole
 	// Replaces the test-time Executor.Kind() method deleted in the
 	// 2026-04 executor-hierarchy cutover.
