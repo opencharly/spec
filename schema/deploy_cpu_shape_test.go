@@ -50,8 +50,9 @@ func TestDeployShapeOverrideAcceptsCpuSingular(t *testing.T) {
 
 // TestDeployShapeOverrideRejectsPluralCpus pins the cutover: the old `cpus:`
 // spelling is GONE from the #Deploy arm. It survives only on #Security (a
-// CPU-quota string) and the libvirt #LibvirtCPU.cpus — different defs entirely.
-// If a future edit reintroduces `cpus:` as an accepted #Deploy key, this fails.
+// CPU-quota string, schema/_common.cue) and the libvirt #LibvirtNUMACell
+// (schema/vm.cue) — different defs entirely. If a future edit reintroduces
+// `cpus:` as an accepted #Deploy key, this fails.
 func TestDeployShapeOverrideRejectsPluralCpus(t *testing.T) {
 	err := deployShape(t, `{from: "some-vm", cpus: 2}`)
 	if err == nil {
@@ -71,11 +72,13 @@ func TestDeploySecurityCpusStillLive(t *testing.T) {
 
 // TestDeployRejectsVariants pins the deletion of the never-implemented
 // `variants:`/`#VmVariant` surface: it was added in #86 with no reader ever.
-// The reader sweep (executed against the default branches) is grep-clean for
-// `GetVariants` in BOTH spec and charly — the only `Variants`/`VmVariant` hits
-// are the generated field/type declarations themselves, and `git log -S 'func
-// GetVariants'` is empty across BOTH repos' entire history. A future
-// reintroduction must fail this test until it ships a real reader.
+// The reader sweep (executed against the default branches) finds NO reader:
+// `GetVariants` appears nowhere in spec or charly, `git log -S 'func
+// GetVariants'` is empty across BOTH repos' entire history, and the only
+// `Variants`/`VmVariant` hits are (a) spec's generated field/type declarations
+// and (b) charly's LIVE `packaging:` feature (`pkg.Variants`), neither of which
+// reads this deploy surface. A future reintroduction must fail this test until
+// it ships a real reader.
 func TestDeployRejectsVariants(t *testing.T) {
 	// An EMPTY variant body is deliberate: the pre-cutover schema accepts
 	// `variants: {small: {}}` (the map and its #VmVariant are valid), so this
