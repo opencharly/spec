@@ -70,8 +70,19 @@
 
 // #EngineCapability — the static facts about an engine, answered by OpDescribe.
 // This is the PUBLISHED provider contract: the fields a provider fills and the
-// consumers read. In this change the capability table + EngineBinary/GPURunArgs/
-// EngineRunModeFor/ImageExistsArgv consumers land; the pod/secret/keep-id fields
+// consumers read.
+//
+// AUTHORITY (the one home): `container.engineCapabilities` is the authoritative
+// table for the COMPILED-IN podman/docker engines and the built-in consumers
+// (EngineBinary/GPURunArgs/EngineRunModeFor/ImageExistsArgv/WorkloadUser). This
+// def is the shape an out-of-tree engine provider (plugin-nerdctl) answers over
+// Describe; the runtime compares/consumes that answer through the same struct,
+// so the table and the wire answer are one type, not two divergent copies. The
+// op envelopes below (#EngineBinaryRequest …) are for a provider that chooses to
+// answer an op instead of Describe.
+//
+// In this change the capability table + EngineBinary/GPURunArgs/EngineRunModeFor/
+// ImageExistsArgv consumers land; the pod/secret/keep-id fields
 // (SupportsPods / SupportsSecrets / SupportsUsernsKeepID / UsernsKeepIDArg /
 // WorkloadUser) are consumed by the engine PROVIDERS (the out-of-tree
 // plugin-nerdctl and the compiled-in podman/docker providers) as those land —
