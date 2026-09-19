@@ -12,7 +12,10 @@ package proc
 // needing a second copy.
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/opencharly/spec/spec"
@@ -36,6 +39,77 @@ import (
 // The matched directory resolves verbatim (leading `~/` expanded); the ref's
 // `:vTAG` is IGNORED — an override ALWAYS resolves to the dev's current tree.
 const RepoOverrideEnv = "CHARLY_REPO_OVERRIDE"
+
+// canonicalRepoPath canonicalizes a repo ref to the repo-root form the loader uses,
+// via the ONE canonical implementation (spec.NormalizeRepoSpec) — never a second copy
+// of the auto-prefix rule (R3). `opencharly/charly` and `github.com/opencharly/charly`
+// therefore both canonicalize to `github.com/opencharly/charly`.
+func canonicalRepoPath(rp string) string {
+	repoPath, _ := spec.NormalizeRepoSpec(rp)
+	return repoPath
+}
+
+// RepoOverrideDir returns the configured local override directory for repoPath, or
+// ("", false, nil) when none applies. envValue is the raw CHARLY_REPO_OVERRIDE value
+// (a comma-separated list of `repoPath=localDir` pairs). A malformed entry, a
+// missing/empty directory, or a non-directory target is a hard error — the override
+// was set deliberately, so a typo must fail loud rather than silently fall through to
+// a remote fetch.
+//
+// This is THE single implementation of the CHARLY_REPO_OVERRIDE parse: the
+// comma-separated repoPath=localDir split, the repo-path canonicalization (via
+// spec.NormalizeRepoSpec — BOTH sides, so a bare `owner/repo` argument matches an
+// `owner/repo=` entry and vice versa), the `~/` home expansion, and the
+// exists-and-is-a-directory check.
+//
+// It lives HERE, in spec/proc, next to RepoOverrideEnv, so BOTH the loader-side
+// orchestration (sdk/loaderkit.EnsureRepoDownloaded) AND the fetch LEAF
+// (spec/refs.DownloadRepo, used directly by `charly marketplace generate`,
+// `charly docs generate`, and pluginsgen) share ONE parse. Before this move the parse
+// lived only in loaderkit, so every direct DownloadRepo caller silently bypassed the
+// override — an R4 hole (the mechanism exists to verify uncommitted work before
+// pushing; a leaf that ignores it defeats it). A consumer MUST call this rather than
+// re-parse the env value (R3 — one canonical implementation per behavior).
+func RepoOverrideDir(repoPath, envValue string) (string, bool, error) {
+	envValue = strings.TrimSpace(envValue)
+	if envValue == "" {
+		return "", false, nil
+	}
+	// Canonicalize BOTH sides: the queried repoPath may itself be a bare `owner/repo`
+	// (a caller can pass either form), and the entry LHS may be either form too.
+	want := canonicalRepoPath(repoPath)
+	for pair := range strings.SplitSeq(envValue, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		eq := strings.LastIndex(pair, "=")
+		if eq < 0 {
+			return "", false, fmt.Errorf("CHARLY_REPO_OVERRIDE: malformed entry %q (want repoPath=localDir)", pair)
+		}
+		if canonicalRepoPath(pair[:eq]) != want {
+			continue
+		}
+		dir := strings.TrimSpace(pair[eq+1:])
+		if dir == "" {
+			return "", false, fmt.Errorf("CHARLY_REPO_OVERRIDE: empty directory for repo %q", repoPath)
+		}
+		if strings.HasPrefix(dir, "~/") {
+			if home, err := os.UserHomeDir(); err == nil {
+				dir = filepath.Join(home, dir[2:])
+			}
+		}
+		info, err := os.Stat(dir)
+		if err != nil {
+			return "", false, fmt.Errorf("CHARLY_REPO_OVERRIDE: override dir for %q not accessible: %w", repoPath, err)
+		}
+		if !info.IsDir() {
+			return "", false, fmt.Errorf("CHARLY_REPO_OVERRIDE: override for %q is not a directory: %s", repoPath, dir)
+		}
+		return dir, true, nil
+	}
+	return "", false, nil
+}
 
 // SelfSuperprojectOverridePair returns a CHARLY_REPO_OVERRIDE pair
 // (`<repo-identity>=<superproject-dir>`) that points a bed project's OWN
