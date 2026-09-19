@@ -127,7 +127,8 @@ func TestDescriptorFromExecutor_Unrecognized(t *testing.T) {
 // TestDescriptorFromExecutor_Container proves the K1-unblock W3 Unit B arm: the ONE enumerable
 // *NestedExecutor shape deploykit.ContainerChain always produces (Parent a plain ShellExecutor{},
 // a single JumpContainerExec hop, no ExtraArgs) round-trips to a "container" descriptor carrying
-// Engine + ContainerName. The engine is DATA on the jump now, so an empty Engine defaults to podman.
+// Engine + ContainerName. The engine is echoed VERBATIM (including empty), so this stays the
+// pure inverse of VenueFromDescriptor.
 func TestDescriptorFromExecutor_Container(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -137,7 +138,7 @@ func TestDescriptorFromExecutor_Container(t *testing.T) {
 		{"podman", "podman", "podman"},
 		{"docker", "docker", "docker"},
 		{"nerdctl", "nerdctl", "nerdctl"},
-		{"default", "", "podman"},
+		{"empty stays empty (pure inverse)", "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

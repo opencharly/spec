@@ -83,7 +83,12 @@ func DescriptorFromExecutor(exec spec.DeployExecutor) spec.VenueDescriptor {
 	case *NestedExecutor:
 		if _, ok := e.Parent.(ShellExecutor); ok {
 			if len(e.Jump.ExtraArgs) == 0 && isContainerKind(e.Jump.Kind) {
-				return spec.VenueDescriptor{Kind: "container", Engine: e.Jump.engineBinary(), ContainerName: e.Jump.Target}
+				// Engine is echoed VERBATIM (including empty) so this stays the pure
+				// inverse of VenueFromDescriptor: desc{Engine:""} round-trips to ""
+				// rather than being normalized to "podman" here. The podman default
+				// is applied only when BUILDING argv (engineBinary), never in the
+				// descriptor round-trip.
+				return spec.VenueDescriptor{Kind: "container", Engine: e.Jump.Engine, ContainerName: e.Jump.Target}
 			}
 		}
 		return spec.VenueDescriptor{}
