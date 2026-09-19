@@ -7,8 +7,11 @@
 // call sites are untouched.
 //
 // The engine NAME vocabulary is CUE-owned (schema/engine.cue #EngineName, emitted as
-// spec.EngineNames) — this file never re-lists the words. The capability FACTS live in one Go
-// table keyed by those words; adding an engine is one CUE edit plus one table row.
+// spec.EngineNames) — this file declares no separate word LIST (IsEngineName/IsRunMode/
+// IsUnitRunMode read spec.EngineNames). The capability FACTS live in one Go table whose
+// KEYS are those CUE-declared words (the words appear as data, not as a second list);
+// adding an engine is one CUE edit plus one table row, gated by
+// TestEngineVocabularyIsSingleSource.
 package container
 
 import (

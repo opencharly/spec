@@ -268,7 +268,7 @@ var KindValueDefs = map[string]string{
 	"vm":         "#VmValue",
 }
 
-// EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. THE single source: the authored candy.engine/deploy.engine union, EngineBinary, and EngineCapabilityFor all derive from it. Adding an engine is one edit to #EngineName + task cue:gen.
+// EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. The authored candy.engine/deploy.engine union and IsEngineName/IsRunMode/IsUnitRunMode derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then task cue:gen.
 var EngineNames = []string{
 	"podman",
 	"docker",
