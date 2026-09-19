@@ -48,7 +48,9 @@ func TestSelfSuperprojectOverridePair_NotASubmodule(t *testing.T) {
 }
 
 // TestRepoOverrideDir_LocalResolution: the parser resolves a matching pair to its local dir
-// (bare-LHS auto-prefix, `~/` expansion, verbatim dir otherwise).
+// (bare-LHS auto-prefix, `~/` expansion, verbatim dir otherwise). BOTH sides are canonicalized,
+// so every combination of bare/qualified repoPath and bare/qualified entry matches — including
+// the bare repoPath + bare entry case that a one-sided comparison silently ignored.
 func TestRepoOverrideDir_LocalResolution(t *testing.T) {
 	dir := t.TempDir()
 	cases := []struct {
@@ -58,8 +60,10 @@ func TestRepoOverrideDir_LocalResolution(t *testing.T) {
 		wantDir  string
 		wantOK   bool
 	}{
-		{"qualified LHS", "github.com/opencharly/x", "github.com/opencharly/x=" + dir, dir, true},
-		{"bare LHS auto-prefixes github.com", "github.com/opencharly/x", "opencharly/x=" + dir, dir, true},
+		{"qualified repoPath, qualified entry", "github.com/opencharly/x", "github.com/opencharly/x=" + dir, dir, true},
+		{"qualified repoPath, bare entry", "github.com/opencharly/x", "opencharly/x=" + dir, dir, true},
+		{"bare repoPath, qualified entry", "opencharly/x", "github.com/opencharly/x=" + dir, dir, true},
+		{"bare repoPath, bare entry (the one-sided bug)", "opencharly/x", "opencharly/x=" + dir, dir, true},
 		{"no match", "github.com/opencharly/other", "opencharly/x=" + dir, "", false},
 		{"empty env", "github.com/opencharly/x", "", "", false},
 	}

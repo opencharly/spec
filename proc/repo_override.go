@@ -40,16 +40,13 @@ import (
 // `:vTAG` is IGNORED — an override ALWAYS resolves to the dev's current tree.
 const RepoOverrideEnv = "CHARLY_REPO_OVERRIDE"
 
-// normalizeOverrideRepoPath canonicalizes the LHS of a CHARLY_REPO_OVERRIDE pair to
-// the repo-root form spec.ParseRemoteRef yields, so `opencharly/charly` and
-// `github.com/opencharly/charly` both match (same auto-prefix rule as
-// spec.NormalizeRepoSpec).
-func normalizeOverrideRepoPath(rp string) string {
-	rp = strings.TrimSpace(strings.TrimSuffix(rp, "/"))
-	if i := strings.Index(rp, "/"); i > 0 && !strings.Contains(rp[:i], ".") {
-		return "github.com/" + rp
-	}
-	return rp
+// canonicalRepoPath canonicalizes a repo ref to the repo-root form the loader uses,
+// via the ONE canonical implementation (spec.NormalizeRepoSpec) — never a second copy
+// of the auto-prefix rule (R3). `opencharly/charly` and `github.com/opencharly/charly`
+// therefore both canonicalize to `github.com/opencharly/charly`.
+func canonicalRepoPath(rp string) string {
+	repoPath, _ := spec.NormalizeRepoSpec(rp)
+	return repoPath
 }
 
 // RepoOverrideDir returns the configured local override directory for repoPath, or
@@ -60,9 +57,10 @@ func normalizeOverrideRepoPath(rp string) string {
 // a remote fetch.
 //
 // This is THE single implementation of the CHARLY_REPO_OVERRIDE parse: the
-// comma-separated repoPath=localDir split, the repo-path normalization (a bare
-// owner/repo LHS auto-prefixes github.com, the same rule as spec.NormalizeRepoSpec),
-// the `~/` home expansion, and the exists-and-is-a-directory check.
+// comma-separated repoPath=localDir split, the repo-path canonicalization (via
+// spec.NormalizeRepoSpec — BOTH sides, so a bare `owner/repo` argument matches an
+// `owner/repo=` entry and vice versa), the `~/` home expansion, and the
+// exists-and-is-a-directory check.
 //
 // It lives HERE, in spec/proc, next to RepoOverrideEnv, so BOTH the loader-side
 // orchestration (sdk/loaderkit.EnsureRepoDownloaded) AND the fetch LEAF
@@ -77,6 +75,9 @@ func RepoOverrideDir(repoPath, envValue string) (string, bool, error) {
 	if envValue == "" {
 		return "", false, nil
 	}
+	// Canonicalize BOTH sides: the queried repoPath may itself be a bare `owner/repo`
+	// (a caller can pass either form), and the entry LHS may be either form too.
+	want := canonicalRepoPath(repoPath)
 	for pair := range strings.SplitSeq(envValue, ",") {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
@@ -86,7 +87,7 @@ func RepoOverrideDir(repoPath, envValue string) (string, bool, error) {
 		if eq < 0 {
 			return "", false, fmt.Errorf("CHARLY_REPO_OVERRIDE: malformed entry %q (want repoPath=localDir)", pair)
 		}
-		if normalizeOverrideRepoPath(pair[:eq]) != repoPath {
+		if canonicalRepoPath(pair[:eq]) != want {
 			continue
 		}
 		dir := strings.TrimSpace(pair[eq+1:])
