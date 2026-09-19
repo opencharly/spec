@@ -178,19 +178,20 @@
 
 	// Per-deploy VM-shape override, read by candy/plugin-vm's hostConfigResolve:
 	// `from:` a kind:vm template and state a different size, instead of duplicating
-	// the whole template for each consumer (R3). The spelling matches `#Vm`'s own
-	// field (`cpu:`, singular) EXACTLY, so a template and every deploy that derives
-	// from it read alike. These three were DEAD since the initial spec import —
-	// authorable but with zero readers — and the cpu one was also misspelled
-	// `cpus:`, the only VM-shape surface to do so; the reader that gives them
-	// meaning (plugin-vm) landed with the rename.
+	// the whole template for each consumer (R3). The spelling is `#Vm`'s own —
+	// `cpu:` (singular) and `ram:` — so a template and every deploy that derives
+	// from it read alike. Both were DEAD since the initial spec import (authorable,
+	// zero readers/authors); the cpu one was misspelled `cpus:`, the lone VM-shape
+	// outlier. The reader that gives them meaning (candy/plugin-vm) lands with the
+	// rename.
 	//
-	// A VM template's `disk_size` builds the shared base disk ONCE, so a per-deploy
-	// disk_size cannot resize an already-built disk; it is kept for shape parity
-	// with #Vm but is not a live per-deploy override (only cpu/ram are).
-	cpu?:       int & >=1 @go(Cpus,type=int)
-	ram?:       #VmSize
-	disk_size?: #VmSize @go(DiskSize)
+	// There is deliberately NO per-deploy `disk_size`: a kind:vm template's
+	// disk_size builds the shared base disk ONCE and every deploy boots a read-only
+	// COW overlay of it, so a per-deploy disk_size could not resize an already-built
+	// disk. The dead field was removed rather than parked (R5) — a future
+	// deliberate cutover may add a real per-deploy disk mechanism with a reader.
+	cpu?: int & >=1 @go(Cpus,type=int)
+	ram?: #VmSize
 
 	deploy?: #KubernetesDeploy @go(Deploy,optional=nillable)
 

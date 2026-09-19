@@ -363,9 +363,13 @@ type VmSnapshotPolicy struct {
 // rejected at validate time, because the disk comes exclusively from the shared
 // snapshot chain.
 type VmVariant struct {
-	Cpus int `yaml:"cpus,omitempty" json:"cpus,omitempty"`
+	// The SAME VM-shape spellings as `#Vm` / `#Deploy` — `cpu:` (singular) and
+	// `ram:` — so every VM-shape surface in the vocabulary reads alike. Both were
+	// the plural/alias outliers (`cpus:`/`memory:`) until the deploy-shape-override
+	// cutover aligned the whole family; the `#Deploy` cpu rename is the same sweep.
+	Cpus int `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Memory VmSize `yaml:"memory,omitempty" json:"memory,omitempty"`
+	Ram VmSize `yaml:"ram,omitempty" json:"ram,omitempty"`
 
 	Video string `yaml:"video,omitempty" json:"video,omitempty"`
 
@@ -4450,21 +4454,21 @@ type Deploy struct {
 
 	// Per-deploy VM-shape override, read by candy/plugin-vm's hostConfigResolve:
 	// `from:` a kind:vm template and state a different size, instead of duplicating
-	// the whole template for each consumer (R3). The spelling matches `#Vm`'s own
-	// field (`cpu:`, singular) EXACTLY, so a template and every deploy that derives
-	// from it read alike. These three were DEAD since the initial spec import —
-	// authorable but with zero readers — and the cpu one was also misspelled
-	// `cpus:`, the only VM-shape surface to do so; the reader that gives them
-	// meaning (plugin-vm) landed with the rename.
+	// the whole template for each consumer (R3). The spelling is `#Vm`'s own —
+	// `cpu:` (singular) and `ram:` — so a template and every deploy that derives
+	// from it read alike. Both were DEAD since the initial spec import (authorable,
+	// zero readers/authors); the cpu one was misspelled `cpus:`, the lone VM-shape
+	// outlier. The reader that gives them meaning (candy/plugin-vm) lands with the
+	// rename.
 	//
-	// A VM template's `disk_size` builds the shared base disk ONCE, so a per-deploy
-	// disk_size cannot resize an already-built disk; it is kept for shape parity
-	// with #Vm but is not a live per-deploy override (only cpu/ram are).
+	// There is deliberately NO per-deploy `disk_size`: a kind:vm template's
+	// disk_size builds the shared base disk ONCE and every deploy boots a read-only
+	// COW overlay of it, so a per-deploy disk_size could not resize an already-built
+	// disk. The dead field was removed rather than parked (R5) — a future
+	// deliberate cutover may add a real per-deploy disk mechanism with a reader.
 	Cpus int `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
 	Ram VmSize `yaml:"ram,omitempty" json:"ram,omitempty"`
-
-	DiskSize VmSize `yaml:"disk_size,omitempty" json:"disk_size,omitempty"`
 
 	Deploy *KubernetesDeploy `yaml:"deploy,omitempty" json:"deploy,omitempty"`
 

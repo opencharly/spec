@@ -387,8 +387,12 @@ import "strings"
 // rejected at validate time, because the disk comes exclusively from the shared
 // snapshot chain.
 #VmVariant: {
-	cpus?:       int & >=1 @go(,type=int)
-	memory?:     #VmSize
+	// The SAME VM-shape spellings as `#Vm` / `#Deploy` — `cpu:` (singular) and
+	// `ram:` — so every VM-shape surface in the vocabulary reads alike. Both were
+	// the plural/alias outliers (`cpus:`/`memory:`) until the deploy-shape-override
+	// cutover aligned the whole family; the `#Deploy` cpu rename is the same sweep.
+	cpu?:        int & >=1 @go(Cpus,type=int)
+	ram?:        #VmSize
 	video?:      string & !="" @go(Video)
 	gpu?:       {hostdev?: *"auto" | "none" | string @go(Hostdev), vendor?: string & !="" @go(Vendor)} @go(Gpu,optional=nillable)
 	display?:    string & !="" @go(Display)
