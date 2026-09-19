@@ -8,7 +8,10 @@ package proc
 // tree (the candy-ref analogue of the auto --dev-local-pkg toolchain build). These tests lock the
 // merge precedence + the env->local-dir resolution so the behavior can't regress.
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestMergeRepoOverrides(t *testing.T) {
 	cases := []struct{ name, existing, add, want string }{
@@ -41,5 +44,49 @@ func TestMergeRepoOverrides(t *testing.T) {
 func TestSelfSuperprojectOverridePair_NotASubmodule(t *testing.T) {
 	if pair := SelfSuperprojectOverridePair(t.TempDir()); pair != "" {
 		t.Errorf("non-submodule dir should yield no override, got %q", pair)
+	}
+}
+
+// TestRepoOverrideDir_LocalResolution: the parser resolves a matching pair to its local dir
+// (bare-LHS auto-prefix, `~/` expansion, verbatim dir otherwise).
+func TestRepoOverrideDir_LocalResolution(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name     string
+		repoPath string
+		env      string
+		wantDir  string
+		wantOK   bool
+	}{
+		{"qualified LHS", "github.com/opencharly/x", "github.com/opencharly/x=" + dir, dir, true},
+		{"bare LHS auto-prefixes github.com", "github.com/opencharly/x", "opencharly/x=" + dir, dir, true},
+		{"no match", "github.com/opencharly/other", "opencharly/x=" + dir, "", false},
+		{"empty env", "github.com/opencharly/x", "", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok, err := RepoOverrideDir(tc.repoPath, tc.env)
+			if err != nil {
+				t.Fatalf("RepoOverrideDir: %v", err)
+			}
+			if ok != tc.wantOK || got != tc.wantDir {
+				t.Errorf("RepoOverrideDir(%q,%q) = (%q,%v), want (%q,%v)", tc.repoPath, tc.env, got, ok, tc.wantDir, tc.wantOK)
+			}
+		})
+	}
+}
+
+// TestRepoOverrideDir_HardErrors: a deliberately-set override with a malformed entry, an empty
+// dir, or a missing/non-directory target HARD-fails (never silently falls through to a remote
+// fetch — the typo must be loud).
+func TestRepoOverrideDir_HardErrors(t *testing.T) {
+	file := t.TempDir() + "/afile"
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"nokey", "opencharly/x=", "opencharly/x=/nonexistent-tree-xyz", "opencharly/x=" + file} {
+		if _, _, err := RepoOverrideDir("github.com/opencharly/x", bad); err == nil {
+			t.Errorf("RepoOverrideDir(%q) accepted a bad entry; want a hard error", bad)
+		}
 	}
 }

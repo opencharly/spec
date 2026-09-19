@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/opencharly/spec/proc"
 )
 
 // TestPickResolvedCommit guards the Bug-2 fix: an annotated tag must resolve to
@@ -307,5 +309,24 @@ func TestGitClone_PopulatesAllSubmodules(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, probe.path)); err != nil {
 			t.Errorf("submodule path %s not populated (%s): %v", probe.path, probe.why, err)
 		}
+	}
+}
+
+// TestDownloadRepoHonorsOverrideAtTheLeaf gates the R4 fix: CHARLY_REPO_OVERRIDE must be
+// honored at the fetch LEAF (DownloadRepo), not only at the loader's EnsureRepoDownloaded
+// caller. `charly marketplace generate`, `charly docs generate`, and pluginsgen call
+// DownloadRepo directly, so before this fix they silently fetched the pinned REMOTE ref
+// even with an override set — defeating the "verify an uncommitted tree before pushing"
+// mechanism they exist to support. A matching override must return the local tree WITHOUT
+// any network fetch (the impossible version proves no fetch happened).
+func TestDownloadRepoHonorsOverrideAtTheLeaf(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(proc.RepoOverrideEnv, "opencharly/some-repo="+dir)
+	got, err := DownloadRepo("github.com/opencharly/some-repo", "v2099.999.9999")
+	if err != nil {
+		t.Fatalf("DownloadRepo with an override must not fetch (got error %v)", err)
+	}
+	if got != dir {
+		t.Fatalf("DownloadRepo = %q, want the override dir %q", got, dir)
 	}
 }
