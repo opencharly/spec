@@ -241,6 +241,18 @@ func writeVocab(dir, out string) error {
 	if err != nil {
 		return err
 	}
+	// engineNames / engineRunModes — the engine vocabularies, so the engine
+	// word list and run-mode list have ONE source (CUE) rather than a Go switch
+	// or switch-case list. EngineBinary / ValidateEngine / ValidateRunMode
+	// consult these.
+	engineNames, err := enumValues(schema, "#EngineName")
+	if err != nil {
+		return err
+	}
+	engineRunModes, err := enumValues(schema, "#EngineRunMode")
+	if err != nil {
+		return err
+	}
 	opVerbs, err := enumValues(schema, "#OpVerb")
 	if err != nil {
 		return err
@@ -273,6 +285,8 @@ func writeVocab(dir, out string) error {
 		opVerbs:            opVerbs,
 		authoringVerbs:     authoringVerbs,
 		kindValueDefs:      kindValues,
+		engineNames:        engineNames,
+		engineRunModes:     engineRunModes,
 	})
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
@@ -484,6 +498,8 @@ type vocabSets struct {
 	opVerbs            []string
 	authoringVerbs     []string
 	kindValueDefs      map[string]string
+	engineNames        []string
+	engineRunModes     []string
 }
 
 func renderVocab(s vocabSets) string {
@@ -510,6 +526,8 @@ func renderVocab(s vocabSets) string {
 	writeStrSlice(&b, "OpVerbs", "the verb DISCRIMINATOR vocabulary (#OpVerb) — the exactly-one-set verb subset of #Op fields (Op.Kind() + the VerbCatalog dispatch table gate against it).", s.opVerbs)
 	writeStrSlice(&b, "AuthoringVerbs", "the AUTHORABLE #Op field vocabulary (#Op fields minus the never-authored origin/venue/intent_do/plugin/plugin_input/command).", s.authoringVerbs)
 	writeStrMap(&b, "KindValueDefs", "the word→#<Kind>Value CUE-def map the host uses to closedness-gate a substrate/candy node's authored VALUE (validateKindValueCUE). DERIVED from the #<X>Value defs themselves (every one except the shared #DeployValue disjunct), so a new value-gated kind needs no hand-maintained map.", s.kindValueDefs)
+	writeStrSlice(&b, "EngineNames", "the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. THE single source: the authored candy.engine/deploy.engine union, EngineBinary, and EngineCapabilityFor all derive from it. Adding an engine is one edit to #EngineName + task cue:gen.", s.engineNames)
+	writeStrSlice(&b, "EngineRunModes", "the CLOSED engine run-mode vocabulary (#EngineRunMode) — quadlet/systemd-unit/direct. ValidateRunMode derives from it; the per-engine mode mapping is container.EngineCapabilityFor.", s.engineRunModes)
 	return b.String()
 }
 

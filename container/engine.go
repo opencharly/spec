@@ -1,45 +1,50 @@
 // Package container is the spec fabric slice for container-engine host helpers — resolving
-// which engine binary to invoke, its GPU run-args, and auto-detecting the installed engine.
-// RELOCATED from sdk/kit (#55 fabric-primitive extraction). It carries os/exec (the engine
-// auto-detect shells `LookPath`) in its OWN slice (Rule 2) so a consumer needing only value
-// types never drags os/exec. charly core inlines from here; sdk/kit re-exports the same symbols
-// so existing kit.EngineBinary / kit.GPURunArgs / kit.DetectEngine call sites are untouched.
+// which engine binary to invoke, its GPU run-args, auto-detecting the installed engine, and the
+// engine capability data table. RELOCATED from sdk/kit (#55 fabric-primitive extraction). It
+// carries os/exec (the engine auto-detect shells `LookPath`) in its OWN slice (Rule 2) so a
+// consumer needing only value types never drags os/exec. charly core inlines from here; sdk/kit
+// re-exports the same symbols so existing kit.EngineBinary / kit.GPURunArgs / kit.DetectEngine
+// call sites are untouched.
+//
+// The engine NAME vocabulary is CUE-owned (schema/engine.cue #EngineName, emitted as
+// spec.EngineNames) — this file never re-lists the words. The capability FACTS live in one Go
+// table keyed by those words; adding an engine is one CUE edit plus one table row.
 package container
 
 import (
 	"fmt"
 	"os/exec"
+	"strings"
+
+	"github.com/opencharly/spec/spec"
 )
 
 // EngineBinary returns the CLI binary name for a container engine. "auto" resolves via
-// DetectEngine (podman preferred), falling back to "docker".
+// DetectEngine (podman preferred); an unknown word falls back to "docker" (the historical
+// default) so a caller without a capability row still gets a runnable binary.
 func EngineBinary(engine string) string {
-	switch engine {
-	case "podman":
-		return "podman"
-	case "docker":
-		return "docker"
-	case "nerdctl":
-		return "nerdctl"
-	case "auto":
+	if engine == "auto" {
 		if detected, err := DetectEngine(); err == nil {
 			return detected
 		}
 		return "docker"
-	default:
-		return "docker"
 	}
+	if c, ok := engineCapabilities[engine]; ok {
+		return c.Binary
+	}
+	// Unknown/empty word: the historical default. A caller can distinguish this
+	// from a real engine via IsEngineName.
+	return "docker"
 }
 
 // GPURunArgs returns the engine-specific run flags that expose all host GPUs to a container.
 // podman uses the CDI device form; docker and nerdctl use the Docker-compatible `--gpus`.
+// The style rides on the capability table so it is a fact, not a switch.
 func GPURunArgs(engine string) []string {
-	switch engine {
-	case "podman":
+	if c, ok := EngineCapabilityFor(engine); ok && c.GPUArgStyle == "cdi" {
 		return []string{"--device", "nvidia.com/gpu=all"}
-	default:
-		return []string{"--gpus", "all"}
 	}
+	return []string{"--gpus", "all"}
 }
 
 // DetectEngine auto-detects the container engine: prefers podman, falls back to docker.
@@ -55,54 +60,51 @@ func DetectEngine() (string, error) {
 	return "", fmt.Errorf("no container engine found (install podman or docker)")
 }
 
-// EngineCapability is the static, data-only description of an engine: the facts
-// every "does this engine support X" branch in core consults instead of
-// switching on the engine name. It mirrors the authored #EngineCapability CUE
-// def (schema/engine.cue); the provider contract carries the same shape on the
-// wire. Kept as a plain Go table here because the name->facts mapping is DATA
-// (like EngineBinary), available before any engine provider connects.
-type EngineCapability struct {
-	// Binary is the CLI binary the engine is driven through.
-	Binary string
-	// SupportsPods is true when the engine has a first-class pod primitive
-	// (podman's .pod). False means pod-style sharing uses a shared network
-	// namespace (--net=container:<primary>).
-	SupportsPods bool
-	// SupportsSecrets is true when the engine has a native secret store
-	// (podman secret). False means credentials are delivered as env/file.
-	SupportsSecrets bool
-	// SupportsUsernsKeepID is true when the engine can map the invoking user
-	// into the container (podman --userns=keep-id). False means host-identical
-	// file sharing requires launching the workload as container-uid-0 under a
-	// rootless single-userns engine (nerdctl).
-	SupportsUsernsKeepID bool
-	// SupportsRootless is true when the engine runs without host root.
-	SupportsRootless bool
-	// RunMode is the persistence/supervision mode: "quadlet" (podman),
-	// "systemd-unit" (nerdctl; a generated .service wrapping the CLI), or
-	// "direct" (docker; ephemeral argv).
-	RunMode string
-	// GPUArgStyle is "cdi" (podman --device nvidia.com/gpu=all) or "gpus"
-	// (docker/nerdctl --gpus all).
-	GPUArgStyle string
-	// UsernsKeepIDArg is the per-container keep-id argv when supported.
-	UsernsKeepIDArg string
-	// WorkloadUser is the in-container user a workload must run as for
-	// host-identical file sharing. "0" for rootless single-userns engines
-	// (container-uid 0 IS the invoking host user in the rootless userns);
-	// empty means the engine's keep-id mapping handles it.
-	WorkloadUser string
+// engineNames is CUE-owned (schema/engine.cue #EngineName → spec.EngineNames);
+// engineRunModes likewise (#EngineRunMode → spec.EngineRunModes). Exposing them
+// as funcs keeps every consumer off a hand-written literal list.
+
+// EngineNames returns the closed engine word vocabulary (podman/docker/nerdctl).
+func EngineNames() []string { return spec.EngineNames }
+
+// IsEngineName reports whether name is a member of the closed engine vocabulary.
+// It does NOT resolve "auto" (that is a selector, not an engine word) — callers
+// validating authored config reject "auto" here and resolve it separately.
+func IsEngineName(name string) bool { return contains(spec.EngineNames, name) }
+
+// RunModes returns the closed run-mode vocabulary (quadlet/systemd-unit/direct).
+func RunModes() []string { return spec.EngineRunModes }
+
+// IsRunMode reports whether mode is a member of the closed run-mode vocabulary.
+func IsRunMode(mode string) bool { return contains(spec.EngineRunModes, mode) }
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
-// engineCapabilities is the DATA table the kernel consults. One row per engine
-// word; the values are facts about the engine CLI, not policy. nerdctl's row is
-// the spike-proven posture: rootless, no pods primitive (shared-netns
-// emulation), no native secret store (env/file fallback), no keep-id
-// (workload runs as uid 0 == invoking user), systemd-unit persistence, Docker's
-// `--gpus` passthrough.
-var engineCapabilities = map[string]EngineCapability{
+// EngineCapability is the sdk-visible alias of the generated spec.EngineCapability
+// — the ONE schema-shaped type (authored in schema/engine.cue, generated into
+// spec/cue_types_gen.go). Callers write container.EngineCapability; the shape is
+// never hand-maintained here.
+type EngineCapability = spec.EngineCapability
+
+// engineCapabilities is the DATA table the kernel consults: one row per engine
+// word, using the generated spec.EngineCapability shape. The values are facts
+// about each engine CLI, not policy — they replace every "does this engine
+// support X" branch in core. nerdctl's row is the spike-proven posture: rootless,
+// no pods primitive (shared-netns emulation), no native secret store (env/file
+// fallback), no keep-id (workload runs as uid 0 == the invoking host user),
+// systemd-unit persistence, Docker `--gpus` passthrough.
+var engineCapabilities = map[string]spec.EngineCapability{
 	"podman": {
+		Name:                 "podman",
 		Binary:               "podman",
+		DetectProbe:          "podman --version",
 		SupportsPods:         true,
 		SupportsSecrets:      true,
 		SupportsUsernsKeepID: true,
@@ -112,36 +114,34 @@ var engineCapabilities = map[string]EngineCapability{
 		UsernsKeepIDArg:      "--userns=keep-id",
 	},
 	"docker": {
-		Binary:               "docker",
-		SupportsPods:         false,
-		SupportsSecrets:      false,
-		SupportsUsernsKeepID: false,
-		SupportsRootless:     true,
-		RunMode:              "direct",
-		GPUArgStyle:          "gpus",
+		Name:             "docker",
+		Binary:           "docker",
+		DetectProbe:      "docker --version",
+		SupportsRootless: true,
+		RunMode:          "direct",
+		GPUArgStyle:      "gpus",
 	},
 	"nerdctl": {
-		Binary:               "nerdctl",
-		SupportsPods:         false,
-		SupportsSecrets:      false,
-		SupportsUsernsKeepID: false,
-		SupportsRootless:     true,
-		RunMode:              "systemd-unit",
-		GPUArgStyle:          "gpus",
-		WorkloadUser:         "0",
+		Name:             "nerdctl",
+		Binary:           "nerdctl",
+		DetectProbe:      "nerdctl --version",
+		SupportsRootless: true,
+		RunMode:          "systemd-unit",
+		GPUArgStyle:      "gpus",
+		WorkloadUser:     "0",
 	},
 }
 
-// EngineCapabilityFor returns the capability facts for an engine word. The
-// bool is false for an unknown/empty word, so a caller can distinguish "docker"
-// (a known engine with known limitations) from a typo. "auto" resolves through
+// EngineCapabilityFor returns the capability facts for an engine word. The bool
+// is false for an unknown/empty word, so a caller can distinguish "docker" (a
+// known engine with known limitations) from a typo. "auto" resolves through
 // DetectEngine first so a caller never has to.
-func EngineCapabilityFor(engine string) (EngineCapability, bool) {
+func EngineCapabilityFor(engine string) (spec.EngineCapability, bool) {
 	if engine == "auto" {
 		if detected, err := DetectEngine(); err == nil {
 			engine = detected
 		} else {
-			return EngineCapability{}, false
+			return spec.EngineCapability{}, false
 		}
 	}
 	c, ok := engineCapabilities[engine]
@@ -152,7 +152,13 @@ func EngineCapabilityFor(engine string) (EngineCapability, bool) {
 // defaulting to "direct" for an unknown word (the conservative, no-unit path).
 func EngineRunModeFor(engine string) string {
 	if c, ok := EngineCapabilityFor(engine); ok {
-		return c.RunMode
+		return string(c.RunMode)
 	}
 	return "direct"
+}
+
+// EngineValidationError builds the canonical "not an engine" error text from the
+// CUE-owned vocabulary, so the message can never drift from the accepted set.
+func EngineValidationError(field, value string) error {
+	return fmt.Errorf("%s must be one of %s, got %q", field, strings.Join(spec.EngineNames, ", "), value)
 }

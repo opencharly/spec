@@ -233,19 +233,26 @@ func ResolveValue(envVal, cfgVal, defaultVal string) string {
 }
 
 func ValidateEngine(value, field string) error {
-	switch value {
-	case "docker", "podman", "nerdctl":
-		return nil
+	// The engine vocabulary is CUE-owned (spec.EngineNames via container); a
+	// literal list here would be a second source that drifts.
+	if !container.IsEngineName(value) {
+		return container.EngineValidationError(field, value)
 	}
-	return fmt.Errorf("%s must be \"docker\", \"podman\", or \"nerdctl\", got %q", field, value)
+	return nil
 }
 
 func ValidateRunMode(value string) error {
-	switch value {
-	case "auto", "direct", "quadlet", "systemd-unit":
+	// "auto" is the pre-resolution SELECTOR (ResolveRuntime replaces it with a
+	// concrete mode via DetectRunMode before this validation runs); it is not a
+	// member of the run-mode vocabulary. The concrete modes are CUE-owned
+	// (spec.EngineRunModes via container) — a literal list here would drift.
+	if value == "auto" {
 		return nil
 	}
-	return fmt.Errorf("run_mode must be \"auto\", \"direct\", \"quadlet\", or \"systemd-unit\", got %q", value)
+	if !container.IsRunMode(value) {
+		return fmt.Errorf("run_mode must be \"auto\" or one of %s, got %q", strings.Join(container.RunModes(), ", "), value)
+	}
+	return nil
 }
 
 // DetectRunMode returns the persistence/supervision mode for a run engine:

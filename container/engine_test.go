@@ -1,14 +1,19 @@
 package container
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/opencharly/spec/spec"
+)
 
 func TestEngineBinary(t *testing.T) {
 	cases := map[string]string{
 		"podman":  "podman",
 		"docker":  "docker",
 		"nerdctl": "nerdctl",
-		"":        "docker",
-		"bogus":   "docker",
+		// unknown/empty falls back to the historical default
+		"":      "docker",
+		"bogus": "docker",
 	}
 	for engine, want := range cases {
 		if got := EngineBinary(engine); got != want {
@@ -29,6 +34,33 @@ func TestGPURunArgs(t *testing.T) {
 	}
 }
 
+// TestEngineVocabularyIsSingleSource proves the word list comes from CUE
+// (spec.EngineNames) and that IsEngineName / EngineBinary agree with it — so no
+// literal switch can drift from the schema.
+func TestEngineVocabularyIsSingleSource(t *testing.T) {
+	if len(spec.EngineNames) == 0 {
+		t.Fatal("spec.EngineNames is empty — the CUE vocabulary did not reach the generated file")
+	}
+	for _, name := range spec.EngineNames {
+		if !IsEngineName(name) {
+			t.Errorf("IsEngineName(%q) = false for a CUE-declared engine", name)
+		}
+		if EngineBinary(name) != name {
+			t.Errorf("EngineBinary(%q) = %q, want the engine's own name", name, EngineBinary(name))
+		}
+		if _, ok := EngineCapabilityFor(name); !ok {
+			t.Errorf("engine %q has no capability row", name)
+		}
+	}
+	// "auto" and typos are not engine WORDS.
+	if IsEngineName("auto") {
+		t.Error(`IsEngineName("auto") must be false — auto is a selector, not an engine word`)
+	}
+	if IsEngineName("bogus") {
+		t.Error(`IsEngineName("bogus") must be false`)
+	}
+}
+
 func TestEngineCapabilityFor(t *testing.T) {
 	podman, ok := EngineCapabilityFor("podman")
 	if !ok {
@@ -42,6 +74,9 @@ func TestEngineCapabilityFor(t *testing.T) {
 	}
 	if podman.GPUArgStyle != "cdi" {
 		t.Errorf("podman GPUArgStyle = %q, want cdi", podman.GPUArgStyle)
+	}
+	if podman.Name != "podman" {
+		t.Errorf("podman Name = %q, want podman", podman.Name)
 	}
 
 	nerdctl, ok := EngineCapabilityFor("nerdctl")
@@ -67,6 +102,9 @@ func TestEngineCapabilityFor(t *testing.T) {
 	// as container-uid 0, which IS the invoking host user in the rootless userns.
 	if nerdctl.WorkloadUser != "0" {
 		t.Errorf("nerdctl WorkloadUser = %q, want 0 (uid 0 == host user rootless)", nerdctl.WorkloadUser)
+	}
+	if nerdctl.DetectProbe == "" {
+		t.Error("nerdctl must declare a detect_probe")
 	}
 
 	docker, ok := EngineCapabilityFor("docker")
@@ -97,18 +135,34 @@ func TestEngineRunModeFor(t *testing.T) {
 	}
 }
 
-// TestEveryEngineHasCapability is the drift gate: the engine words in
-// EngineBinary and the capability table must never disagree, so adding an
-// engine to one place without the other fails here rather than at deploy time.
-func TestEveryEngineHasCapability(t *testing.T) {
-	for _, engine := range []string{"podman", "docker", "nerdctl"} {
-		c, ok := EngineCapabilityFor(engine)
-		if !ok {
-			t.Errorf("engine %q has no capability row", engine)
-			continue
+func TestIsRunMode(t *testing.T) {
+	for _, m := range spec.EngineRunModes {
+		if !IsRunMode(m) {
+			t.Errorf("IsRunMode(%q) = false for a CUE-declared run mode", m)
 		}
-		if c.Binary != EngineBinary(engine) {
-			t.Errorf("engine %q: capability Binary %q != EngineBinary %q", engine, c.Binary, EngineBinary(engine))
+	}
+	// "auto" is the pre-resolution selector, not a run-mode word.
+	if IsRunMode("auto") {
+		t.Error(`IsRunMode("auto") must be false — auto is a selector`)
+	}
+	if IsRunMode("bogus") {
+		t.Error(`IsRunMode("bogus") must be false`)
+	}
+}
+
+// TestEngineCapabilityShapeMatchesSchema is the drift gate: the table uses the
+// generated spec.EngineCapability type (not a hand mirror), so every row's
+// RunMode must be a member of the CUE-owned run-mode vocabulary.
+func TestEngineCapabilityShapeMatchesSchema(t *testing.T) {
+	for name, c := range engineCapabilities {
+		if string(c.Name) != name {
+			t.Errorf("capability row %q has Name %q", name, c.Name)
+		}
+		if !IsEngineName(string(c.Name)) {
+			t.Errorf("capability row %q Name is not in spec.EngineNames", name)
+		}
+		if c.RunMode != "" && !IsRunMode(string(c.RunMode)) {
+			t.Errorf("capability row %q RunMode %q is not in spec.EngineRunModes", name, c.RunMode)
 		}
 	}
 }

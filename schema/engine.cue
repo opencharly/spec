@@ -9,8 +9,16 @@
 // provider for capability data and argv, instead of switching on a name.
 //
 // The split (kernel/plugin boundary law):
-//   - engine NAME -> BINARY is data, so #EngineName / #EngineBinary below live
-//     in spec and every authored engine field references them (one vocabulary).
+//   - the engine VOCABULARY (which engine words, which run modes) is data,
+//     owned here by #EngineName / #EngineRunMode. `task cue:gen` emits them as
+//     spec.EngineNames / spec.EngineRunModes, and every consumer derives from
+//     those — EngineBinary, ValidateEngine, ValidateRunMode, the authored
+//     candy.engine/deploy.engine union. Adding an engine is one edit to
+//     #EngineName plus `task cue:gen`.
+//   - the engine CAPABILITY FACTS (pods? secrets? keep-id? run mode?) live in
+//     one Go table keyed by those words (container.engineCapabilities), typed by
+//     the generated spec.EngineCapability below — so adding an engine is also
+//     one table row, never a switch edit.
 //   - engine BEHAVIOR is provider-served: an engine provider answers the ops in
 //     this file. podman/docker are compiled-in (needed before project plugins
 //     load); nerdctl is out-of-process.
@@ -21,8 +29,9 @@
 
 // #EngineName — the CLOSED engine vocabulary. THE single source: every authored
 // engine field (`candy.engine`, `deploy.engine`, the seam request/reply
-// envelopes) references this def, so adding an engine is one edit here plus
-// `task cue:gen`, never a sweep of literal unions.
+// envelopes) references this def, and `task cue:gen` emits it as
+// spec.EngineNames, which EngineBinary/ValidateEngine/EngineCapabilityFor all
+// derive from.
 //
 // "auto" is a RESOLUTION selector (pick the best installed engine), never a
 // provider word — no engine:auto provider exists. It is resolved by
@@ -36,6 +45,8 @@
 //   systemd-unit — a generated .service wrapping the engine CLI (nerdctl; no
 //                  quadlet equivalent exists).
 //   direct       — an ephemeral argv launch with no unit (docker today).
+// `task cue:gen` emits this as spec.EngineRunModes; ValidateRunMode derives
+// from it.
 #EngineRunMode: ("quadlet" | "systemd-unit" | "direct")
 
 // #EngineCapability — the static facts about an engine, answered by OpDescribe.

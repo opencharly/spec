@@ -3630,8 +3630,9 @@ type Candy struct {
 
 // #EngineName — the CLOSED engine vocabulary. THE single source: every authored
 // engine field (`candy.engine`, `deploy.engine`, the seam request/reply
-// envelopes) references this def, so adding an engine is one edit here plus
-// `task cue:gen`, never a sweep of literal unions.
+// envelopes) references this def, and `task cue:gen` emits it as
+// spec.EngineNames, which EngineBinary/ValidateEngine/EngineCapabilityFor all
+// derive from.
 //
 // "auto" is a RESOLUTION selector (pick the best installed engine), never a
 // provider word — no engine:auto provider exists. It is resolved by
@@ -5652,6 +5653,9 @@ type EncExecReply struct {
 //	systemd-unit — a generated .service wrapping the engine CLI (nerdctl; no
 //	               quadlet equivalent exists).
 //	direct       — an ephemeral argv launch with no unit (docker today).
+//
+// `task cue:gen` emits this as spec.EngineRunModes; ValidateRunMode derives
+// from it.
 type EngineRunMode string
 
 // #EngineCapability — the static facts about an engine, answered by OpDescribe.
