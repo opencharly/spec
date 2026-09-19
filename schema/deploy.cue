@@ -176,9 +176,24 @@
 	user?: string & !=""
 	ssh_arg?: [...string] @go(SSHArgs)
 
-	cpus?:      int & >=1 @go(,type=int)
-	ram?:       #VmSize
-	disk_size?: #VmSize @go(DiskSize)
+	// Per-deploy VM-shape override, read by candy/plugin-vm's hostConfigResolve:
+	// `from:` a kind:vm template and state a different size, instead of duplicating
+	// the whole template for each consumer (R3). The spelling is `#Vm`'s own —
+	// `cpu:` (singular) and `ram:` — so a template and every deploy that derives
+	// from it read alike. Both were DEAD since the initial spec import (authorable,
+	// zero readers/authors); the cpu one was misspelled `cpus:`, the lone VM-shape
+	// outlier. The reader that gives them meaning already landed as
+	// candy/plugin-vm#39 (chain-inheriting over `from:`); it reads these `cpu:`/
+	// `ram:` spellings once plugin-vm bumps its spec pin to the tag THIS leg
+	// produces. The wire shape lands here first.
+	//
+	// There is deliberately NO per-deploy `disk_size`: a kind:vm template's
+	// disk_size builds the shared base disk ONCE and every deploy boots a read-only
+	// COW overlay of it, so a per-deploy disk_size could not resize an already-built
+	// disk. The dead field was removed rather than parked (R5) — a future
+	// deliberate cutover may add a real per-deploy disk mechanism with a reader.
+	cpu?: int & >=1 @go(Cpus,type=int)
+	ram?: #VmSize
 
 	deploy?: #KubernetesDeploy @go(Deploy,optional=nillable)
 
@@ -196,12 +211,6 @@
 	// shares ONE golden disk (revert ≈ seconds vs fresh install ≈ 20-30 min).
 	// VM-only (the substrate-word checks reject it on other substrates).
 	snapshot?: #VmSnapshotPolicy @go(Snapshot,optional=nillable)
-	// variants — named VM-config overrides that boot the SAME golden disk with a
-	// different shape (cpus/memory/video/gpu/display/devices/attachments). A
-	// variant may ONLY change VM shape — any change to source: or disk identity
-	// is rejected, because the disk comes exclusively from the shared snapshot
-	// chain. The unnamed default variant equals the bed's own vm: attributes.
-	variants?: {[=~"^[^.]+$"]: #VmVariant} @go(Variants,type=map[string]*VmVariant)
 
 	// update_gate — the check-bed's declarative R10 fresh-update change-class
 	// switch: how the Step-5 acceptance gate re-verifies the bed (the declarative
