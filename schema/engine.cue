@@ -69,8 +69,14 @@
 #EngineUnitRunModes: ["quadlet", "systemd-unit"] @go(-)
 
 // #EngineCapability — the static facts about an engine, answered by OpDescribe.
-// These drive every remaining "does this engine support X" branch in core, so
-// no caller switches on the engine name again.
+// This is the PUBLISHED provider contract: the fields a provider fills and the
+// consumers read. In this change the capability table + EngineBinary/GPURunArgs/
+// EngineRunModeFor/ImageExistsArgv consumers land; the pod/secret/keep-id fields
+// (SupportsPods / SupportsSecrets / SupportsUsernsKeepID / UsernsKeepIDArg /
+// WorkloadUser) are consumed by the engine PROVIDERS (the out-of-tree
+// plugin-nerdctl and the compiled-in podman/docker providers) as those land —
+// they are declared here so the wire contract is complete and stable, not
+// because every field already has a reader in this tree.
 #EngineCapability: {
 	// The engine's own name (mirrors the provider word).
 	name!: #EngineName @go(Name)

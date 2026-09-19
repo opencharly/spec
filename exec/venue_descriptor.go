@@ -35,24 +35,18 @@ func VenueFromDescriptor(d spec.VenueDescriptor) (spec.DeployExecutor, error) {
 // ContainerChainFromDescriptor rebuilds the exact single-hop NestedExecutor
 // deploykit.ContainerChain(engine, containerName) produces — the SAME shape, without sdk/kit
 // importing sdk/deploykit (deploykit already imports kit; importing back would cycle).
-// deploykit.ContainerChain itself calls this (R3 — one construction, not two). engine defaults to
-// "podman" (matching ContainerChain's own JumpPodmanExec default) for any value other than
-// "docker".
+// deploykit.ContainerChain itself calls this (R3 — one construction, not two). engine is the
+// container-engine CLI (podman / docker / nerdctl); empty defaults to podman (matching the
+// historical JumpPodmanExec default).
 func ContainerChainFromDescriptor(engine, containerName string) spec.DeployExecutor {
-	jumpKind := JumpPodmanExec
-	if engine == "docker" {
-		jumpKind = JumpDockerExec
-	}
+	jump := NestedJump{Kind: JumpContainerExec, Engine: engine, Target: containerName}
 	// Deterministic exec user/HOME (issue #149): read the running container's
 	// OCI-spec User + HOME once at chain construction so every exec hop passes
 	// them explicitly, immune to the engine's exec user/HOME resolution race
 	// for containers created during a concurrent bed window. Best-effort — an
 	// unreadable container falls back to the engine's own resolution.
-	user, home := containerExecUserHome(engine, containerName)
-	return &NestedExecutor{
-		Parent: ShellExecutor{},
-		Jump:   NestedJump{Kind: jumpKind, Target: containerName, User: user, Home: home},
-	}
+	jump.User, jump.Home = containerExecUserHome(jump.engineBinary(), containerName)
+	return &NestedExecutor{Parent: ShellExecutor{}, Jump: jump}
 }
 
 // DescriptorFromExecutor is the pure INVERSE of VenueFromDescriptor: it derives a serializable
@@ -88,13 +82,8 @@ func DescriptorFromExecutor(exec spec.DeployExecutor) spec.VenueDescriptor {
 		return spec.VenueDescriptor{Kind: "ssh", User: e.User, Host: e.Host, Port: e.Port, Args: e.Args, ConnectTimeout: e.ConnectTimeout}
 	case *NestedExecutor:
 		if _, ok := e.Parent.(ShellExecutor); ok {
-			if len(e.Jump.ExtraArgs) == 0 {
-				switch e.Jump.Kind {
-				case JumpPodmanExec:
-					return spec.VenueDescriptor{Kind: "container", Engine: "podman", ContainerName: e.Jump.Target}
-				case JumpDockerExec:
-					return spec.VenueDescriptor{Kind: "container", Engine: "docker", ContainerName: e.Jump.Target}
-				}
+			if len(e.Jump.ExtraArgs) == 0 && isContainerKind(e.Jump.Kind) {
+				return spec.VenueDescriptor{Kind: "container", Engine: e.Jump.engineBinary(), ContainerName: e.Jump.Target}
 			}
 		}
 		return spec.VenueDescriptor{}

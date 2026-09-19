@@ -673,3 +673,53 @@ func TestParseContainerUserHome(t *testing.T) {
 		})
 	}
 }
+
+// TestWrapWithJump_Nerdctl proves the engine is DATA on the jump: JumpContainerExec
+// with Engine "nerdctl" emits `nerdctl exec -i`, not podman. It fails against the
+// pre-engine-data code, where an unknown engine silently fell through to podman.
+func TestWrapWithJump_Nerdctl(t *testing.T) {
+	j := NestedJump{Kind: JumpContainerExec, Engine: "nerdctl", Target: "mybox"}
+	out, err := wrapWithJump(j, "echo hi", false)
+	if err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	if !strings.Contains(out, "nerdctl exec -i") {
+		t.Errorf("wrapped missing `nerdctl exec -i`: %s", out)
+	}
+	if strings.Contains(out, "podman exec") {
+		t.Errorf("nerdctl jump leaked podman: %s", out)
+	}
+}
+
+// TestJumpEngineBinary pins the engine resolution: Engine is used verbatim;
+// the legacy JumpPodmanExec/JumpDockerExec kinds map to their engine; an empty
+// canonical jump defaults to podman.
+func TestJumpEngineBinary(t *testing.T) {
+	cases := []struct {
+		jump NestedJump
+		want string
+	}{
+		{NestedJump{Kind: JumpContainerExec, Engine: "nerdctl"}, "nerdctl"},
+		{NestedJump{Kind: JumpContainerExec, Engine: "docker"}, "docker"},
+		{NestedJump{Kind: JumpContainerExec}, "podman"},
+		{NestedJump{Kind: JumpPodmanExec}, "podman"},
+		{NestedJump{Kind: JumpDockerExec}, "docker"},
+	}
+	for _, tc := range cases {
+		if got := tc.jump.engineBinary(); got != tc.want {
+			t.Errorf("engineBinary(%+v) = %q, want %q", tc.jump, got, tc.want)
+		}
+	}
+}
+
+// TestCopyIntoJumpCommand_Nerdctl is the cp-side twin of the wrap test.
+func TestCopyIntoJumpCommand_Nerdctl(t *testing.T) {
+	j := NestedJump{Kind: JumpContainerExec, Engine: "nerdctl", Target: "mybox"}
+	out, err := copyIntoJumpCommand(j, "/stage/f", "/remote/f", 0o644, false)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if !strings.Contains(out, "nerdctl cp") || strings.Contains(out, "podman") {
+		t.Errorf("nerdctl copy jump wrong: %s", out)
+	}
+}
