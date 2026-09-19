@@ -79,8 +79,25 @@
 // [Floor, Head] and the previous row (record-field-to-instrument) already sat
 // AT 2026.248.1030, so a residual-config rewrite is impossible without this
 // bump.
+// Bumped again by the per-deploy VM-shape override cutover: `#Deploy`'s dead
+// VM-shape `cpu`/`ram` fields are given meaning by a reader (candy/plugin-vm's
+// hostConfigResolve, chain-inheriting over `from:`) that already landed as
+// plugin-vm#39 and reads these spellings once plugin-vm bumps its spec pin to
+// the tag this leg produces; the cpu field is
+// corrected from the outlier plural spelling `cpus:` to the singular `cpu:`,
+// matching `#Vm` (the template it overrides) exactly. The unreadable `disk_size`
+// field and the never-implemented `variants:`/`#VmVariant` surface are DELETED
+// rather than parked — the cpu/ram/disk_size fields were authorable-but-inert
+// since the initial spec import (`11dcd6d`), while `variants:`/`#VmVariant` was
+// added in #86 and never implemented. All of them were DEAD (zero readers, zero
+// authors), so nothing authored needs migrating; the old `cpus:` key is simply
+// gone. NO migration-table entry:
+// a rename would have to be scoped `under_kind: vm` and the op-walker's
+// under_kind marks every mapping nested within the entity, which would also
+// rewrite the LIVE `security: {cpus: "2.5"}` string quota into a schema-invalid
+// `security: {cpu: …}`. Re-adding under the correct spelling sidesteps that.
 // Re-stamped to the merge-time CalVer by the fresh pr-validator.
-#SchemaVersion: #CanonCalVer & "2026.249.2125" @go(-)
+#SchemaVersion: #CanonCalVer & "2026.261.1747" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
 // the migration-baseline reset it EQUALS #SchemaVersion — the deleted 47-step chain

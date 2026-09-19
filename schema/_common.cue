@@ -380,18 +380,3 @@ import "strings"
 	consistent?:         bool @go(Consistent)
 	keep_venue?:         bool @go(KeepVenue)
 }
-
-// #VmVariant — a named VM-config override that boots the SAME golden disk with a
-// different shape. Only VM-shape fields are legal (cpus/memory/video/gpu/
-// display/devices/attachments); any change to source: or disk identity is
-// rejected at validate time, because the disk comes exclusively from the shared
-// snapshot chain.
-#VmVariant: {
-	cpus?:       int & >=1 @go(,type=int)
-	memory?:     #VmSize
-	video?:      string & !="" @go(Video)
-	gpu?:       {hostdev?: *"auto" | "none" | string @go(Hostdev), vendor?: string & !="" @go(Vendor)} @go(Gpu,optional=nillable)
-	display?:    string & !="" @go(Display)
-	devices?:    [...string] @go(Devices)
-	attachments?: [...string] @go(Attachments)
-}

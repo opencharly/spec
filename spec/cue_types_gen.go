@@ -357,31 +357,6 @@ type VmSnapshotPolicy struct {
 	KeepVenue bool `yaml:"keep_venue,omitempty" json:"keep_venue,omitempty"`
 }
 
-// #VmVariant — a named VM-config override that boots the SAME golden disk with a
-// different shape. Only VM-shape fields are legal (cpus/memory/video/gpu/
-// display/devices/attachments); any change to source: or disk identity is
-// rejected at validate time, because the disk comes exclusively from the shared
-// snapshot chain.
-type VmVariant struct {
-	Cpus int `yaml:"cpus,omitempty" json:"cpus,omitempty"`
-
-	Memory VmSize `yaml:"memory,omitempty" json:"memory,omitempty"`
-
-	Video string `yaml:"video,omitempty" json:"video,omitempty"`
-
-	Gpu *struct {
-		Hostdev *string `yaml:"hostdev,omitempty" json:"hostdev,omitempty"`
-
-		Vendor *string `yaml:"vendor,omitempty" json:"vendor,omitempty"`
-	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
-
-	Display string `yaml:"display,omitempty" json:"display,omitempty"`
-
-	Devices []string `yaml:"devices,omitempty" json:"devices,omitempty"`
-
-	Attachments []string `yaml:"attachments,omitempty" json:"attachments,omitempty"`
-}
-
 type Agent struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
@@ -4462,11 +4437,25 @@ type Deploy struct {
 
 	SSHArgs []string `yaml:"ssh_arg,omitempty" json:"ssh_arg,omitempty"`
 
-	Cpus int `yaml:"cpus,omitempty" json:"cpus,omitempty"`
+	// Per-deploy VM-shape override, read by candy/plugin-vm's hostConfigResolve:
+	// `from:` a kind:vm template and state a different size, instead of duplicating
+	// the whole template for each consumer (R3). The spelling is `#Vm`'s own —
+	// `cpu:` (singular) and `ram:` — so a template and every deploy that derives
+	// from it read alike. Both were DEAD since the initial spec import (authorable,
+	// zero readers/authors); the cpu one was misspelled `cpus:`, the lone VM-shape
+	// outlier. The reader that gives them meaning already landed as
+	// candy/plugin-vm#39 (chain-inheriting over `from:`); it reads these `cpu:`/
+	// `ram:` spellings once plugin-vm bumps its spec pin to the tag THIS leg
+	// produces. The wire shape lands here first.
+	//
+	// There is deliberately NO per-deploy `disk_size`: a kind:vm template's
+	// disk_size builds the shared base disk ONCE and every deploy boots a read-only
+	// COW overlay of it, so a per-deploy disk_size could not resize an already-built
+	// disk. The dead field was removed rather than parked (R5) — a future
+	// deliberate cutover may add a real per-deploy disk mechanism with a reader.
+	Cpus int `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
 	Ram VmSize `yaml:"ram,omitempty" json:"ram,omitempty"`
-
-	DiskSize VmSize `yaml:"disk_size,omitempty" json:"disk_size,omitempty"`
 
 	Deploy *KubernetesDeploy `yaml:"deploy,omitempty" json:"deploy,omitempty"`
 
@@ -4489,13 +4478,6 @@ type Deploy struct {
 	// shares ONE golden disk (revert ≈ seconds vs fresh install ≈ 20-30 min).
 	// VM-only (the substrate-word checks reject it on other substrates).
 	Snapshot *VmSnapshotPolicy `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
-
-	// variants — named VM-config overrides that boot the SAME golden disk with a
-	// different shape (cpus/memory/video/gpu/display/devices/attachments). A
-	// variant may ONLY change VM shape — any change to source: or disk identity
-	// is rejected, because the disk comes exclusively from the shared snapshot
-	// chain. The unnamed default variant equals the bed's own vm: attributes.
-	Variants map[string]*VmVariant `yaml:"variants,omitempty" json:"variants,omitempty"`
 
 	// update_gate — the check-bed's declarative R10 fresh-update change-class
 	// switch: how the Step-5 acceptance gate re-verifies the bed (the declarative
