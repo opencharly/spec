@@ -209,6 +209,14 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 	if rt.RunMode == "quadlet" && rt.RunEngine != "podman" {
 		fmt.Fprintf(os.Stderr, "Warning: run_mode=quadlet requires podman; engine.run=%s\n", rt.RunEngine)
 	}
+	if rt.RunMode == "systemd-unit" {
+		// systemd-unit is the generic non-quadlet unit mode (nerdctl). It is
+		// valid for any engine that reports it, so only warn when the resolved
+		// engine does not actually offer it (an explicit override mismatch).
+		if c, ok := container.EngineCapabilityFor(rt.RunEngine); !ok || c.RunMode != "systemd-unit" {
+			fmt.Fprintf(os.Stderr, "Warning: run_mode=systemd-unit is not offered by engine.run=%s\n", rt.RunEngine)
+		}
+	}
 
 	return rt, nil
 }
@@ -225,33 +233,45 @@ func ResolveValue(envVal, cfgVal, defaultVal string) string {
 }
 
 func ValidateEngine(value, field string) error {
-	if value != "docker" && value != "podman" {
-		return fmt.Errorf("%s must be \"docker\" or \"podman\", got %q", field, value)
+	switch value {
+	case "docker", "podman", "nerdctl":
+		return nil
 	}
-	return nil
+	return fmt.Errorf("%s must be \"docker\", \"podman\", or \"nerdctl\", got %q", field, value)
 }
 
 func ValidateRunMode(value string) error {
-	if value != "auto" && value != "direct" && value != "quadlet" {
-		return fmt.Errorf("run_mode must be \"auto\", \"direct\", or \"quadlet\", got %q", value)
+	switch value {
+	case "auto", "direct", "quadlet", "systemd-unit":
+		return nil
 	}
-	return nil
+	return fmt.Errorf("run_mode must be \"auto\", \"direct\", \"quadlet\", or \"systemd-unit\", got %q", value)
 }
 
-// DetectRunMode returns "quadlet" when podman is present AND a functional
-// systemd-user session is reachable (systemctl binary + XDG_RUNTIME_DIR +
-// /run/user/<uid>/systemd directory). Otherwise returns "direct".
+// DetectRunMode returns the persistence/supervision mode for a run engine:
+//
+//   - podman  → "quadlet" when a functional systemd-user session is reachable,
+//     otherwise "direct".
+//   - nerdctl → "systemd-unit" when a functional systemd-user session is
+//     reachable (nerdctl has no quadlet generator; charly emits a .service that
+//     wraps the nerdctl CLI), otherwise "direct".
+//   - anything else (docker) → "direct".
 //
 // The functional-systemd-user check (added 2026-04-27) catches nested
 // environments — harness sandbox pods, supervisord-only containers, sysvinit hosts —
 // that have the systemctl binary present but no running `systemd --user`
 // session. Without this check, `charly deploy add <name> <ref>` would silently
-// pick run_mode=quadlet, write the .container file, and fail at
+// pick a unit mode, write the unit file, and fail at
 // `systemctl --user daemon-reload` time. With the check, run_mode=direct
 // is auto-selected on those hosts and `runConfigDirect()` (in
 // config_image.go) emits a `podman run -d` invocation instead.
+//
+// The engine→mode mapping is DATA owned by spec/container (EngineRunModeFor);
+// this function only decides whether the unit-capable mode is reachable on the
+// host. A new engine therefore lands in one place.
 func DetectRunMode(runEngine string) string {
-	if runEngine != "podman" {
+	mode := container.EngineRunModeFor(runEngine)
+	if mode != "quadlet" && mode != "systemd-unit" {
 		return "direct"
 	}
 	if _, err := exec.LookPath("systemctl"); err != nil {
@@ -260,7 +280,7 @@ func DetectRunMode(runEngine string) string {
 	if !SystemdUserAvailable() {
 		return "direct"
 	}
-	return "quadlet"
+	return mode
 }
 
 // SystemdUserRuntimeDir returns the path the directory check probes —

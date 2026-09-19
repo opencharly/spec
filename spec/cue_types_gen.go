@@ -3481,7 +3481,9 @@ type Candy struct {
 	// engine — a candy's required run engine; per-image resolution walks the
 	// candy chain (engine.go ResolveBoxEngine) and cross-candy conflicts are a
 	// validate error. RETAINED by the schema-compaction consumer audit.
-	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+	// The engine vocabulary is #EngineName (schema/engine.cue) — one source shared
+	// by every authored engine field, so a new engine (nerdctl) lands once.
+	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
 
 	// `from:` is NOT a candy field — EDGE-INHERIT cutover D: a candy: node carrying
 	// `base:` or `from:` is a full IMAGE (#Box, the former box:), routed there by the
@@ -3625,6 +3627,17 @@ type Candy struct {
 	// --- operator-facing artifacts ---
 	Artifact []CandyArtifact `yaml:"artifact,omitempty" json:"artifact,omitempty"`
 }
+
+// #EngineName — the CLOSED engine vocabulary. THE single source: every authored
+// engine field (`candy.engine`, `deploy.engine`, the seam request/reply
+// envelopes) references this def, so adding an engine is one edit here plus
+// `task cue:gen`, never a sweep of literal unions.
+//
+// "auto" is a RESOLUTION selector (pick the best installed engine), never a
+// provider word — no engine:auto provider exists. It is resolved by
+// ResolveRuntime before any engine provider is consulted, so it is a runtime
+// value, not an authored union member here.
+type EngineName string
 
 // #Plugin — the candy's plugin declaration. Its presence makes the candy a
 // plugin (Go: charly/checkspec.go via the generated Candy.Plugin field, consumed
@@ -4398,7 +4411,7 @@ type Deploy struct {
 
 	Network string `yaml:"network,omitempty" json:"network,omitempty"`
 
-	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
 
 	Security *Security `yaml:"security,omitempty" json:"security,omitempty"`
 
@@ -5630,6 +5643,200 @@ type EncExecInput struct {
 // shim turns a non-empty Error into a Go error.
 type EncExecReply struct {
 	Error string `yaml:"error,omitempty" json:"error"`
+}
+
+// #EngineRunMode — how a deployment persists and is supervised on the host.
+//
+//	quadlet      — podman's systemd generator: a .container/.pod unit under
+//	               ~/.config/containers/systemd/ (podman only).
+//	systemd-unit — a generated .service wrapping the engine CLI (nerdctl; no
+//	               quadlet equivalent exists).
+//	direct       — an ephemeral argv launch with no unit (docker today).
+type EngineRunMode string
+
+// #EngineCapability — the static facts about an engine, answered by OpDescribe.
+// These drive every remaining "does this engine support X" branch in core, so
+// no caller switches on the engine name again.
+type EngineCapability struct {
+	// The engine's own name (mirrors the provider word).
+	Name EngineName `yaml:"name,omitempty" json:"name"`
+
+	// The CLI binary the engine is driven through (podman / docker / nerdctl).
+	Binary string `yaml:"binary,omitempty" json:"binary"`
+
+	// A shell probe that exits 0 when the engine is installed on a host.
+	// Evaluated by the host, never by the provider (it is a host fact).
+	DetectProbe string `yaml:"detect_probe,omitempty" json:"detect_probe,omitempty"`
+
+	// supports_pods — the engine has a first-class pod primitive (podman .pod).
+	// false means pod-style sharing is emulated with a shared network namespace.
+	SupportsPods bool `yaml:"supports_pods,omitempty" json:"supports_pods"`
+
+	// supports_secrets — the engine has a native secret store (podman secret).
+	// false means credentials are delivered as env/file (docker/nerdctl).
+	SupportsSecrets bool `yaml:"supports_secrets,omitempty" json:"supports_secrets"`
+
+	// supports_userns_keepid — per-container uid mapping exists (podman
+	// --userns=keep-id). false means the workload must be launched as
+	// container-uid-0 under a rootless single-userns engine to share host files
+	// with the invoking user (nerdctl rootless).
+	SupportsUsernsKeepID bool `yaml:"supports_userns_keepid,omitempty" json:"supports_userns_keepid"`
+
+	// supports_rootless — the engine runs without host root.
+	SupportsRootless bool `yaml:"supports_rootless,omitempty" json:"supports_rootless"`
+
+	// run_mode — the persistence/supervision mode this engine uses on a host.
+	RunMode EngineRunMode `yaml:"run_mode,omitempty" json:"run_mode"`
+
+	// gpu_arg_style — the vendor-GPU passthrough flag family.
+	//
+	//	cdi  — podman's `--device nvidia.com/gpu=all`
+	//	gpus — docker/nerdctl's `--gpus all`
+	GPUArgStyle string `yaml:"gpu_arg_style,omitempty" json:"gpu_arg_style"`
+
+	// userns_keepid_arg — the per-container keep-id argv when supported (podman
+	// `--userns=keep-id`); empty otherwise.
+	UsernsKeepIDArg string `yaml:"userns_keepid_arg,omitempty" json:"userns_keepid_arg,omitempty"`
+
+	// workload_user — the in-container user a workload must run as for
+	// host-identical file sharing. For podman keep-id this is the invoking user;
+	// for rootless single-userns engines (nerdctl) it is "0" because container-uid
+	// 0 IS the invoking host user in the rootless userns.
+	WorkloadUser string `yaml:"workload_user,omitempty" json:"workload_user,omitempty"`
+}
+
+// #EngineBinaryRequest / #EngineBinaryReply — the `binary` op: resolve the CLI
+// binary for an engine name. Split out because the name->binary mapping is pure
+// data that callers need before any provider is connected.
+type EngineBinaryRequest struct {
+	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+}
+
+type EngineBinaryReply struct {
+	Binary string `yaml:"binary,omitempty" json:"binary,omitempty"`
+}
+
+// #EngineGPURunArgsRequest / #EngineGPURunArgsReply — the `gpu_args` op: the
+// engine's vendor-GPU passthrough argv.
+type EngineGPURunArgsRequest struct {
+	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+}
+
+type EngineGPURunArgsReply struct {
+	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
+}
+
+// #EngineStartPlanRequest / #EngineStartPlanReply — the `start_plan` op: the
+// engine-specific container launch argv and mode for a deploy. The host passes
+// the resolved knobs; the provider builds the argv so no caller assembles
+// engine flags.
+type EngineStartPlanRequest struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+
+	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+
+	RunMode string `yaml:"run_mode,omitempty" json:"run_mode,omitempty"`
+
+	Network string `yaml:"network,omitempty" json:"network,omitempty"`
+
+	WorkloadUser string `yaml:"workload_user,omitempty" json:"workload_user,omitempty"`
+
+	KeepID bool `yaml:"keep_id,omitempty" json:"keep_id,omitempty"`
+
+	UsernsHost bool `yaml:"userns_host,omitempty" json:"userns_host,omitempty"`
+
+	Detach bool `yaml:"detach,omitempty" json:"detach,omitempty"`
+
+	Ports []string `yaml:"ports,omitempty" json:"ports,omitempty"`
+
+	Volumes []string `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+
+	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
+
+	EnvFiles []string `yaml:"env_files,omitempty" json:"env_files,omitempty"`
+
+	ExtraArgs []string `yaml:"extra_args,omitempty" json:"extra_args,omitempty"`
+
+	ImageArgs []string `yaml:"image_args,omitempty" json:"image_args,omitempty"`
+}
+
+type EngineStartPlanReply struct {
+	Argv []string `yaml:"argv,omitempty" json:"argv,omitempty"`
+
+	RunMode string `yaml:"run_mode,omitempty" json:"run_mode,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
+}
+
+// #EngineUnitRequest / #EngineUnitReply — the `unit_emit` op: render the
+// persistent supervision unit for a deployment (quadlet .container/.pod for
+// podman, a systemd .service wrapping the CLI for nerdctl). Names/paths are
+// host-resolved; the provider returns file contents keyed by absolute path.
+type EngineUnitRequest struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	RunMode string `yaml:"run_mode,omitempty" json:"run_mode,omitempty"`
+
+	StartArgv []string `yaml:"start_argv,omitempty" json:"start_argv,omitempty"`
+
+	StopArgv []string `yaml:"stop_argv,omitempty" json:"stop_argv,omitempty"`
+
+	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	After []string `yaml:"after,omitempty" json:"after,omitempty"`
+
+	Wants []string `yaml:"wants,omitempty" json:"wants,omitempty"`
+
+	Restart string `yaml:"restart,omitempty" json:"restart,omitempty"`
+
+	WorkingDir string `yaml:"working_dir,omitempty" json:"working_dir,omitempty"`
+
+	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
+
+	// engine_specific carries whatever the engine's own generator needs; quadlet
+	// ignores it, the systemd-unit emitter uses it for the wrapped CLI argv.
+	EngineSpecific StrMap `yaml:"engine_specific,omitempty" json:"engine_specific,omitempty"`
+}
+
+type EngineUnitReply struct {
+	// files maps an absolute path to its rendered contents.
+	Files map[string]string `yaml:"files,omitempty" json:"files,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
+}
+
+// #EngineNetworkEnsureRequest / #EngineNetworkEnsureReply — the `network_ensure`
+// op: make the engine's shared container network exist (podman netavark+aardvark
+// `charly`; nerdctl CNI network).
+type EngineNetworkEnsureRequest struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+
+	DNS []string `yaml:"dns,omitempty" json:"dns,omitempty"`
+
+	DNSSearch []string `yaml:"dns_search,omitempty" json:"dns_search,omitempty"`
+}
+
+type EngineNetworkEnsureReply struct {
+	Network string `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Argv []string `yaml:"argv,omitempty" json:"argv,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
+}
+
+// #EngineDescribeReply — the capability envelope served for the engine class.
+// The provider's Describe returns this; core resolves it once and consults it
+// for every capability question.
+type EngineDescribeReply struct {
+	Capability *EngineCapability `yaml:"capability,omitempty" json:"capability,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
 // #FeatureEntity is one enumerated kind: entity + its RAW plan data (Step is

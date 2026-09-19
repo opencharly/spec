@@ -27,6 +27,7 @@ var ProviderClasses = []string{
 	"build",
 	"builder",
 	"command",
+	"engine",
 	"loader",
 	"refs",
 	"agent-runtime",

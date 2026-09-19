@@ -138,7 +138,7 @@
 	env?: {PATH?: _|_, [string]: #StrVal} @go(Env,type=map[string]string)
 	env_file?: string & !="" @go(EnvFile)
 	network?:  string & !=""
-	engine?:   "podman" | "docker"
+	engine?:   #EngineName
 	security?: #Security @go(Security,optional=nillable)
 	secret?: [...#DeploySecret]
 	volume?: [...#DeployVolume]
