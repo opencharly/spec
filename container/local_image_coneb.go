@@ -820,7 +820,9 @@ func ResolveShellImageRef(registry, name, tag string) string {
 	if tag == "" {
 		// Try local CalVer resolution. Best-effort: if nothing local matches, fall back to a
 		// tagless ref so the engine's own resolution path can error with its canonical message.
-		if resolved, err := ResolveNewestLocalCalVer("podman", name); err == nil && resolved != "" {
+		// "auto" resolves to the engine actually installed on the host (DetectEngine), so this
+		// probes the right local store instead of assuming podman.
+		if resolved, err := ResolveNewestLocalCalVer("auto", name); err == nil && resolved != "" {
 			return resolved
 		}
 		if registry != "" {
