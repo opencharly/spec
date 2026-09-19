@@ -79,3 +79,16 @@ func TestDeployRejectsVariants(t *testing.T) {
 		t.Fatal("the deleted `variants:` surface was accepted on a #Deploy body")
 	}
 }
+
+// TestDeployRejectsDiskSize pins the deletion of the unreadable per-deploy
+// `disk_size:`. A kind:vm template's disk_size builds the shared base disk ONCE
+// and every deploy boots a read-only COW overlay of it, so a per-deploy value
+// could never resize it. The field had zero readers and zero authors (tree-wide
+// classification in the PR body) and was removed rather than parked. A future
+// per-deploy disk mechanism must ship a real reader, which will require changing
+// this test deliberately.
+func TestDeployRejectsDiskSize(t *testing.T) {
+	if err := deployShape(t, `{from: "some-vm", disk_size: "40G"}`); err == nil {
+		t.Fatal("the deleted per-deploy `disk_size:` was accepted on a #Deploy body")
+	}
+}
