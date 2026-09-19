@@ -139,7 +139,7 @@ type DeployExecutor interface {
 	// Kind returns a coarse classification of the venue used by the test
 	// runner for reporting and skip decisions. Values:
 	//   "host"      — ShellExecutor (operator's machine)
-	//   "container" — NestedExecutor with JumpPodmanExec / JumpDockerExec
+	//   "container" — NestedExecutor with JumpContainerExec (Engine carries podman/docker/nerdctl)
 	//   "vm"        — SSHExecutor or NestedExecutor with JumpSSH/JumpVirshConsole
 	// Replaces the test-time Executor.Kind() method deleted in the
 	// 2026-04 executor-hierarchy cutover.
@@ -168,7 +168,7 @@ type DeployExecutor interface {
 // implementation (host-engine builder exec) lives in sdk/kit; this options struct
 // is spec-homed because DeployExecutor.RunBuilder carries it across the IR.
 type BuilderRunOpts struct {
-	Engine       string // "podman" or "docker"; default "podman"
+	Engine       string // container engine CLI (podman/docker/nerdctl); empty → podman
 	BuilderImage string // full image ref, e.g. "ghcr.io/opencharly/fedora-builder:latest"
 	CandyDir     string // absolute path to candy source (bind-mounted as /work)
 	ScriptBody   string // shell script contents to pass to bash -c

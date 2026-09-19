@@ -134,25 +134,9 @@ func (n *NestedExecutor) StartProcess(ctx context.Context, launch spec.ProcessLa
 	}
 	var outer []string
 	switch n.Jump.Kind {
-	case JumpPodmanExec:
-		outer = []string{"podman", "exec", "-i"}
+	case JumpContainerExec:
+		outer = []string{n.Jump.engineBinary(), "exec", "-i"}
 		// Deterministic session user/HOME (issue #149): see wrapWithJump.
-		if n.Jump.User != "" {
-			outer = append(outer, "--user", n.Jump.User)
-		}
-		if n.Jump.Home != "" {
-			outer = append(outer, "--env", "HOME="+n.Jump.Home)
-		}
-		outer = append(outer, n.Jump.ExtraArgs...)
-		if launch.WorkingDir != "" {
-			outer = append(outer, "--workdir", launch.WorkingDir)
-		}
-		for _, pair := range proc.EnvMapToPairs(launch.Env) {
-			outer = append(outer, "--env", pair)
-		}
-		outer = append(outer, n.Jump.Target)
-	case JumpDockerExec:
-		outer = []string{"docker", "exec", "-i"}
 		if n.Jump.User != "" {
 			outer = append(outer, "--user", n.Jump.User)
 		}
@@ -177,7 +161,7 @@ func (n *NestedExecutor) StartProcess(ctx context.Context, launch spec.ProcessLa
 	default:
 		return nil, fmt.Errorf("NestedExecutor process jump %d: %w", n.Jump.Kind, spec.ErrNotSupported)
 	}
-	if n.Jump.Kind == JumpPodmanExec || n.Jump.Kind == JumpDockerExec {
+	if isContainerKind(n.Jump.Kind) {
 		outer = append(outer, launch.Argv...)
 	}
 	return parent.StartProcess(ctx, spec.ProcessLaunch{Argv: outer})

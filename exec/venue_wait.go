@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 
 	"github.com/opencharly/spec/poll"
@@ -38,6 +39,19 @@ func WaitForVmSshReady(domainID string) {
 	_ = gate.WaitForCloudInit(ctx)
 }
 
+// readinessEngine returns the container engine to probe a deployment with.
+// charly-managed venvs export CHARLY_RUN_ENGINE (the container-nesting / engine
+// layers set it; `charly settings engine.run` is the host-level twin), so the
+// probe uses the SAME engine the deploy ran under. When unset (a bare host or a
+// project-unaware caller) it falls back to defaultContainerEngine (podman) —
+// the same default the rest of the exec slice uses. Pure so it is unit-tested.
+func readinessEngine(envValue string) string {
+	if envValue != "" {
+		return envValue
+	}
+	return defaultContainerEngine
+}
+
 // WaitForContainerReady gates on the container being exec-able AND its supervisord-managed
 // children having left their transitional states, so a one-shot check-live port/service probe
 // never races a child that has not yet bound. `charly start` returns when systemd reports the
@@ -51,6 +65,10 @@ func WaitForVmSshReady(domainID string) {
 // caller falls back to the built-in defaults).
 func WaitForContainerReady(bed string) {
 	containerName := "charly-" + bed
+	// Probe with the engine the deployment actually runs under
+	// (CHARLY_RUN_ENGINE), not a literal: a docker/nerdctl host must use its
+	// own binary. See readinessEngine for the contract + fallback.
+	engine := readinessEngine(os.Getenv("CHARLY_RUN_ENGINE"))
 	// supervisorStatus reports __NOSUP__ when the image has no supervisorctl, so
 	// "no supervisord" is distinguishable from "socket not up yet".
 	const supervisorStatus = `command -v supervisorctl >/dev/null 2>&1 || { echo __NOSUP__; exit 0; }; supervisorctl status 2>&1`
@@ -63,10 +81,10 @@ func WaitForContainerReady(bed string) {
 	// check-live step surfaces the real failure).
 	cfg := poll.ReadinessProvider().Wait("container-ready "+bed, poll.PollLocal)
 	_ = poll.PollUntil(context.Background(), cfg, func(actx context.Context) (bool, float64, error) {
-		if exec.CommandContext(actx, "podman", "exec", containerName, "true").Run() != nil {
+		if exec.CommandContext(actx, engine, "exec", containerName, "true").Run() != nil {
 			return false, 0, nil // container not exec-able yet
 		}
-		out, _ := exec.CommandContext(actx, "podman", "exec", containerName, "sh", "-c", supervisorStatus).CombinedOutput()
+		out, _ := exec.CommandContext(actx, engine, "exec", containerName, "sh", "-c", supervisorStatus).CombinedOutput()
 		if bytes.Contains(out, []byte("__NOSUP__")) {
 			return true, 0, nil // no supervisord — nothing to settle
 		}

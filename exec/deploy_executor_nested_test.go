@@ -22,7 +22,7 @@ func TestNestedExecutor_VenueChains(t *testing.T) {
 
 	n1 := &NestedExecutor{
 		Parent: local,
-		Jump:   NestedJump{Kind: JumpPodmanExec, Target: "mybox"},
+		Jump:   NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mybox"},
 	}
 	if !strings.Contains(n1.Venue(), "podman-exec:mybox") {
 		t.Errorf("NestedExecutor Venue missing jump description: %q", n1.Venue())
@@ -46,7 +46,7 @@ func TestNestedExecutor_VenueChains(t *testing.T) {
 }
 
 func TestWrapWithJump_Podman(t *testing.T) {
-	j := NestedJump{Kind: JumpPodmanExec, Target: "mybox"}
+	j := NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mybox"}
 	out, err := wrapWithJump(j, "echo hi", false)
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
@@ -63,7 +63,7 @@ func TestWrapWithJump_Podman(t *testing.T) {
 }
 
 func TestWrapWithJump_PodmanRoot(t *testing.T) {
-	j := NestedJump{Kind: JumpPodmanExec, Target: "mybox"}
+	j := NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mybox"}
 	out, err := wrapWithJump(j, "id", true)
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
@@ -88,8 +88,8 @@ func TestWrapWithJump_ShellProbeNotHardcodedBash(t *testing.T) {
 		name string
 		jump NestedJump
 	}{
-		{"podman", NestedJump{Kind: JumpPodmanExec, Target: "mybox"}},
-		{"docker", NestedJump{Kind: JumpDockerExec, Target: "mybox"}},
+		{"podman", NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mybox"}},
+		{"docker", NestedJump{Kind: JumpContainerExec, Engine: "docker", Target: "mybox"}},
 		{"ssh", NestedJump{Kind: JumpSSH, Target: "user@host.invalid"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -171,7 +171,7 @@ func TestParseSSHTarget(t *testing.T) {
 }
 
 func TestCopyIntoJumpCommand_PodmanChownChmod(t *testing.T) {
-	j := NestedJump{Kind: JumpPodmanExec, Target: "box"}
+	j := NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "box"}
 	cmd, err := copyIntoJumpCommand(j, "/tmp/stage", "/usr/local/bin/foo", 0o755, true)
 	if err != nil {
 		t.Fatalf("copyIntoJumpCommand: %v", err)
@@ -217,9 +217,9 @@ func TestSSHExecutor_Venue(t *testing.T) {
 // not necessarily bash — see wrapWithJump; heredoc handling is POSIX, so the
 // collision and the fix are the same either way.)
 func TestNestedExecutor_ThreeLevelNesting_DelimitersUnique(t *testing.T) {
-	innerJump := NestedJump{Kind: JumpPodmanExec, Target: "deepest"}
-	midJump := NestedJump{Kind: JumpPodmanExec, Target: "middle"}
-	outerJump := NestedJump{Kind: JumpPodmanExec, Target: "outermost"}
+	innerJump := NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "deepest"}
+	midJump := NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "middle"}
+	outerJump := NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "outermost"}
 
 	innerScript := `echo hello`
 	midScript, err := wrapWithJump(innerJump, innerScript, false)
@@ -276,7 +276,7 @@ func TestNestedExecutor_EnvVarsPropagated_XdgRuntimeDir(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
 
-	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "vm"}, `charly check libvirt info vm`, false)
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "vm"}, `charly check libvirt info vm`, false)
 	if err != nil {
 		t.Fatalf("wrapWithJump: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestNestedExecutor_EnvVarsPropagated_DisplayWayland(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "wayland-2")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
 
-	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "charly-fixture-desktop"}, `charly check live fixture-desktop --filter wl`, false)
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "charly-fixture-desktop"}, `charly check live fixture-desktop --filter wl`, false)
 	if err != nil {
 		t.Fatalf("wrapWithJump: %v", err)
 	}
@@ -398,7 +398,7 @@ func (r *recordingParentExecutor) GetFile(_ context.Context, path string, _ bool
 func TestNestedExecutorGetFile_StagesRedirectOnParent(t *testing.T) {
 	png := "\x89PNG\r\n\x1a\n\x00\x01\x02\xde\xad\xbe\xef"
 	rec := &recordingParentExecutor{getFileData: []byte(png)}
-	n := &NestedExecutor{Parent: rec, Jump: NestedJump{Kind: JumpPodmanExec, Target: "charly-test-pod"}}
+	n := &NestedExecutor{Parent: rec, Jump: NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "charly-test-pod"}}
 
 	data, err := n.GetFile(context.Background(), "/tmp/charly-wl-screenshot.png", false, spec.EmitOpts{})
 	if err != nil {
@@ -559,14 +559,14 @@ echo "TOOK=${PROBE_TOOK:-sh-branch}"`
 		jump NestedJump
 		root bool
 	}{
-		{"podman", NestedJump{Kind: JumpPodmanExec, Target: "mybox"}, false},
-		{"podman-root", NestedJump{Kind: JumpPodmanExec, Target: "mybox"}, true},
-		{"docker", NestedJump{Kind: JumpDockerExec, Target: "mybox"}, false},
+		{"podman", NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mybox"}, false},
+		{"podman-root", NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mybox"}, true},
+		{"docker", NestedJump{Kind: JumpContainerExec, Engine: "docker", Target: "mybox"}, false},
 		{"ssh", NestedJump{Kind: JumpSSH, Target: "user@127.0.0.1:2222"}, false},
 		{"ssh-root", NestedJump{Kind: JumpSSH, Target: "user@127.0.0.1:2222"}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.jump.Kind == JumpDockerExec {
+			if tc.jump.Engine == "docker" {
 				// docker takes the same argv-delivery path as podman.
 				writeTransportStub(t, binDir, "docker", `#!/bin/sh
 [ "$1" = exec ] && shift
@@ -610,7 +610,7 @@ exec "$@"
 // (immune to the engine's exec user/HOME resolution race for containers
 // created during a concurrent bed window).
 func TestWrapWithJump_PodmanExplicitUserHome(t *testing.T) {
-	j := NestedJump{Kind: JumpPodmanExec, Target: "mybox", User: "1000:1000", Home: "/home/user"}
+	j := NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mybox", User: "1000:1000", Home: "/home/user"}
 	out, err := wrapWithJump(j, "echo hi", false)
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
@@ -619,7 +619,7 @@ func TestWrapWithJump_PodmanExplicitUserHome(t *testing.T) {
 		t.Errorf("wrapped missing explicit --user/--env HOME: %s", out)
 	}
 	// The pre-fix shape (no explicit user/HOME) must still work unchanged.
-	plain := NestedJump{Kind: JumpPodmanExec, Target: "mybox"}
+	plain := NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mybox"}
 	out2, err := wrapWithJump(plain, "echo hi", false)
 	if err != nil {
 		t.Fatalf("wrap plain: %v", err)
@@ -671,5 +671,53 @@ func TestParseContainerUserHome(t *testing.T) {
 				t.Errorf("parseContainerUserHome(%q) = (%q, %q), want (%q, %q)", tc.out, user, home, tc.wantUser, tc.wantHome)
 			}
 		})
+	}
+}
+
+// TestWrapWithJump_Nerdctl proves the engine is DATA on the jump: JumpContainerExec
+// with Engine "nerdctl" emits `nerdctl exec -i`, not podman. It fails against the
+// pre-engine-data code, where an unknown engine silently fell through to podman.
+func TestWrapWithJump_Nerdctl(t *testing.T) {
+	j := NestedJump{Kind: JumpContainerExec, Engine: "nerdctl", Target: "mybox"}
+	out, err := wrapWithJump(j, "echo hi", false)
+	if err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	if !strings.Contains(out, "nerdctl exec -i") {
+		t.Errorf("wrapped missing `nerdctl exec -i`: %s", out)
+	}
+	if strings.Contains(out, "podman exec") {
+		t.Errorf("nerdctl jump leaked podman: %s", out)
+	}
+}
+
+// TestJumpEngineBinary pins the engine resolution: Engine is used verbatim; an
+// empty canonical jump defaults to podman.
+func TestJumpEngineBinary(t *testing.T) {
+	cases := []struct {
+		jump NestedJump
+		want string
+	}{
+		{NestedJump{Kind: JumpContainerExec, Engine: "nerdctl"}, "nerdctl"},
+		{NestedJump{Kind: JumpContainerExec, Engine: "docker"}, "docker"},
+		{NestedJump{Kind: JumpContainerExec, Engine: "podman"}, "podman"},
+		{NestedJump{Kind: JumpContainerExec}, "podman"},
+	}
+	for _, tc := range cases {
+		if got := tc.jump.engineBinary(); got != tc.want {
+			t.Errorf("engineBinary(%+v) = %q, want %q", tc.jump, got, tc.want)
+		}
+	}
+}
+
+// TestCopyIntoJumpCommand_Nerdctl is the cp-side twin of the wrap test.
+func TestCopyIntoJumpCommand_Nerdctl(t *testing.T) {
+	j := NestedJump{Kind: JumpContainerExec, Engine: "nerdctl", Target: "mybox"}
+	out, err := copyIntoJumpCommand(j, "/stage/f", "/remote/f", 0o644, false)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if !strings.Contains(out, "nerdctl cp") || strings.Contains(out, "podman") {
+		t.Errorf("nerdctl copy jump wrong: %s", out)
 	}
 }

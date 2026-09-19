@@ -50,7 +50,7 @@ import (
 func BuilderRun(ctx context.Context, opts spec.BuilderRunOpts) ([]byte, error) {
 	engine := opts.Engine
 	if engine == "" {
-		engine = "podman"
+		engine = defaultContainerEngine
 	}
 
 	// `podman run` needs the CONCRETE storage key, not a namespace-qualified or

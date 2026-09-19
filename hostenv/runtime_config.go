@@ -72,10 +72,10 @@ type EngineConfig struct {
 
 // ResolvedRuntime holds the fully resolved runtime configuration
 type ResolvedRuntime struct {
-	BuildEngine          string // "docker" or "podman"
-	RunEngine            string // "docker" or "podman"
+	BuildEngine          string // a member of spec.EngineNames (podman/docker/nerdctl)
+	RunEngine            string // a member of spec.EngineNames (podman/docker/nerdctl)
 	Rootful              string // "auto", "machine", "sudo", "native"
-	RunMode              string // "direct" or "quadlet"
+	RunMode              string // a member of spec.EngineRunModes (quadlet/systemd-unit/direct)
 	AutoEnable           bool   // auto-enable quadlet on first start
 	BindAddress          string // "127.0.0.1" or "0.0.0.0"
 	EncryptedStoragePath string // path for gocryptfs encrypted storage
@@ -206,11 +206,39 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		return nil, err
 	}
 
-	if rt.RunMode == "quadlet" && rt.RunEngine != "podman" {
-		fmt.Fprintf(os.Stderr, "Warning: run_mode=quadlet requires podman; engine.run=%s\n", rt.RunEngine)
+	// Warn when an EXPLICIT run_mode names a unit mode the resolved engine does
+	// not offer. One capability-driven check — no literal engine or mode words.
+	if msg := runModeMismatchWarning(rt.RunEngine, rt.RunMode); msg != "" {
+		fmt.Fprint(os.Stderr, msg)
 	}
 
 	return rt, nil
+}
+
+// runModeMismatchWarning returns the warn-or-empty message for a resolved
+// engine/run-mode pair, or "" when they agree (or when the mode is not a unit
+// mode at all). It is the ONE place the "does this engine offer this unit mode"
+// question is answered, and it is a pure function so the branch is testable
+// without spawning a process or stubbing stderr.
+//
+// `direct` is the host-degraded fallback: an engine that offers a unit mode but
+// resolved to `direct` (no systemd-user session) is NOT a mismatch, because
+// DetectRunMode deliberately degrades there. Only an EXPLICIT unit mode the
+// engine cannot produce is a warning.
+func runModeMismatchWarning(runEngine, runMode string) string {
+	if !container.IsUnitRunMode(runMode) {
+		return ""
+	}
+	cap, ok := container.EngineCapabilityFor(runEngine)
+	if ok && string(cap.RunMode) == runMode {
+		return ""
+	}
+	offered := "no unit mode"
+	if ok {
+		offered = string(cap.RunMode)
+	}
+	return fmt.Sprintf("Warning: run_mode=%s is not offered by engine.run=%s (it offers %s)\n",
+		runMode, runEngine, offered)
 }
 
 // ResolveValue returns the first non-empty value from the chain.
@@ -225,42 +253,67 @@ func ResolveValue(envVal, cfgVal, defaultVal string) string {
 }
 
 func ValidateEngine(value, field string) error {
-	if value != "docker" && value != "podman" {
-		return fmt.Errorf("%s must be \"docker\" or \"podman\", got %q", field, value)
+	// The engine vocabulary is CUE-owned (spec.EngineNames via container); a
+	// literal list here would be a second source that drifts.
+	if !container.IsEngineName(value) {
+		return container.EngineValidationError(field, value)
 	}
 	return nil
 }
 
 func ValidateRunMode(value string) error {
-	if value != "auto" && value != "direct" && value != "quadlet" {
-		return fmt.Errorf("run_mode must be \"auto\", \"direct\", or \"quadlet\", got %q", value)
+	// "auto" is the pre-resolution SELECTOR (ResolveRuntime replaces it with a
+	// concrete mode via DetectRunMode before this validation runs); it is not a
+	// member of the run-mode vocabulary. The concrete modes are CUE-owned
+	// (spec.EngineRunModes via container) — a literal list here would drift.
+	if value == "auto" {
+		return nil
+	}
+	if !container.IsRunMode(value) {
+		return fmt.Errorf("run_mode must be \"auto\" or one of %s, got %q", strings.Join(container.RunModes(), ", "), value)
 	}
 	return nil
 }
 
-// DetectRunMode returns "quadlet" when podman is present AND a functional
-// systemd-user session is reachable (systemctl binary + XDG_RUNTIME_DIR +
-// /run/user/<uid>/systemd directory). Otherwise returns "direct".
+// DetectRunMode returns the persistence/supervision mode for a run engine:
+//
+//   - podman  → "quadlet" when a functional systemd-user session is reachable,
+//     otherwise "direct".
+//   - nerdctl → "systemd-unit" when a functional systemd-user session is
+//     reachable (nerdctl has no quadlet generator; charly emits a .service that
+//     wraps the nerdctl CLI), otherwise "direct".
+//   - anything else (docker) → "direct".
 //
 // The functional-systemd-user check (added 2026-04-27) catches nested
 // environments — harness sandbox pods, supervisord-only containers, sysvinit hosts —
 // that have the systemctl binary present but no running `systemd --user`
 // session. Without this check, `charly deploy add <name> <ref>` would silently
-// pick run_mode=quadlet, write the .container file, and fail at
+// pick a unit mode, write the unit file, and fail at
 // `systemctl --user daemon-reload` time. With the check, run_mode=direct
 // is auto-selected on those hosts and `runConfigDirect()` (in
 // config_image.go) emits a `podman run -d` invocation instead.
+//
+// The engine→mode mapping is DATA owned by spec/container (EngineRunModeFor);
+// this function only decides whether the unit-capable mode is reachable on the
+// host. A new engine therefore lands in one place.
 func DetectRunMode(runEngine string) string {
-	if runEngine != "podman" {
-		return "direct"
+	// The engine→mode mapping is DATA owned by spec/container (EngineRunModeFor,
+	// from the CUE-owned capability table); this function only decides whether
+	// the unit-capable mode is reachable on the host. Unit-capability itself is
+	// a CUE-owned fact (container.IsUnitRunMode), and the non-unit fallback name
+	// is derived (container.DirectRunMode), so this file holds no mode literal at
+	// all — no {"quadlet","systemd-unit"} pair, no "direct".
+	mode := container.EngineRunModeFor(runEngine)
+	if !container.IsUnitRunMode(mode) {
+		return container.DirectRunMode()
 	}
 	if _, err := exec.LookPath("systemctl"); err != nil {
-		return "direct"
+		return container.DirectRunMode()
 	}
 	if !SystemdUserAvailable() {
-		return "direct"
+		return container.DirectRunMode()
 	}
-	return "quadlet"
+	return mode
 }
 
 // SystemdUserRuntimeDir returns the path the directory check probes —

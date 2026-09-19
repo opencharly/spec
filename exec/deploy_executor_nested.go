@@ -29,7 +29,7 @@ import (
 //
 //    NestedExecutor{
 //        Parent: outerVmSSH,
-//        Jump:   NestedJump{Kind: JumpPodmanExec, Target: "mychild"},
+//        Jump:   NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "mychild"},
 //    }
 //
 // When the child calls RunSystem("pacman -Sy"), NestedExecutor passes
@@ -56,17 +56,12 @@ import (
 type JumpKind int
 
 const (
-	// JumpPodmanExec enters a rootful or rootless podman container
-	// via `podman exec -i <name>`. The parent must have podman
-	// available (the container-nesting candy provides this for
-	// container-in-container; the virtualization candy is unrelated
-	// here — container children of container parents).
-	JumpPodmanExec JumpKind = iota + 1
-
-	// JumpDockerExec enters a docker container via `docker exec -i`.
-	// Separate from podman because docker and podman CLIs differ in
-	// exit-code propagation and stdin handling.
-	JumpDockerExec
+	// JumpContainerExec enters a container with `<engine> exec -i <name>`, where
+	// <engine> is NestedJump.Engine (podman / docker / nerdctl). The transport is
+	// identical across engines — only the binary differs — so the engine is DATA
+	// on the jump (NestedJump.Engine), not one enum arm per engine. This is why a
+	// new engine needs no new JumpKind: it sets Engine.
+	JumpContainerExec JumpKind = iota + 1
 
 	// JumpSSH makes an additional ssh hop — used when the child
 	// itself is an SSH-reachable VM inside an already-SSH-reachable
@@ -82,20 +77,26 @@ const (
 // NestedJump describes one hop into a nested environment. The Target
 // string's meaning depends on Kind:
 //
-//	JumpPodmanExec / JumpDockerExec: container name.
-//	JumpSSH:                         "[user@]host[:port]" or an
-//	                                 ssh-config alias (e.g.
-//	                                 "charly-<vmname>"). ssh(1) reads
-//	                                 ~/.ssh/config + agent for keys
-//	                                 and connection options — we
-//	                                 contain zero credential state.
-//	JumpVirshConsole:                libvirt domain name.
+//	JumpContainerExec: container name (Engine holds the CLI: podman/docker/nerdctl).
+//	JumpSSH:           "[user@]host[:port]" or an
+//	                   ssh-config alias (e.g.
+//	                   "charly-<vmname>"). ssh(1) reads
+//	                   ~/.ssh/config + agent for keys
+//	                   and connection options — we
+//	                   contain zero credential state.
+//	JumpVirshConsole:  libvirt domain name.
 type NestedJump struct {
 	Kind   JumpKind
 	Target string
 
+	// Engine is the container-engine CLI for a JumpContainerExec hop — one of
+	// the CUE-owned engine words (podman / docker / nerdctl). Empty defaults to
+	// podman (the historical default). The engine is DATA here so
+	// the exec argv is built from the engine vocabulary, never an enum arm.
+	Engine string
+
 	// User is the explicit `--user` value (e.g. "1000:1000") passed to a
-	// podman/docker exec hop. When set, the exec argv carries `--user <User>`
+	// container exec hop. When set, the exec argv carries `--user <User>`
 	// so the session user is deterministic instead of whatever the engine's
 	// exec user/HOME resolution derives at that moment (issue #149: a
 	// container created during a concurrent bed window resolves uid=1000
@@ -106,7 +107,7 @@ type NestedJump struct {
 	User string
 
 	// Home is the explicit HOME value (e.g. "/home/user") passed to a
-	// podman/docker exec hop as `--env HOME=<Home>`. See User.
+	// container exec hop as `--env HOME=<Home>`. See User.
 	Home string
 
 	// Extra arguments inserted before the shell invocation. Rarely
@@ -158,6 +159,27 @@ func jumpShell(kind JumpKind, asRoot bool) string {
 	return shell
 }
 
+// defaultContainerEngine is the engine a container-exec jump uses when
+// NestedJump.Engine is empty — podman, the historical default. An engine word is
+// used verbatim, so the exec argv follows the engine vocabulary (podman / docker
+// / nerdctl) with no switch.
+const defaultContainerEngine = "podman"
+
+// engineBinary returns the container-engine CLI for a container-exec jump:
+// NestedJump.Engine, defaulting to podman when unset.
+func (j NestedJump) engineBinary() string {
+	if j.Engine != "" {
+		return j.Engine
+	}
+	return defaultContainerEngine
+}
+
+// isContainerKind reports whether a JumpKind enters a container. One transport
+// arm now (the engine is data), kept as a predicate so call sites read clearly.
+func isContainerKind(kind JumpKind) bool {
+	return kind == JumpContainerExec
+}
+
 func nestedSSHLogArgs() []string { return []string{"-o", nestedSSHLogLevel} }
 
 func nestedSSHLogFlags() string { return strings.Join(escapeTokens(nestedSSHLogArgs()), " ") + " " }
@@ -166,10 +188,8 @@ func nestedSSHLogFlags() string { return strings.Join(escapeTokens(nestedSSHLogA
 // component of NestedExecutor.Venue().
 func (j NestedJump) String() string {
 	switch j.Kind {
-	case JumpPodmanExec:
-		return "podman-exec:" + j.Target
-	case JumpDockerExec:
-		return "docker-exec:" + j.Target
+	case JumpContainerExec:
+		return j.engineBinary() + "-exec:" + j.Target
 	case JumpSSH:
 		return "ssh:" + j.Target
 	case JumpVirshConsole:
@@ -279,11 +299,7 @@ func (n *NestedExecutor) RunCapture(ctx context.Context, script string) (string,
 // venues where a podman container-SETUP infra failure (infra_classify.go) can occur.
 // SSH/virsh-console jumps are excluded.
 func isContainerJump(kind JumpKind) bool {
-	switch kind {
-	case JumpPodmanExec, JumpDockerExec:
-		return true
-	}
-	return false
+	return isContainerKind(kind)
 }
 
 // prepareJump wraps a script for this executor's jump.
@@ -323,7 +339,7 @@ func (n *NestedExecutor) ResolveHome(ctx context.Context, user string) (string, 
 // the path taken to reach it.
 func (n *NestedExecutor) Kind() string {
 	switch n.Jump.Kind {
-	case JumpPodmanExec, JumpDockerExec:
+	case JumpContainerExec:
 		return "container"
 	case JumpSSH, JumpVirshConsole:
 		return "vm"
@@ -378,7 +394,7 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 	}
 	// Only podman/docker/ssh jumps support the stdout-cat approach.
 	switch n.Jump.Kind {
-	case JumpPodmanExec, JumpDockerExec, JumpSSH:
+	case JumpContainerExec, JumpSSH:
 		// ok
 	default:
 		return nil, fmt.Errorf("NestedExecutor.GetFile: jump kind %d does not support file retricheck (add explicit support if needed)", int(n.Jump.Kind))
@@ -437,7 +453,7 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 // a delim absent from its inner content.
 //
 // Env-var propagation across container hops: when the jump kind is
-// JumpPodmanExec / JumpDockerExec, a curated allowlist of session-
+// JumpContainerExec, a curated allowlist of session-
 // related env vars (XDG_RUNTIME_DIR, DISPLAY, WAYLAND_DISPLAY,
 // DBUS_SESSION_BUS_ADDRESS) is propagated via `--env KEY=VALUE` flags
 // when set in the parent's environ. This is critical for libvirt
@@ -480,11 +496,8 @@ func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
 	}
 
 	switch jump.Kind {
-	case JumpPodmanExec, JumpDockerExec:
-		engine := "podman"
-		if jump.Kind == JumpDockerExec {
-			engine = "docker"
-		}
+	case JumpContainerExec:
+		engine := jump.engineBinary()
 		// Propagate session-related env vars across the container hop
 		// so verbs that need them (libvirt session-socket lookup,
 		// wayland/X11 display, dbus session bus) work the same as the
@@ -558,11 +571,8 @@ func copyIntoJumpCommand(jump NestedJump, stagePath, remotePath string, mode uin
 	modeStr := permOctal(mode)
 
 	switch jump.Kind {
-	case JumpPodmanExec, JumpDockerExec:
-		engine := "podman"
-		if jump.Kind == JumpDockerExec {
-			engine = "docker"
-		}
+	case JumpContainerExec:
+		engine := jump.engineBinary()
 		// `<engine> cp <stage> <container>:<remote>` then chown/chmod
 		// via exec. Root ownership inside the container is cheap
 		// (containers usually run as root by default) but we issue
