@@ -73,8 +73,8 @@ func TestDeploySecurityCpusStillLive(t *testing.T) {
 // `variants:`/`#VmVariant` surface: it was added in #86 with no reader ever.
 // The reader sweep (executed against the default branches) is grep-clean for
 // `GetVariants` in BOTH spec and charly — the only `Variants`/`VmVariant` hits
-// are the generated field/type declarations themselves, and `git log -S
-// GetVariants` returns no commit on either repo's history. A future
+// are the generated field/type declarations themselves, and `git log -S 'func
+// GetVariants'` is empty across BOTH repos' entire history. A future
 // reintroduction must fail this test until it ships a real reader.
 func TestDeployRejectsVariants(t *testing.T) {
 	// An EMPTY variant body is deliberate: the pre-cutover schema accepts
