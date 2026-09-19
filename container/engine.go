@@ -39,7 +39,9 @@ func EngineBinary(engine string) string {
 
 // GPURunArgs returns the engine-specific run flags that expose all host GPUs to a container.
 // podman uses the CDI device form; docker and nerdctl use the Docker-compatible `--gpus`.
-// The style rides on the capability table so it is a fact, not a switch.
+// The style rides on the capability table so it is a fact, not a switch. The `"auto"`
+// selector resolves to the installed engine via DetectEngine (the same resolution
+// EngineBinary performs), so GPURunArgs("auto") matches GPURunArgs(<detected>).
 func GPURunArgs(engine string) []string {
 	if c, ok := EngineCapabilityFor(engine); ok && c.GPUArgStyle == "cdi" {
 		return []string{"--device", "nvidia.com/gpu=all"}

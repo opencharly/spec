@@ -1,6 +1,7 @@
 package container
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/opencharly/spec/spec"
@@ -30,6 +31,15 @@ func TestGPURunArgs(t *testing.T) {
 		got := GPURunArgs(engine)
 		if len(got) != 2 || got[0] != "--gpus" || got[1] != "all" {
 			t.Errorf("GPURunArgs(%q) = %v, want --gpus all", engine, got)
+		}
+	}
+	// `"auto"` is the pre-resolution selector: it resolves to the installed engine
+	// (DetectEngine), so it must yield the SAME form as that engine — not the
+	// historical `--gpus all` default. On a podman host that is the CDI form; the
+	// assertion is written against the detected engine so it holds on any host.
+	if detected, err := DetectEngine(); err == nil {
+		if got, want := GPURunArgs("auto"), GPURunArgs(detected); !reflect.DeepEqual(got, want) {
+			t.Errorf("GPURunArgs(auto) = %v, want the detected engine %q's %v", got, detected, want)
 		}
 	}
 }
