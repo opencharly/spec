@@ -27,10 +27,6 @@ import (
 	pb "github.com/opencharly/spec/proto"
 )
 
-// ProtocolVersion is the go-plugin/proto contract version — a thin secondary gate.
-// CalVer (charly's version.go) is the authority; matching CalVer ⇒ matching proto.
-const ProtocolVersion = 2
-
 // DispenseKey is the single go-plugin plugin name; charly serves/dispenses ONE
 // gRPC plugin exposing the uniform Provider + PluginMeta services.
 const DispenseKey = "charly"
@@ -39,8 +35,17 @@ const DispenseKey = "charly"
 // plugin server refuses to serve unless launched with CHARLY_PLUGIN set, so a
 // plugin binary run by hand prints the "not meant to be executed directly" notice
 // instead of hanging.
+//
+// ProtocolVersion is hashicorp/go-plugin's OWN transport-family negotiation: its
+// checkProtoVersion runs at Connect, before Describe. The value is FROZEN at 2 and
+// MUST NOT be changed without rebuilding every plugin binary — go-plugin refuses a
+// plugin whose advertised version differs, and that would break plugins whose
+// WIREFRAME is perfectly compatible. It is NOT the wireframe gate: the wireframe
+// contract is the CUE schema a plugin serves over Describe and the host splices onto
+// its base (registerPluginUnitSchema), where a real capability gap is a hard schema
+// error.
 var Handshake = plugin.HandshakeConfig{
-	ProtocolVersion:  ProtocolVersion,
+	ProtocolVersion:  2,
 	MagicCookieKey:   "CHARLY_PLUGIN",
 	MagicCookieValue: "charly-plugin-v1",
 }

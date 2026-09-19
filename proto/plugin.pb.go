@@ -68,8 +68,6 @@ type Capabilities struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// the plugin's CalVer (CalVer is the version authority)
 	Calver string `protobuf:"bytes,1,opt,name=calver,proto3" json:"calver,omitempty"`
-	// thin secondary gate; never duplicates CalVer
-	ProtocolVersion uint32 `protobuf:"varint,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	// the unit's capabilities + the def validating each input
 	Provided []*ProvidedCapability `protobuf:"bytes,3,rep,name=provided,proto3" json:"provided,omitempty"`
 	// the unit's package-less, SELF-CONTAINED .cue source text
@@ -113,13 +111,6 @@ func (x *Capabilities) GetCalver() string {
 		return x.Calver
 	}
 	return ""
-}
-
-func (x *Capabilities) GetProtocolVersion() uint32 {
-	if x != nil {
-		return x.ProtocolVersion
-	}
-	return 0
 }
 
 func (x *Capabilities) GetProvided() []*ProvidedCapability {
@@ -2427,13 +2418,12 @@ var File_plugin_proto protoreflect.FileDescriptor
 const file_plugin_proto_rawDesc = "" +
 	"\n" +
 	"\fplugin.proto\x12\fcharlyplugin\"\a\n" +
-	"\x05Empty\"\xae\x01\n" +
+	"\x05Empty\"\x89\x01\n" +
 	"\fCapabilities\x12\x16\n" +
-	"\x06calver\x18\x01 \x01(\tR\x06calver\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\rR\x0fprotocolVersion\x12<\n" +
+	"\x06calver\x18\x01 \x01(\tR\x06calver\x12<\n" +
 	"\bprovided\x18\x03 \x03(\v2 .charlyplugin.ProvidedCapabilityR\bprovided\x12\x1d\n" +
 	"\n" +
-	"schema_cue\x18\x04 \x01(\tR\tschemaCue\"\xf6\x03\n" +
+	"schema_cue\x18\x04 \x01(\tR\tschemaCueJ\x04\b\x02\x10\x03\"\xf6\x03\n" +
 	"\x12ProvidedCapability\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x1b\n" +

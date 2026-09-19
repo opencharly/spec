@@ -12,10 +12,9 @@ message Empty {
 }
 
 message Capabilities {
+  reserved 2;
   // the plugin's CalVer (CalVer is the version authority)
   string calver = 1;
-  // thin secondary gate; never duplicates CalVer
-  uint32 protocol_version = 2;
   // the unit's capabilities + the def validating each input
   repeated ProvidedCapability provided = 3;
   // the unit's package-less, SELF-CONTAINED .cue source text
