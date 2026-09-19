@@ -380,5 +380,3 @@ import "strings"
 	consistent?:         bool @go(Consistent)
 	keep_venue?:         bool @go(KeepVenue)
 }
-
-
