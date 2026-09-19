@@ -12,9 +12,11 @@
 //   - the engine VOCABULARY (which engine words, which run modes, which modes are
 //     unit-supervised) is data, owned here by #EngineName / #EngineRunMode /
 //     #EngineUnitRunModes. `task cue:gen` emits them as spec.EngineNames /
-//     spec.EngineRunModes / spec.EngineUnitRunModes, and every consumer derives
-//     from those: IsEngineName/IsRunMode/IsUnitRunMode read the emitted lists,
-//     and the authored candy.engine/deploy.engine fields are typed #EngineName.
+//     spec.EngineRunModes / spec.EngineUnitRunModeWords, and each consumer
+//     predicate reads its OWN list: IsEngineName reads spec.EngineNames,
+//     IsRunMode reads spec.EngineRunModes, and IsUnitRunMode reads
+//     spec.EngineUnitRunModeWords. The authored candy.engine/deploy.engine
+//     fields are typed #EngineName.
 //     The op-envelope `engine` fields below stay plain `string` on purpose:
 //     they carry the RESOLVED or still-`auto`/empty engine at the wire boundary,
 //     which is a superset of the authored vocabulary — a `#EngineName` there

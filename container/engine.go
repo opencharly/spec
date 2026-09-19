@@ -6,11 +6,14 @@
 // re-exports the same symbols so existing kit.EngineBinary / kit.GPURunArgs / kit.DetectEngine
 // call sites are untouched.
 //
-// The engine NAME vocabulary is CUE-owned (schema/engine.cue #EngineName, emitted as
-// spec.EngineNames) — this file declares no separate word LIST (IsEngineName/IsRunMode/
-// IsUnitRunMode read spec.EngineNames). The capability FACTS live in one Go table whose
-// KEYS are those CUE-declared words (the words appear as data, not as a second list);
-// adding an engine is one CUE edit plus one table row, gated by
+// The engine vocabularies are CUE-owned (schema/engine.cue #EngineName /
+// #EngineRunMode / #EngineUnitRunModes, emitted as spec.EngineNames /
+// spec.EngineRunModes / spec.EngineUnitRunModeWords) — this file declares no
+// separate word LIST. Each predicate reads its OWN emitted list: IsEngineName →
+// spec.EngineNames, IsRunMode → spec.EngineRunModes, IsUnitRunMode →
+// spec.EngineUnitRunModeWords. The capability FACTS live in one Go table whose
+// KEYS are the engine words (they appear as data, not as a second list); adding
+// an engine is one CUE edit plus one table row, gated by
 // TestEngineVocabularyIsSingleSource.
 package container
 
