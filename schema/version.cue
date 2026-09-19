@@ -87,9 +87,11 @@
 // corrected from the outlier plural spelling `cpus:` to the singular `cpu:`,
 // matching `#Vm` (the template it overrides) exactly. The unreadable `disk_size`
 // field and the never-implemented `variants:`/`#VmVariant` surface are DELETED
-// rather than parked — both were authorable-but-inert. All of these were DEAD
-// since the initial spec import (zero readers, zero authors), so nothing authored
-// needs migrating; the old `cpus:` key is simply gone. NO migration-table entry:
+// rather than parked — the cpu/ram/disk_size fields were authorable-but-inert
+// since the initial spec import (`11dcd6d`), while `variants:`/`#VmVariant` was
+// added in #86 and never implemented. All of them were DEAD (zero readers, zero
+// authors), so nothing authored needs migrating; the old `cpus:` key is simply
+// gone. NO migration-table entry:
 // a rename would have to be scoped `under_kind: vm` and the op-walker's
 // under_kind marks every mapping nested within the entity, which would also
 // rewrite the LIVE `security: {cpus: "2.5"}` string quota into a schema-invalid
