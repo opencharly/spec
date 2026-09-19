@@ -80,8 +80,9 @@
 // AT 2026.248.1030, so a residual-config rewrite is impossible without this
 // bump.
 // Bumped again by the per-deploy VM-shape override cutover: `#Deploy`'s dead
-// VM-shape `cpu`/`ram` fields gain their reader (candy/plugin-vm's
-// hostConfigResolve, chain-inheriting over `from:`), and the cpu field is
+// VM-shape `cpu`/`ram` fields are given meaning by a reader (candy/plugin-vm's
+// hostConfigResolve, chain-inheriting over `from:`) that lands in a SIBLING PR
+// after this leg tags; the cpu field is
 // corrected from the outlier plural spelling `cpus:` to the singular `cpu:`,
 // matching `#Vm` (the template it overrides) exactly. The unreadable `disk_size`
 // field and the never-implemented `variants:`/`#VmVariant` surface are DELETED

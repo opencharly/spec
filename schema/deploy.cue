@@ -182,8 +182,8 @@
 	// `cpu:` (singular) and `ram:` — so a template and every deploy that derives
 	// from it read alike. Both were DEAD since the initial spec import (authorable,
 	// zero readers/authors); the cpu one was misspelled `cpus:`, the lone VM-shape
-	// outlier. The reader that gives them meaning (candy/plugin-vm) lands with the
-	// rename.
+	// outlier. The reader that gives them meaning (candy/plugin-vm) is a SIBLING
+	// PR that merges after this leg tags — the wire shape lands here first.
 	//
 	// There is deliberately NO per-deploy `disk_size`: a kind:vm template's
 	// disk_size builds the shared base disk ONCE and every deploy boots a read-only
