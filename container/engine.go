@@ -92,6 +92,23 @@ func IsRunMode(mode string) bool { return contains(spec.EngineRunModes, mode) }
 // so no caller hand-lists {"quadlet","systemd-unit"}.
 func IsUnitRunMode(mode string) bool { return contains(spec.EngineUnitRunModeWords, mode) }
 
+// DirectRunMode returns the non-unit run mode — the one member of the CUE-owned
+// spec.EngineRunModes that is NOT unit-supervised. Derived as the set difference
+// (EngineRunModes − EngineUnitRunModeWords), so the name has NO literal home:
+// changing #EngineRunMode is the only edit. Falls back to the last mode in the
+// list if the vocabularies are ever malformed (never expected; unit-tested).
+func DirectRunMode() string {
+	for _, m := range spec.EngineRunModes {
+		if !IsUnitRunMode(m) {
+			return m
+		}
+	}
+	if n := len(spec.EngineRunModes); n > 0 {
+		return spec.EngineRunModes[n-1]
+	}
+	return ""
+}
+
 func contains(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
@@ -160,12 +177,13 @@ func EngineCapabilityFor(engine string) (spec.EngineCapability, bool) {
 }
 
 // EngineRunModeFor returns the persistence/supervision mode for an engine word,
-// defaulting to "direct" for an unknown word (the conservative, no-unit path).
+// defaulting to the non-unit mode for an unknown word (the conservative,
+// no-unit path). The fallback name is derived (DirectRunMode), never a literal.
 func EngineRunModeFor(engine string) string {
 	if c, ok := EngineCapabilityFor(engine); ok {
 		return string(c.RunMode)
 	}
-	return "direct"
+	return DirectRunMode()
 }
 
 // EngineValidationError builds the canonical "not an engine" error text from the

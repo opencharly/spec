@@ -176,3 +176,32 @@ func TestEngineCapabilityShapeMatchesSchema(t *testing.T) {
 		}
 	}
 }
+
+// TestDirectRunModeDerived proves the non-unit mode name is DERIVED as
+// EngineRunModes − EngineUnitRunModeWords, not a second literal: it must be a
+// member of the run-mode vocabulary and NOT a unit mode.
+func TestDirectRunModeDerived(t *testing.T) {
+	got := DirectRunMode()
+	if got == "" {
+		t.Fatal("DirectRunMode() is empty")
+	}
+	if !IsRunMode(got) {
+		t.Errorf("DirectRunMode() = %q, not a member of spec.EngineRunModes", got)
+	}
+	if IsUnitRunMode(got) {
+		t.Errorf("DirectRunMode() = %q, but it must NOT be unit-supervised", got)
+	}
+	// Exactly one non-unit mode exists in the CUE vocabulary.
+	nonUnit := 0
+	for _, m := range spec.EngineRunModes {
+		if !IsUnitRunMode(m) {
+			nonUnit++
+			if m != got {
+				t.Errorf("non-unit mode %q != DirectRunMode() %q", m, got)
+			}
+		}
+	}
+	if nonUnit != 1 {
+		t.Errorf("expected exactly 1 non-unit run mode, found %d", nonUnit)
+	}
+}

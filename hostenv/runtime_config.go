@@ -300,29 +300,21 @@ func DetectRunMode(runEngine string) string {
 	// The engine→mode mapping is DATA owned by spec/container (EngineRunModeFor,
 	// from the CUE-owned capability table); this function only decides whether
 	// the unit-capable mode is reachable on the host. Unit-capability itself is
-	// a CUE-owned fact (container.IsUnitRunMode), so no caller hand-lists
-	// {"quadlet","systemd-unit"}.
-	//
-	// DirectRunMode is the non-unit fallback name from the CUE-owned vocabulary
-	// (never a literal here).
+	// a CUE-owned fact (container.IsUnitRunMode), and the non-unit fallback name
+	// is derived (container.DirectRunMode), so this file holds no mode literal at
+	// all — no {"quadlet","systemd-unit"} pair, no "direct".
 	mode := container.EngineRunModeFor(runEngine)
 	if !container.IsUnitRunMode(mode) {
-		return DirectRunMode
+		return container.DirectRunMode()
 	}
 	if _, err := exec.LookPath("systemctl"); err != nil {
-		return DirectRunMode
+		return container.DirectRunMode()
 	}
 	if !SystemdUserAvailable() {
-		return DirectRunMode
+		return container.DirectRunMode()
 	}
 	return mode
 }
-
-// DirectRunMode is the name of the non-unit, ephemeral run mode (an argv launch
-// with no generated unit). It is one member of the CUE-owned spec.EngineRunModes;
-// this const exists so the "fall back to direct" sites name the mode rather than
-// repeating the literal.
-const DirectRunMode = "direct"
 
 // SystemdUserRuntimeDir returns the path the directory check probes —
 // `/run/user/<uid>/systemd`. Exposed as a package-level SEAM var so tests
