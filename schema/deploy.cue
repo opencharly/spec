@@ -176,7 +176,19 @@
 	user?: string & !=""
 	ssh_arg?: [...string] @go(SSHArgs)
 
-	cpus?:      int & >=1 @go(,type=int)
+	// Per-deploy VM-shape override, read by candy/plugin-vm's hostConfigResolve:
+	// `from:` a kind:vm template and state a different size, instead of duplicating
+	// the whole template for each consumer (R3). The spelling matches `#Vm`'s own
+	// field (`cpu:`, singular) EXACTLY, so a template and every deploy that derives
+	// from it read alike. These three were DEAD since the initial spec import —
+	// authorable but with zero readers — and the cpu one was also misspelled
+	// `cpus:`, the only VM-shape surface to do so; the reader that gives them
+	// meaning (plugin-vm) landed with the rename.
+	//
+	// A VM template's `disk_size` builds the shared base disk ONCE, so a per-deploy
+	// disk_size cannot resize an already-built disk; it is kept for shape parity
+	// with #Vm but is not a live per-deploy override (only cpu/ram are).
+	cpu?:       int & >=1 @go(Cpus,type=int)
 	ram?:       #VmSize
 	disk_size?: #VmSize @go(DiskSize)
 
