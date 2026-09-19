@@ -25,6 +25,7 @@ import (
 	"github.com/opencharly/spec/cache"
 	"github.com/opencharly/spec/calver"
 	"github.com/opencharly/spec/lock"
+	"github.com/opencharly/spec/proc"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -544,6 +545,18 @@ func submodulesPopulatedUncached(cachePath string) bool {
 // matches, so their cache-hit behavior is unchanged. A cache written before
 // this contract has no provenance and is re-downloaded once, then self-heals.
 func DownloadRepo(repoPath string, version string) (string, error) {
+	// RDD local-override (CHARLY_REPO_OVERRIDE): resolve a remote repo ref to a LOCAL
+	// working tree instead of fetching, so an UNCOMMITTED candy/charly.yml change can
+	// be built and evaluated by ANY consumer before it is pushed. Enforced HERE, at the
+	// fetch LEAF, so every caller inherits it — the loader-side orchestration AND the
+	// direct callers (`charly marketplace generate`, `charly docs generate`,
+	// pluginsgen). The override tree is the dev's LIVE tree: used verbatim, never
+	// migrated (migration would mutate the working tree).
+	if dir, ok, err := proc.RepoOverrideDir(repoPath, os.Getenv(proc.RepoOverrideEnv)); err != nil {
+		return "", err
+	} else if ok {
+		return dir, nil
+	}
 	return downloadRepoFrom(RepoGitURL(repoPath), repoPath, version)
 }
 
