@@ -112,6 +112,7 @@ var engineCapabilities = map[string]spec.EngineCapability{
 		RunMode:              "quadlet",
 		GPUArgStyle:          "cdi",
 		UsernsKeepIDArg:      "--userns=keep-id",
+		ImageExistsArgv:      []string{"image", "exists"},
 	},
 	"docker": {
 		Name:             "docker",
@@ -120,6 +121,7 @@ var engineCapabilities = map[string]spec.EngineCapability{
 		SupportsRootless: true,
 		RunMode:          "direct",
 		GPUArgStyle:      "gpus",
+		ImageExistsArgv:  []string{"image", "inspect"},
 	},
 	"nerdctl": {
 		Name:             "nerdctl",
@@ -129,6 +131,7 @@ var engineCapabilities = map[string]spec.EngineCapability{
 		RunMode:          "systemd-unit",
 		GPUArgStyle:      "gpus",
 		WorkloadUser:     "0",
+		ImageExistsArgv:  []string{"image", "inspect"},
 	},
 }
 

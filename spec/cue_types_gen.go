@@ -5707,6 +5707,12 @@ type EngineCapability struct {
 	// for rootless single-userns engines (nerdctl) it is "0" because container-uid
 	// 0 IS the invoking host user in the rootless userns.
 	WorkloadUser string `yaml:"workload_user,omitempty" json:"workload_user,omitempty"`
+
+	// image_exists_argv — the subcommand pair that answers "is this image in the
+	// local store?" (podman `image exists`, docker/nerdctl `image inspect`, since
+	// docker has no `image exists`). A capability fact so local-image probes do
+	// not switch on the engine name.
+	ImageExistsArgv []string `yaml:"image_exists_argv,omitempty" json:"image_exists_argv"`
 }
 
 // #EngineBinaryRequest / #EngineBinaryReply — the `binary` op: resolve the CLI

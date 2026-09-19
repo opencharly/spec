@@ -45,17 +45,17 @@ var LocalImageExists = defaultLocalImageExists
 
 func defaultLocalImageExists(engine, imageRef string) bool {
 	binary := EngineBinary(engine)
-	switch engine {
-	case "podman":
-		cmd := exec.Command(binary, "image", "exists", imageRef)
-		return cmd.Run() == nil
-	default:
-		// Docker has no "image exists" subcommand; use "image inspect"
-		cmd := exec.Command(binary, "image", "inspect", imageRef)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		return cmd.Run() == nil
+	// The probe argv is a capability fact (podman `image exists`; docker/nerdctl
+	// `image inspect`, since docker has no `image exists`), so this does not
+	// switch on the engine name.
+	probe := []string{"image", "inspect"}
+	if c, ok := EngineCapabilityFor(engine); ok && len(c.ImageExistsArgv) > 0 {
+		probe = c.ImageExistsArgv
 	}
+	cmd := exec.Command(binary, append(probe, imageRef)...)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run() == nil
 }
 
 // LooksLikeFullRef returns true if the image ref contains a registry segment

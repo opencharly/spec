@@ -104,6 +104,11 @@
 	// for rootless single-userns engines (nerdctl) it is "0" because container-uid
 	// 0 IS the invoking host user in the rootless userns.
 	workload_user?: string @go(WorkloadUser)
+	// image_exists_argv — the subcommand pair that answers "is this image in the
+	// local store?" (podman `image exists`, docker/nerdctl `image inspect`, since
+	// docker has no `image exists`). A capability fact so local-image probes do
+	// not switch on the engine name.
+	image_exists_argv: [...string] @go(ImageExistsArgv)
 }
 
 // #EngineBinaryRequest / #EngineBinaryReply — the `binary` op: resolve the CLI
