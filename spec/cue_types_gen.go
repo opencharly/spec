@@ -3628,11 +3628,11 @@ type Candy struct {
 	Artifact []CandyArtifact `yaml:"artifact,omitempty" json:"artifact,omitempty"`
 }
 
-// #EngineName — the CLOSED engine vocabulary. THE single source: every authored
-// engine field (`candy.engine`, `deploy.engine`, the seam request/reply
-// envelopes) references this def, and `task cue:gen` emits it as
-// spec.EngineNames, which EngineBinary/ValidateEngine/EngineCapabilityFor all
-// derive from.
+// #EngineName — the CLOSED engine vocabulary. THE single source for the engine
+// words: the authored candy.engine/deploy.engine fields are this def, and
+// `task cue:gen` emits it as spec.EngineNames, from which IsEngineName derives.
+// EngineBinary/EngineCapabilityFor answer from the capability table keyed by
+// these same words (drift-tested against spec.EngineNames).
 //
 // "auto" is a RESOLUTION selector (pick the best installed engine), never a
 // provider word — no engine:auto provider exists. It is resolved by
@@ -5655,7 +5655,7 @@ type EncExecReply struct {
 //	direct       — an ephemeral argv launch with no unit (docker today).
 //
 // `task cue:gen` emits this as spec.EngineRunModes; ValidateRunMode derives
-// from it.
+// from it, and container.IsRunMode reads it.
 type EngineRunMode string
 
 // #EngineCapability — the static facts about an engine, answered by OpDescribe.

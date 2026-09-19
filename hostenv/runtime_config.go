@@ -72,10 +72,10 @@ type EngineConfig struct {
 
 // ResolvedRuntime holds the fully resolved runtime configuration
 type ResolvedRuntime struct {
-	BuildEngine          string // "docker" or "podman"
-	RunEngine            string // "docker" or "podman"
+	BuildEngine          string // a member of spec.EngineNames (podman/docker/nerdctl)
+	RunEngine            string // a member of spec.EngineNames (podman/docker/nerdctl)
 	Rootful              string // "auto", "machine", "sudo", "native"
-	RunMode              string // "direct" or "quadlet"
+	RunMode              string // a member of spec.EngineRunModes (quadlet/systemd-unit/direct)
 	AutoEnable           bool   // auto-enable quadlet on first start
 	BindAddress          string // "127.0.0.1" or "0.0.0.0"
 	EncryptedStoragePath string // path for gocryptfs encrypted storage
@@ -206,15 +206,22 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		return nil, err
 	}
 
-	if rt.RunMode == "quadlet" && rt.RunEngine != "podman" {
-		fmt.Fprintf(os.Stderr, "Warning: run_mode=quadlet requires podman; engine.run=%s\n", rt.RunEngine)
-	}
-	if rt.RunMode == "systemd-unit" {
-		// systemd-unit is the generic non-quadlet unit mode (nerdctl). It is
-		// valid for any engine that reports it, so only warn when the resolved
-		// engine does not actually offer it (an explicit override mismatch).
-		if c, ok := container.EngineCapabilityFor(rt.RunEngine); !ok || c.RunMode != "systemd-unit" {
-			fmt.Fprintf(os.Stderr, "Warning: run_mode=systemd-unit is not offered by engine.run=%s\n", rt.RunEngine)
+	// Warn when an EXPLICIT run_mode names a unit mode the resolved engine does
+	// not offer (e.g. run_mode=quadlet with engine.run=nerdctl, or
+	// run_mode=systemd-unit with engine.run=podman). It is one capability-driven
+	// check — no literal engine or mode words: unit-capability is a CUE-owned
+	// fact (container.IsUnitRunMode), and the engine's offered mode comes from the
+	// capability table. `direct` is the host-degraded fallback, so an engine that
+	// offers a unit mode but resolved to `direct` (no systemd-user session) is
+	// NOT warned about.
+	if container.IsUnitRunMode(rt.RunMode) {
+		if cap, ok := container.EngineCapabilityFor(rt.RunEngine); !ok || string(cap.RunMode) != rt.RunMode {
+			offered := "no unit mode"
+			if ok {
+				offered = string(cap.RunMode)
+			}
+			fmt.Fprintf(os.Stderr, "Warning: run_mode=%s is not offered by engine.run=%s (it offers %s)\n",
+				rt.RunMode, rt.RunEngine, offered)
 		}
 	}
 
@@ -277,18 +284,32 @@ func ValidateRunMode(value string) error {
 // this function only decides whether the unit-capable mode is reachable on the
 // host. A new engine therefore lands in one place.
 func DetectRunMode(runEngine string) string {
+	// The engine→mode mapping is DATA owned by spec/container (EngineRunModeFor,
+	// from the CUE-owned capability table); this function only decides whether
+	// the unit-capable mode is reachable on the host. Unit-capability itself is
+	// a CUE-owned fact (container.IsUnitRunMode), so no caller hand-lists
+	// {"quadlet","systemd-unit"}.
+	//
+	// DirectRunMode is the non-unit fallback name from the CUE-owned vocabulary
+	// (never a literal here).
 	mode := container.EngineRunModeFor(runEngine)
-	if mode != "quadlet" && mode != "systemd-unit" {
-		return "direct"
+	if !container.IsUnitRunMode(mode) {
+		return DirectRunMode
 	}
 	if _, err := exec.LookPath("systemctl"); err != nil {
-		return "direct"
+		return DirectRunMode
 	}
 	if !SystemdUserAvailable() {
-		return "direct"
+		return DirectRunMode
 	}
 	return mode
 }
+
+// DirectRunMode is the name of the non-unit, ephemeral run mode (an argv launch
+// with no generated unit). It is one member of the CUE-owned spec.EngineRunModes;
+// this const exists so the "fall back to direct" sites name the mode rather than
+// repeating the literal.
+const DirectRunMode = "direct"
 
 // SystemdUserRuntimeDir returns the path the directory check probes —
 // `/run/user/<uid>/systemd`. Exposed as a package-level SEAM var so tests

@@ -78,6 +78,12 @@ func RunModes() []string { return spec.EngineRunModes }
 // IsRunMode reports whether mode is a member of the closed run-mode vocabulary.
 func IsRunMode(mode string) bool { return contains(spec.EngineRunModes, mode) }
 
+// IsUnitRunMode reports whether mode is supervised by a generated unit file
+// (quadlet / systemd-unit) rather than an ephemeral argv launch (direct). The
+// unit-capable subset is CUE-owned (#EngineUnitRunModes → spec.EngineUnitRunModeWords),
+// so no caller hand-lists {"quadlet","systemd-unit"}.
+func IsUnitRunMode(mode string) bool { return contains(spec.EngineUnitRunModeWords, mode) }
+
 func contains(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
@@ -87,19 +93,13 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// EngineCapability is the sdk-visible alias of the generated spec.EngineCapability
-// — the ONE schema-shaped type (authored in schema/engine.cue, generated into
-// spec/cue_types_gen.go). Callers write container.EngineCapability; the shape is
-// never hand-maintained here.
-type EngineCapability = spec.EngineCapability
-
 // engineCapabilities is the DATA table the kernel consults: one row per engine
-// word, using the generated spec.EngineCapability shape. The values are facts
-// about each engine CLI, not policy — they replace every "does this engine
-// support X" branch in core. nerdctl's row is the spike-proven posture: rootless,
-// no pods primitive (shared-netns emulation), no native secret store (env/file
-// fallback), no keep-id (workload runs as uid 0 == the invoking host user),
-// systemd-unit persistence, Docker `--gpus` passthrough.
+// word, using the generated spec.EngineCapability shape (never a hand mirror).
+// The values are facts about each engine CLI, not policy — they replace every
+// "does this engine support X" branch in core. nerdctl's row is the spike-proven
+// posture: rootless, no pods primitive (shared-netns emulation), no native
+// secret store (env/file fallback), no keep-id (workload runs as uid 0 == the
+// invoking host user), systemd-unit persistence, Docker `--gpus` passthrough.
 var engineCapabilities = map[string]spec.EngineCapability{
 	"podman": {
 		Name:                 "podman",

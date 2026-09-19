@@ -1,0 +1,56 @@
+package hostenv
+
+import (
+	"os/exec"
+	"testing"
+)
+
+// runModeCase pins the engine→mode resolution on a host WITH a systemd-user
+// session (the seam dir is pointed at a real temp dir) so the "direct" fallback
+// is not what the assertion is accidentally measuring.
+func withSystemdUserSession(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		t.Skip("systemctl not present; DetectRunMode cannot reach a unit mode")
+	}
+	orig := SystemdUserRuntimeDir
+	SystemdUserRuntimeDir = func() string { return t.TempDir() }
+	t.Cleanup(func() { SystemdUserRuntimeDir = orig })
+}
+
+// TestDetectRunMode_NerdctlIsSystemdUnit is the new-behaviour gate: with a
+// systemd-user session, nerdctl resolves to the systemd-unit mode (it has no
+// quadlet generator), not "direct" and not "quadlet".
+func TestDetectRunMode_NerdctlIsSystemdUnit(t *testing.T) {
+	withSystemdUserSession(t)
+	if got := DetectRunMode("nerdctl"); got != "systemd-unit" {
+		t.Errorf("DetectRunMode(nerdctl) = %q, want systemd-unit", got)
+	}
+}
+
+func TestDetectRunMode_PodmanIsQuadlet(t *testing.T) {
+	withSystemdUserSession(t)
+	if got := DetectRunMode("podman"); got != "quadlet" {
+		t.Errorf("DetectRunMode(podman) = %q, want quadlet", got)
+	}
+	// Regression: docker has no unit mode.
+	if got := DetectRunMode("docker"); got != "direct" {
+		t.Errorf("DetectRunMode(docker) = %q, want direct", got)
+	}
+}
+
+// TestDetectRunMode_NoSystemdUserSessionFallsBackToDirect proves the
+// host-degraded path: a unit-capable engine still resolves to "direct" when no
+// functional systemd-user session exists. The seam dir is pointed at a
+// non-existent path so the probe fails deterministically.
+func TestDetectRunMode_NoSystemdUserSessionFallsBackToDirect(t *testing.T) {
+	orig := SystemdUserRuntimeDir
+	SystemdUserRuntimeDir = func() string { return "/nonexistent/charly-test-no-systemd-user" }
+	t.Cleanup(func() { SystemdUserRuntimeDir = orig })
+	if got := DetectRunMode("nerdctl"); got != "direct" {
+		t.Errorf("DetectRunMode(nerdctl) with no systemd-user session = %q, want direct", got)
+	}
+	if got := DetectRunMode("podman"); got != "direct" {
+		t.Errorf("DetectRunMode(podman) with no systemd-user session = %q, want direct", got)
+	}
+}

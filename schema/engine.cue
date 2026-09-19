@@ -9,16 +9,25 @@
 // provider for capability data and argv, instead of switching on a name.
 //
 // The split (kernel/plugin boundary law):
-//   - the engine VOCABULARY (which engine words, which run modes) is data,
-//     owned here by #EngineName / #EngineRunMode. `task cue:gen` emits them as
-//     spec.EngineNames / spec.EngineRunModes, and every consumer derives from
-//     those — EngineBinary, ValidateEngine, ValidateRunMode, the authored
-//     candy.engine/deploy.engine union. Adding an engine is one edit to
-//     #EngineName plus `task cue:gen`.
-//   - the engine CAPABILITY FACTS (pods? secrets? keep-id? run mode?) live in
-//     one Go table keyed by those words (container.engineCapabilities), typed by
-//     the generated spec.EngineCapability below — so adding an engine is also
-//     one table row, never a switch edit.
+//   - the engine VOCABULARY (which engine words, which run modes, which modes are
+//     unit-supervised) is data, owned here by #EngineName / #EngineRunMode /
+//     #EngineUnitRunModes. `task cue:gen` emits them as spec.EngineNames /
+//     spec.EngineRunModes / spec.EngineUnitRunModes, and every consumer derives
+//     from those: IsEngineName/IsRunMode/IsUnitRunMode read the emitted lists,
+//     and the authored candy.engine/deploy.engine fields are typed #EngineName.
+//     The op-envelope `engine` fields below stay plain `string` on purpose:
+//     they carry the RESOLVED or still-`auto`/empty engine at the wire boundary,
+//     which is a superset of the authored vocabulary — a `#EngineName` there
+//     would reject the legitimate pre-resolution value.
+//   - the engine CAPABILITY FACTS (pods? secrets? keep-id? run mode? gpu style?)
+//     live in one Go table keyed by those words (container.engineCapabilities),
+//     typed by the generated spec.EngineCapability below. EngineBinary and
+//     EngineCapabilityFor read that table; a drift test asserts each row's
+//     Name/RunMode are members of the emitted vocabularies.
+//     So adding an engine is one edit to #EngineName plus one table row (the
+//     table row is what supplies the CLI binary and the native-feature facts);
+//     adding a RUN MODE is one edit to #EngineRunMode plus, if it is
+//     unit-supervised, one entry in #EngineUnitRunModes.
 //   - engine BEHAVIOR is provider-served: an engine provider answers the ops in
 //     this file. podman/docker are compiled-in (needed before project plugins
 //     load); nerdctl is out-of-process.
@@ -27,11 +36,11 @@
 // served schema is spliced over the RPC by Describe, so a provider must not
 // invent fields outside these defs.
 
-// #EngineName — the CLOSED engine vocabulary. THE single source: every authored
-// engine field (`candy.engine`, `deploy.engine`, the seam request/reply
-// envelopes) references this def, and `task cue:gen` emits it as
-// spec.EngineNames, which EngineBinary/ValidateEngine/EngineCapabilityFor all
-// derive from.
+// #EngineName — the CLOSED engine vocabulary. THE single source for the engine
+// words: the authored candy.engine/deploy.engine fields are this def, and
+// `task cue:gen` emits it as spec.EngineNames, from which IsEngineName derives.
+// EngineBinary/EngineCapabilityFor answer from the capability table keyed by
+// these same words (drift-tested against spec.EngineNames).
 //
 // "auto" is a RESOLUTION selector (pick the best installed engine), never a
 // provider word — no engine:auto provider exists. It is resolved by
@@ -46,8 +55,16 @@
 //                  quadlet equivalent exists).
 //   direct       — an ephemeral argv launch with no unit (docker today).
 // `task cue:gen` emits this as spec.EngineRunModes; ValidateRunMode derives
-// from it.
+// from it, and container.IsRunMode reads it.
 #EngineRunMode: ("quadlet" | "systemd-unit" | "direct")
+
+// #EngineUnitRunModes — the SUBSET of #EngineRunMode that is supervised by a
+// generated unit file (as opposed to an ephemeral argv launch). This is the
+// data fact that `direct` is not unit-supervised, so a caller never hand-lists
+// {"quadlet","systemd-unit"} — that pair was a drift-prone second source.
+// @go(-) suppresses a useless generated Go type; `task cue:gen` emits the list
+// as spec.EngineUnitRunModeWords, which container.IsUnitRunMode reads.
+#EngineUnitRunModes: ["quadlet", "systemd-unit"] @go(-)
 
 // #EngineCapability — the static facts about an engine, answered by OpDescribe.
 // These drive every remaining "does this engine support X" branch in core, so

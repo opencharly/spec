@@ -253,6 +253,10 @@ func writeVocab(dir, out string) error {
 	if err != nil {
 		return err
 	}
+	engineUnitRunModes, err := listValues(schema, "#EngineUnitRunModes")
+	if err != nil {
+		return err
+	}
 	opVerbs, err := enumValues(schema, "#OpVerb")
 	if err != nil {
 		return err
@@ -287,6 +291,7 @@ func writeVocab(dir, out string) error {
 		kindValueDefs:      kindValues,
 		engineNames:        engineNames,
 		engineRunModes:     engineRunModes,
+		engineUnitRunModes: engineUnitRunModes,
 	})
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
@@ -500,6 +505,7 @@ type vocabSets struct {
 	kindValueDefs      map[string]string
 	engineNames        []string
 	engineRunModes     []string
+	engineUnitRunModes []string
 }
 
 func renderVocab(s vocabSets) string {
@@ -528,6 +534,7 @@ func renderVocab(s vocabSets) string {
 	writeStrMap(&b, "KindValueDefs", "the word→#<Kind>Value CUE-def map the host uses to closedness-gate a substrate/candy node's authored VALUE (validateKindValueCUE). DERIVED from the #<X>Value defs themselves (every one except the shared #DeployValue disjunct), so a new value-gated kind needs no hand-maintained map.", s.kindValueDefs)
 	writeStrSlice(&b, "EngineNames", "the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. THE single source: the authored candy.engine/deploy.engine union, EngineBinary, and EngineCapabilityFor all derive from it. Adding an engine is one edit to #EngineName + task cue:gen.", s.engineNames)
 	writeStrSlice(&b, "EngineRunModes", "the CLOSED engine run-mode vocabulary (#EngineRunMode) — quadlet/systemd-unit/direct. ValidateRunMode derives from it; the per-engine mode mapping is container.EngineCapabilityFor.", s.engineRunModes)
+	writeStrSlice(&b, "EngineUnitRunModeWords", "the SUBSET of EngineRunModes supervised by a generated unit file (#EngineUnitRunModes) — quadlet/systemd-unit, not direct. container.IsUnitRunMode reads it, so the unit-capability question is a data fact, never a hand-listed pair.", s.engineUnitRunModes)
 	return b.String()
 }
 

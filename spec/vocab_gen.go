@@ -281,3 +281,9 @@ var EngineRunModes = []string{
 	"systemd-unit",
 	"direct",
 }
+
+// EngineUnitRunModeWords is the SUBSET of EngineRunModes supervised by a generated unit file (#EngineUnitRunModes) — quadlet/systemd-unit, not direct. container.IsUnitRunMode reads it, so the unit-capability question is a data fact, never a hand-listed pair.
+var EngineUnitRunModeWords = []string{
+	"quadlet",
+	"systemd-unit",
+}
