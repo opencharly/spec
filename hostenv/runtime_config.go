@@ -207,25 +207,38 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 	}
 
 	// Warn when an EXPLICIT run_mode names a unit mode the resolved engine does
-	// not offer (e.g. run_mode=quadlet with engine.run=nerdctl, or
-	// run_mode=systemd-unit with engine.run=podman). It is one capability-driven
-	// check — no literal engine or mode words: unit-capability is a CUE-owned
-	// fact (container.IsUnitRunMode), and the engine's offered mode comes from the
-	// capability table. `direct` is the host-degraded fallback, so an engine that
-	// offers a unit mode but resolved to `direct` (no systemd-user session) is
-	// NOT warned about.
-	if container.IsUnitRunMode(rt.RunMode) {
-		if cap, ok := container.EngineCapabilityFor(rt.RunEngine); !ok || string(cap.RunMode) != rt.RunMode {
-			offered := "no unit mode"
-			if ok {
-				offered = string(cap.RunMode)
-			}
-			fmt.Fprintf(os.Stderr, "Warning: run_mode=%s is not offered by engine.run=%s (it offers %s)\n",
-				rt.RunMode, rt.RunEngine, offered)
-		}
+	// not offer. One capability-driven check — no literal engine or mode words.
+	if msg := runModeMismatchWarning(rt.RunEngine, rt.RunMode); msg != "" {
+		fmt.Fprint(os.Stderr, msg)
 	}
 
 	return rt, nil
+}
+
+// runModeMismatchWarning returns the warn-or-empty message for a resolved
+// engine/run-mode pair, or "" when they agree (or when the mode is not a unit
+// mode at all). It is the ONE place the "does this engine offer this unit mode"
+// question is answered, and it is a pure function so the branch is testable
+// without spawning a process or stubbing stderr.
+//
+// `direct` is the host-degraded fallback: an engine that offers a unit mode but
+// resolved to `direct` (no systemd-user session) is NOT a mismatch, because
+// DetectRunMode deliberately degrades there. Only an EXPLICIT unit mode the
+// engine cannot produce is a warning.
+func runModeMismatchWarning(runEngine, runMode string) string {
+	if !container.IsUnitRunMode(runMode) {
+		return ""
+	}
+	cap, ok := container.EngineCapabilityFor(runEngine)
+	if ok && string(cap.RunMode) == runMode {
+		return ""
+	}
+	offered := "no unit mode"
+	if ok {
+		offered = string(cap.RunMode)
+	}
+	return fmt.Sprintf("Warning: run_mode=%s is not offered by engine.run=%s (it offers %s)\n",
+		runMode, runEngine, offered)
 }
 
 // ResolveValue returns the first non-empty value from the chain.

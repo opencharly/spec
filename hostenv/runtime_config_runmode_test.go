@@ -54,3 +54,29 @@ func TestDetectRunMode_NoSystemdUserSessionFallsBackToDirect(t *testing.T) {
 		t.Errorf("DetectRunMode(podman) with no systemd-user session = %q, want direct", got)
 	}
 }
+
+// TestRunModeMismatchWarning is the coverage gate for the ResolveRuntime
+// warning branch: a unit run_mode the resolved engine cannot offer warns; a
+// matching pair does not; and `direct` never warns (it is the host-degraded
+// fallback, not a mismatch).
+func TestRunModeMismatchWarning(t *testing.T) {
+	cases := []struct {
+		engine, mode string
+		wantWarn     bool
+	}{
+		{"podman", "quadlet", false},       // match
+		{"nerdctl", "systemd-unit", false}, // match
+		{"nerdctl", "quadlet", true},       // nerdctl has no quadlet generator
+		{"podman", "systemd-unit", true},   // podman offers quadlet, not systemd-unit
+		{"docker", "systemd-unit", true},   // docker offers no unit mode
+		{"nerdctl", "direct", false},       // direct is the degraded fallback
+		{"podman", "direct", false},        // direct is the degraded fallback
+		{"", "quadlet", true},              // unknown engine offers no unit mode
+	}
+	for _, c := range cases {
+		got := runModeMismatchWarning(c.engine, c.mode)
+		if (got != "") != c.wantWarn {
+			t.Errorf("runModeMismatchWarning(%q, %q) = %q, wantWarn=%v", c.engine, c.mode, got, c.wantWarn)
+		}
+	}
+}
