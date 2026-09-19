@@ -37,7 +37,7 @@ func deployShape(t *testing.T, body string) error {
 
 // TestDeployShapeOverrideAcceptsCpuSingular gates the per-deploy VM-shape
 // override's CPU spelling: a `from:` deploy body carries `cpu:` (singular),
-// matching #Vm (the template it overrides) and #VmVariant.
+// matching #Vm (the template it overrides).
 //
 // This test FAILS on the pre-cutover schema, where the field was misspelled
 // `cpus:` — the exact regression the rename exists to prevent. Deleting the
@@ -50,9 +50,8 @@ func TestDeployShapeOverrideAcceptsCpuSingular(t *testing.T) {
 
 // TestDeployShapeOverrideRejectsPluralCpus pins the cutover: the old `cpus:`
 // spelling is GONE from the #Deploy arm. It survives only on #Security (a
-// CPU-quota string) and the libvirt #LibvirtCPU.cpus — different defs entirely,
-// NOT #VmVariant, which this cutover aligned to `cpu:`. If a future edit
-// reintroduces `cpus:` as an accepted #Deploy key, this fails.
+// CPU-quota string) and the libvirt #LibvirtCPU.cpus — different defs entirely.
+// If a future edit reintroduces `cpus:` as an accepted #Deploy key, this fails.
 func TestDeployShapeOverrideRejectsPluralCpus(t *testing.T) {
 	err := deployShape(t, `{from: "some-vm", cpus: 2}`)
 	if err == nil {
@@ -70,14 +69,13 @@ func TestDeploySecurityCpusStillLive(t *testing.T) {
 	}
 }
 
-// TestDeployVariantShapeAligned pins the third VM-shape surface: #VmVariant now
-// reads `cpu:`/`ram:` (the pre-cutover spelling was `cpus:`/`memory:`), so the
-// whole VM-shape family is consistent.
-func TestDeployVariantShapeAligned(t *testing.T) {
-	if err := deployShape(t, `{from: "some-vm", variants: {small: {cpu: 1, ram: "2G"}}}`); err != nil {
-		t.Fatalf("#VmVariant with aligned `cpu:`/`ram:` was rejected: %v", err)
-	}
-	if err := deployShape(t, `{from: "some-vm", variants: {small: {cpus: 1, memory: "2G"}}}`); err == nil {
-		t.Fatal("the retired #VmVariant `cpus:`/`memory:` spelling was accepted; the alignment is incomplete")
+// TestDeployRejectsVariants pins the deletion of the never-implemented
+// `variants:`/`#VmVariant` surface: it was added in #86 with no reader ever
+// (grep-clean for GetVariants across spec + charly history), so it is removed
+// rather than parked. A future reintroduction must fail this test until it ships
+// a real reader.
+func TestDeployRejectsVariants(t *testing.T) {
+	if err := deployShape(t, `{from: "some-vm", variants: {small: {cpu: 1}}}`); err == nil {
+		t.Fatal("the deleted `variants:` surface was accepted on a #Deploy body")
 	}
 }

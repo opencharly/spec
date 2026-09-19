@@ -80,11 +80,13 @@
 // AT 2026.248.1030, so a residual-config rewrite is impossible without this
 // bump.
 // Bumped again by the per-deploy VM-shape override cutover: `#Deploy`'s dead
-// VM-shape fields (cpu/ram/disk_size) gain their reader (candy/plugin-vm's
-// hostConfigResolve, chain-inheriting over `from:`) AND the cpu field is
-// corrected from the singular outlier `cpus:` to `cpu:`, matching `#Vm` (the
-// template it overrides) exactly. The three fields were DEAD since the initial
-// spec import — authorable, zero readers, zero authors — so nothing authored
+// VM-shape `cpu`/`ram` fields gain their reader (candy/plugin-vm's
+// hostConfigResolve, chain-inheriting over `from:`), and the cpu field is
+// corrected from the outlier plural spelling `cpus:` to the singular `cpu:`,
+// matching `#Vm` (the template it overrides) exactly. The unreadable `disk_size`
+// field and the never-implemented `variants:`/`#VmVariant` surface are DELETED
+// rather than parked — both were authorable-but-inert. All of these were DEAD
+// since the initial spec import (zero readers, zero authors), so nothing authored
 // needs migrating; the old `cpus:` key is simply gone. NO migration-table entry:
 // a rename would have to be scoped `under_kind: vm` and the op-walker's
 // under_kind marks every mapping nested within the entity, which would also
