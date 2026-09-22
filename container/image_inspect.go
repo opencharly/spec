@@ -92,11 +92,7 @@ const imageLabelsCacheTTL = 5 * time.Minute
 // (~/.config/charly/cache/labels/). An inert store (no config dir) makes every
 // lookup a miss without error.
 func imageLabelsCacheStore() *cache.Store {
-	dir, err := cache.StoreDir("labels")
-	if err != nil {
-		return cache.Open("")
-	}
-	return cache.Open(dir)
+	return cache.OpenNamed("labels")
 }
 
 // readImageLabelsCache returns the cached labels for key if fresh, else (nil,

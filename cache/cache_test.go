@@ -61,7 +61,7 @@ func TestFillComputesOnceUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = s.Fill("k", func(Entry) (Entry, error) {
+			_, _ = s.Fill("k", func() (Entry, error) {
 				calls.Add(1)
 				time.Sleep(2 * time.Millisecond) // widen the contention window
 				return Entry{Value: json.RawMessage(`"computed"`)}, nil
@@ -82,7 +82,7 @@ func TestFillReturnsExistingWithoutCallingFill(t *testing.T) {
 	s := Open(t.TempDir())
 	s.WriteValue("k", "existing")
 	called := false
-	e, err := s.Fill("k", func(Entry) (Entry, error) {
+	e, err := s.Fill("k", func() (Entry, error) {
 		called = true
 		return Entry{}, nil
 	})
@@ -122,7 +122,7 @@ func TestInertStoreNeverErr(t *testing.T) {
 	if s.Len() != 0 {
 		t.Fatal("inert store must stay empty")
 	}
-	e, err := s.Fill("k", func(Entry) (Entry, error) {
+	e, err := s.Fill("k", func() (Entry, error) {
 		return Entry{Value: json.RawMessage(`"inline"`)}, nil
 	})
 	if err != nil {
@@ -131,6 +131,49 @@ func TestInertStoreNeverErr(t *testing.T) {
 	var got string
 	if !e.Decode(&got) || got != "inline" {
 		t.Fatalf("inert Fill must return the computed value, got %q", got)
+	}
+}
+
+func TestDeleteRemovesEntry(t *testing.T) {
+	s := Open(t.TempDir())
+	s.WriteValue("k", "v")
+	if _, ok := s.Get("k"); !ok {
+		t.Fatal("entry missing after write")
+	}
+	if err := s.Delete("k"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, ok := s.Get("k"); ok {
+		t.Fatal("entry must be gone after Delete")
+	}
+	// Deleting an absent key is a no-op, never an error.
+	if err := s.Delete("absent"); err != nil {
+		t.Fatalf("Delete of an absent key must not error: %v", err)
+	}
+}
+
+func TestOpenNamedResolvesUnderRoot(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CHARLY_CACHE_DIR", root)
+	s := OpenNamed("things")
+	if got, want := s.Dir(), root+"/things"; got != want {
+		t.Fatalf("OpenNamed dir = %q, want %q", got, want)
+	}
+	s.WriteValue("k", "v")
+	if _, ok := OpenNamed("things").Get("k"); !ok {
+		t.Fatal("OpenNamed must reopen the SAME store on disk")
+	}
+}
+
+func TestHashHex(t *testing.T) {
+	if HashHex("abc") == HashHex("abd") {
+		t.Fatal("HashHex must be content-sensitive")
+	}
+	if HashHex("same") != HashHex("same") {
+		t.Fatal("HashHex must be deterministic")
+	}
+	if len(HashHex("x")) != 64 {
+		t.Fatalf("HashHex must be a hex sha256 (64 chars), got %d", len(HashHex("x")))
 	}
 }
 

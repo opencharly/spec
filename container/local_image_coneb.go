@@ -142,11 +142,7 @@ func InvalidateImageCache() {
 // (~/.config/charly/cache/images/). An inert store (no config dir) makes every
 // lookup a miss without error.
 func imageCacheStore() *cache.Store {
-	dir, err := cache.StoreDir("images")
-	if err != nil {
-		return cache.Open("")
-	}
-	return cache.Open(dir)
+	return cache.OpenNamed("images")
 }
 
 // imageCacheValue is the cached image list for one engine.

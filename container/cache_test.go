@@ -1,7 +1,6 @@
 package container
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -80,18 +79,12 @@ func TestImageLabelsCacheRoundTrip(t *testing.T) {
 	}
 }
 
-// imageCacheStoreDirIsNamed pins the store layout: the image list lives under a
-// named `images/` dir in the cache root, so one Store per concern.
+// TestImageCacheStoreDirIsNamed pins the store layout: the image list lives
+// under a named `images/` dir in the cache root, so one Store per concern.
 func TestImageCacheStoreDirIsNamed(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CHARLY_CACHE_DIR", root)
-	dir, err := cache.StoreDir("images")
-	if err != nil {
-		t.Fatal(err)
+	if got, want := imageCacheStore().Dir(), filepath.Join(root, "images"); got != want {
+		t.Fatalf("imageCacheStore().Dir() = %q, want %q", got, want)
 	}
-	if want := filepath.Join(root, "images"); dir != want {
-		t.Fatalf("StoreDir = %q, want %q", dir, want)
-	}
-	// imageCacheStore must resolve into that dir.
-	_ = os.RemoveAll(root)
 }

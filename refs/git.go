@@ -468,21 +468,11 @@ type submoduleCacheValue struct {
 	Populated bool `json:"populated"`
 }
 
-// submoduleCachePath returns the persistent submodule-verdict cache store under
-// the charly dir (~/.config/charly/cache/submodules/).
-func submoduleCachePath() (string, error) {
-	return cache.StoreDir("submodules")
-}
-
 // submoduleCacheStore opens the persistent submodule-verdict Store (the ONE
 // shared cache mechanism). An inert store (no config dir) makes every lookup a
 // miss without error.
 func submoduleCacheStore() *cache.Store {
-	dir, err := submoduleCachePath()
-	if err != nil {
-		return cache.Open("")
-	}
-	return cache.Open(dir)
+	return cache.OpenNamed("submodules")
 }
 
 // readSubmoduleCache returns the cached verdict for cachePath if fresh, else

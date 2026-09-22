@@ -124,6 +124,18 @@ type Store struct {
 // a miss/no-op — the cache is an optimization, so a caller never has to guard it.
 func Open(dir string) *Store { return &Store{dir: dir, maxEntries: DefaultMaxEntries} }
 
+// OpenNamed opens the named store under the charly cache dir
+// (~/.config/charly/cache/<name>/, CHARLY_CACHE_DIR overriding the root). A
+// path-resolution failure yields an inert store, so a caller never guards it —
+// the ONE idiom every named-store consumer shares (R3).
+func OpenNamed(name string) *Store {
+	dir, err := StoreDir(name)
+	if err != nil {
+		return Open("")
+	}
+	return Open(dir)
+}
+
 // OpenLimited is Open with an explicit entry cap (0 disables pruning).
 func OpenLimited(dir string, maxEntries int) *Store {
 	return &Store{dir: dir, maxEntries: maxEntries}
@@ -233,17 +245,19 @@ func (s *Store) WriteValue(key string, value any) {
 
 // Fill returns the entry for key, computing it with fill when absent. It
 // serializes the miss under the per-key flock and DOUBLE-CHECKS under the lock,
-// so concurrent first-missers compute once and reuse the winner's entry. fill
-// receives the current entry (zero when absent) so a revalidating caller can
-// short-circuit on an unchanged upstream (returning it unchanged refreshes its
-// Resolved). A fill error is returned un-wrapped; nothing is written.
+// so concurrent first-missers compute once and reuse the winner's entry. A fill
+// error is returned un-wrapped; nothing is written. fill takes no argument: the
+// store-level policy is presence-or-absence, and a caller that must REVALIDATE a
+// mutable upstream (the gh ETag path) reads the existing entry with Get, decides
+// upstream itself, and Puts the refreshed entry — Fill is the compute-once
+// primitive, not a revalidation hook.
 //
 // Every failure short of fill itself — an inert store, a lock timeout — degrades
 // to calling fill and returning its result WITHOUT persisting: the cache never
 // fails a caller.
-func (s *Store) Fill(key string, fill func(cur Entry) (Entry, error)) (Entry, error) {
+func (s *Store) Fill(key string, fill func() (Entry, error)) (Entry, error) {
 	if !s.usable() {
-		return fill(Entry{})
+		return fill()
 	}
 	if e, ok := s.Get(key); ok {
 		return e, nil
@@ -251,14 +265,13 @@ func (s *Store) Fill(key string, fill func(cur Entry) (Entry, error)) (Entry, er
 	release, err := lock.AcquireFileLock(s.lockPath(key), true)
 	if err != nil {
 		// Lock contention (or an IO failure): compute without caching.
-		e, ferr := fill(Entry{})
-		return e, ferr
+		return fill()
 	}
 	defer func() { _ = release() }()
 	if e, ok := s.Get(key); ok {
 		return e, nil
 	}
-	e, ferr := fill(Entry{})
+	e, ferr := fill()
 	if ferr != nil {
 		return Entry{}, ferr
 	}
