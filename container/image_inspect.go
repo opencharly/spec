@@ -15,13 +15,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/opencharly/spec/cache"
 	execc "github.com/opencharly/spec/exec"
-	"github.com/opencharly/spec/spec"
 )
 
 // ContainerImageRef returns the image ref backing a running container (.Config.Image via
@@ -51,19 +49,16 @@ func ContainerImage(engine, containerName string) string {
 // every subsequent call within the TTL reads the cache. The LIVE container state (podman ps) is
 // never cached.
 func InspectImageLabels(engine, imageRef string) (map[string]string, error) {
-	cachePath, key := imageLabelsCacheKey(engine, imageRef)
-	if cachePath != "" {
-		if labels, ok := readImageLabelsCache(cachePath, key); ok {
-			return labels, nil
-		}
+	store := imageLabelsCacheStore()
+	key := engine + "|" + imageRef
+	if labels, ok := readImageLabelsCache(store, key); ok {
+		return labels, nil
 	}
 	labels, err := inspectImageLabelsUncached(engine, imageRef)
 	if err != nil {
 		return nil, err
 	}
-	if cachePath != "" {
-		writeImageLabelsCache(cachePath, key, labels)
-	}
+	writeImageLabelsCache(store, key, labels)
 	return labels, nil
 }
 
@@ -93,27 +88,28 @@ func inspectImageLabelsUncached(engine, imageRef string) (map[string]string, err
 // within a few minutes.
 const imageLabelsCacheTTL = 5 * time.Minute
 
-// imageLabelsCacheKey returns the image-label cache file + a content key (the
-// engine + the image ref).
-func imageLabelsCacheKey(engine, imageRef string) (string, string) {
-	cfg, err := spec.DefaultDeployConfigPath()
+// imageLabelsCacheStore opens the image-label Store under the charly dir
+// (~/.config/charly/cache/labels/). An inert store (no config dir) makes every
+// lookup a miss without error.
+func imageLabelsCacheStore() *cache.Store {
+	dir, err := cache.StoreDir("labels")
 	if err != nil {
-		return "", ""
+		return cache.Open("")
 	}
-	return filepath.Join(filepath.Dir(cfg), "cache", "labels.json"), engine + "|" + imageRef
+	return cache.Open(dir)
 }
 
 // readImageLabelsCache returns the cached labels for key if fresh, else (nil,
-// false). A corrupt/absent file is a cache miss.
-func readImageLabelsCache(path, key string) (map[string]string, bool) {
+// false). A corrupt/absent entry is a cache miss.
+func readImageLabelsCache(store *cache.Store, key string) (map[string]string, bool) {
 	var labels map[string]string
-	if !cache.Read(path, key, imageLabelsCacheTTL, &labels) {
+	if !store.ReadTTL(key, imageLabelsCacheTTL, &labels) {
 		return nil, false
 	}
 	return labels, true
 }
 
 // writeImageLabelsCache persists the labels (best-effort).
-func writeImageLabelsCache(path, key string, labels map[string]string) {
-	cache.Write(path, key, labels)
+func writeImageLabelsCache(store *cache.Store, key string, labels map[string]string) {
+	store.WriteValue(key, labels)
 }

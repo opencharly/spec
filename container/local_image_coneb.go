@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -107,14 +106,12 @@ var ListLocalImages = cachedListLocalImages
 const imageCacheTTL = 5 * time.Minute
 
 // cachedListLocalImages is the persistent-cache wrapper: it reads the cached
-// image list from the charly dir cache file when fresh, else re-fetches via
+// image list from the charly dir store when fresh, else re-fetches via
 // `{podman,docker} images --format json` and caches the result.
 func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
-	cachePath, err := imageCachePath()
-	if err == nil {
-		if images, ok := readImageCache(cachePath, engine); ok {
-			return images, nil
-		}
+	store := imageCacheStore()
+	if images, ok := readImageCache(store, engine); ok {
+		return images, nil
 	}
 	fmt.Fprintf(os.Stderr, "charly: listing local images (first run — may take a moment)...\n")
 	started := time.Now()
@@ -129,9 +126,7 @@ func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 		fmt.Fprintf(os.Stderr, "charly: listed %d local images in %s — consider pruning the image store\n",
 			len(images), el.Round(time.Millisecond))
 	}
-	if cachePath != "" {
-		writeImageCache(cachePath, engine, images)
-	}
+	writeImageCache(store, engine, images)
 	return images, nil
 }
 
@@ -140,21 +135,18 @@ func cachedListLocalImages(engine string) ([]LocalImageInfo, error) {
 // operation that creates or pulls an image — so the next status run re-fetches
 // the fresh image list instead of serving a stale cache.
 func InvalidateImageCache() {
-	cachePath, err := imageCachePath()
-	if err != nil {
-		return
-	}
-	_ = os.Remove(cachePath)
+	_ = imageCacheStore().Clear()
 }
 
-// imageCachePath returns the image-list cache file under the charly dir
-// (~/.config/charly/cache/images.json).
-func imageCachePath() (string, error) {
-	cfg, err := spec.DefaultDeployConfigPath()
+// imageCacheStore opens the persistent image-list Store under the charly dir
+// (~/.config/charly/cache/images/). An inert store (no config dir) makes every
+// lookup a miss without error.
+func imageCacheStore() *cache.Store {
+	dir, err := cache.StoreDir("images")
 	if err != nil {
-		return "", err
+		return cache.Open("")
 	}
-	return filepath.Join(filepath.Dir(cfg), "cache", "images.json"), nil
+	return cache.Open(dir)
 }
 
 // imageCacheValue is the cached image list for one engine.
@@ -164,18 +156,18 @@ type imageCacheValue struct {
 }
 
 // readImageCache returns the cached image list if fresh for engine, else (nil,
-// false). A corrupt/absent file is a cache miss.
-func readImageCache(path, engine string) ([]LocalImageInfo, bool) {
+// false). A corrupt/absent entry is a cache miss.
+func readImageCache(store *cache.Store, engine string) ([]LocalImageInfo, bool) {
 	var v imageCacheValue
-	if !cache.Read(path, engine, imageCacheTTL, &v) || v.Engine != engine {
+	if !store.ReadTTL(engine, imageCacheTTL, &v) || v.Engine != engine {
 		return nil, false
 	}
 	return v.Images, true
 }
 
 // writeImageCache persists the image list (best-effort).
-func writeImageCache(path, engine string, images []LocalImageInfo) {
-	cache.Write(path, engine, imageCacheValue{Engine: engine, Images: images})
+func writeImageCache(store *cache.Store, engine string, images []LocalImageInfo) {
+	store.WriteValue(engine, imageCacheValue{Engine: engine, Images: images})
 }
 
 // listLocalImagesTimeout bounds the image enumeration. `podman images --format json`
