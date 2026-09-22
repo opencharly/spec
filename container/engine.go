@@ -26,21 +26,21 @@ import (
 )
 
 // EngineBinary returns the CLI binary name for a container engine. "auto" resolves via
-// DetectEngine (podman preferred); an unknown word falls back to "docker" (the historical
-// default) so a caller without a capability row still gets a runnable binary.
+// DetectEngine (podman preferred); an unknown/empty word falls back to the ONE
+// default engine (spec.DefaultContainerEngine, podman) so a caller that names no
+// engine gets the same engine the exec hop and DetectEngine use. A caller can
+// distinguish the fallback from a real word via IsEngineName.
 func EngineBinary(engine string) string {
 	if engine == "auto" {
 		if detected, err := DetectEngine(); err == nil {
 			return detected
 		}
-		return "docker"
+		return spec.DefaultContainerEngine
 	}
 	if c, ok := engineCapabilities[engine]; ok {
 		return c.Binary
 	}
-	// Unknown/empty word: the historical default. A caller can distinguish this
-	// from a real engine via IsEngineName.
-	return "docker"
+	return spec.DefaultContainerEngine
 }
 
 // GPURunArgs returns the engine-specific run flags that expose all host GPUs to a container.
@@ -68,11 +68,9 @@ func DetectEngine() (string, error) {
 	return "", fmt.Errorf("no container engine found (install podman or docker)")
 }
 
-// engineNames is CUE-owned (schema/engine.cue #EngineName → spec.EngineNames);
-// engineRunModes likewise (#EngineRunMode → spec.EngineRunModes). Exposing them
-// as funcs keeps every consumer off a hand-written literal list.
-
-// EngineNames returns the closed engine word vocabulary (podman/docker/nerdctl).
+// EngineNames returns the closed engine word vocabulary (podman/docker/nerdctl),
+// sourced from the CUE-owned schema (schema/engine.cue #EngineName →
+// spec.EngineNames) so no consumer holds a hand-written literal list.
 func EngineNames() []string { return spec.EngineNames }
 
 // IsEngineName reports whether name is a member of the closed engine vocabulary.

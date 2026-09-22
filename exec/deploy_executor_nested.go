@@ -160,10 +160,10 @@ func jumpShell(kind JumpKind, asRoot bool) string {
 }
 
 // defaultContainerEngine is the engine a container-exec jump uses when
-// NestedJump.Engine is empty — podman, the historical default. An engine word is
-// used verbatim, so the exec argv follows the engine vocabulary (podman / docker
-// / nerdctl) with no switch.
-const defaultContainerEngine = "podman"
+// NestedJump.Engine is empty. It is an ALIAS of the one home
+// (spec.DefaultContainerEngine) so the exec hop and container.EngineBinary
+// resolve an unspecified engine to the SAME word.
+const defaultContainerEngine = spec.DefaultContainerEngine
 
 // engineBinary returns the container-engine CLI for a container-exec jump:
 // NestedJump.Engine, defaulting to podman when unset.
@@ -287,19 +287,12 @@ func (n *NestedExecutor) RunCapture(ctx context.Context, script string) (string,
 	// lets the eventually.go bounded retry re-attempt it and the check-box exit mapping route
 	// it to the infra exit class. A genuine in-container "command not found" matches nothing
 	// and stays an ordinary (exit, nil) result. See infra_classify.go.
-	if rerr == nil && isContainerJump(n.Jump.Kind) {
+	if rerr == nil && isContainerKind(n.Jump.Kind) {
 		if sig, ok := ClassifyContainerInfraFailure(exit, stderr); ok {
 			return stdout, stderr, exit, containerInfraError(sig, exit, spec.TrimPreview(stderr))
 		}
 	}
 	return stdout, stderr, exit, rerr
-}
-
-// isContainerJump reports whether a jump enters a container (podman/docker exec) — the only
-// venues where a podman container-SETUP infra failure (infra_classify.go) can occur.
-// SSH/virsh-console jumps are excluded.
-func isContainerJump(kind JumpKind) bool {
-	return isContainerKind(kind)
 }
 
 // prepareJump wraps a script for this executor's jump.
@@ -392,7 +385,7 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 	if n.Parent == nil {
 		return nil, fmt.Errorf("NestedExecutor: nil Parent")
 	}
-	// Only podman/docker/ssh jumps support the stdout-cat approach.
+	// Only container/ssh jumps support the stdout-cat approach.
 	switch n.Jump.Kind {
 	case JumpContainerExec, JumpSSH:
 		// ok

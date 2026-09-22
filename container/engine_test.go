@@ -12,9 +12,9 @@ func TestEngineBinary(t *testing.T) {
 		"podman":  "podman",
 		"docker":  "docker",
 		"nerdctl": "nerdctl",
-		// unknown/empty falls back to the historical default
-		"":      "docker",
-		"bogus": "docker",
+		// unknown/empty falls back to the ONE default engine (spec.DefaultContainerEngine)
+		"":      spec.DefaultContainerEngine,
+		"bogus": spec.DefaultContainerEngine,
 	}
 	for engine, want := range cases {
 		if got := EngineBinary(engine); got != want {
