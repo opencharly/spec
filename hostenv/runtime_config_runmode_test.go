@@ -71,7 +71,7 @@ func TestRunModeMismatchWarning(t *testing.T) {
 		{"docker", "systemd-unit", true},   // docker offers no unit mode
 		{"nerdctl", "direct", false},       // direct is the degraded fallback
 		{"podman", "direct", false},        // direct is the degraded fallback
-		{"bogus", "quadlet", true},         // unknown engine offers no unit mode
+		{"bogus", "quadlet", false},        // unknown word == the default engine (podman → quadlet)
 		// The EMPTY engine means "unspecified" and resolves to the ONE default
 		// engine (podman → quadlet), so an empty engine with quadlet MATCHES (no
 		// warning) and an empty engine with systemd-unit is a real mismatch. This

@@ -60,6 +60,32 @@ func TestGPURunArgs(t *testing.T) {
 // and imageExistsProbeArgv("") — reading the capability table and getting
 // not-found for "" — fell back to docker/nerdctl's forms, so one input split
 // across two engines. This is the regression gate for that split.
+// TestUnknownEngineResolutionIsSingleHome proves an UNKNOWN non-empty word does
+// not split one input across two engines either: for every consumer,
+// f(word) == f(EngineBinary(word)). Before the fix, EngineBinary("bogus") was
+// the default (podman) while GPURunArgs("bogus")/imageExistsProbeArgv("bogus")
+// took the docker/nerdctl fallback — podman's binary with docker's args/probe.
+// IsEngineName is the typo gate; the capability resolution treats any non-member
+// as the default engine so the consumers agree.
+func TestUnknownEngineResolutionIsSingleHome(t *testing.T) {
+	for _, word := range []string{"bogus", "containerd", "Podman", "docker-23"} {
+		resolved := EngineBinary(word)
+		if got := GPURunArgs(word); !reflect.DeepEqual(got, GPURunArgs(resolved)) {
+			t.Errorf("GPURunArgs(%q)=%v != GPURunArgs(EngineBinary(%q))=%v", word, got, word, GPURunArgs(resolved))
+		}
+		if got := imageExistsProbeArgv(word); !reflect.DeepEqual(got, imageExistsProbeArgv(resolved)) {
+			t.Errorf("imageExistsProbeArgv(%q)=%v != imageExistsProbeArgv(EngineBinary(%q))=%v", word, got, word, imageExistsProbeArgv(resolved))
+		}
+		if got, want := EngineRunModeFor(word), EngineRunModeFor(resolved); got != want {
+			t.Errorf("EngineRunModeFor(%q)=%q != EngineRunModeFor(EngineBinary(%q))=%q", word, got, word, want)
+		}
+		// A real typo is caught by IsEngineName, not by a split resolution.
+		if IsEngineName(word) {
+			t.Errorf("IsEngineName(%q) must be false — it is not in the closed vocabulary", word)
+		}
+	}
+}
+
 func TestEmptyEngineResolutionIsSingleHome(t *testing.T) {
 	def := spec.DefaultContainerEngine
 	// Every consumer's "" resolution must equal its resolution for the default WORD.
@@ -176,8 +202,15 @@ func TestEngineCapabilityFor(t *testing.T) {
 		t.Error("docker must not claim a native secret store")
 	}
 
-	if _, ok := EngineCapabilityFor("bogus"); ok {
-		t.Error("EngineCapabilityFor(bogus) must report not-found")
+	// An unknown non-empty word resolves to the ONE default engine (like the
+	// empty word), so binary/mode/gpu-args/probe never split across two engines.
+	// IsEngineName is the typo gate, not this bool.
+	bogus, ok := EngineCapabilityFor("bogus")
+	if !ok {
+		t.Fatal("EngineCapabilityFor(bogus) must resolve (to the default engine), not report not-found")
+	}
+	if bogus.Binary != spec.DefaultContainerEngine {
+		t.Errorf("EngineCapabilityFor(bogus).Binary = %q, want the default engine %q", bogus.Binary, spec.DefaultContainerEngine)
 	}
 }
 
@@ -188,8 +221,10 @@ func TestEngineRunModeFor(t *testing.T) {
 	if got := EngineRunModeFor("nerdctl"); got != "systemd-unit" {
 		t.Errorf("EngineRunModeFor(nerdctl) = %q, want systemd-unit", got)
 	}
-	if got := EngineRunModeFor("bogus"); got != "direct" {
-		t.Errorf("EngineRunModeFor(bogus) = %q, want direct (conservative default)", got)
+	// An unknown non-empty word == the default engine (podman → quadlet), the
+	// same single-home resolution as the empty word — never a third engine's mode.
+	if got := EngineRunModeFor("bogus"); got != EngineRunModeFor(spec.DefaultContainerEngine) {
+		t.Errorf("EngineRunModeFor(bogus) = %q, want the default engine's mode %q", got, EngineRunModeFor(spec.DefaultContainerEngine))
 	}
 	// The EMPTY engine means "the default engine", and MUST resolve to the same
 	// engine EngineBinary("") resolves to — one (binary, mode) resolution, never

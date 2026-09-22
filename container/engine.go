@@ -177,18 +177,17 @@ var engineCapabilities = map[string]spec.EngineCapability{
 	},
 }
 
-// EngineCapabilityFor returns the capability facts for an engine word. The bool
-// is false for a genuinely unknown word, so a caller can distinguish "docker" (a
-// known engine with known limitations) from a typo. "auto" resolves through
-// DetectEngine first so a caller never has to.
+// EngineCapabilityFor returns the capability facts for an engine. There is NO
+// distinct "unknown engine": the empty word AND any word that is not a member of
+// the closed engine vocabulary both mean "the default engine"
+// (spec.DefaultContainerEngine) — an unrecognized word can only be a typo or a
+// pre-resolution artifact, and treating it as a separate engine would split one
+// input across two engines' facts (podman's binary with docker's gpu args/probe/
+// mode, the regression this resolution closes). "auto" resolves through
+// DetectEngine first; the bool is false ONLY when that detection fails.
 //
-// The EMPTY word means "unspecified" and resolves to the ONE default engine
-// (spec.DefaultContainerEngine) — the SAME word EngineBinary("") resolves to, so
-// an unspecified engine has ONE (binary, mode, gpu-args, probe) resolution.
-// Before this, EngineBinary("") was podman while GPURunArgs("") and
-// imageExistsProbeArgv("") — which read the capability table and got not-found —
-// fell back to docker/nerdctl's forms, splitting one input across two engines.
-// Centralizing the empty resolution here is what makes every consumer agree.
+// A caller that needs to know whether a word is a REAL engine uses IsEngineName,
+// not this bool — ValidateEngine is the authoring-time typo gate.
 func EngineCapabilityFor(engine string) (spec.EngineCapability, bool) {
 	if engine == "auto" {
 		if detected, err := DetectEngine(); err == nil {
@@ -197,7 +196,9 @@ func EngineCapabilityFor(engine string) (spec.EngineCapability, bool) {
 			return spec.EngineCapability{}, false
 		}
 	}
-	if engine == "" {
+	if _, ok := engineCapabilities[engine]; !ok {
+		// "" and every unrecognized word resolve to the ONE default engine, so
+		// binary/mode/gpu-args/probe all agree on a single engine.
 		engine = spec.DefaultContainerEngine
 	}
 	c, ok := engineCapabilities[engine]
@@ -211,12 +212,12 @@ func EngineCapabilityFor(engine string) (spec.EngineCapability, bool) {
 // the non-unit mode (the conservative, no-unit path; the name is derived via
 // DirectRunMode, never a literal).
 func EngineRunModeFor(engine string) string {
-	if engine == "" {
-		engine = spec.DefaultContainerEngine
-	}
 	if c, ok := EngineCapabilityFor(engine); ok {
 		return string(c.RunMode)
 	}
+	// Unreachable for "" or an unknown word (both resolve to the default engine's
+	// capability); reachable only for "auto" when NO engine is installed, where the
+	// conservative no-unit path is the right degraded answer.
 	return DirectRunMode()
 }
 

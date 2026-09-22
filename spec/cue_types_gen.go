@@ -5782,9 +5782,16 @@ type EngineStartPlanReply struct {
 }
 
 // #EngineUnitRequest / #EngineUnitReply — the `unit_emit` op: render the
-// persistent supervision unit for a deployment (quadlet .container/.pod for
-// podman, a systemd .service wrapping the CLI for nerdctl). Names/paths are
-// host-resolved; the provider returns file contents keyed by absolute path.
+// non-quadlet persistent supervision unit for a deployment — a systemd .service
+// wrapping the engine CLI (nerdctl's mode). Names/paths are host-resolved; the
+// provider returns file contents keyed by absolute path.
+//
+// QUADLET IS NOT RENDERED HERE: podman's run mode is `quadlet`, and its
+// .container/.pod units are emitted by podman's OWN generator (the caller's
+// generator), not by this op. A request whose run mode is quadlet, or is not a
+// unit mode at all, returns an EMPTY reply (no files) — the caller's quadlet
+// generator owns that form. This op answers only the engine that has no native
+// generator.
 type EngineUnitRequest struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 

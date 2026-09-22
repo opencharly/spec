@@ -72,18 +72,19 @@ func TestEngineDescribeOp(t *testing.T) {
 		t.Errorf("describe(podman) capability = %+v, want binary=podman run_mode=quadlet", *reply.Capability)
 	}
 
+	// An unknown non-empty word resolves to the default engine's capability, the
+	// SAME single-home resolution the empty word gets — so describe agrees with
+	// EngineBinary/GPURunArgs/probe (one input, one engine).
 	out, err = InvokeEngineOp("bogus", ops.OpEngineDescribe, nil)
 	if err != nil {
 		t.Fatalf("describe(bogus) must not be a Go error: %v", err)
 	}
-	// Fresh var: json.Unmarshal leaves absent keys untouched, so reusing `reply`
-	// would keep the podman capability from the first decode.
 	var bogusReply spec.EngineDescribeReply
 	if err := json.Unmarshal(out, &bogusReply); err != nil {
 		t.Fatalf("describe(bogus) reply did not parse: %v", err)
 	}
-	if bogusReply.Capability != nil || bogusReply.Error == "" {
-		t.Errorf("describe(bogus) = %+v, want an error field and no capability", bogusReply)
+	if bogusReply.Capability == nil || bogusReply.Capability.Binary != spec.DefaultContainerEngine {
+		t.Errorf("describe(bogus) = %+v, want the default engine %q's capability", bogusReply, spec.DefaultContainerEngine)
 	}
 }
 
