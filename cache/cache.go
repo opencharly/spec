@@ -1,11 +1,13 @@
 // Package cache provides the ONE shared persistent-cache mechanism (R3): a
 // keyed Store with three interchangeable VALIDITY modes and one storage layout.
 //
-// Every cache in the tree — the status hot path (the image list, the image
-// labels, the submodule verdicts, the substrate probes), the loader's
-// materialized-tree cache, and a plugin client's HTTP revalidation cache — is a
-// Store: a directory of one JSON entry per key, keyed by a content key, with the
-// entry recording the validity inputs so the READ decides freshness.
+// A Store is a directory of one JSON entry per key, keyed by a content key, with
+// the entry recording the validity inputs so the READ decides freshness. This
+// package's own consumers — spec/refs (submodule verdicts) and spec/container
+// (image list, image labels) — are Stores today; the loader's materialized-tree
+// cache (sdk/loaderkit) and a plugin HTTP client (plugin-gh) are folded onto the
+// SAME Store in their own producer-ordered changes, so a feature never grows its
+// own bespoke cache.
 //
 // Validity lives IN the entry, never in the storage mechanism, so the same Store
 // serves all three policies:
