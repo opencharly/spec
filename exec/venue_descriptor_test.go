@@ -107,11 +107,11 @@ func TestDescriptorFromExecutor_Unrecognized(t *testing.T) {
 		},
 		"non-shell parent (composition)": {
 			Parent: &SSHExecutor{Host: "charly-arch"},
-			Jump:   NestedJump{Kind: JumpPodmanExec, Target: "child"},
+			Jump:   NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "child"},
 		},
 		"non-empty ExtraArgs": {
 			Parent: ShellExecutor{},
-			Jump:   NestedJump{Kind: JumpPodmanExec, Target: "child", ExtraArgs: []string{"--env", "FOO=bar"}},
+			Jump:   NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "child", ExtraArgs: []string{"--env", "FOO=bar"}},
 		},
 	}
 	for name, nested := range cases {
@@ -126,20 +126,23 @@ func TestDescriptorFromExecutor_Unrecognized(t *testing.T) {
 
 // TestDescriptorFromExecutor_Container proves the K1-unblock W3 Unit B arm: the ONE enumerable
 // *NestedExecutor shape deploykit.ContainerChain always produces (Parent a plain ShellExecutor{},
-// a single JumpPodmanExec/JumpDockerExec hop, no ExtraArgs) round-trips to a "container"
-// descriptor carrying Engine + ContainerName.
+// a single JumpContainerExec hop, no ExtraArgs) round-trips to a "container" descriptor carrying
+// Engine + ContainerName. The engine is echoed VERBATIM (including empty), so this stays the
+// pure inverse of VenueFromDescriptor.
 func TestDescriptorFromExecutor_Container(t *testing.T) {
 	cases := []struct {
 		name       string
-		jumpKind   JumpKind
+		engine     string
 		wantEngine string
 	}{
-		{"podman", JumpPodmanExec, "podman"},
-		{"docker", JumpDockerExec, "docker"},
+		{"podman", "podman", "podman"},
+		{"docker", "docker", "docker"},
+		{"nerdctl", "nerdctl", "nerdctl"},
+		{"empty stays empty (pure inverse)", "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			nested := &NestedExecutor{Parent: ShellExecutor{}, Jump: NestedJump{Kind: tc.jumpKind, Target: "charly-checkbox-1-1"}}
+			nested := &NestedExecutor{Parent: ShellExecutor{}, Jump: NestedJump{Kind: JumpContainerExec, Engine: tc.engine, Target: "charly-checkbox-1-1"}}
 			d := DescriptorFromExecutor(nested)
 			want := spec.VenueDescriptor{Kind: "container", Engine: tc.wantEngine, ContainerName: "charly-checkbox-1-1"}
 			if !reflect.DeepEqual(d, want) {
@@ -150,17 +153,18 @@ func TestDescriptorFromExecutor_Container(t *testing.T) {
 }
 
 // TestVenueFromDescriptor_Container proves the forward direction: a "container" descriptor
-// re-materializes the exact NestedExecutor shape deploykit.ContainerChain produces. Engine
-// defaults to podman when empty, matching ContainerChain's own default.
+// re-materializes the exact NestedExecutor shape deploykit.ContainerChain produces. The engine
+// is carried as DATA on the canonical JumpContainerExec hop (verbatim, including empty).
 func TestVenueFromDescriptor_Container(t *testing.T) {
 	cases := []struct {
-		name         string
-		engine       string
-		wantJumpKind JumpKind
+		name       string
+		engine     string
+		wantEngine string
 	}{
-		{"podman", "podman", JumpPodmanExec},
-		{"docker", "docker", JumpDockerExec},
-		{"empty engine defaults to podman", "", JumpPodmanExec},
+		{"podman", "podman", "podman"},
+		{"docker", "docker", "docker"},
+		{"nerdctl", "nerdctl", "nerdctl"},
+		{"empty engine defaults to podman", "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -175,7 +179,7 @@ func TestVenueFromDescriptor_Container(t *testing.T) {
 			if _, ok := nested.Parent.(ShellExecutor); !ok {
 				t.Fatalf("want a plain ShellExecutor{} parent, got %#v", nested.Parent)
 			}
-			if nested.Jump.Kind != tc.wantJumpKind || nested.Jump.Target != "charly-checkbox-1-1" {
+			if nested.Jump.Kind != JumpContainerExec || nested.Jump.Target != "charly-checkbox-1-1" || nested.Jump.Engine != tc.wantEngine {
 				t.Fatalf("Jump not threaded through correctly: %#v", nested.Jump)
 			}
 		})

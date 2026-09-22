@@ -42,19 +42,26 @@ import (
 // candy/plugin-box, candy/plugin-deploy-pod, candy/plugin-kube, charly core) are unchanged.
 var LocalImageExists = defaultLocalImageExists
 
+// imageExistsProbeArgv returns the local-store probe subcommand for an engine:
+// podman's `image exists`, or the `image inspect` fallback docker/nerdctl need
+// (docker has no `image exists`). It is a pure function of the capability table,
+// so the engine→probe mapping is testable without shelling out and no engine
+// name is switched on.
+func imageExistsProbeArgv(engine string) []string {
+	if c, ok := EngineCapabilityFor(engine); ok && len(c.ImageExistsArgv) > 0 {
+		return c.ImageExistsArgv
+	}
+	return []string{"image", "inspect"}
+}
+
 func defaultLocalImageExists(engine, imageRef string) bool {
 	binary := EngineBinary(engine)
-	switch engine {
-	case "podman":
-		cmd := exec.Command(binary, "image", "exists", imageRef)
-		return cmd.Run() == nil
-	default:
-		// Docker has no "image exists" subcommand; use "image inspect"
-		cmd := exec.Command(binary, "image", "inspect", imageRef)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		return cmd.Run() == nil
-	}
+	// The probe argv is a capability fact (podman `image exists`; docker/nerdctl
+	// `image inspect`), so this does not switch on the engine name.
+	cmd := exec.Command(binary, append(imageExistsProbeArgv(engine), imageRef)...)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run() == nil
 }
 
 // LooksLikeFullRef returns true if the image ref contains a registry segment
@@ -801,7 +808,9 @@ func ResolveShellImageRef(registry, name, tag string) string {
 	if tag == "" {
 		// Try local CalVer resolution. Best-effort: if nothing local matches, fall back to a
 		// tagless ref so the engine's own resolution path can error with its canonical message.
-		if resolved, err := ResolveNewestLocalCalVer("podman", name); err == nil && resolved != "" {
+		// "auto" resolves to the engine actually installed on the host (DetectEngine), so this
+		// probes the right local store instead of assuming podman.
+		if resolved, err := ResolveNewestLocalCalVer("auto", name); err == nil && resolved != "" {
 			return resolved
 		}
 		if registry != "" {

@@ -27,6 +27,7 @@ var ProviderClasses = []string{
 	"build",
 	"builder",
 	"command",
+	"engine",
 	"loader",
 	"refs",
 	"agent-runtime",
@@ -265,4 +266,24 @@ var KindValueDefs = map[string]string{
 	"local":      "#LocalValue",
 	"pod":        "#PodValue",
 	"vm":         "#VmValue",
+}
+
+// EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then task cue:gen.
+var EngineNames = []string{
+	"podman",
+	"docker",
+	"nerdctl",
+}
+
+// EngineRunModes is the CLOSED engine run-mode vocabulary (#EngineRunMode) — quadlet/systemd-unit/direct. IsRunMode and ValidateRunMode derive from it; the per-engine mode mapping is container.EngineCapabilityFor.
+var EngineRunModes = []string{
+	"quadlet",
+	"systemd-unit",
+	"direct",
+}
+
+// EngineUnitRunModeWords is the SUBSET of EngineRunModes supervised by a generated unit file (#EngineUnitRunModes) — quadlet/systemd-unit, not direct. container.IsUnitRunMode reads it, so the unit-capability question is a data fact, never a hand-listed pair.
+var EngineUnitRunModeWords = []string{
+	"quadlet",
+	"systemd-unit",
 }

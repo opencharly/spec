@@ -21,7 +21,9 @@
 	// engine — a candy's required run engine; per-image resolution walks the
 	// candy chain (engine.go ResolveBoxEngine) and cross-candy conflicts are a
 	// validate error. RETAINED by the schema-compaction consumer audit.
-	engine?: "docker" | "podman"
+	// The engine vocabulary is #EngineName (schema/engine.cue) — one source shared
+	// by every authored engine field, so a new engine (nerdctl) lands once.
+	engine?: #EngineName
 	// `from:` is NOT a candy field — EDGE-INHERIT cutover D: a candy: node carrying
 	// `base:` or `from:` is a full IMAGE (#Box, the former box:), routed there by the
 	// loader; a LAYER fragment has neither. So `from:` lives only on #Box.
@@ -528,7 +530,7 @@
 // plugin-box's validPluginClasses derive from — parser consolidation F4.2), and
 // #PluginCapability's regex derives from the same list, so the CUE-side capability
 // gate can never drift from the Go-side class set.
-#ProviderClassNames: ["kind", "deploy", "verb", "step", "build", "builder", "command", "loader", "refs", "agent-runtime", "terminal"] @go(-)
+#ProviderClassNames: ["kind", "deploy", "verb", "step", "build", "builder", "command", "engine", "loader", "refs", "agent-runtime", "terminal"] @go(-)
 
 // #ProviderClassPattern — the class alternation derived from #ProviderClassNames
 // (the ONE hand-maintained list; the regex is computed, never authored).

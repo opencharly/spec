@@ -42,8 +42,8 @@ import (
 // For each path segment, a single hop is added based on the node's
 // target classification:
 //
-//	target: pod / container → NestedExecutor with JumpPodmanExec /
-//	                          JumpDockerExec into "charly-<flat-path>".
+//	target: pod / container → NestedExecutor with JumpContainerExec
+//	                          (Engine = the deploy's engine) into "charly-<flat-path>".
 //	                          Container name flattens dot-separated
 //	                          paths to underscore-separated to remain
 //	                          a legal podman container name.
@@ -167,25 +167,17 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.DeployNode, flat
 			podName = leaf
 		}
 		name := "charly-" + podName
-		engineJump := JumpPodmanExec
-		if node.Engine == "docker" {
-			engineJump = JumpDockerExec
-		}
+		// The engine is DATA on the jump (node.Engine is #EngineName); an empty
+		// engine defaults to podman in engineBinary(). No engine switch.
+		jump := NestedJump{Kind: JumpContainerExec, Engine: string(node.Engine), Target: name}
 		// Deterministic exec user/HOME (issue #149): read the running
 		// container's OCI-spec User + HOME once at chain construction so every
 		// exec hop passes them explicitly, immune to the engine's exec
 		// user/HOME resolution race for containers created during a
 		// concurrent bed window. Best-effort — an unreadable container falls
 		// back to the engine's own resolution (the pre-fix behavior).
-		engine := "podman"
-		if node.Engine == "docker" {
-			engine = "docker"
-		}
-		user, home := containerExecUserHome(engine, name)
-		return &NestedExecutor{
-			Parent: chain,
-			Jump:   NestedJump{Kind: engineJump, Target: name, User: user, Home: home},
-		}, nil
+		jump.User, jump.Home = containerExecUserHome(jump.engineBinary(), name)
+		return &NestedExecutor{Parent: chain, Jump: jump}, nil
 
 	case "ssh":
 		// VM SSH alias keys off the per-deploy DOMAIN IDENTITY
