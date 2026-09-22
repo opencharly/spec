@@ -1,8 +1,6 @@
 package container
 
 import (
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -15,12 +13,12 @@ import (
 
 func TestImageCacheRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "images.json")
+	store := cache.Open(dir)
 	images := []LocalImageInfo{
 		{ID: "sha256:abc", Names: []string{"ghcr.io/opencharly/test:1.0"}, Labels: map[string]string{"ai.opencharly.box": "test"}},
 	}
-	writeImageCache(path, "podman", images)
-	got, ok := readImageCache(path, "podman")
+	writeImageCache(store, "podman", images)
+	got, ok := readImageCache(store, "podman")
 	if !ok {
 		t.Fatal("readImageCache: cache miss after write")
 	}
@@ -28,53 +26,47 @@ func TestImageCacheRoundTrip(t *testing.T) {
 		t.Fatalf("readImageCache: got %+v", got)
 	}
 	// A different engine is a cache miss.
-	if _, ok := readImageCache(path, "docker"); ok {
+	if _, ok := readImageCache(store, "docker"); ok {
 		t.Fatal("readImageCache: docker engine should miss")
 	}
 }
 
 func TestImageCacheTTLExpiry(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "images.json")
+	store := cache.Open(dir)
 	images := []LocalImageInfo{{ID: "sha256:abc"}}
-	writeImageCache(path, "podman", images)
-	// Backdate the entry beyond the TTL via the shared cache file.
-	data, _ := os.ReadFile(path)
-	var cf cache.File
-	_ = json.Unmarshal(data, &cf)
-	for k, e := range cf.Entries {
-		e.Resolved = time.Now().Add(-2 * imageCacheTTL)
-		cf.Entries[k] = e
+	writeImageCache(store, "podman", images)
+	// Backdate the entry beyond the TTL through the shared Store's PutEntry seam.
+	e, ok := store.Get("podman")
+	if !ok {
+		t.Fatal("store.Get: entry missing after write")
 	}
-	out, _ := json.Marshal(cf)
-	_ = os.WriteFile(path, out, 0o644)
-	if _, ok := readImageCache(path, "podman"); ok {
+	e.Resolved = time.Now().Add(-2 * imageCacheTTL)
+	store.PutEntry("podman", e)
+	if _, ok := readImageCache(store, "podman"); ok {
 		t.Fatal("readImageCache: stale entry should miss")
 	}
 }
 
 func TestInvalidateImageCache(t *testing.T) {
-	// Point the cache at a temp file via the env override.
+	// Point the cache at a temp root via the env override.
 	dir := t.TempDir()
-	cfg := filepath.Join(dir, "charly.yml")
-	t.Setenv("CHARLY_DEPLOY_CONFIG", cfg)
-	path, err := imageCachePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeImageCache(path, "podman", []LocalImageInfo{{ID: "sha256:abc"}})
+	t.Setenv("CHARLY_CACHE_DIR", dir)
+	store := imageCacheStore()
+	writeImageCache(store, "podman", []LocalImageInfo{{ID: "sha256:abc"}})
 	InvalidateImageCache()
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("InvalidateImageCache: cache file still exists: %v", err)
+	if store.Len() != 0 {
+		t.Fatalf("InvalidateImageCache: store still holds %d entries", store.Len())
 	}
 }
 
 func TestImageLabelsCacheRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "labels.json")
+	store := cache.Open(dir)
 	labels := map[string]string{"ai.opencharly.box": "test"}
-	writeImageLabelsCache(path, "podman|ghcr.io/opencharly/test:1.0", labels)
-	got, ok := readImageLabelsCache(path, "podman|ghcr.io/opencharly/test:1.0")
+	key := "podman|ghcr.io/opencharly/test:1.0"
+	writeImageLabelsCache(store, key, labels)
+	got, ok := readImageLabelsCache(store, key)
 	if !ok {
 		t.Fatal("readImageLabelsCache: cache miss after write")
 	}
@@ -82,7 +74,17 @@ func TestImageLabelsCacheRoundTrip(t *testing.T) {
 		t.Fatalf("readImageLabelsCache: got %v", got)
 	}
 	// A different key is a cache miss.
-	if _, ok := readImageLabelsCache(path, "podman|other"); ok {
+	if _, ok := readImageLabelsCache(store, "podman|other"); ok {
 		t.Fatal("readImageLabelsCache: different key should miss")
+	}
+}
+
+// TestImageCacheStoreDirIsNamed pins the store layout: the image list lives
+// under a named `images/` dir in the cache root, so one Store per concern.
+func TestImageCacheStoreDirIsNamed(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CHARLY_CACHE_DIR", root)
+	if got, want := imageCacheStore().Dir(), filepath.Join(root, "images"); got != want {
+		t.Fatalf("imageCacheStore().Dir() = %q, want %q", got, want)
 	}
 }
