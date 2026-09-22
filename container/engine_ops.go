@@ -64,7 +64,7 @@ func InvokeEngineOp(reserved, op string, params json.RawMessage) (json.RawMessag
 				return nil, fmt.Errorf("engine binary op: %w", err)
 			}
 		}
-		return marshalReply(spec.EngineBinaryReply{Binary: EngineBinary(engineOr(req.Engine, reserved))})
+		return marshalReply(spec.EngineBinaryReply{Binary: engineBinaryRaw(engineOr(req.Engine, reserved))})
 	case ops.OpEngineGPURunArgs:
 		var req spec.EngineGPURunArgsRequest
 		if len(params) > 0 {
@@ -72,7 +72,7 @@ func InvokeEngineOp(reserved, op string, params json.RawMessage) (json.RawMessag
 				return nil, fmt.Errorf("engine gpu_args op: %w", err)
 			}
 		}
-		return marshalReply(spec.EngineGPURunArgsReply{Args: GPURunArgs(engineOr(req.Engine, reserved))})
+		return marshalReply(spec.EngineGPURunArgsReply{Args: engineGPUArgsRaw(engineOr(req.Engine, reserved))})
 	case ops.OpEngineStartPlan:
 		var req spec.EngineStartPlanRequest
 		if len(params) > 0 {
@@ -121,6 +121,26 @@ func marshalReply(v any) (json.RawMessage, error) {
 		return nil, err
 	}
 	return json.RawMessage(b), nil
+}
+
+// engineBinaryRaw is the name→binary LEAF: it reads the capability table directly
+// (no dispatch), so the `binary` op body can call it without recursing into
+// EngineBinary (which is the op's typed accessor). An unknown/empty word resolves
+// to the ONE default engine, matching EngineBinary.
+func engineBinaryRaw(engine string) string {
+	if c, ok := EngineCapabilityFor(engine); ok {
+		return c.Binary
+	}
+	return spec.DefaultContainerEngine
+}
+
+// engineGPUArgsRaw is the gpu-args LEAF (capability-table read, no dispatch), used
+// by the `gpu_args` op body so it never recurses into GPURunArgs.
+func engineGPUArgsRaw(engine string) []string {
+	if c, ok := EngineCapabilityFor(engine); ok && c.GPUArgStyle == "cdi" {
+		return []string{"--device", "nvidia.com/gpu=all"}
+	}
+	return []string{"--gpus", "all"}
 }
 
 // engineDescribe answers OpEngineDescribe: the capability envelope. An unknown

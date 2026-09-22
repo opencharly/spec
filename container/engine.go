@@ -18,10 +18,12 @@
 package container
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 
+	"github.com/opencharly/spec/ops"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -30,6 +32,10 @@ import (
 // default engine (spec.DefaultContainerEngine, podman) so a caller that names no
 // engine gets the same engine the exec hop and DetectEngine use. A caller can
 // distinguish the fallback from a real word via IsEngineName.
+//
+// The behavior is served by the engine provider CLASS (the `binary` op); this
+// predicate is its typed accessor, so the class has an in-tree consumer and the
+// compiled-in / out-of-process placements answer identically.
 func EngineBinary(engine string) string {
 	if engine == "auto" {
 		if detected, err := DetectEngine(); err == nil {
@@ -37,8 +43,11 @@ func EngineBinary(engine string) string {
 		}
 		return spec.DefaultContainerEngine
 	}
-	if c, ok := engineCapabilities[engine]; ok {
-		return c.Binary
+	if out, err := InvokeEngineOp(engine, ops.OpEngineBinary, nil); err == nil {
+		var rep spec.EngineBinaryReply
+		if json.Unmarshal(out, &rep) == nil {
+			return rep.Binary
+		}
 	}
 	return spec.DefaultContainerEngine
 }
@@ -48,9 +57,21 @@ func EngineBinary(engine string) string {
 // The style rides on the capability table so it is a fact, not a switch. The `"auto"`
 // selector resolves to the installed engine via DetectEngine (the same resolution
 // EngineBinary performs), so GPURunArgs("auto") matches GPURunArgs(<detected>).
+//
+// Served by the class's `gpu_args` op; this is its typed accessor.
 func GPURunArgs(engine string) []string {
-	if c, ok := EngineCapabilityFor(engine); ok && c.GPUArgStyle == "cdi" {
-		return []string{"--device", "nvidia.com/gpu=all"}
+	if engine == "auto" {
+		if detected, err := DetectEngine(); err == nil {
+			engine = detected
+		} else {
+			engine = spec.DefaultContainerEngine
+		}
+	}
+	if out, err := InvokeEngineOp(engine, ops.OpEngineGPURunArgs, nil); err == nil {
+		var rep spec.EngineGPURunArgsReply
+		if json.Unmarshal(out, &rep) == nil && rep.Args != nil {
+			return rep.Args
+		}
 	}
 	return []string{"--gpus", "all"}
 }

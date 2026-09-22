@@ -2,6 +2,7 @@ package container
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/opencharly/spec/ops"
@@ -261,4 +262,36 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// TestEnginePredicatesRouteThroughTheClassOp proves the class is genuinely
+// CONSUMED in-tree: EngineBinary and GPURunArgs are the typed accessors of the
+// binary/gpu_args ops, so their answers equal the op replies. This is the gate
+// that the class is not a shipped-but-unconsumed contract.
+func TestEnginePredicatesRouteThroughTheClassOp(t *testing.T) {
+	for _, engine := range append(append([]string{}, spec.EngineNames...), "") {
+		out, err := InvokeEngineOp(engine, ops.OpEngineBinary, nil)
+		if err != nil {
+			t.Fatalf("binary op(%q): %v", engine, err)
+		}
+		var brep spec.EngineBinaryReply
+		if err := json.Unmarshal(out, &brep); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := EngineBinary(engine), brep.Binary; got != want {
+			t.Errorf("EngineBinary(%q) = %q, op reply = %q — the accessor must route through the op", engine, got, want)
+		}
+
+		out, err = InvokeEngineOp(engine, ops.OpEngineGPURunArgs, nil)
+		if err != nil {
+			t.Fatalf("gpu_args op(%q): %v", engine, err)
+		}
+		var grep spec.EngineGPURunArgsReply
+		if err := json.Unmarshal(out, &grep); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := GPURunArgs(engine), grep.Args; !reflect.DeepEqual(got, want) {
+			t.Errorf("GPURunArgs(%q) = %v, op reply = %v — the accessor must route through the op", engine, got, want)
+		}
+	}
 }
