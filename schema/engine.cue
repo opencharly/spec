@@ -82,12 +82,14 @@
 // answer an op instead of Describe.
 //
 // In this change the capability table + EngineBinary/GPURunArgs/EngineRunModeFor/
-// ImageExistsArgv consumers land; the pod/secret/keep-id fields
-// (SupportsPods / SupportsSecrets / SupportsUsernsKeepID / UsernsKeepIDArg /
-// WorkloadUser) are consumed by the engine PROVIDERS (the out-of-tree
-// plugin-nerdctl and the compiled-in podman/docker providers) as those land —
-// they are declared here so the wire contract is complete and stable, not
-// because every field already has a reader in this tree.
+// ImageExistsArgv consumers land; the class name (#ProviderClassNames) and the op
+// envelopes below are the STABLE wire contract the compiled-in podman/docker
+// providers and the out-of-tree plugin-nerdctl bind to. `#EngineCapability` is
+// the one type shared by the table and the wire answer. The pod/secret/keep-id
+// fields (SupportsPods / SupportsSecrets / SupportsUsernsKeepID /
+// UsernsKeepIDArg / WorkloadUser) are declared so that contract is complete; the
+// compiled-in EngineBinary consumer reads `binary`, and the remaining fields'
+// readers are the engine providers themselves.
 #EngineCapability: {
 	// The engine's own name (mirrors the provider word).
 	name!: #EngineName @go(Name)
