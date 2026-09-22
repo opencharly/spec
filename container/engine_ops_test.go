@@ -171,6 +171,27 @@ func TestEngineStartPlanOp(t *testing.T) {
 	}
 }
 
+// TestEngineUnitEmitEmitsExecStartPre pins that exec_start_pre (a declared
+// envelope field) reaches the rendered unit as ExecStartPre= directives.
+func TestEngineUnitEmitEmitsExecStartPre(t *testing.T) {
+	out, err := InvokeEngineOp("nerdctl", ops.OpEngineUnitEmit,
+		json.RawMessage(`{"name":"svc","run_mode":"systemd-unit","start_argv":["/usr/bin/nerdctl","run","svc"],"exec_start_pre":["/usr/bin/nerdctl rm -f svc","/bin/true"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rep spec.EngineUnitReply
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatal(err)
+	}
+	text := rep.Files["charly-svc.service"]
+	if !containsSub(text, "ExecStartPre=/usr/bin/nerdctl rm -f svc") {
+		t.Errorf("unit text missing the first ExecStartPre:\n%s", text)
+	}
+	if !containsSub(text, "ExecStartPre=/bin/true") {
+		t.Errorf("unit text missing the second ExecStartPre:\n%s", text)
+	}
+}
+
 // TestEngineUnitEmitHonorsRequestRunMode pins that the op's decision input is the
 // REQUEST's run_mode (the envelope field), not the provider's capability: a
 // quadlet request to ANY provider — even nerdctl, whose capability mode is

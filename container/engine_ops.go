@@ -276,6 +276,12 @@ func renderSystemdUnit(req spec.EngineUnitRequest) string {
 		restart = "on-failure"
 	}
 	add("Restart=" + restart + "\n")
+	// ExecStartPre: one directive per entry (each is a full command line).
+	for _, pre := range req.ExecStartPre {
+		if pre != "" {
+			add("ExecStartPre=" + pre + "\n")
+		}
+	}
 	add("ExecStart=" + strings.Join(req.StartArgv, " ") + "\n")
 	if len(req.StopArgv) > 0 {
 		add("ExecStop=" + strings.Join(req.StopArgv, " ") + "\n")

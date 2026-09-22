@@ -5815,8 +5815,11 @@ type EngineUnitRequest struct {
 
 	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
 
-	// engine_specific carries whatever the engine's own generator needs; quadlet
-	// ignores it, the systemd-unit emitter uses it for the wrapped CLI argv.
+	// engine_specific carries whatever engine-specific extras a future unit
+	// generator needs (a quadlet-only knob, an engine-specific ordering hint, …).
+	// It is a declared CARRIER: the systemd-unit servant builds ExecStart from
+	// start_argv and does not read it today, and podman's quadlet is emitted by
+	// podman's OWN generator, not this op.
 	EngineSpecific StrMap `yaml:"engine_specific,omitempty" json:"engine_specific,omitempty"`
 }
 

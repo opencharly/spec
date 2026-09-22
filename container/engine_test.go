@@ -53,13 +53,6 @@ func TestGPURunArgs(t *testing.T) {
 	}
 }
 
-// TestEmptyEngineResolutionIsSingleHome pins the block-1 invariant: for the
-// unspecified ("") engine, the binary, run mode, GPU args, and local-image probe
-// ALL resolve to the SAME engine — the ONE default (spec.DefaultContainerEngine).
-// Before the fix, EngineBinary("") was the default (podman) while GPURunArgs("")
-// and imageExistsProbeArgv("") — reading the capability table and getting
-// not-found for "" — fell back to docker/nerdctl's forms, so one input split
-// across two engines. This is the regression gate for that split.
 // TestUnknownEngineResolutionIsSingleHome proves an UNKNOWN non-empty word does
 // not split one input across two engines either: for every consumer,
 // f(word) == f(EngineBinary(word)). Before the fix, EngineBinary("bogus") was
@@ -86,6 +79,13 @@ func TestUnknownEngineResolutionIsSingleHome(t *testing.T) {
 	}
 }
 
+// TestEmptyEngineResolutionIsSingleHome pins the block-1 invariant: for the
+// unspecified ("") engine, the binary, run mode, GPU args, and local-image probe
+// ALL resolve to the SAME engine — the ONE default (spec.DefaultContainerEngine).
+// Before the fix, EngineBinary("") was the default (podman) while GPURunArgs("")
+// and imageExistsProbeArgv("") — reading the capability table and getting
+// not-found for "" — fell back to docker/nerdctl's forms, so one input split
+// across two engines. This is the regression gate for that split.
 func TestEmptyEngineResolutionIsSingleHome(t *testing.T) {
 	def := spec.DefaultContainerEngine
 	// Every consumer's "" resolution must equal its resolution for the default WORD.
