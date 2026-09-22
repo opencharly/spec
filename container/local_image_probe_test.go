@@ -16,8 +16,10 @@ func TestImageExistsProbeArgv(t *testing.T) {
 		// docker has no `image exists`; docker and nerdctl both use `image inspect`.
 		"docker":  {"image", "inspect"},
 		"nerdctl": {"image", "inspect"},
-		// unknown/empty falls back to the inspect form (the historical default).
-		"":      {"image", "inspect"},
+		// The EMPTY word means "unspecified" and resolves to the ONE default engine
+		// (podman → `image exists`), agreeing with EngineBinary(""). A genuinely
+		// unknown word still falls back to the inspect form.
+		"":      {"image", "exists"},
 		"bogus": {"image", "inspect"},
 	}
 	for engine, want := range cases {

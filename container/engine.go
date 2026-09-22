@@ -157,9 +157,17 @@ var engineCapabilities = map[string]spec.EngineCapability{
 }
 
 // EngineCapabilityFor returns the capability facts for an engine word. The bool
-// is false for an unknown/empty word, so a caller can distinguish "docker" (a
+// is false for a genuinely unknown word, so a caller can distinguish "docker" (a
 // known engine with known limitations) from a typo. "auto" resolves through
 // DetectEngine first so a caller never has to.
+//
+// The EMPTY word means "unspecified" and resolves to the ONE default engine
+// (spec.DefaultContainerEngine) — the SAME word EngineBinary("") resolves to, so
+// an unspecified engine has ONE (binary, mode, gpu-args, probe) resolution.
+// Before this, EngineBinary("") was podman while GPURunArgs("") and
+// imageExistsProbeArgv("") — which read the capability table and got not-found —
+// fell back to docker/nerdctl's forms, splitting one input across two engines.
+// Centralizing the empty resolution here is what makes every consumer agree.
 func EngineCapabilityFor(engine string) (spec.EngineCapability, bool) {
 	if engine == "auto" {
 		if detected, err := DetectEngine(); err == nil {
@@ -167,6 +175,9 @@ func EngineCapabilityFor(engine string) (spec.EngineCapability, bool) {
 		} else {
 			return spec.EngineCapability{}, false
 		}
+	}
+	if engine == "" {
+		engine = spec.DefaultContainerEngine
 	}
 	c, ok := engineCapabilities[engine]
 	return c, ok

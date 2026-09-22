@@ -88,6 +88,21 @@ const (
 	OpConfigSetup  = "config-setup"
 	OpConfigRemove = "config-remove"
 
+	// OpEngineDescribe / OpEngineBinary / OpEngineGPURunArgs / OpEngineStartPlan /
+	// OpEngineUnitEmit / OpEngineNetworkEnsure are the `engine` provider-class selectors
+	// (spec/schema/engine.cue). A compiled-in engine:podman / engine:docker provider (and
+	// the out-of-process engine:nerdctl plugin) dispatches req.GetOp() against these,
+	// decoding the matching spec.Engine*Request and returning the spec.Engine*Reply. The
+	// values are the op NAMES the engine.cue doc comments use ("describe", "binary",
+	// "gpu_args", "start_plan", "unit_emit", "network_ensure"); none collides with another
+	// selector's value. They are generic action selectors, never provider words (F11).
+	OpEngineDescribe      = "describe"       // engine: the capability envelope → spec.EngineDescribeReply
+	OpEngineBinary        = "binary"         // engine: name→CLI binary → spec.EngineBinaryReply
+	OpEngineGPURunArgs    = "gpu_args"       // engine: vendor-GPU passthrough argv → spec.EngineGPURunArgsReply
+	OpEngineStartPlan     = "start_plan"     // engine: container launch argv + mode → spec.EngineStartPlanReply
+	OpEngineUnitEmit      = "unit_emit"      // engine: supervision unit file contents → spec.EngineUnitReply
+	OpEngineNetworkEnsure = "network_ensure" // engine: ensure the shared network exists → spec.EngineNetworkEnsureReply
+
 	OpStatusCollect = "status-collect" // command:status: programmatic status collection → []spec.DeploymentStatus (distinct from lifecycle OpStatus)
 
 	// OpStatusCollectAll is the K6 whole-subsystem status FAN-OUT + deploy-cone ENRICHMENT

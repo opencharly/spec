@@ -71,7 +71,13 @@ func TestRunModeMismatchWarning(t *testing.T) {
 		{"docker", "systemd-unit", true},   // docker offers no unit mode
 		{"nerdctl", "direct", false},       // direct is the degraded fallback
 		{"podman", "direct", false},        // direct is the degraded fallback
-		{"", "quadlet", true},              // unknown engine offers no unit mode
+		{"bogus", "quadlet", true},         // unknown engine offers no unit mode
+		// The EMPTY engine means "unspecified" and resolves to the ONE default
+		// engine (podman → quadlet), so an empty engine with quadlet MATCHES (no
+		// warning) and an empty engine with systemd-unit is a real mismatch. This
+		// is the block-1 single-home resolution reaching the warning branch.
+		{"", "quadlet", false},       // empty == the default engine's mode
+		{"", "systemd-unit", true},   // empty defaults to podman, which offers quadlet
 	}
 	for _, c := range cases {
 		got := runModeMismatchWarning(c.engine, c.mode)

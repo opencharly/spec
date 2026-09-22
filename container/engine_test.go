@@ -27,11 +27,20 @@ func TestGPURunArgs(t *testing.T) {
 	if got := GPURunArgs("podman"); len(got) != 2 || got[0] != "--device" || got[1] != "nvidia.com/gpu=all" {
 		t.Errorf("GPURunArgs(podman) = %v, want CDI device form", got)
 	}
-	for _, engine := range []string{"docker", "nerdctl", ""} {
+	for _, engine := range []string{"docker", "nerdctl"} {
 		got := GPURunArgs(engine)
 		if len(got) != 2 || got[0] != "--gpus" || got[1] != "all" {
 			t.Errorf("GPURunArgs(%q) = %v, want --gpus all", engine, got)
 		}
+	}
+	// The EMPTY word means "unspecified" and resolves to the ONE default engine, so
+	// its GPU form is the default engine's (podman → CDI), NOT the historical
+	// docker-style `--gpus all`. The empty-word resolution must agree with
+	// EngineBinary("") — one input, one engine.
+	wantEmpty := GPURunArgs(EngineBinary(""))
+	if got := GPURunArgs(""); !reflect.DeepEqual(got, wantEmpty) {
+		t.Errorf("GPURunArgs(\"\") = %v, want the default engine's %v (EngineBinary(\"\")=%q)",
+			got, wantEmpty, EngineBinary(""))
 	}
 	// `"auto"` is the pre-resolution selector: it resolves to the installed engine
 	// (DetectEngine), so it must yield the SAME form as that engine — not the
@@ -41,6 +50,45 @@ func TestGPURunArgs(t *testing.T) {
 		if got, want := GPURunArgs("auto"), GPURunArgs(detected); !reflect.DeepEqual(got, want) {
 			t.Errorf("GPURunArgs(auto) = %v, want the detected engine %q's %v", got, detected, want)
 		}
+	}
+}
+
+// TestEmptyEngineResolutionIsSingleHome pins the block-1 invariant: for the
+// unspecified ("") engine, the binary, run mode, GPU args, and local-image probe
+// ALL resolve to the SAME engine — the ONE default (spec.DefaultContainerEngine).
+// Before the fix, EngineBinary("") was the default (podman) while GPURunArgs("")
+// and imageExistsProbeArgv("") — reading the capability table and getting
+// not-found for "" — fell back to docker/nerdctl's forms, so one input split
+// across two engines. This is the regression gate for that split.
+func TestEmptyEngineResolutionIsSingleHome(t *testing.T) {
+	def := spec.DefaultContainerEngine
+	// Every consumer's "" resolution must equal its resolution for the default WORD.
+	if got, want := EngineBinary(""), EngineBinary(def); got != want {
+		t.Errorf("EngineBinary(\"\") = %q, want the default word's %q", got, want)
+	}
+	if got, want := EngineRunModeFor(""), EngineRunModeFor(def); got != want {
+		t.Errorf("EngineRunModeFor(\"\") = %q, want the default word's %q", got, want)
+	}
+	if got, want := GPURunArgs(""), GPURunArgs(def); !reflect.DeepEqual(got, want) {
+		t.Errorf("GPURunArgs(\"\") = %v, want the default word's %v", got, want)
+	}
+	if got, want := imageExistsProbeArgv(""), imageExistsProbeArgv(def); !reflect.DeepEqual(got, want) {
+		t.Errorf("imageExistsProbeArgv(\"\") = %v, want the default word's %v", got, want)
+	}
+	// And the requested cross-checks against EngineBinary("") directly.
+	if got, want := GPURunArgs(""), GPURunArgs(EngineBinary("")); !reflect.DeepEqual(got, want) {
+		t.Errorf("GPURunArgs(\"\") = %v, want GPURunArgs(EngineBinary(\"\")) = %v", got, want)
+	}
+	if got, want := imageExistsProbeArgv(""), imageExistsProbeArgv(EngineBinary("")); !reflect.DeepEqual(got, want) {
+		t.Errorf("imageExistsProbeArgv(\"\") = %v, want imageExistsProbeArgv(EngineBinary(\"\")) = %v", got, want)
+	}
+	// The default engine (podman) carries the CDI GPU form and the `image exists`
+	// probe; assert the concrete values so the resolution is not vacuously equal.
+	if got := GPURunArgs(""); len(got) != 2 || got[0] != "--device" {
+		t.Errorf("GPURunArgs(\"\") = %v, want the default engine's CDI form", got)
+	}
+	if got := imageExistsProbeArgv(""); !reflect.DeepEqual(got, []string{"image", "exists"}) {
+		t.Errorf("imageExistsProbeArgv(\"\") = %v, want the default engine's {image exists}", got)
 	}
 }
 
