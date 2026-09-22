@@ -25,8 +25,10 @@ import (
 // hands across the wire.
 //
 // The engine data facts (binary, run mode, gpu style, probes) come from
-// engineCapabilities via EngineCapabilityFor — the ONE table — and the argv
-// builders reuse GPURunArgs so no second copy of the GPU flag family exists (R3).
+// engineCapabilities via EngineCapabilityFor — the ONE table. The GPU flag
+// family is defined ONCE in engineGPUArgsRaw below; the public GPURunArgs is its
+// typed accessor (GPURunArgs → InvokeEngineOp → engineGPUArgsRaw), so there is no
+// second copy of the flag form.
 
 // EngineOps returns the op selectors the engine class serves. A provider
 // advertises exactly these; a test asserts each is answered by InvokeEngineOp,

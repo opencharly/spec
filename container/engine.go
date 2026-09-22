@@ -58,7 +58,10 @@ func EngineBinary(engine string) string {
 // selector resolves to the installed engine via DetectEngine (the same resolution
 // EngineBinary performs), so GPURunArgs("auto") matches GPURunArgs(<detected>).
 //
-// Served by the class's `gpu_args` op; this is its typed accessor.
+// Served by the class's `gpu_args` op; this is its typed accessor. The flag form
+// is defined once, in engineGPUArgsRaw (the op body's leaf). The marshal path
+// cannot fail for a plain string slice, but if it ever did this falls back to that
+// SAME leaf — never a second copy of the flag form.
 func GPURunArgs(engine string) []string {
 	if engine == "auto" {
 		if detected, err := DetectEngine(); err == nil {
@@ -73,7 +76,7 @@ func GPURunArgs(engine string) []string {
 			return rep.Args
 		}
 	}
-	return []string{"--gpus", "all"}
+	return engineGPUArgsRaw(engine)
 }
 
 // DetectEngine auto-detects the container engine: prefers podman, falls back to docker.
