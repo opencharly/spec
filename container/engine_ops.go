@@ -144,8 +144,10 @@ func engineGPUArgsRaw(engine string) []string {
 }
 
 // engineDescribe answers OpEngineDescribe: the capability envelope. An unknown
-// word yields the reply with an error field rather than a Go error, matching the
-// envelope's own contract.
+// non-empty word resolves to the default engine's capability (the same single-home
+// resolution every consumer uses), so it is NOT an error; the Error reply is
+// produced only when EngineCapabilityFor finds no engine at all — "auto" with no
+// engine installed — matching the envelope's own contract rather than a Go error.
 func engineDescribe(engine string) (json.RawMessage, error) {
 	c, ok := EngineCapabilityFor(engine)
 	if !ok {
