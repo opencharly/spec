@@ -40,11 +40,13 @@ func WaitForVmSshReady(domainID string) {
 }
 
 // readinessEngine returns the container engine to probe a deployment with.
-// charly-managed venvs export CHARLY_RUN_ENGINE (the container-nesting / engine
-// layers set it; `charly settings engine.run` is the host-level twin), so the
-// probe uses the SAME engine the deploy ran under. When unset (a bare host or a
-// project-unaware caller) it falls back to defaultContainerEngine (podman) —
-// the same default the rest of the exec slice uses. Pure so it is unit-tested.
+// The run engine is a host/deploy fact surfaced as the CHARLY_RUN_ENGINE
+// environment variable: `charly settings engine.run` reads it (hostenv.ResolveRuntime's
+// twin in candy/plugin-settings), and the container-nesting layer sets it to
+// "podman" for the nested-pod posture. So the probe uses the SAME engine the
+// deploy ran under. When unset (a bare host or a project-unaware caller) it falls
+// back to defaultContainerEngine (podman) — the same default the rest of the exec
+// slice uses. Pure so it is unit-tested.
 func readinessEngine(envValue string) string {
 	if envValue != "" {
 		return envValue
