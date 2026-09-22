@@ -26,7 +26,6 @@ import (
 	"github.com/opencharly/spec/calver"
 	"github.com/opencharly/spec/lock"
 	"github.com/opencharly/spec/proc"
-	"github.com/opencharly/spec/spec"
 )
 
 // ---------------------------------------------------------------------------
@@ -469,25 +468,18 @@ type submoduleCacheValue struct {
 	Populated bool `json:"populated"`
 }
 
-// submoduleCachePath returns the persistent submodule-verdict cache file under
-// the charly dir (~/.config/charly/cache/submodules.json).
-func submoduleCachePath() (string, error) {
-	cfg, err := spec.DefaultDeployConfigPath()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(filepath.Dir(cfg), "cache", "submodules.json"), nil
+// submoduleCacheStore opens the persistent submodule-verdict Store (the ONE
+// shared cache mechanism). An inert store (no config dir) makes every lookup a
+// miss without error.
+func submoduleCacheStore() *cache.Store {
+	return cache.OpenNamed("submodules")
 }
 
 // readSubmoduleCache returns the cached verdict for cachePath if fresh, else
-// (false, false). A corrupt/absent file is a cache miss.
+// (false, false). A corrupt/absent entry is a cache miss.
 func readSubmoduleCache(cachePath string) (bool, bool) {
-	path, err := submoduleCachePath()
-	if err != nil {
-		return false, false
-	}
 	var v submoduleCacheValue
-	if !cache.Read(path, cachePath, submoduleCacheTTL, &v) {
+	if !submoduleCacheStore().ReadTTL(cachePath, submoduleCacheTTL, &v) {
 		return false, false
 	}
 	return v.Populated, true
@@ -495,11 +487,7 @@ func readSubmoduleCache(cachePath string) (bool, bool) {
 
 // writeSubmoduleCache persists the verdict (best-effort).
 func writeSubmoduleCache(cachePath string, populated bool) {
-	path, err := submoduleCachePath()
-	if err != nil {
-		return
-	}
-	cache.Write(path, cachePath, submoduleCacheValue{Populated: populated})
+	submoduleCacheStore().WriteValue(cachePath, submoduleCacheValue{Populated: populated})
 }
 
 func submodulesPopulatedUncached(cachePath string) bool {
