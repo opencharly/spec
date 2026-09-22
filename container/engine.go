@@ -172,10 +172,16 @@ func EngineCapabilityFor(engine string) (spec.EngineCapability, bool) {
 	return c, ok
 }
 
-// EngineRunModeFor returns the persistence/supervision mode for an engine word,
-// defaulting to the non-unit mode for an unknown word (the conservative,
-// no-unit path). The fallback name is derived (DirectRunMode), never a literal.
+// EngineRunModeFor returns the persistence/supervision mode for an engine word.
+// An EMPTY word means "the default engine" and resolves to its mode — the same
+// word EngineBinary("") resolves to — so an unspecified engine has ONE
+// (binary, mode) resolution. A genuinely unknown NON-EMPTY word falls back to
+// the non-unit mode (the conservative, no-unit path; the name is derived via
+// DirectRunMode, never a literal).
 func EngineRunModeFor(engine string) string {
+	if engine == "" {
+		engine = spec.DefaultContainerEngine
+	}
 	if c, ok := EngineCapabilityFor(engine); ok {
 		return string(c.RunMode)
 	}

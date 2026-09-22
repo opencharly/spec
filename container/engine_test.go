@@ -143,6 +143,16 @@ func TestEngineRunModeFor(t *testing.T) {
 	if got := EngineRunModeFor("bogus"); got != "direct" {
 		t.Errorf("EngineRunModeFor(bogus) = %q, want direct (conservative default)", got)
 	}
+	// The EMPTY engine means "the default engine", and MUST resolve to the same
+	// engine EngineBinary("") resolves to — one (binary, mode) resolution, never
+	// podman's binary with docker's mode.
+	if got := EngineRunModeFor(""); got != EngineRunModeFor(spec.DefaultContainerEngine) {
+		t.Errorf("EngineRunModeFor(\"\") = %q, want the default engine's mode %q (EngineBinary(\"\")=%q)",
+			got, EngineRunModeFor(spec.DefaultContainerEngine), EngineBinary(""))
+	}
+	if got := EngineRunModeFor(""); got != "quadlet" {
+		t.Errorf("EngineRunModeFor(\"\") = %q, want quadlet (the default engine spec.DefaultContainerEngine=podman mode)", got)
+	}
 }
 
 func TestIsRunMode(t *testing.T) {
