@@ -171,6 +171,27 @@ func TestEngineStartPlanOp(t *testing.T) {
 	}
 }
 
+// TestEngineUnitEmitHonorsRequestRunMode pins that the op's decision input is the
+// REQUEST's run_mode (the envelope field), not the provider's capability: a
+// quadlet request to ANY provider — even nerdctl, whose capability mode is
+// systemd-unit — returns no files. This is the doc/servant agreement gate.
+func TestEngineUnitEmitHonorsRequestRunMode(t *testing.T) {
+	for _, engine := range spec.EngineNames {
+		out, err := InvokeEngineOp(string(engine), ops.OpEngineUnitEmit,
+			json.RawMessage(`{"name":"svc","run_mode":"quadlet","start_argv":["x","run"]}`))
+		if err != nil {
+			t.Fatalf("unit_emit(%s, quadlet): %v", engine, err)
+		}
+		var rep spec.EngineUnitReply
+		if err := json.Unmarshal(out, &rep); err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.Files) != 0 {
+			t.Errorf("unit_emit(%s, run_mode=quadlet) = %v, want no files (quadlet req is not this op's)", engine, rep.Files)
+		}
+	}
+}
+
 // TestEngineUnitEmitOp pins the persistence unit: nerdctl's systemd-unit form is
 // rendered; podman's quadlet returns no files (podman's own generator emits it).
 func TestEngineUnitEmitOp(t *testing.T) {
