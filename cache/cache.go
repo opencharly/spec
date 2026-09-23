@@ -512,6 +512,12 @@ func (l *Layout) Clear() error {
 // takes no argument: a caller that must REVALIDATE a mutable upstream reads the
 // existing entry with Get, decides upstream itself, and Puts the refreshed
 // entry.
+//
+// Fill STAMPS Resolved to now, exactly like Put: the compute-once path is a
+// fresh computation, so its write time is now — a fill callback need not (and
+// must not have to) set Resolved itself. A callback returning a zero Resolved
+// (e.g. an empty degrade entry) would otherwise be instantly TTL-stale and sort
+// as the OLDEST entry for reclamation.
 func (l *Layout) Fill(key string, fill func() (Entry, error)) (Entry, error) {
 	if !l.usable() {
 		return fill()
@@ -519,7 +525,7 @@ func (l *Layout) Fill(key string, fill func() (Entry, error)) (Entry, error) {
 	if e, ok := l.Get(key); ok {
 		return e, nil
 	}
-	release, err := lock.AcquireFileLock(l.lockFile()+".fill", true)
+	release, err := lock.AcquireFileLock(l.fillLockPath(key), true)
 	if err != nil {
 		return fill()
 	}
@@ -531,6 +537,7 @@ func (l *Layout) Fill(key string, fill func() (Entry, error)) (Entry, error) {
 	if ferr != nil {
 		return Entry{}, ferr
 	}
+	e.Resolved = time.Now()
 	if perr := l.put(key, e); perr != nil {
 		return e, nil // the value is valid; caching is best-effort
 	}
@@ -539,6 +546,13 @@ func (l *Layout) Fill(key string, fill func() (Entry, error)) (Entry, error) {
 		return e, nil
 	}
 	return got, nil
+}
+
+// fillLockPath is the per-key advisory-lock path for Fill's compute-once guard —
+// a locks/ sibling keeps the entries dir sweepable (the same layout the legacy
+// per-key keyed store used).
+func (l *Layout) fillLockPath(key string) string {
+	return filepath.Join(l.dir, "locks", tagFor(key)+".fill.lock")
 }
 
 // GC reclaims blobs no live manifest references, then enforces the entry cap.

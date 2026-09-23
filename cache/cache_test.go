@@ -340,3 +340,25 @@ func TestKeyDigestStableAndOrdered(t *testing.T) {
 		t.Fatal("KeyDigest must change when a component changes")
 	}
 }
+
+// TestFillStampsResolved locks the Fill write-time contract: the compute-once
+// path stamps Resolved to NOW (like Put), so a fill callback returning a zero
+// Resolved is NOT persisted as instantly-stale. Without the stamp, a TTL caller's
+// freshly-computed entry reads as a miss (defeating compute-once) and sorts as
+// the OLDEST entry for reclamation.
+func TestFillStampsResolved(t *testing.T) {
+	l := OpenLayout(t.TempDir())
+	if _, err := l.Fill("k", func() (Entry, error) {
+		// A zero-Resolved entry — the shape a degrade/empty callback returns.
+		return Entry{Payload: []byte(`"v"`)}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	e, ok := l.Get("k")
+	if !ok {
+		t.Fatal("entry missing after Fill")
+	}
+	if !e.FreshTTL(time.Minute) {
+		t.Fatalf("Fill must stamp Resolved=now so the entry is TTL-fresh; got Resolved=%v", e.Resolved)
+	}
+}
