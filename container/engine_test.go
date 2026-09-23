@@ -190,6 +190,11 @@ func TestEngineCapabilityFor(t *testing.T) {
 	if nerdctl.DetectProbe == "" {
 		t.Error("nerdctl must declare a detect_probe")
 	}
+	// nerdctl rejects `-d` with `--rm` (measured live on 2.3.5); podman/docker
+	// accept both. The fact lets a detached-argv builder drop --rm where illegal.
+	if !nerdctl.NoRemoveWithDetach {
+		t.Error("nerdctl must set NoRemoveWithDetach (flags -d and --rm cannot be combined)")
+	}
 
 	docker, ok := EngineCapabilityFor("docker")
 	if !ok {
@@ -200,6 +205,13 @@ func TestEngineCapabilityFor(t *testing.T) {
 	}
 	if docker.SupportsSecrets {
 		t.Error("docker must not claim a native secret store")
+	}
+	// docker (like podman) accepts `-d --rm`.
+	if docker.NoRemoveWithDetach {
+		t.Error("docker accepts -d with --rm; NoRemoveWithDetach must be false")
+	}
+	if podman.NoRemoveWithDetach {
+		t.Error("podman accepts -d with --rm; NoRemoveWithDetach must be false")
 	}
 
 	// An unknown non-empty word resolves to the ONE default engine (like the

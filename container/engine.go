@@ -169,14 +169,15 @@ var engineCapabilities = map[string]spec.EngineCapability{
 		ImageExistsArgv:  []string{"image", "inspect"},
 	},
 	"nerdctl": {
-		Name:             "nerdctl",
-		Binary:           "nerdctl",
-		DetectProbe:      "nerdctl --version",
-		SupportsRootless: true,
-		RunMode:          "systemd-unit",
-		GPUArgStyle:      "gpus",
-		WorkloadUser:     "0",
-		ImageExistsArgv:  []string{"image", "inspect"},
+		Name:               "nerdctl",
+		Binary:             "nerdctl",
+		DetectProbe:        "nerdctl --version",
+		SupportsRootless:   true,
+		RunMode:            "systemd-unit",
+		GPUArgStyle:        "gpus",
+		WorkloadUser:       "0",
+		ImageExistsArgv:    []string{"image", "inspect"},
+		NoRemoveWithDetach: true,
 	},
 }
 
