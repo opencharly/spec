@@ -61,12 +61,7 @@
 }
 
 // #CacheStoreInfo is one named `spec/cache` ArtifactStore's GC outcome (the
-// `cache` category, `charly clean --cache`): the store name, its live entry
-// count, and the unreferenced blobs reclaimed (removed, or would-remove under
-// dry_run) plus their summed size in bytes. A blob is unreferenced when no
-// index manifest references it as config, layer, or manifest — content
-// addressing means a replaced/deleted entry leaves its superseded blobs behind
-// until this GC reclaims them.
+// `cache` category, `charly clean --cache`).
 #CacheStoreInfo: {
 	name!:          string @go(Name)
 	entries!:       int    @go(Entries)
@@ -105,6 +100,7 @@
 	deep_bytes?: int @go(DeepBytes)
 	cache_stores?: [...#CacheStoreInfo] @go(CacheStores)
 	tag_groups?: [...#TagInfo] @go(TagGroups)
+
 	keep_images?:     int    @go(KeepImages, type=int)
 	keep_check_runs?: int    @go(KeepCheckRuns, type=int)
 	error?:           string @go(Error)

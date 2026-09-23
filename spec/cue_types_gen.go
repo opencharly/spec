@@ -4092,12 +4092,7 @@ type TagInfo struct {
 }
 
 // #CacheStoreInfo is one named `spec/cache` ArtifactStore's GC outcome (the
-// `cache` category, `charly clean --cache`): the store name, its live entry
-// count, and the unreferenced blobs reclaimed (removed, or would-remove under
-// dry_run) plus their summed size in bytes. A blob is unreferenced when no
-// index manifest references it as config, layer, or manifest — content
-// addressing means a replaced/deleted entry leaves its superseded blobs behind
-// until this GC reclaims them.
+// `cache` category, `charly clean --cache`).
 type CacheStoreInfo struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
