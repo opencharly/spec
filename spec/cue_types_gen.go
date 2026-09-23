@@ -4063,6 +4063,8 @@ type RetentionRequest struct {
 
 	Deep bool `yaml:"deep,omitempty" json:"deep,omitempty"`
 
+	Cache bool `yaml:"cache,omitempty" json:"cache,omitempty"`
+
 	List bool `yaml:"list,omitempty" json:"list,omitempty"`
 
 	BuildPrune bool `yaml:"build_prune,omitempty" json:"build_prune,omitempty"`
@@ -4087,6 +4089,18 @@ type TagInfo struct {
 	Version string `yaml:"version,omitempty" json:"version"`
 
 	InUse bool `yaml:"in_use,omitempty" json:"in_use"`
+}
+
+// #CacheStoreInfo is one named `spec/cache` ArtifactStore's GC outcome (the
+// `cache` category, `charly clean --cache`).
+type CacheStoreInfo struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Entries int64 `yaml:"entries,omitempty" json:"entries"`
+
+	RemovedBlobs int64 `yaml:"removed_blobs,omitempty" json:"removed_blobs"`
+
+	RemovedBytes int64 `yaml:"removed_bytes,omitempty" json:"removed_bytes"`
 }
 
 // #RetentionReply is the verb:retention reply: the removed (or would-remove,
@@ -4124,6 +4138,8 @@ type RetentionReply struct {
 	DeepIDs []string `yaml:"deep_ids,omitempty" json:"deep_ids,omitempty"`
 
 	DeepBytes int64 `yaml:"deep_bytes,omitempty" json:"deep_bytes,omitempty"`
+
+	CacheStores []CacheStoreInfo `yaml:"cache_stores,omitempty" json:"cache_stores,omitempty"`
 
 	TagGroups []TagInfo `yaml:"tag_groups,omitempty" json:"tag_groups,omitempty"`
 

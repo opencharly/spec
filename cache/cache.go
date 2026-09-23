@@ -184,14 +184,55 @@ func OpenNamedLayout(name string) *Layout {
 // (~/.config/charly/cache/<name>/). CHARLY_CACHE_DIR overrides the root (the
 // one override every store honors, so a caller can relocate the whole cache).
 func StoreDir(name string) (string, error) {
+	root, err := StoreRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, name), nil
+}
+
+// StoreRoot returns the ROOT directory every named store lives under
+// (~/.config/charly/cache/), honoring the CHARLY_CACHE_DIR override.
+func StoreRoot() (string, error) {
 	if root := os.Getenv("CHARLY_CACHE_DIR"); root != "" {
-		return filepath.Join(root, name), nil
+		return root, nil
 	}
 	cfg, err := spec.DefaultDeployConfigPath()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(filepath.Dir(cfg), "cache", name), nil
+	return filepath.Join(filepath.Dir(cfg), "cache"), nil
+}
+
+// NamedStores returns every named store under the cache root, sorted by name.
+// A store is a directory that looks like an OCI Image Layout (carries an
+// oci-layout marker) — a stray non-layout file/dir under the root is skipped,
+// so a caller never mistakes unrelated cache state for an ArtifactStore. A
+// missing root is an empty list, never an error.
+func NamedStores() ([]string, error) {
+	root, err := StoreRoot()
+	if err != nil {
+		return nil, err
+	}
+	ents, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var names []string
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		if _, lerr := os.Stat(filepath.Join(root, e.Name(), ociv1.ImageLayoutFile)); lerr != nil {
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // Dir reports the store root ("" for an inert store).
@@ -556,25 +597,57 @@ func (l *Layout) fillLockPath(key string) string {
 	return filepath.Join(l.dir, "locks", tagFor(key)+".fill.lock")
 }
 
+// GCReclaim reports the outcome of one GC: the number of unreferenced blobs
+// reclaimed and their summed size in bytes. dryRun counts the would-remove set
+// without touching disk.
+type GCReclaim struct {
+	RemovedBlobs int
+	RemovedBytes int64
+}
+
 // GC reclaims blobs no live manifest references, then enforces the entry cap.
 func (l *Layout) GC() error {
+	_, err := l.GCStats(false)
+	return err
+}
+
+// GCStats runs GC and reports what it reclaimed. With dryRun it computes the
+// same set but removes nothing — the `--dry-run` probe. A missing/inert store
+// is a zero reclaim, never an error.
+//
+// The reported set INCLUDES cap eviction: the live-blob computation uses the
+// entries a real GC would KEEP (the cap-pruned subset), so a dry-run predicts
+// exactly what a real run removes — including the blobs a cap-evicted entry alone
+// referenced. (Computing `live` from the un-pruned index would under-report.)
+func (l *Layout) GCStats(dryRun bool) (GCReclaim, error) {
 	if !l.usable() {
-		return nil
+		return GCReclaim{}, nil
 	}
 	release, err := lock.AcquireFileLock(l.lockFile(), true)
 	if err != nil {
-		return err
+		return GCReclaim{}, err
 	}
 	defer func() { _ = release() }()
-	if err := l.enforceCap(); err != nil {
-		return err
-	}
 	idx, err := l.readIndex()
 	if err != nil {
-		return err
+		return GCReclaim{}, err
+	}
+	// keep = the entries GC will retain: the whole index, cap-pruned when a real
+	// run would trip the cap. Dry-run prunes the IN-MEMORY view (predicting the
+	// same reclaim) without persisting it.
+	keep := idx.Manifests
+	if l.maxEntries > 0 && len(idx.Manifests) > l.maxEntries {
+		keep = l.capKeptManifests(idx.Manifests, l.maxEntries)
+		if !dryRun {
+			shrunk := *idx
+			shrunk.Manifests = keep
+			if werr := l.writeIndex(&shrunk); werr != nil {
+				return GCReclaim{}, werr
+			}
+		}
 	}
 	live := map[digest.Digest]bool{}
-	for _, d := range idx.Manifests {
+	for _, d := range keep {
 		live[d.Digest] = true
 		manifestBytes, rerr := l.readBlob(d.Digest)
 		if rerr != nil {
@@ -590,7 +663,8 @@ func (l *Layout) GC() error {
 		}
 	}
 	blobsRoot := filepath.Join(l.dir, ociv1.ImageBlobsDir)
-	return filepath.WalkDir(blobsRoot, func(path string, d os.DirEntry, werr error) error {
+	var reclaim GCReclaim
+	walkErr := filepath.WalkDir(blobsRoot, func(path string, d os.DirEntry, werr error) error {
 		if werr != nil || d.IsDir() {
 			return nil
 		}
@@ -601,11 +675,19 @@ func (l *Layout) GC() error {
 		alg := filepath.Base(filepath.Dir(rel))
 		encoded := filepath.Base(rel)
 		dgst := digest.Digest(alg + ":" + encoded)
-		if !live[dgst] {
+		if live[dgst] {
+			return nil
+		}
+		if info, ierr := d.Info(); ierr == nil {
+			reclaim.RemovedBytes += info.Size()
+		}
+		reclaim.RemovedBlobs++
+		if !dryRun {
 			_ = os.Remove(path)
 		}
 		return nil
 	})
+	return reclaim, walkErr
 }
 
 // enforceCap reclaims the OLDEST entries when the count exceeds maxEntries.
@@ -620,12 +702,21 @@ func (l *Layout) enforceCap() error {
 	if len(idx.Manifests) <= l.maxEntries {
 		return nil
 	}
+	idx.Manifests = l.capKeptManifests(idx.Manifests, l.maxEntries)
+	return l.writeIndex(idx)
+}
+
+// capKeptManifests returns the subset of manifests a maxEntries cap retains: the
+// NEWEST maxEntries by entry `Resolved` (a zero/unparseable timestamp sorts
+// oldest, so a corrupt entry is evicted before a good one). The ONE cap
+// selection — enforceCap persists its result, GCStats' dry-run predicts from it.
+func (l *Layout) capKeptManifests(manifests []ociv1.Descriptor, maxEntries int) []ociv1.Descriptor {
 	type dated struct {
 		desc ociv1.Descriptor
 		res  time.Time
 	}
-	entries := make([]dated, 0, len(idx.Manifests))
-	for _, d := range idx.Manifests {
+	entries := make([]dated, 0, len(manifests))
+	for _, d := range manifests {
 		res := time.Time{}
 		if mb, rerr := l.readBlob(d.Digest); rerr == nil {
 			var m ociv1.Manifest
@@ -641,19 +732,18 @@ func (l *Layout) enforceCap() error {
 		entries = append(entries, dated{d, res})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].res.Before(entries[j].res) })
-	excess := len(entries) - l.maxEntries
+	excess := len(entries) - maxEntries
 	drop := map[string]bool{}
 	for i := 0; i < excess; i++ {
 		drop[entries[i].desc.Annotations[ociv1.AnnotationRefName]] = true
 	}
-	kept := idx.Manifests[:0]
-	for _, d := range idx.Manifests {
+	kept := make([]ociv1.Descriptor, 0, maxEntries)
+	for _, d := range manifests {
 		if !drop[d.Annotations[ociv1.AnnotationRefName]] {
 			kept = append(kept, d)
 		}
 	}
-	idx.Manifests = kept
-	return l.writeIndex(idx)
+	return kept
 }
 
 // HashHex is the hex SHA-256 of s — the content-addressed digest helper shared

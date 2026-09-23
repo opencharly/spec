@@ -301,6 +301,93 @@ func TestGCReclaimsUnreferencedBlobs(t *testing.T) {
 	}
 }
 
+// TestGCStatsReportsReclaimAndDryRun pins the reporting contract the `cache`
+// retention category uses: GCStats returns the reclaimed blob count + summed
+// bytes, and dryRun computes the SAME set while removing nothing. Without the
+// stats, the operator surface could only say "GC ran", never how much it
+// reclaimed; without dryRun, a probe would have to mutate.
+func TestGCStatsReportsReclaimAndDryRun(t *testing.T) {
+	dir := t.TempDir()
+	l := OpenLayout(dir)
+	if err := l.Put("k", Entry{Payload: []byte("old-payload")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Put("k", Entry{Payload: []byte("new-payload")}); err != nil {
+		t.Fatal(err)
+	}
+
+	// dry-run: reports the superseded blob (payload + config + manifest of the old
+	// entry) without removing anything.
+	dry, err := l.GCStats(true)
+	if err != nil {
+		t.Fatalf("GCStats(dry): %v", err)
+	}
+	if dry.RemovedBlobs == 0 || dry.RemovedBytes == 0 {
+		t.Fatalf("dry-run must report the reclaimable set, got %+v", dry)
+	}
+	if _, ok := l.Get("k"); !ok {
+		t.Fatal("dry-run must not touch the store")
+	}
+
+	// real: the same set is reclaimed and reported.
+	real, err := l.GCStats(false)
+	if err != nil {
+		t.Fatalf("GCStats: %v", err)
+	}
+	if real.RemovedBlobs != dry.RemovedBlobs {
+		t.Fatalf("real GC removed %d blobs, dry-run predicted %d", real.RemovedBlobs, dry.RemovedBlobs)
+	}
+	if _, ok := l.Get("k"); !ok {
+		t.Fatal("GC must keep the live entry")
+	}
+}
+
+// TestGCStatsDryRunPredictsCapEviction pins the cap-interaction contract: when a
+// real GC would trip maxEntries, the dry-run must report the SAME reclaim —
+// including the blobs a cap-evicted entry alone referenced. (A dry-run that
+// skipped the cap entirely would under-report, so its prediction would diverge
+// from what a real run removes.)
+func TestGCStatsDryRunPredictsCapEviction(t *testing.T) {
+	dir := t.TempDir()
+	// Populate under a cap of 3 (so all three land) …
+	writer := OpenLayoutLimited(dir, 3)
+	base := time.Now().Add(-time.Hour)
+	for i, key := range []string{"oldest", "middle", "newest"} {
+		if err := writer.PutEntry(key, Entry{Payload: []byte("payload-" + key), Resolved: base.Add(time.Duration(i) * time.Minute)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// … then open with a cap of 2 — the shape a pulled store (written by the
+	// registry transport without the cap) or a lowered cap presents to GC: the
+	// index now EXCEEDS the cap, so a real GC evicts the oldest entry AND its blobs.
+	l := OpenLayoutLimited(dir, 2)
+
+	dry, err := l.GCStats(true)
+	if err != nil {
+		t.Fatalf("GCStats(dry): %v", err)
+	}
+	if dry.RemovedBlobs == 0 {
+		t.Fatal("dry-run must predict the cap-evicted entry's blobs as reclaimed")
+	}
+	if _, ok := l.Get("oldest"); !ok {
+		t.Fatal("dry-run must not mutate the index")
+	}
+
+	real, err := l.GCStats(false)
+	if err != nil {
+		t.Fatalf("GCStats: %v", err)
+	}
+	if real.RemovedBlobs != dry.RemovedBlobs || real.RemovedBytes != dry.RemovedBytes {
+		t.Fatalf("dry-run %+v != real %+v — the prediction must match the cap-eviction outcome", dry, real)
+	}
+	if _, ok := l.Get("oldest"); ok {
+		t.Fatal("a real cap GC must evict the oldest entry")
+	}
+	if _, ok := l.Get("newest"); !ok {
+		t.Fatal("a cap GC must keep the newest entry")
+	}
+}
+
 func TestOpenNamedLayoutResolvesUnderRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CHARLY_CACHE_DIR", root)
@@ -313,6 +400,47 @@ func TestOpenNamedLayoutResolvesUnderRoot(t *testing.T) {
 	}
 	if _, ok := OpenNamedLayout("things").Get("k"); !ok {
 		t.Fatal("OpenNamedLayout must reopen the SAME store on disk")
+	}
+}
+
+// TestStoreRootAndNamedStores pins the enumeration contract the `cache` retention
+// category relies on: StoreRoot honors CHARLY_CACHE_DIR, NamedStores lists each
+// ACTUAL layout (a written store) sorted by name, and — crucially — SKIPS a
+// stray directory that is not an OCI layout, so unrelated cache state can never
+// be mistaken for an ArtifactStore to GC. A missing root is an empty list, not
+// an error.
+func TestStoreRootAndNamedStores(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CHARLY_CACHE_DIR", root)
+	if got, err := StoreRoot(); err != nil || got != root {
+		t.Fatalf("StoreRoot = %q, %v; want %q", got, err, root)
+	}
+
+	// Two real stores (each a written OCI layout) + one stray non-layout dir.
+	for _, name := range []string{"beta", "alpha"} {
+		if err := OpenNamedLayout(name).Put("k", Entry{Payload: []byte(`"v"`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "not-a-layout"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "loose.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	names, err := NamedStores()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 2 || names[0] != "alpha" || names[1] != "beta" {
+		t.Fatalf("NamedStores = %v, want [alpha beta] (sorted, non-layout dirs skipped)", names)
+	}
+
+	// A missing root yields an empty list, never an error.
+	t.Setenv("CHARLY_CACHE_DIR", filepath.Join(root, "does-not-exist"))
+	if names, err := NamedStores(); err != nil || len(names) != 0 {
+		t.Fatalf("NamedStores on a missing root = %v, %v; want empty, nil", names, err)
 	}
 }
 
