@@ -36,18 +36,18 @@
 // "retention-defaults" HostBuild seam is DELETED).
 // keep (the CLI --keep override) wins over both when > 0.
 #RetentionRequest: {
-	dir!:               string @go(Dir)
-	dry_run?:           bool   @go(DryRun)
-	images?:            bool   @go(Images)
-	check?:             bool   @go(Check)
-	deep?:              bool   @go(Deep)
-	cache?:             bool   @go(Cache)
-	list?:              bool   @go(List)
-	build_prune?:       bool   @go(BuildPrune)
-	keep?:              int    @go(Keep, type=int)
-	keep_images?:       int    @go(KeepImages, type=int)
-	keep_check_runs?:   int    @go(KeepCheckRuns, type=int)
-	invalidate?:        string @go(Invalidate)
+	dir!:             string @go(Dir)
+	dry_run?:         bool   @go(DryRun)
+	images?:          bool   @go(Images)
+	check?:           bool   @go(Check)
+	deep?:            bool   @go(Deep)
+	cache?:           bool   @go(Cache)
+	list?:            bool   @go(List)
+	build_prune?:     bool   @go(BuildPrune)
+	keep?:            int    @go(Keep, type=int)
+	keep_images?:     int    @go(KeepImages, type=int)
+	keep_check_runs?: int    @go(KeepCheckRuns, type=int)
+	invalidate?:      string @go(Invalidate)
 }
 
 // #CacheStoreInfo is one named `spec/cache` ArtifactStore's GC outcome (the
@@ -99,16 +99,16 @@
 //
 // error is a human-facing message on a non-recoverable failure.
 #RetentionReply: {
-	image_refs?:      [...string]  @go(ImageRefs)
-	dangling_ids?:    [...string]  @go(DanglingIDs)
-	staging_dirs?:    [...string]  @go(StagingDirs)
-	build_dirs?:      [...string]  @go(BuildDirs)
-	check_paths?:     [...string]  @go(CheckPaths)
-	deep_ids?:        [...string]  @go(DeepIDs)
-	deep_bytes?:      int          @go(DeepBytes)
-	cache_stores?:    [...#CacheStoreInfo] @go(CacheStores)
-	tag_groups?:      [...#TagInfo] @go(TagGroups)
-	keep_images?:     int          @go(KeepImages, type=int)
-	keep_check_runs?: int          @go(KeepCheckRuns, type=int)
-	error?:           string       @go(Error)
+	image_refs?: [...string] @go(ImageRefs)
+	dangling_ids?: [...string] @go(DanglingIDs)
+	staging_dirs?: [...string] @go(StagingDirs)
+	build_dirs?: [...string] @go(BuildDirs)
+	check_paths?: [...string] @go(CheckPaths)
+	deep_ids?: [...string] @go(DeepIDs)
+	deep_bytes?: int @go(DeepBytes)
+	cache_stores?: [...#CacheStoreInfo] @go(CacheStores)
+	tag_groups?: [...#TagInfo] @go(TagGroups)
+	keep_images?:     int    @go(KeepImages, type=int)
+	keep_check_runs?: int    @go(KeepCheckRuns, type=int)
+	error?:           string @go(Error)
 }

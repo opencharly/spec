@@ -40,9 +40,16 @@ func holderDescription(path string) string {
 	return strings.Join(names, ", ")
 }
 
-// flockHolderPIDs returns the pids that hold an flock on path, matched by the lock file's inode via
-// /proc/<pid>/fdinfo/<fd>. Empty when the platform/kernel cannot answer (never an error: this is a
-// diagnostic, and a waiter must not fail differently because a diagnostic was unavailable).
+// flockHolderPIDs returns the pids that hold an flock on path, matched by the lock file's inode.
+// Empty when the platform/kernel cannot answer (never an error: this is a diagnostic, and a waiter
+// must not fail differently because a diagnostic was unavailable).
+//
+// It reads /proc/locks ONCE (a single file listing every kernel lock: `N: FLOCK ADVISORY WRITE
+// <pid> <maj>:<min>:<inode> START END`) rather than walking /proc/<pid>/fdinfo/* for every process.
+// The walk was O(processes × open-fds) — seconds of syscalls on a loaded host — and it ran INSIDE
+// the bounded-wait failure path, so a "bounded at 200ms" acquire could overshoot its own assertion
+// by seconds under concurrent load. /proc/locks is the kernel's own index, so the lookup is one
+// read regardless of host load (R1 root fix, not a widened assertion).
 func flockHolderPIDs(path string) []int {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -52,36 +59,31 @@ func flockHolderPIDs(path string) []int {
 	if !ok {
 		return nil
 	}
-	// fmt rather than strconv: Stat_t.Ino is uint64 on linux/amd64 but uint32 on the 32-bit ports,
-	// and the explicit uint64() conversion is a lint finding (unconvert) on the platform CI runs.
-	inoLine := fmt.Sprintf("ino:\t%d", st.Ino)
-	procs, err := os.ReadDir("/proc")
+	data, err := os.ReadFile("/proc/locks")
 	if err != nil {
 		return nil
 	}
+	// inode token in the lock line is `<major>:<minor>:<inode>`; compare the inode.
+	want := fmt.Sprintf("%d", st.Ino)
 	var pids []int
-	for _, p := range procs {
-		pid, err := strconv.Atoi(p.Name())
-		if err != nil {
-			continue // not a pid dir
+	seen := map[int]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		// `1: FLOCK ADVISORY WRITE 1550021 08:01:52409469 0 EOF` — 8 fields,
+		// with pid at index 4 and the dev:inode token at index 5.
+		if len(fields) < 6 || fields[1] != "FLOCK" {
+			continue
 		}
-		fdinfoDir := filepath.Join("/proc", p.Name(), "fdinfo")
-		fds, err := os.ReadDir(fdinfoDir)
-		if err != nil {
-			continue // not a process we can inspect, or it exited
+		devInode := strings.Split(fields[5], ":")
+		if len(devInode) != 3 || devInode[2] != want {
+			continue
 		}
-		for _, fd := range fds {
-			b, err := os.ReadFile(filepath.Join(fdinfoDir, fd.Name()))
-			if err != nil {
-				continue // raced with exit
-			}
-			s := string(b)
-			if !strings.Contains(s, inoLine) || !strings.Contains(s, "lock:") {
-				continue
-			}
-			pids = append(pids, pid)
-			break
+		pid, perr := strconv.Atoi(fields[4])
+		if perr != nil || seen[pid] {
+			continue
 		}
+		seen[pid] = true
+		pids = append(pids, pid)
 	}
 	return pids
 }
