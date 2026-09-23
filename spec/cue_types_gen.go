@@ -6938,6 +6938,29 @@ type UserInfo struct {
 	Home string `yaml:"home,omitempty" json:"home,omitempty"`
 }
 
+// #CacheTransferRequest — the verb:oci cache-push / cache-pull wire input: a
+// named spec/cache ArtifactStore's OCI Image Layout directory and the registry
+// reference it moves to/from. Single-sourced here (R3) so candy/plugin-oci's
+// transport legs and candy/plugin-cache's `charly cache push/pull` leaves share
+// ONE decoded type instead of two hand-written copies that can drift.
+type CacheTransferRequest struct {
+	Dir string `yaml:"dir,omitempty" json:"dir"`
+
+	Ref string `yaml:"ref,omitempty" json:"ref"`
+
+	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
+}
+
+// #CacheTransferReply — the transport result: the resolved digest and the number
+// of entry manifests (cache keys) moved, plus the canonicalised ref.
+type CacheTransferReply struct {
+	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
+
+	Entries int `yaml:"entries,omitempty" json:"entries,omitempty"`
+
+	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
+}
+
 type Pod struct {
 	// References a kind:box (bare lowercase-hyphenated name or remote ref).
 	// Optional: the Go field has no non-empty validator.
