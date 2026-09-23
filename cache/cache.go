@@ -614,6 +614,11 @@ func (l *Layout) GC() error {
 // GCStats runs GC and reports what it reclaimed. With dryRun it computes the
 // same set but removes nothing — the `--dry-run` probe. A missing/inert store
 // is a zero reclaim, never an error.
+//
+// The reported set INCLUDES cap eviction: the live-blob computation uses the
+// entries a real GC would KEEP (the cap-pruned subset), so a dry-run predicts
+// exactly what a real run removes — including the blobs a cap-evicted entry alone
+// referenced. (Computing `live` from the un-pruned index would under-report.)
 func (l *Layout) GCStats(dryRun bool) (GCReclaim, error) {
 	if !l.usable() {
 		return GCReclaim{}, nil
@@ -623,17 +628,26 @@ func (l *Layout) GCStats(dryRun bool) (GCReclaim, error) {
 		return GCReclaim{}, err
 	}
 	defer func() { _ = release() }()
-	if !dryRun {
-		if err := l.enforceCap(); err != nil {
-			return GCReclaim{}, err
-		}
-	}
 	idx, err := l.readIndex()
 	if err != nil {
 		return GCReclaim{}, err
 	}
+	// keep = the entries GC will retain: the whole index, cap-pruned when a real
+	// run would trip the cap. Dry-run prunes the IN-MEMORY view (predicting the
+	// same reclaim) without persisting it.
+	keep := idx.Manifests
+	if l.maxEntries > 0 && len(idx.Manifests) > l.maxEntries {
+		keep = l.capKeptManifests(idx.Manifests, l.maxEntries)
+		if !dryRun {
+			shrunk := *idx
+			shrunk.Manifests = keep
+			if werr := l.writeIndex(&shrunk); werr != nil {
+				return GCReclaim{}, werr
+			}
+		}
+	}
 	live := map[digest.Digest]bool{}
-	for _, d := range idx.Manifests {
+	for _, d := range keep {
 		live[d.Digest] = true
 		manifestBytes, rerr := l.readBlob(d.Digest)
 		if rerr != nil {
@@ -688,12 +702,21 @@ func (l *Layout) enforceCap() error {
 	if len(idx.Manifests) <= l.maxEntries {
 		return nil
 	}
+	idx.Manifests = l.capKeptManifests(idx.Manifests, l.maxEntries)
+	return l.writeIndex(idx)
+}
+
+// capKeptManifests returns the subset of manifests a maxEntries cap retains: the
+// NEWEST maxEntries by entry `Resolved` (a zero/unparseable timestamp sorts
+// oldest, so a corrupt entry is evicted before a good one). The ONE cap
+// selection — enforceCap persists its result, GCStats' dry-run predicts from it.
+func (l *Layout) capKeptManifests(manifests []ociv1.Descriptor, maxEntries int) []ociv1.Descriptor {
 	type dated struct {
 		desc ociv1.Descriptor
 		res  time.Time
 	}
-	entries := make([]dated, 0, len(idx.Manifests))
-	for _, d := range idx.Manifests {
+	entries := make([]dated, 0, len(manifests))
+	for _, d := range manifests {
 		res := time.Time{}
 		if mb, rerr := l.readBlob(d.Digest); rerr == nil {
 			var m ociv1.Manifest
@@ -709,19 +732,18 @@ func (l *Layout) enforceCap() error {
 		entries = append(entries, dated{d, res})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].res.Before(entries[j].res) })
-	excess := len(entries) - l.maxEntries
+	excess := len(entries) - maxEntries
 	drop := map[string]bool{}
 	for i := 0; i < excess; i++ {
 		drop[entries[i].desc.Annotations[ociv1.AnnotationRefName]] = true
 	}
-	kept := idx.Manifests[:0]
-	for _, d := range idx.Manifests {
+	kept := make([]ociv1.Descriptor, 0, maxEntries)
+	for _, d := range manifests {
 		if !drop[d.Annotations[ociv1.AnnotationRefName]] {
 			kept = append(kept, d)
 		}
 	}
-	idx.Manifests = kept
-	return l.writeIndex(idx)
+	return kept
 }
 
 // HashHex is the hex SHA-256 of s — the content-addressed digest helper shared

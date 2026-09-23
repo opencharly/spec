@@ -342,6 +342,52 @@ func TestGCStatsReportsReclaimAndDryRun(t *testing.T) {
 	}
 }
 
+// TestGCStatsDryRunPredictsCapEviction pins the cap-interaction contract: when a
+// real GC would trip maxEntries, the dry-run must report the SAME reclaim —
+// including the blobs a cap-evicted entry alone referenced. (A dry-run that
+// skipped the cap entirely would under-report, so its prediction would diverge
+// from what a real run removes.)
+func TestGCStatsDryRunPredictsCapEviction(t *testing.T) {
+	dir := t.TempDir()
+	// Populate under a cap of 3 (so all three land) …
+	writer := OpenLayoutLimited(dir, 3)
+	base := time.Now().Add(-time.Hour)
+	for i, key := range []string{"oldest", "middle", "newest"} {
+		if err := writer.PutEntry(key, Entry{Payload: []byte("payload-" + key), Resolved: base.Add(time.Duration(i) * time.Minute)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// … then open with a cap of 2 — the shape a pulled store (written by the
+	// registry transport without the cap) or a lowered cap presents to GC: the
+	// index now EXCEEDS the cap, so a real GC evicts the oldest entry AND its blobs.
+	l := OpenLayoutLimited(dir, 2)
+
+	dry, err := l.GCStats(true)
+	if err != nil {
+		t.Fatalf("GCStats(dry): %v", err)
+	}
+	if dry.RemovedBlobs == 0 {
+		t.Fatal("dry-run must predict the cap-evicted entry's blobs as reclaimed")
+	}
+	if _, ok := l.Get("oldest"); !ok {
+		t.Fatal("dry-run must not mutate the index")
+	}
+
+	real, err := l.GCStats(false)
+	if err != nil {
+		t.Fatalf("GCStats: %v", err)
+	}
+	if real.RemovedBlobs != dry.RemovedBlobs || real.RemovedBytes != dry.RemovedBytes {
+		t.Fatalf("dry-run %+v != real %+v — the prediction must match the cap-eviction outcome", dry, real)
+	}
+	if _, ok := l.Get("oldest"); ok {
+		t.Fatal("a real cap GC must evict the oldest entry")
+	}
+	if _, ok := l.Get("newest"); !ok {
+		t.Fatal("a cap GC must keep the newest entry")
+	}
+}
+
 func TestOpenNamedLayoutResolvesUnderRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CHARLY_CACHE_DIR", root)
