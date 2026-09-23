@@ -79,7 +79,8 @@ const (
 // Entry is one cached value plus the inputs its validity is decided from.
 type Entry struct {
 	// Key is the ORIGINAL cache key (the manifest tag is its digest, so the key
-	// is carried in an annotation). Set by the Store on Put; a caller need not.
+	// is carried in an annotation). Get reconstructs it for the caller; a caller
+	// need not set it on Put.
 	Key string `json:"key,omitempty"`
 	// Payload is the cached value's bytes (JSON, a tar tree, …).
 	Payload []byte `json:"payload,omitempty"`
