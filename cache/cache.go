@@ -597,22 +597,40 @@ func (l *Layout) fillLockPath(key string) string {
 	return filepath.Join(l.dir, "locks", tagFor(key)+".fill.lock")
 }
 
+// GCReclaim reports the outcome of one GC: the number of unreferenced blobs
+// reclaimed and their summed size in bytes. dryRun counts the would-remove set
+// without touching disk.
+type GCReclaim struct {
+	RemovedBlobs int
+	RemovedBytes int64
+}
+
 // GC reclaims blobs no live manifest references, then enforces the entry cap.
 func (l *Layout) GC() error {
+	_, err := l.GCStats(false)
+	return err
+}
+
+// GCStats runs GC and reports what it reclaimed. With dryRun it computes the
+// same set but removes nothing — the `--dry-run` probe. A missing/inert store
+// is a zero reclaim, never an error.
+func (l *Layout) GCStats(dryRun bool) (GCReclaim, error) {
 	if !l.usable() {
-		return nil
+		return GCReclaim{}, nil
 	}
 	release, err := lock.AcquireFileLock(l.lockFile(), true)
 	if err != nil {
-		return err
+		return GCReclaim{}, err
 	}
 	defer func() { _ = release() }()
-	if err := l.enforceCap(); err != nil {
-		return err
+	if !dryRun {
+		if err := l.enforceCap(); err != nil {
+			return GCReclaim{}, err
+		}
 	}
 	idx, err := l.readIndex()
 	if err != nil {
-		return err
+		return GCReclaim{}, err
 	}
 	live := map[digest.Digest]bool{}
 	for _, d := range idx.Manifests {
@@ -631,7 +649,8 @@ func (l *Layout) GC() error {
 		}
 	}
 	blobsRoot := filepath.Join(l.dir, ociv1.ImageBlobsDir)
-	return filepath.WalkDir(blobsRoot, func(path string, d os.DirEntry, werr error) error {
+	var reclaim GCReclaim
+	walkErr := filepath.WalkDir(blobsRoot, func(path string, d os.DirEntry, werr error) error {
 		if werr != nil || d.IsDir() {
 			return nil
 		}
@@ -642,11 +661,19 @@ func (l *Layout) GC() error {
 		alg := filepath.Base(filepath.Dir(rel))
 		encoded := filepath.Base(rel)
 		dgst := digest.Digest(alg + ":" + encoded)
-		if !live[dgst] {
+		if live[dgst] {
+			return nil
+		}
+		if info, ierr := d.Info(); ierr == nil {
+			reclaim.RemovedBytes += info.Size()
+		}
+		reclaim.RemovedBlobs++
+		if !dryRun {
 			_ = os.Remove(path)
 		}
 		return nil
 	})
+	return reclaim, walkErr
 }
 
 // enforceCap reclaims the OLDEST entries when the count exceeds maxEntries.

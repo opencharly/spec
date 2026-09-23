@@ -47,7 +47,6 @@
 	keep?:              int    @go(Keep, type=int)
 	keep_images?:       int    @go(KeepImages, type=int)
 	keep_check_runs?:   int    @go(KeepCheckRuns, type=int)
-	keep_cache_entries?: int   @go(KeepCacheEntries, type=int)
 	invalidate?:        string @go(Invalidate)
 }
 
@@ -96,9 +95,7 @@
 // newest-first per box.
 //
 // cache_stores is the `cache` reply payload: one entry per named ArtifactStore
-// under the cache root, each with its unreferenced-blob GC outcome. keep_cache_entries
-// is the caller's PRE-RESOLVED defaults.keep_cache_entries (0 = use the store's own
-// DefaultMaxEntries), the entry cap each store is GC'd to.
+// under the cache root, each with its unreferenced-blob GC outcome.
 //
 // error is a human-facing message on a non-recoverable failure.
 #RetentionReply: {
@@ -113,6 +110,5 @@
 	tag_groups?:      [...#TagInfo] @go(TagGroups)
 	keep_images?:     int          @go(KeepImages, type=int)
 	keep_check_runs?: int          @go(KeepCheckRuns, type=int)
-	keep_cache_entries?: int       @go(KeepCacheEntries, type=int)
 	error?:           string       @go(Error)
 }

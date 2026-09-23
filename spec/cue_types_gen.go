@@ -4075,8 +4075,6 @@ type RetentionRequest struct {
 
 	KeepCheckRuns int `yaml:"keep_check_runs,omitempty" json:"keep_check_runs,omitempty"`
 
-	KeepCacheEntries int `yaml:"keep_cache_entries,omitempty" json:"keep_cache_entries,omitempty"`
-
 	Invalidate string `yaml:"invalidate,omitempty" json:"invalidate,omitempty"`
 }
 
@@ -4131,9 +4129,7 @@ type TagInfo struct {
 // newest-first per box.
 //
 // cache_stores is the `cache` reply payload: one entry per named ArtifactStore
-// under the cache root, each with its unreferenced-blob GC outcome. keep_cache_entries
-// is the caller's PRE-RESOLVED defaults.keep_cache_entries (0 = use the store's own
-// DefaultMaxEntries), the entry cap each store is GC'd to.
+// under the cache root, each with its unreferenced-blob GC outcome.
 //
 // error is a human-facing message on a non-recoverable failure.
 type RetentionReply struct {
@@ -4158,8 +4154,6 @@ type RetentionReply struct {
 	KeepImages int `yaml:"keep_images,omitempty" json:"keep_images,omitempty"`
 
 	KeepCheckRuns int `yaml:"keep_check_runs,omitempty" json:"keep_check_runs,omitempty"`
-
-	KeepCacheEntries int `yaml:"keep_cache_entries,omitempty" json:"keep_cache_entries,omitempty"`
 
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }

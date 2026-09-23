@@ -301,6 +301,47 @@ func TestGCReclaimsUnreferencedBlobs(t *testing.T) {
 	}
 }
 
+// TestGCStatsReportsReclaimAndDryRun pins the reporting contract the `cache`
+// retention category uses: GCStats returns the reclaimed blob count + summed
+// bytes, and dryRun computes the SAME set while removing nothing. Without the
+// stats, the operator surface could only say "GC ran", never how much it
+// reclaimed; without dryRun, a probe would have to mutate.
+func TestGCStatsReportsReclaimAndDryRun(t *testing.T) {
+	dir := t.TempDir()
+	l := OpenLayout(dir)
+	if err := l.Put("k", Entry{Payload: []byte("old-payload")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Put("k", Entry{Payload: []byte("new-payload")}); err != nil {
+		t.Fatal(err)
+	}
+
+	// dry-run: reports the superseded blob (payload + config + manifest of the old
+	// entry) without removing anything.
+	dry, err := l.GCStats(true)
+	if err != nil {
+		t.Fatalf("GCStats(dry): %v", err)
+	}
+	if dry.RemovedBlobs == 0 || dry.RemovedBytes == 0 {
+		t.Fatalf("dry-run must report the reclaimable set, got %+v", dry)
+	}
+	if _, ok := l.Get("k"); !ok {
+		t.Fatal("dry-run must not touch the store")
+	}
+
+	// real: the same set is reclaimed and reported.
+	real, err := l.GCStats(false)
+	if err != nil {
+		t.Fatalf("GCStats: %v", err)
+	}
+	if real.RemovedBlobs != dry.RemovedBlobs {
+		t.Fatalf("real GC removed %d blobs, dry-run predicted %d", real.RemovedBlobs, dry.RemovedBlobs)
+	}
+	if _, ok := l.Get("k"); !ok {
+		t.Fatal("GC must keep the live entry")
+	}
+}
+
 func TestOpenNamedLayoutResolvesUnderRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CHARLY_CACHE_DIR", root)
