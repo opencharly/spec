@@ -45,3 +45,22 @@
 	gid?:  int    @go(GID,type=int)
 	home?: string @go(Home)
 }
+
+// #CacheTransferRequest — the verb:oci cache-push / cache-pull wire input: a
+// named spec/cache ArtifactStore's OCI Image Layout directory and the registry
+// reference it moves to/from. Single-sourced here (R3) so candy/plugin-oci's
+// transport legs and candy/plugin-cache's `charly cache push/pull` leaves share
+// ONE decoded type instead of two hand-written copies that can drift.
+#CacheTransferRequest: {
+	dir:      string @go(Dir)
+	ref:      string @go(Ref)
+	insecure?: bool   @go(Insecure)
+}
+
+// #CacheTransferReply — the transport result: the resolved digest and the number
+// of entry manifests (cache keys) moved, plus the canonicalised ref.
+#CacheTransferReply: {
+	digest?:  string @go(Digest)
+	entries?: int    @go(Entries,type=int)
+	ref?:     string @go(Ref)
+}
