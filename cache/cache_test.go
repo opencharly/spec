@@ -316,12 +316,14 @@ func TestOpenNamedLayoutResolvesUnderRoot(t *testing.T) {
 	}
 }
 
+// TestHashHex pins the content-addressed digest helper: content-sensitive,
+// deterministic (verified by re-deriving a fresh value), and a 64-char hex sha256.
 func TestHashHex(t *testing.T) {
 	if HashHex("abc") == HashHex("abd") {
 		t.Fatal("HashHex must be content-sensitive")
 	}
-	if HashHex("same") != HashHex("same") {
-		t.Fatal("HashHex must be deterministic")
+	if got, again := HashHex("same"), HashHex("same"); got != again {
+		t.Fatalf("HashHex must be deterministic: %s vs %s", got, again)
 	}
 	if len(HashHex("x")) != 64 {
 		t.Fatalf("HashHex must be a hex sha256 (64 chars), got %d", len(HashHex("x")))

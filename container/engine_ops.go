@@ -180,14 +180,15 @@ func engineStartPlan(engine string, req spec.EngineStartPlanRequest) (json.RawMe
 	}
 	// uid-identical sharing: keep-id engines map the invoking user; engines
 	// without keep-id run as the declared workload user (0 == host user rootless).
-	if req.KeepID && c.SupportsUsernsKeepID && c.UsernsKeepIDArg != "" {
+	switch {
+	case req.KeepID && c.SupportsUsernsKeepID && c.UsernsKeepIDArg != "":
 		argv = append(argv, c.UsernsKeepIDArg)
-	} else if !c.SupportsUsernsKeepID && c.WorkloadUser != "" {
+	case !c.SupportsUsernsKeepID && c.WorkloadUser != "":
 		if req.WorkloadUser == "" {
 			req.WorkloadUser = c.WorkloadUser
 		}
 		argv = append(argv, "--user", req.WorkloadUser)
-	} else if req.WorkloadUser != "" {
+	case req.WorkloadUser != "":
 		argv = append(argv, "--user", req.WorkloadUser)
 	}
 	if req.UsernsHost {

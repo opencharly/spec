@@ -275,8 +275,8 @@ func (l *Layout) writeIndex(idx *ociv1.Index) error {
 			return werr
 		}
 	}
-	if idx.Versioned.SchemaVersion == 0 {
-		idx.Versioned.SchemaVersion = 2
+	if idx.SchemaVersion == 0 {
+		idx.SchemaVersion = 2
 	}
 	if idx.MediaType == "" {
 		idx.MediaType = ociv1.MediaTypeImageIndex
