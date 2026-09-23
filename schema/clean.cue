@@ -50,6 +50,16 @@
 	invalidate?:      string @go(Invalidate)
 }
 
+// #TagInfo is one locally stored image tag, as presented by `charly box list
+// tags` (verb:retention list=true): version is "-" when the image carries no
+// parseable ai.opencharly.version label.
+#TagInfo: {
+	box!:     string @go(Box)
+	ref!:     string @go(Ref)
+	version!: string @go(Version)
+	in_use!:  bool   @go(InUse)
+}
+
 // #CacheStoreInfo is one named `spec/cache` ArtifactStore's GC outcome (the
 // `cache` category, `charly clean --cache`): the store name, its live entry
 // count, and the unreferenced blobs reclaimed (removed, or would-remove under
@@ -62,16 +72,6 @@
 	entries!:       int    @go(Entries)
 	removed_blobs!: int    @go(RemovedBlobs)
 	removed_bytes!: int    @go(RemovedBytes)
-}
-
-// #TagInfo is one locally stored image tag, as presented by `charly box list
-// tags` (verb:retention list=true): version is "-" when the image carries no
-// parseable ai.opencharly.version label.
-#TagInfo: {
-	box!:     string @go(Box)
-	ref!:     string @go(Ref)
-	version!: string @go(Version)
-	in_use!:  bool   @go(InUse)
 }
 
 // #RetentionReply is the verb:retention reply: the removed (or would-remove,
@@ -93,9 +93,6 @@
 //
 // tag_groups is the `list` reply payload: every locally stored charly-labeled tag,
 // newest-first per box.
-//
-// cache_stores is the `cache` reply payload: one entry per named ArtifactStore
-// under the cache root, each with its unreferenced-blob GC outcome.
 //
 // error is a human-facing message on a non-recoverable failure.
 #RetentionReply: {

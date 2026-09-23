@@ -4078,6 +4078,19 @@ type RetentionRequest struct {
 	Invalidate string `yaml:"invalidate,omitempty" json:"invalidate,omitempty"`
 }
 
+// #TagInfo is one locally stored image tag, as presented by `charly box list
+// tags` (verb:retention list=true): version is "-" when the image carries no
+// parseable ai.opencharly.version label.
+type TagInfo struct {
+	Box string `yaml:"box,omitempty" json:"box"`
+
+	Ref string `yaml:"ref,omitempty" json:"ref"`
+
+	Version string `yaml:"version,omitempty" json:"version"`
+
+	InUse bool `yaml:"in_use,omitempty" json:"in_use"`
+}
+
 // #CacheStoreInfo is one named `spec/cache` ArtifactStore's GC outcome (the
 // `cache` category, `charly clean --cache`): the store name, its live entry
 // count, and the unreferenced blobs reclaimed (removed, or would-remove under
@@ -4093,19 +4106,6 @@ type CacheStoreInfo struct {
 	RemovedBlobs int64 `yaml:"removed_blobs,omitempty" json:"removed_blobs"`
 
 	RemovedBytes int64 `yaml:"removed_bytes,omitempty" json:"removed_bytes"`
-}
-
-// #TagInfo is one locally stored image tag, as presented by `charly box list
-// tags` (verb:retention list=true): version is "-" when the image carries no
-// parseable ai.opencharly.version label.
-type TagInfo struct {
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	Ref string `yaml:"ref,omitempty" json:"ref"`
-
-	Version string `yaml:"version,omitempty" json:"version"`
-
-	InUse bool `yaml:"in_use,omitempty" json:"in_use"`
 }
 
 // #RetentionReply is the verb:retention reply: the removed (or would-remove,
@@ -4127,9 +4127,6 @@ type TagInfo struct {
 //
 // tag_groups is the `list` reply payload: every locally stored charly-labeled tag,
 // newest-first per box.
-//
-// cache_stores is the `cache` reply payload: one entry per named ArtifactStore
-// under the cache root, each with its unreferenced-blob GC outcome.
 //
 // error is a human-facing message on a non-recoverable failure.
 type RetentionReply struct {
