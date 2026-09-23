@@ -316,6 +316,47 @@ func TestOpenNamedLayoutResolvesUnderRoot(t *testing.T) {
 	}
 }
 
+// TestStoreRootAndNamedStores pins the enumeration contract the `cache` retention
+// category relies on: StoreRoot honors CHARLY_CACHE_DIR, NamedStores lists each
+// ACTUAL layout (a written store) sorted by name, and — crucially — SKIPS a
+// stray directory that is not an OCI layout, so unrelated cache state can never
+// be mistaken for an ArtifactStore to GC. A missing root is an empty list, not
+// an error.
+func TestStoreRootAndNamedStores(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CHARLY_CACHE_DIR", root)
+	if got, err := StoreRoot(); err != nil || got != root {
+		t.Fatalf("StoreRoot = %q, %v; want %q", got, err, root)
+	}
+
+	// Two real stores (each a written OCI layout) + one stray non-layout dir.
+	for _, name := range []string{"beta", "alpha"} {
+		if err := OpenNamedLayout(name).Put("k", Entry{Payload: []byte(`"v"`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "not-a-layout"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "loose.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	names, err := NamedStores()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 2 || names[0] != "alpha" || names[1] != "beta" {
+		t.Fatalf("NamedStores = %v, want [alpha beta] (sorted, non-layout dirs skipped)", names)
+	}
+
+	// A missing root yields an empty list, never an error.
+	t.Setenv("CHARLY_CACHE_DIR", filepath.Join(root, "does-not-exist"))
+	if names, err := NamedStores(); err != nil || len(names) != 0 {
+		t.Fatalf("NamedStores on a missing root = %v, %v; want empty, nil", names, err)
+	}
+}
+
 // TestHashHex pins the content-addressed digest helper: content-sensitive,
 // deterministic (verified by re-deriving a fresh value), and a 64-char hex sha256.
 func TestHashHex(t *testing.T) {

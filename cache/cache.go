@@ -184,14 +184,55 @@ func OpenNamedLayout(name string) *Layout {
 // (~/.config/charly/cache/<name>/). CHARLY_CACHE_DIR overrides the root (the
 // one override every store honors, so a caller can relocate the whole cache).
 func StoreDir(name string) (string, error) {
+	root, err := StoreRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, name), nil
+}
+
+// StoreRoot returns the ROOT directory every named store lives under
+// (~/.config/charly/cache/), honoring the CHARLY_CACHE_DIR override.
+func StoreRoot() (string, error) {
 	if root := os.Getenv("CHARLY_CACHE_DIR"); root != "" {
-		return filepath.Join(root, name), nil
+		return root, nil
 	}
 	cfg, err := spec.DefaultDeployConfigPath()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(filepath.Dir(cfg), "cache", name), nil
+	return filepath.Join(filepath.Dir(cfg), "cache"), nil
+}
+
+// NamedStores returns every named store under the cache root, sorted by name.
+// A store is a directory that looks like an OCI Image Layout (carries an
+// oci-layout marker) — a stray non-layout file/dir under the root is skipped,
+// so a caller never mistakes unrelated cache state for an ArtifactStore. A
+// missing root is an empty list, never an error.
+func NamedStores() ([]string, error) {
+	root, err := StoreRoot()
+	if err != nil {
+		return nil, err
+	}
+	ents, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var names []string
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		if _, lerr := os.Stat(filepath.Join(root, e.Name(), ociv1.ImageLayoutFile)); lerr != nil {
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // Dir reports the store root ("" for an inert store).

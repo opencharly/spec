@@ -36,17 +36,33 @@
 // "retention-defaults" HostBuild seam is DELETED).
 // keep (the CLI --keep override) wins over both when > 0.
 #RetentionRequest: {
-	dir!:             string @go(Dir)
-	dry_run?:         bool   @go(DryRun)
-	images?:          bool   @go(Images)
-	check?:           bool   @go(Check)
-	deep?:            bool   @go(Deep)
-	list?:            bool   @go(List)
-	build_prune?:     bool   @go(BuildPrune)
-	keep?:            int    @go(Keep, type=int)
-	keep_images?:     int    @go(KeepImages, type=int)
-	keep_check_runs?: int    @go(KeepCheckRuns, type=int)
-	invalidate?:      string @go(Invalidate)
+	dir!:               string @go(Dir)
+	dry_run?:           bool   @go(DryRun)
+	images?:            bool   @go(Images)
+	check?:             bool   @go(Check)
+	deep?:              bool   @go(Deep)
+	cache?:             bool   @go(Cache)
+	list?:              bool   @go(List)
+	build_prune?:       bool   @go(BuildPrune)
+	keep?:              int    @go(Keep, type=int)
+	keep_images?:       int    @go(KeepImages, type=int)
+	keep_check_runs?:   int    @go(KeepCheckRuns, type=int)
+	keep_cache_entries?: int   @go(KeepCacheEntries, type=int)
+	invalidate?:        string @go(Invalidate)
+}
+
+// #CacheStoreInfo is one named `spec/cache` ArtifactStore's GC outcome (the
+// `cache` category, `charly clean --cache`): the store name, its live entry
+// count, and the unreferenced blobs reclaimed (removed, or would-remove under
+// dry_run) plus their summed size in bytes. A blob is unreferenced when no
+// index manifest references it as config, layer, or manifest — content
+// addressing means a replaced/deleted entry leaves its superseded blobs behind
+// until this GC reclaims them.
+#CacheStoreInfo: {
+	name!:          string @go(Name)
+	entries!:       int    @go(Entries)
+	removed_blobs!: int    @go(RemovedBlobs)
+	removed_bytes!: int    @go(RemovedBytes)
 }
 
 // #TagInfo is one locally stored image tag, as presented by `charly box list
@@ -79,6 +95,11 @@
 // tag_groups is the `list` reply payload: every locally stored charly-labeled tag,
 // newest-first per box.
 //
+// cache_stores is the `cache` reply payload: one entry per named ArtifactStore
+// under the cache root, each with its unreferenced-blob GC outcome. keep_cache_entries
+// is the caller's PRE-RESOLVED defaults.keep_cache_entries (0 = use the store's own
+// DefaultMaxEntries), the entry cap each store is GC'd to.
+//
 // error is a human-facing message on a non-recoverable failure.
 #RetentionReply: {
 	image_refs?:      [...string]  @go(ImageRefs)
@@ -88,8 +109,10 @@
 	check_paths?:     [...string]  @go(CheckPaths)
 	deep_ids?:        [...string]  @go(DeepIDs)
 	deep_bytes?:      int          @go(DeepBytes)
+	cache_stores?:    [...#CacheStoreInfo] @go(CacheStores)
 	tag_groups?:      [...#TagInfo] @go(TagGroups)
 	keep_images?:     int          @go(KeepImages, type=int)
 	keep_check_runs?: int          @go(KeepCheckRuns, type=int)
+	keep_cache_entries?: int       @go(KeepCacheEntries, type=int)
 	error?:           string       @go(Error)
 }

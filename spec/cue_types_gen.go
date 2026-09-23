@@ -4063,6 +4063,8 @@ type RetentionRequest struct {
 
 	Deep bool `yaml:"deep,omitempty" json:"deep,omitempty"`
 
+	Cache bool `yaml:"cache,omitempty" json:"cache,omitempty"`
+
 	List bool `yaml:"list,omitempty" json:"list,omitempty"`
 
 	BuildPrune bool `yaml:"build_prune,omitempty" json:"build_prune,omitempty"`
@@ -4073,7 +4075,26 @@ type RetentionRequest struct {
 
 	KeepCheckRuns int `yaml:"keep_check_runs,omitempty" json:"keep_check_runs,omitempty"`
 
+	KeepCacheEntries int `yaml:"keep_cache_entries,omitempty" json:"keep_cache_entries,omitempty"`
+
 	Invalidate string `yaml:"invalidate,omitempty" json:"invalidate,omitempty"`
+}
+
+// #CacheStoreInfo is one named `spec/cache` ArtifactStore's GC outcome (the
+// `cache` category, `charly clean --cache`): the store name, its live entry
+// count, and the unreferenced blobs reclaimed (removed, or would-remove under
+// dry_run) plus their summed size in bytes. A blob is unreferenced when no
+// index manifest references it as config, layer, or manifest — content
+// addressing means a replaced/deleted entry leaves its superseded blobs behind
+// until this GC reclaims them.
+type CacheStoreInfo struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Entries int64 `yaml:"entries,omitempty" json:"entries"`
+
+	RemovedBlobs int64 `yaml:"removed_blobs,omitempty" json:"removed_blobs"`
+
+	RemovedBytes int64 `yaml:"removed_bytes,omitempty" json:"removed_bytes"`
 }
 
 // #TagInfo is one locally stored image tag, as presented by `charly box list
@@ -4109,6 +4130,11 @@ type TagInfo struct {
 // tag_groups is the `list` reply payload: every locally stored charly-labeled tag,
 // newest-first per box.
 //
+// cache_stores is the `cache` reply payload: one entry per named ArtifactStore
+// under the cache root, each with its unreferenced-blob GC outcome. keep_cache_entries
+// is the caller's PRE-RESOLVED defaults.keep_cache_entries (0 = use the store's own
+// DefaultMaxEntries), the entry cap each store is GC'd to.
+//
 // error is a human-facing message on a non-recoverable failure.
 type RetentionReply struct {
 	ImageRefs []string `yaml:"image_refs,omitempty" json:"image_refs,omitempty"`
@@ -4125,11 +4151,15 @@ type RetentionReply struct {
 
 	DeepBytes int64 `yaml:"deep_bytes,omitempty" json:"deep_bytes,omitempty"`
 
+	CacheStores []CacheStoreInfo `yaml:"cache_stores,omitempty" json:"cache_stores,omitempty"`
+
 	TagGroups []TagInfo `yaml:"tag_groups,omitempty" json:"tag_groups,omitempty"`
 
 	KeepImages int `yaml:"keep_images,omitempty" json:"keep_images,omitempty"`
 
 	KeepCheckRuns int `yaml:"keep_check_runs,omitempty" json:"keep_check_runs,omitempty"`
+
+	KeepCacheEntries int `yaml:"keep_cache_entries,omitempty" json:"keep_cache_entries,omitempty"`
 
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
