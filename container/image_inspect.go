@@ -91,21 +91,29 @@ const imageLabelsCacheTTL = 5 * time.Minute
 // imageLabelsCacheStore opens the image-label Store under the charly dir
 // (~/.config/charly/cache/labels/). An inert store (no config dir) makes every
 // lookup a miss without error.
-func imageLabelsCacheStore() *cache.Store {
-	return cache.OpenNamed("labels")
+func imageLabelsCacheStore() *cache.Layout {
+	return cache.OpenNamedLayout("labels")
 }
 
 // readImageLabelsCache returns the cached labels for key if fresh, else (nil,
 // false). A corrupt/absent entry is a cache miss.
-func readImageLabelsCache(store *cache.Store, key string) (map[string]string, bool) {
+func readImageLabelsCache(store *cache.Layout, key string) (map[string]string, bool) {
+	e, ok := store.Get(key)
+	if !ok || !e.FreshTTL(imageLabelsCacheTTL) {
+		return nil, false
+	}
 	var labels map[string]string
-	if !store.ReadTTL(key, imageLabelsCacheTTL, &labels) {
+	if !e.Decode(&labels) {
 		return nil, false
 	}
 	return labels, true
 }
 
 // writeImageLabelsCache persists the labels (best-effort).
-func writeImageLabelsCache(store *cache.Store, key string, labels map[string]string) {
-	store.WriteValue(key, labels)
+func writeImageLabelsCache(store *cache.Layout, key string, labels map[string]string) {
+	raw, err := json.Marshal(labels)
+	if err != nil {
+		return
+	}
+	_ = store.Put(key, cache.Entry{Payload: raw})
 }

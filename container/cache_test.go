@@ -13,7 +13,7 @@ import (
 
 func TestImageCacheRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	store := cache.Open(dir)
+	store := cache.OpenLayout(dir)
 	images := []LocalImageInfo{
 		{ID: "sha256:abc", Names: []string{"ghcr.io/opencharly/test:1.0"}, Labels: map[string]string{"ai.opencharly.box": "test"}},
 	}
@@ -33,7 +33,7 @@ func TestImageCacheRoundTrip(t *testing.T) {
 
 func TestImageCacheTTLExpiry(t *testing.T) {
 	dir := t.TempDir()
-	store := cache.Open(dir)
+	store := cache.OpenLayout(dir)
 	images := []LocalImageInfo{{ID: "sha256:abc"}}
 	writeImageCache(store, "podman", images)
 	// Backdate the entry beyond the TTL through the shared Store's PutEntry seam.
@@ -42,7 +42,7 @@ func TestImageCacheTTLExpiry(t *testing.T) {
 		t.Fatal("store.Get: entry missing after write")
 	}
 	e.Resolved = time.Now().Add(-2 * imageCacheTTL)
-	store.PutEntry("podman", e)
+	_ = store.PutEntry("podman", e)
 	if _, ok := readImageCache(store, "podman"); ok {
 		t.Fatal("readImageCache: stale entry should miss")
 	}
@@ -62,7 +62,7 @@ func TestInvalidateImageCache(t *testing.T) {
 
 func TestImageLabelsCacheRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	store := cache.Open(dir)
+	store := cache.OpenLayout(dir)
 	labels := map[string]string{"ai.opencharly.box": "test"}
 	key := "podman|ghcr.io/opencharly/test:1.0"
 	writeImageLabelsCache(store, key, labels)

@@ -38,7 +38,7 @@ func TestEveryDeclaredEngineOpIsServed(t *testing.T) {
 	// Every advertised op must actually dispatch (no unserved op, no error).
 	for _, engine := range spec.EngineNames {
 		for op := range want {
-			out, err := InvokeEngineOp(string(engine), op, json.RawMessage(`{}`))
+			out, err := InvokeEngineOp(engine, op, json.RawMessage(`{}`))
 			if err != nil {
 				t.Errorf("InvokeEngineOp(%s, %s) errored: %v", engine, op, err)
 			}
@@ -198,7 +198,7 @@ func TestEngineUnitEmitEmitsExecStartPre(t *testing.T) {
 // systemd-unit — returns no files. This is the doc/servant agreement gate.
 func TestEngineUnitEmitHonorsRequestRunMode(t *testing.T) {
 	for _, engine := range spec.EngineNames {
-		out, err := InvokeEngineOp(string(engine), ops.OpEngineUnitEmit,
+		out, err := InvokeEngineOp(engine, ops.OpEngineUnitEmit,
 			json.RawMessage(`{"name":"svc","run_mode":"quadlet","start_argv":["x","run"]}`))
 		if err != nil {
 			t.Fatalf("unit_emit(%s, quadlet): %v", engine, err)

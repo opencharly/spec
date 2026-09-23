@@ -35,8 +35,8 @@ func RepoCachePath(repoPath, version string) (string, error) {
 }
 
 // IsRepoCached reports whether a repo version is already in the cache AS A
-// USABLE EXPORT — the directory exists AND every submodule it declares has
-// content.
+// USABLE EXPORT — the directory exists, carries V2 provenance, AND every
+// submodule it declares has content.
 //
 // The completeness half is load-bearing for IMMUTABLE refs. EnsureRepoDownloaded
 // short-circuits on `cached && !IsMutableRef(version)`, returning RepoCachePath
@@ -48,6 +48,13 @@ func RepoCachePath(repoPath, version string) (string, error) {
 // unrepairable for the life of the cache. Checking content here routes an
 // incomplete export down the download branch instead, so tag and branch caches
 // self-heal by the SAME predicate rather than one growing its own copy.
+//
+// The provenance half is what heals a POLLUTED cache. A v1 (legacy bare-commit)
+// sidecar cannot certify its tree — the pre-cutover loader could rewrite the
+// export in place (auto-migrating charly.yml to the consumer's schema CalVer) —
+// so a legacy export is treated as not-cached and re-fetched once, restoring
+// pristine content. This is network-free (a sidecar read), so the immutable-ref
+// short-circuit still avoids a fetch on every healthy tag access.
 func IsRepoCached(repoPath, version string) (bool, error) {
 	cachePath, err := RepoCachePath(repoPath, version)
 	if err != nil {
@@ -59,6 +66,9 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 			return false, nil
 		}
 		return false, err
+	}
+	if _, ok := ReadRepoCacheProvenance(cachePath); !ok {
+		return false, nil
 	}
 	return submodulesPopulated(cachePath), nil
 }

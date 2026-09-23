@@ -1,36 +1,43 @@
 // Package cache provides the ONE shared persistent-cache mechanism (R3): a
-// keyed Store with three interchangeable VALIDITY modes and one storage layout.
+// content-addressed ArtifactStore whose on-disk form is a standard OCI Image
+// Layout, so every cached artifact is a real OCI manifest — and a whole named
+// cache can be pushed to / pulled from an OCI registry unchanged.
 //
-// A Store is a directory of one JSON entry per key, keyed by a content key, with
-// the entry recording the validity inputs so the READ decides freshness. This
-// package's own consumers — spec/refs (submodule verdicts) and spec/container
-// (image list, image labels) — are Stores today; the loader's materialized-tree
-// cache (sdk/loaderkit) and a plugin HTTP client (plugin-gh) are folded onto the
-// SAME Store in their own producer-ordered changes, so a feature never grows its
-// own bespoke cache.
+// # The model
 //
-// Validity lives IN the entry, never in the storage mechanism, so the same Store
-// serves all three policies:
+// A Store is one OCI Image Layout directory: blobs/<alg>/<digest> (content),
+// index.json (the entry point), oci-layout (the version marker). Each cached
+// artifact is ONE OCI image manifest:
 //
-//   - TTL — Entry.Resolved within a window (the status hot path: the image list,
-//     labels, submodule verdicts).
+//   - config blob   — the entry's validity metadata (resolved / components /
+//     validator). Validity lives IN the entry, never in the storage mechanism.
+//   - layers[0]     — the cached payload bytes (JSON, a tar tree, …).
+//   - annotations   — the cache KEY (ai.opencharly.cache.key) and the TAG
+//     (org.opencontainers.image.ref.name), both indexed by index.json.
+//
+// A NAMED cache is one such layout. Because it is a valid OCI layout, the
+// registry transport (candy/plugin-oci's verb:oci cache-push/cache-pull) reads
+// and writes it verbatim with a standard registry client — no bespoke format.
+//
+// # Docker cache principles, applied
+//
+// Content addressing (blob name = digest), a manifest/index entry point, tags
+// for lookup, and no in-place mutation: a write publishes NEW blobs and swaps
+// index.json atomically (tmp + rename), so a lock-free reader sees either the
+// complete old index or the complete new one — never a torn entry. GC reclaims
+// blobs no live manifest references.
+//
+// # Validity
+//
+//   - TTL        — Entry.Resolved within a window (the status hot path).
 //   - Components — Entry.Components equal the caller's current components (the
-//     content-addressed caches: the loader's materialized tree, a GitHub blob by
-//     SHA). No time validity: valid while the inputs are unchanged.
-//   - Validator — Entry.Validator is an upstream revalidation token (an HTTP
-//     ETag / Last-Modified); the caller revalidates and refreshes on change (a
-//     GitHub PR/issues read that must not re-fetch while upstream is unchanged).
+//     content-addressed caches: the materialized tree, a GitHub blob by SHA).
+//   - Validator  — Entry.Validator is an upstream revalidation token (an HTTP
+//     ETag / Last-Modified); the caller revalidates and refreshes on change.
 //
-// Layout + concurrency (the one mechanism, the spec/refs + loaderkit patterns):
-// one file per key under the store directory, filenames a SHA-256 of the key (a
-// key may carry '/', '|', '@' — never a safe filename). Reads are LOCK-FREE: a
-// writer publishes atomically (tmp + rename), so a reader sees either the
-// complete old state (miss) or the complete new one — never a torn entry. The
-// MISS path takes a per-key blocking advisory flock (spec/lock) and
-// double-checks under the lock, so concurrent first-missers compute ONCE and
-// reuse the winner's entry. Every cache failure — a key error, a read error,
-// lock contention timeout, a corrupt entry — is a MISS: the cache is an
-// optimization, never a correctness dependency.
+// Every cache failure — a read error, an unreadable blob, lock contention
+// timeout, a corrupt manifest — is a MISS: the cache is an optimization, never
+// a correctness dependency.
 package cache
 
 import (
@@ -45,27 +52,40 @@ import (
 
 	"github.com/opencharly/spec/lock"
 	"github.com/opencharly/spec/spec"
+	digest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
+	ociv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // DefaultMaxEntries bounds a Store's size (the Docker builder --keep-storage
 // analogue): beyond it the write path opportunistically reclaims the OLDEST
 // entries. Reclamation is STORAGE-bound only — validity is decided by the entry
-// (TTL / components / validator), never by age — so a pruned entry is only ever
-// a stale-input orphan. 0 disables the cap.
+// (TTL / components / validator), never by age. 0 disables the cap.
 const DefaultMaxEntries = 4096
 
+// Media types for the two blob roles an entry carries. They are namespaced
+// under opencharly so the layout is self-describing without claiming to be a
+// runnable container image.
+const (
+	// MediaTypeCacheConfig is the entry's validity-metadata config blob.
+	MediaTypeCacheConfig = "application/vnd.opencharly.cache.config.v1+json"
+	// MediaTypeCachePayload is the default media type of the cached payload.
+	MediaTypeCachePayload = "application/vnd.opencharly.cache.payload.v1+json"
+	// AnnotationCacheKey records the ORIGINAL cache key on the manifest (the
+	// tag is a digest, so the key must be carried to be recoverable).
+	AnnotationCacheKey = "ai.opencharly.cache.key"
+)
+
 // Entry is one cached value plus the inputs its validity is decided from.
-//
-// Value is the caller's opaque payload. Resolved is the write time (RECLAMATION
-// ordering — and the TTL input where a caller uses one). Components and
-// Validator are the two non-time validity inputs; a caller sets exactly the one
-// its policy uses (a TTL caller sets neither).
 type Entry struct {
-	// Key is the ORIGINAL cache key (the filename is its hash, so the key is
-	// carried inside the entry). Set by the Store on Put; a caller need not set it.
+	// Key is the ORIGINAL cache key (the manifest tag is its digest, so the key
+	// is carried in an annotation). Get reconstructs it for the caller; a caller
+	// need not set it on Put.
 	Key string `json:"key,omitempty"`
-	// Value is the cached payload (opaque JSON).
-	Value json.RawMessage `json:"value"`
+	// Payload is the cached value's bytes (JSON, a tar tree, …).
+	Payload []byte `json:"payload,omitempty"`
+	// MediaType is the payload's media type. Empty means MediaTypeCachePayload.
+	MediaType string `json:"media_type,omitempty"`
 	// Resolved is when the value was written.
 	Resolved time.Time `json:"resolved"`
 	// Components are the content/identity inputs a components-validity caller
@@ -95,9 +115,69 @@ func (e Entry) FreshComponents(want map[string]string) bool {
 	return true
 }
 
-// Decode unmarshals the entry's Value into out; false on a decode error.
+// FreshValidator reports whether the entry's validator equals the caller's
+// current upstream token.
+func (e Entry) FreshValidator(current string) bool { return e.Validator == current }
+
+// Decode unmarshals the entry's Payload into out; false on a decode error.
 func (e Entry) Decode(out any) bool {
-	return json.Unmarshal(e.Value, out) == nil
+	return json.Unmarshal(e.Payload, out) == nil
+}
+
+// entryConfig is the config blob of an entry manifest: the validity inputs.
+type entryConfig struct {
+	Resolved   time.Time         `json:"resolved"`
+	Components map[string]string `json:"components,omitempty"`
+	Validator  string            `json:"validator,omitempty"`
+}
+
+// ArtifactStore is the ONE content-addressed cache contract. The file-based
+// Layout implements it today; the registry transport (verb:oci cache-push/pull)
+// moves a whole named store to and from a registry.
+type ArtifactStore interface {
+	// Put stores e under key (stamping Resolved and publishing new blobs).
+	Put(key string, e Entry) error
+	// Get returns the entry for key and whether it was present (and well-formed).
+	Get(key string) (Entry, bool)
+	// Delete removes key's entry (a no-op when absent).
+	Delete(key string) error
+	// Keys returns every stored key.
+	Keys() []string
+	// Len reports the entry count.
+	Len() int
+	// Clear drops every entry (the `charly cache clear` semantics).
+	Clear() error
+	// GC reclaims blobs no live entry references and enforces the entry cap.
+	GC() error
+	// Dir reports the store root ("" for an inert store).
+	Dir() string
+}
+
+// Layout is the simple file-based ArtifactStore: an OCI Image Layout directory.
+type Layout struct {
+	dir        string
+	maxEntries int
+}
+
+// OpenLayout returns a Layout rooted at dir (created lazily on first write),
+// pruning to DefaultMaxEntries. An empty dir yields an inert store whose every
+// operation is a miss/no-op.
+func OpenLayout(dir string) *Layout { return &Layout{dir: dir, maxEntries: DefaultMaxEntries} }
+
+// OpenLayoutLimited is OpenLayout with an explicit entry cap (0 disables pruning).
+func OpenLayoutLimited(dir string, maxEntries int) *Layout {
+	return &Layout{dir: dir, maxEntries: maxEntries}
+}
+
+// OpenNamedLayout opens the named layout under the charly cache dir
+// (~/.config/charly/cache/<name>/, CHARLY_CACHE_DIR overriding the root). A
+// path-resolution failure yields an inert store, so a caller never guards it.
+func OpenNamedLayout(name string) *Layout {
+	dir, err := StoreDir(name)
+	if err != nil {
+		return OpenLayout("")
+	}
+	return OpenLayout(dir)
 }
 
 // StoreDir returns the cache DIRECTORY for a named store under the charly dir
@@ -114,269 +194,470 @@ func StoreDir(name string) (string, error) {
 	return filepath.Join(filepath.Dir(cfg), "cache", name), nil
 }
 
-// Store is a persistent keyed cache rooted at a directory. Construct with Open
-// and share it: the on-disk state is the point.
-type Store struct {
-	dir        string
-	maxEntries int
-}
-
-// Open returns a Store rooted at dir (created lazily on first write), pruning to
-// DefaultMaxEntries. An empty dir yields an inert store whose every operation is
-// a miss/no-op — the cache is an optimization, so a caller never has to guard it.
-func Open(dir string) *Store { return &Store{dir: dir, maxEntries: DefaultMaxEntries} }
-
-// OpenNamed opens the named store under the charly cache dir
-// (~/.config/charly/cache/<name>/, CHARLY_CACHE_DIR overriding the root). A
-// path-resolution failure yields an inert store, so a caller never guards it —
-// the ONE idiom every named-store consumer shares (R3).
-func OpenNamed(name string) *Store {
-	dir, err := StoreDir(name)
-	if err != nil {
-		return Open("")
-	}
-	return Open(dir)
-}
-
-// OpenLimited is Open with an explicit entry cap (0 disables pruning).
-func OpenLimited(dir string, maxEntries int) *Store {
-	return &Store{dir: dir, maxEntries: maxEntries}
-}
-
 // Dir reports the store root ("" for an inert store).
-func (s *Store) Dir() string { return s.dir }
+func (l *Layout) Dir() string { return l.dir }
 
 // usable reports whether the store is backed by a directory.
-func (s *Store) usable() bool { return s != nil && s.dir != "" }
+func (l *Layout) usable() bool { return l != nil && l.dir != "" }
 
-// entryPath is the file holding key: <dir>/<sha256(key)>.json.
-func (s *Store) entryPath(key string) string {
-	sum := sha256.Sum256([]byte(key))
-	return filepath.Join(s.dir, hex.EncodeToString(sum[:])+".json")
+// --- OCI layout paths ------------------------------------------------------
+
+func (l *Layout) indexFile() string  { return filepath.Join(l.dir, ociv1.ImageIndexFile) }
+func (l *Layout) layoutFile() string { return filepath.Join(l.dir, ociv1.ImageLayoutFile) }
+func (l *Layout) lockFile() string   { return filepath.Join(l.dir, ".lock") }
+
+// blobPath is the content-addressed path of a digest: <dir>/blobs/<alg>/<hex>.
+func (l *Layout) blobPath(dgst digest.Digest) string {
+	return filepath.Join(l.dir, ociv1.ImageBlobsDir, string(dgst.Algorithm()), dgst.Encoded())
 }
 
-// lockPath is the per-key advisory-lock path (a locks/ sibling keeps the entries
-// dir sweepable).
-func (s *Store) lockPath(key string) string {
-	sum := sha256.Sum256([]byte(key))
-	return filepath.Join(s.dir, "locks", hex.EncodeToString(sum[:])+".lock")
-}
+// tagFor derives the OCI tag for a cache key: the hex sha256 (a valid OCI tag,
+// and the same digest the legacy layout used as its filename).
+func tagFor(key string) string { return HashHex(key) }
 
-// Get returns the entry for key and whether it was present (and well-formed). A
-// corrupt or absent entry is a miss.
-func (s *Store) Get(key string) (Entry, bool) {
-	if !s.usable() {
-		return Entry{}, false
+// --- blob IO ---------------------------------------------------------------
+
+// writeBlob writes data into the blob store, returning its descriptor. Writes
+// are content-addressed and idempotent: an existing blob with the same digest
+// is left untouched. Publication is atomic (tmp + rename).
+func (l *Layout) writeBlob(data []byte, mediaType string) (ociv1.Descriptor, error) {
+	dgst := digest.FromBytes(data)
+	desc := ociv1.Descriptor{MediaType: mediaType, Digest: dgst, Size: int64(len(data))}
+	final := l.blobPath(dgst)
+	if _, err := os.Stat(final); err == nil {
+		return desc, nil
 	}
-	data, err := os.ReadFile(s.entryPath(key))
+	if err := os.MkdirAll(filepath.Dir(final), 0o755); err != nil {
+		return ociv1.Descriptor{}, err
+	}
+	tmp := final + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return ociv1.Descriptor{}, err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
+		return ociv1.Descriptor{}, err
+	}
+	return desc, nil
+}
+
+// readBlob returns the bytes named by dgst (verified by the caller's decode).
+func (l *Layout) readBlob(dgst digest.Digest) ([]byte, error) {
+	return os.ReadFile(l.blobPath(dgst))
+}
+
+// --- index IO --------------------------------------------------------------
+
+// readIndex returns the layout's index.json, or an empty index when absent.
+func (l *Layout) readIndex() (*ociv1.Index, error) {
+	data, err := os.ReadFile(l.indexFile())
 	if err != nil {
-		return Entry{}, false
+		if os.IsNotExist(err) {
+			return &ociv1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ociv1.MediaTypeImageIndex}, nil
+		}
+		return nil, err
 	}
-	var e Entry
-	if json.Unmarshal(data, &e) != nil {
-		return Entry{}, false
+	var idx ociv1.Index
+	if err := json.Unmarshal(data, &idx); err != nil {
+		return nil, err
 	}
-	return e, true
+	return &idx, nil
 }
 
-// Read decodes the entry for key into out, returning whether it was present and
-// well-formed (the caller applies its own TTL/components/validator policy to the
-// returned Entry via a companion Get — Read is the pure decode convenience).
-func (s *Store) Read(key string, out any) bool {
-	e, ok := s.Get(key)
-	if !ok {
-		return false
+// writeIndex publishes index.json atomically (tmp + rename).
+func (l *Layout) writeIndex(idx *ociv1.Index) error {
+	if err := os.MkdirAll(l.dir, 0o755); err != nil {
+		return err
 	}
-	return e.Decode(out)
+	// The oci-layout marker is required for a valid layout.
+	if _, err := os.Stat(l.layoutFile()); os.IsNotExist(err) {
+		marker, _ := json.Marshal(ociv1.ImageLayout{Version: ociv1.ImageLayoutVersion})
+		if werr := writeAtomic(l.layoutFile(), marker, 0o644); werr != nil {
+			return werr
+		}
+	}
+	if idx.SchemaVersion == 0 {
+		idx.SchemaVersion = 2
+	}
+	if idx.MediaType == "" {
+		idx.MediaType = ociv1.MediaTypeImageIndex
+	}
+	data, err := json.Marshal(idx)
+	if err != nil {
+		return err
+	}
+	return writeAtomic(l.indexFile(), data, 0o644)
 }
 
-// ReadTTL is Read with the TTL policy applied: it decodes the entry for key into
-// out only when present AND within ttl. The common status-cache read.
-func (s *Store) ReadTTL(key string, ttl time.Duration, out any) bool {
-	e, ok := s.Get(key)
-	if !ok || !e.FreshTTL(ttl) {
-		return false
+// writeAtomic writes data to path via a same-dir temp file and rename.
+func writeAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
 	}
-	return e.Decode(out)
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
-// Put stores e under key, stamping Resolved to now, atomically (tmp + rename so
-// a lock-free reader never sees a torn entry) and best-effort (a write failure is
-// silent).
-func (s *Store) Put(key string, e Entry) {
+// findEntry locates the index descriptor whose ref.name tag equals tag.
+func findEntry(idx *ociv1.Index, tag string) (ociv1.Descriptor, bool) {
+	for _, d := range idx.Manifests {
+		if d.Annotations[ociv1.AnnotationRefName] == tag {
+			return d, true
+		}
+	}
+	return ociv1.Descriptor{}, false
+}
+
+// --- ArtifactStore ---------------------------------------------------------
+
+// Put stores e under key, stamping Resolved to now and publishing new blobs.
+func (l *Layout) Put(key string, e Entry) error {
 	e.Resolved = time.Now()
-	s.PutEntry(key, e)
+	return l.put(key, e)
 }
 
 // PutEntry stores e under key EXACTLY as given — the caller controls Resolved
 // (the backdating seam for TTL tests, and the revalidating caller that refreshes
-// an unchanged entry's Resolved). Key is stamped. Atomic + best-effort like Put.
-func (s *Store) PutEntry(key string, e Entry) {
-	if !s.usable() {
-		return
+// an unchanged entry).
+func (l *Layout) PutEntry(key string, e Entry) error { return l.put(key, e) }
+
+// put is Put with the caller's Resolved preserved (the backdating seam for TTL
+// tests, and the revalidating caller that refreshes an unchanged entry).
+func (l *Layout) put(key string, e Entry) error {
+	if !l.usable() {
+		return nil
 	}
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
-		return
-	}
-	e.Key = key
-	data, err := json.Marshal(e)
+	release, err := lock.AcquireFileLock(l.lockFile(), true)
 	if err != nil {
-		return
+		return err
 	}
-	final := s.entryPath(key)
-	tmp := final + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return
+	defer func() { _ = release() }()
+
+	mediaType := e.MediaType
+	if mediaType == "" {
+		mediaType = MediaTypeCachePayload
 	}
-	if err := os.Rename(tmp, final); err != nil {
-		return
+	payloadDesc, err := l.writeBlob(e.Payload, mediaType)
+	if err != nil {
+		return err
 	}
-	s.prune()
+	cfgJSON, err := json.Marshal(entryConfig{Resolved: e.Resolved, Components: e.Components, Validator: e.Validator})
+	if err != nil {
+		return err
+	}
+	cfgDesc, err := l.writeBlob(cfgJSON, MediaTypeCacheConfig)
+	if err != nil {
+		return err
+	}
+	tag := tagFor(key)
+	manifest := ociv1.Manifest{
+		Versioned:   specs.Versioned{SchemaVersion: 2},
+		MediaType:   ociv1.MediaTypeImageManifest,
+		Config:      cfgDesc,
+		Layers:      []ociv1.Descriptor{payloadDesc},
+		Annotations: map[string]string{AnnotationCacheKey: key, ociv1.AnnotationRefName: tag},
+	}
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	manifestDesc, err := l.writeBlob(manifestJSON, ociv1.MediaTypeImageManifest)
+	if err != nil {
+		return err
+	}
+	manifestDesc.Annotations = map[string]string{AnnotationCacheKey: key, ociv1.AnnotationRefName: tag}
+	if err := l.upsertIndex(tag, manifestDesc); err != nil {
+		return err
+	}
+	return l.enforceCap()
 }
 
-// WriteValue is Put for a caller storing a plain value under a TTL (the common
-// status-cache shape): the value is marshalled and stored with no components or
-// validator.
-func (s *Store) WriteValue(key string, value any) {
-	raw, err := json.Marshal(value)
+// upsertIndex replaces the descriptor tagged tag (or appends it) and publishes.
+func (l *Layout) upsertIndex(tag string, desc ociv1.Descriptor) error {
+	idx, err := l.readIndex()
 	if err != nil {
-		return
+		return err
 	}
-	s.Put(key, Entry{Value: raw})
+	replaced := false
+	for i, d := range idx.Manifests {
+		if d.Annotations[ociv1.AnnotationRefName] == tag {
+			idx.Manifests[i] = desc
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		idx.Manifests = append(idx.Manifests, desc)
+	}
+	return l.writeIndex(idx)
+}
+
+// Get returns the entry for key and whether it was present (and well-formed).
+func (l *Layout) Get(key string) (Entry, bool) {
+	if !l.usable() {
+		return Entry{}, false
+	}
+	idx, err := l.readIndex()
+	if err != nil {
+		return Entry{}, false
+	}
+	desc, ok := findEntry(idx, tagFor(key))
+	if !ok {
+		return Entry{}, false
+	}
+	manifestBytes, err := l.readBlob(desc.Digest)
+	if err != nil {
+		return Entry{}, false
+	}
+	var manifest ociv1.Manifest
+	if json.Unmarshal(manifestBytes, &manifest) != nil {
+		return Entry{}, false
+	}
+	cfgBytes, err := l.readBlob(manifest.Config.Digest)
+	if err != nil {
+		return Entry{}, false
+	}
+	var cfg entryConfig
+	if json.Unmarshal(cfgBytes, &cfg) != nil {
+		return Entry{}, false
+	}
+	var payload []byte
+	mediaType := MediaTypeCachePayload
+	if len(manifest.Layers) > 0 {
+		payload, err = l.readBlob(manifest.Layers[0].Digest)
+		if err != nil {
+			return Entry{}, false
+		}
+		mediaType = manifest.Layers[0].MediaType
+	}
+	return Entry{
+		Key:        key,
+		Payload:    payload,
+		MediaType:  mediaType,
+		Resolved:   cfg.Resolved,
+		Components: cfg.Components,
+		Validator:  cfg.Validator,
+	}, true
+}
+
+// Delete removes key's entry (a no-op when absent).
+func (l *Layout) Delete(key string) error {
+	if !l.usable() {
+		return nil
+	}
+	release, err := lock.AcquireFileLock(l.lockFile(), true)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = release() }()
+	idx, err := l.readIndex()
+	if err != nil {
+		return err
+	}
+	tag := tagFor(key)
+	kept := idx.Manifests[:0]
+	for _, d := range idx.Manifests {
+		if d.Annotations[ociv1.AnnotationRefName] != tag {
+			kept = append(kept, d)
+		}
+	}
+	idx.Manifests = kept
+	return l.writeIndex(idx)
+}
+
+// Keys returns every stored key (read from the manifest annotations).
+func (l *Layout) Keys() []string {
+	if !l.usable() {
+		return nil
+	}
+	idx, err := l.readIndex()
+	if err != nil {
+		return nil
+	}
+	var keys []string
+	for _, d := range idx.Manifests {
+		if k := d.Annotations[AnnotationCacheKey]; k != "" {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+// Len reports the entry count.
+func (l *Layout) Len() int {
+	if !l.usable() {
+		return 0
+	}
+	idx, err := l.readIndex()
+	if err != nil {
+		return 0
+	}
+	return len(idx.Manifests)
+}
+
+// Clear drops the whole layout (`--invalidate` / `charly cache clear`).
+func (l *Layout) Clear() error {
+	if !l.usable() {
+		return nil
+	}
+	return os.RemoveAll(l.dir)
 }
 
 // Fill returns the entry for key, computing it with fill when absent. It
 // serializes the miss under the per-key flock and DOUBLE-CHECKS under the lock,
-// so concurrent first-missers compute once and reuse the winner's entry. A fill
-// error is returned un-wrapped; nothing is written. fill takes no argument: the
-// store-level policy is presence-or-absence, and a caller that must REVALIDATE a
-// mutable upstream (the gh ETag path) reads the existing entry with Get, decides
-// upstream itself, and Puts the refreshed entry — Fill is the compute-once
-// primitive, not a revalidation hook.
+// so concurrent first-missers compute once and reuse the winner's entry. fill
+// takes no argument: a caller that must REVALIDATE a mutable upstream reads the
+// existing entry with Get, decides upstream itself, and Puts the refreshed
+// entry.
 //
-// Every failure short of fill itself — an inert store, a lock timeout — degrades
-// to calling fill and returning its result WITHOUT persisting: the cache never
-// fails a caller.
-func (s *Store) Fill(key string, fill func() (Entry, error)) (Entry, error) {
-	if !s.usable() {
+// Fill STAMPS Resolved to now, exactly like Put: the compute-once path is a
+// fresh computation, so its write time is now — a fill callback need not (and
+// must not have to) set Resolved itself. A callback returning a zero Resolved
+// (e.g. an empty degrade entry) would otherwise be instantly TTL-stale and sort
+// as the OLDEST entry for reclamation.
+func (l *Layout) Fill(key string, fill func() (Entry, error)) (Entry, error) {
+	if !l.usable() {
 		return fill()
 	}
-	if e, ok := s.Get(key); ok {
+	if e, ok := l.Get(key); ok {
 		return e, nil
 	}
-	release, err := lock.AcquireFileLock(s.lockPath(key), true)
+	release, err := lock.AcquireFileLock(l.fillLockPath(key), true)
 	if err != nil {
-		// Lock contention (or an IO failure): compute without caching.
 		return fill()
 	}
 	defer func() { _ = release() }()
-	if e, ok := s.Get(key); ok {
+	if e, ok := l.Get(key); ok {
 		return e, nil
 	}
 	e, ferr := fill()
 	if ferr != nil {
 		return Entry{}, ferr
 	}
-	s.Put(key, e)
-	return e, nil
+	e.Resolved = time.Now()
+	if perr := l.put(key, e); perr != nil {
+		return e, nil // the value is valid; caching is best-effort
+	}
+	got, ok := l.Get(key)
+	if !ok {
+		return e, nil
+	}
+	return got, nil
 }
 
-// Delete removes key's entry (a no-op when absent).
-func (s *Store) Delete(key string) error {
-	if !s.usable() {
-		return nil
-	}
-	if err := os.Remove(s.entryPath(key)); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
+// fillLockPath is the per-key advisory-lock path for Fill's compute-once guard —
+// a locks/ sibling keeps the entries dir sweepable (the same layout the legacy
+// per-key keyed store used).
+func (l *Layout) fillLockPath(key string) string {
+	return filepath.Join(l.dir, "locks", tagFor(key)+".fill.lock")
 }
 
-// Clear drops EVERY entry in the store (the `--invalidate` / `charly cache
-// clear` semantics).
-func (s *Store) Clear() error {
-	if !s.usable() {
+// GC reclaims blobs no live manifest references, then enforces the entry cap.
+func (l *Layout) GC() error {
+	if !l.usable() {
 		return nil
 	}
-	if err := os.RemoveAll(s.dir); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Keys returns every stored key (the original key carried in each entry), in no
-// particular order. A corrupt entry is skipped.
-func (s *Store) Keys() []string {
-	if !s.usable() {
-		return nil
-	}
-	entries, err := os.ReadDir(s.dir)
+	release, err := lock.AcquireFileLock(l.lockFile(), true)
 	if err != nil {
-		return nil
+		return err
 	}
-	var keys []string
-	for _, ent := range entries {
-		if ent.IsDir() || filepath.Ext(ent.Name()) != ".json" {
-			continue
-		}
-		data, rerr := os.ReadFile(filepath.Join(s.dir, ent.Name()))
+	defer func() { _ = release() }()
+	if err := l.enforceCap(); err != nil {
+		return err
+	}
+	idx, err := l.readIndex()
+	if err != nil {
+		return err
+	}
+	live := map[digest.Digest]bool{}
+	for _, d := range idx.Manifests {
+		live[d.Digest] = true
+		manifestBytes, rerr := l.readBlob(d.Digest)
 		if rerr != nil {
 			continue
 		}
-		var e Entry
-		if json.Unmarshal(data, &e) != nil {
+		var manifest ociv1.Manifest
+		if json.Unmarshal(manifestBytes, &manifest) != nil {
 			continue
 		}
-		keys = append(keys, e.Key)
+		live[manifest.Config.Digest] = true
+		for _, layer := range manifest.Layers {
+			live[layer.Digest] = true
+		}
 	}
-	return keys
+	blobsRoot := filepath.Join(l.dir, ociv1.ImageBlobsDir)
+	return filepath.WalkDir(blobsRoot, func(path string, d os.DirEntry, werr error) error {
+		if werr != nil || d.IsDir() {
+			return nil
+		}
+		rel, rerr := filepath.Rel(blobsRoot, path)
+		if rerr != nil {
+			return nil
+		}
+		alg := filepath.Base(filepath.Dir(rel))
+		encoded := filepath.Base(rel)
+		dgst := digest.Digest(alg + ":" + encoded)
+		if !live[dgst] {
+			_ = os.Remove(path)
+		}
+		return nil
+	})
 }
 
-// Len reports the entry count.
-func (s *Store) Len() int { return len(s.Keys()) }
-
-// prune reclaims storage Docker-style: when the entry count exceeds maxEntries,
-// the OLDEST entries (by Resolved) are removed. RECLAMATION only — never a
-// validity input. Best-effort. A no-op when the cap is 0.
-func (s *Store) prune() {
-	if s.maxEntries <= 0 {
-		return
+// enforceCap reclaims the OLDEST entries when the count exceeds maxEntries.
+func (l *Layout) enforceCap() error {
+	if l.maxEntries <= 0 {
+		return nil
 	}
-	entries, err := os.ReadDir(s.dir)
+	idx, err := l.readIndex()
 	if err != nil {
-		return
+		return err
 	}
-	type named struct {
-		name string
+	if len(idx.Manifests) <= l.maxEntries {
+		return nil
+	}
+	type dated struct {
+		desc ociv1.Descriptor
 		res  time.Time
 	}
-	var live []named
-	for _, ent := range entries {
-		if ent.IsDir() || filepath.Ext(ent.Name()) != ".json" {
-			continue
+	entries := make([]dated, 0, len(idx.Manifests))
+	for _, d := range idx.Manifests {
+		res := time.Time{}
+		if mb, rerr := l.readBlob(d.Digest); rerr == nil {
+			var m ociv1.Manifest
+			if json.Unmarshal(mb, &m) == nil {
+				if cb, cerr := l.readBlob(m.Config.Digest); cerr == nil {
+					var cfg entryConfig
+					if json.Unmarshal(cb, &cfg) == nil {
+						res = cfg.Resolved
+					}
+				}
+			}
 		}
-		data, rerr := os.ReadFile(filepath.Join(s.dir, ent.Name()))
-		if rerr != nil {
-			continue
-		}
-		var e Entry
-		if json.Unmarshal(data, &e) != nil {
-			continue
-		}
-		live = append(live, named{ent.Name(), e.Resolved})
+		entries = append(entries, dated{d, res})
 	}
-	excess := len(live) - s.maxEntries
-	if excess <= 0 {
-		return
-	}
-	sort.Slice(live, func(i, j int) bool { return live[i].res.Before(live[j].res) })
+	sort.Slice(entries, func(i, j int) bool { return entries[i].res.Before(entries[j].res) })
+	excess := len(entries) - l.maxEntries
+	drop := map[string]bool{}
 	for i := 0; i < excess; i++ {
-		_ = os.Remove(filepath.Join(s.dir, live[i].name))
+		drop[entries[i].desc.Annotations[ociv1.AnnotationRefName]] = true
 	}
+	kept := idx.Manifests[:0]
+	for _, d := range idx.Manifests {
+		if !drop[d.Annotations[ociv1.AnnotationRefName]] {
+			kept = append(kept, d)
+		}
+	}
+	idx.Manifests = kept
+	return l.writeIndex(idx)
 }
 
 // HashHex is the hex SHA-256 of s — the content-addressed digest helper shared
-// by every components-keyed caller (the loader's walk envelope, a GitHub blob).
+// by every components-keyed caller.
 func HashHex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
