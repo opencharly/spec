@@ -34,6 +34,10 @@ func TestIsRepoCached_IncompleteExportIsNotCached(t *testing.T) {
 			[]byte("[submodule \"spec\"]\n\tpath = spec\n\turl = https://example.invalid/spec.git\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
+		// V2 provenance: the tree is certifiably pristine.
+		if err := WriteRepoCacheProvenance(cache, version); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	mk(t, "v1.0.0", false) // the shape the old fetch left behind
@@ -62,5 +66,36 @@ func TestIsRepoCached_IncompleteExportIsNotCached(t *testing.T) {
 	}
 	if got {
 		t.Error("a missing cache entry must not report cached")
+	}
+}
+
+// TestIsRepoCached_LegacyProvenanceIsNotCached locks the v2 provenance gate: a
+// LEGACY (v1: bare-commit) sidecar cannot certify its tree — the pre-cutover
+// loader could rewrite an export in place — so the export must be treated as NOT
+// cached, forcing one pristine re-fetch. Without this the polluted cache stays a
+// permanent hit for immutable refs (the exact bug this cutover fixes).
+func TestIsRepoCached_LegacyProvenanceIsNotCached(t *testing.T) {
+	cacheDir := t.TempDir()
+	t.Setenv("CHARLY_REPO_CACHE", cacheDir)
+
+	const repo = "github.com/opencharly/charly"
+	cache := filepath.Join(cacheDir, repo+"@main")
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The legacy sidecar: just the commit hash, no version envelope.
+	if err := os.WriteFile(RefProvenancePath(cache), []byte("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := IsRepoCached(repo, "main")
+	if err != nil {
+		t.Fatalf("IsRepoCached: %v", err)
+	}
+	if got {
+		t.Fatal("a legacy (v1) provenance sidecar must NOT count as cached — it cannot " +
+			"certify its content, so the export must be re-fetched pristine")
+	}
+	if _, ok := ReadRepoCacheProvenance(cache); ok {
+		t.Fatal("ReadRepoCacheProvenance must reject the legacy bare-commit format")
 	}
 }

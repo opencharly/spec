@@ -7,6 +7,8 @@ require (
 	github.com/alecthomas/kong v1.15.0
 	github.com/emicklei/proto v1.14.3
 	github.com/hashicorp/go-plugin v1.8.0
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	golang.org/x/crypto v0.49.0
 	golang.org/x/sys v0.42.0
 	google.golang.org/grpc v1.61.0
@@ -26,8 +28,6 @@ require (
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/oklog/run v1.1.0 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/protocolbuffers/txtpbfmt v0.0.0-20260217160748-a481f6a22f94 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect

@@ -50,13 +50,13 @@ func TestRepoCacheFresh(t *testing.T) {
 	if repoCacheFresh(cachePath, commit) {
 		t.Fatal("export without provenance sidecar (pre-contract cache) must be stale")
 	}
-	if err := writeRefProvenance(cachePath, "aaa111bbb222aaa111bbb222aaa111bbb222aaa111"); err != nil {
+	if err := WriteRepoCacheProvenance(cachePath, "aaa111bbb222aaa111bbb222aaa111bbb222aaa111"); err != nil {
 		t.Fatal(err)
 	}
 	if repoCacheFresh(cachePath, commit) {
 		t.Fatal("sidecar naming a different commit (moved ref) must be stale")
 	}
-	if err := writeRefProvenance(cachePath, commit); err != nil {
+	if err := WriteRepoCacheProvenance(cachePath, commit); err != nil {
 		t.Fatal(err)
 	}
 	if !repoCacheFresh(cachePath, commit) {

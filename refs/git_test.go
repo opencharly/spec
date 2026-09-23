@@ -231,7 +231,7 @@ func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
 				"[submodule \"spec\"]\n\tpath = spec\n\turl = https://example.invalid/spec.git\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := writeRefProvenance(cache, commit); err != nil {
+		if err := WriteRepoCacheProvenance(cache, commit); err != nil {
 			t.Fatal(err)
 		}
 		return cache
@@ -249,7 +249,7 @@ func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
 	}
 	// A repo declaring no submodules at all is trivially complete.
 	bare := t.TempDir()
-	if err := writeRefProvenance(bare, commit); err != nil {
+	if err := WriteRepoCacheProvenance(bare, commit); err != nil {
 		t.Fatal(err)
 	}
 	if !repoCacheFresh(bare, commit) {
@@ -267,7 +267,7 @@ func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
 		[]byte("[submodule \"ghost\"]\n\tpath = ghost\n\turl = https://example.invalid/g.git\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeRefProvenance(nogl, commit); err != nil {
+	if err := WriteRepoCacheProvenance(nogl, commit); err != nil {
 		t.Fatal(err)
 	}
 	if !repoCacheFresh(nogl, commit) {

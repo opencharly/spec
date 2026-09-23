@@ -35,7 +35,7 @@ func TestSubmoduleCacheTTLExpiry(t *testing.T) {
 		t.Fatal("store.Get: entry missing after write")
 	}
 	e.Resolved = time.Now().Add(-2 * submoduleCacheTTL)
-	store.PutEntry("/tmp/repo1", e)
+	_ = store.PutEntry("/tmp/repo1", e)
 	if _, ok := readSubmoduleCache("/tmp/repo1"); ok {
 		t.Fatal("readSubmoduleCache: stale entry should miss")
 	}

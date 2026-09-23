@@ -11,6 +11,7 @@ package refs
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -381,21 +382,63 @@ func IsMutableRef(version string) bool {
 	return true
 }
 
-// refProvenancePath is the sidecar recording the commit a cache export was
-// cloned from.
-func refProvenancePath(cachePath string) string {
+// RepoCacheProvenance is the sidecar record describing how a cache export was
+// produced. Version 2 replaced the legacy bare-commit text file: the version
+// gate is what makes an already-POLLUTED cache self-heal.
+//
+// WHY THE VERSION GATE. Legacy exports (v1: a file holding only the commit
+// hash) were written by a code path that could MUTATE the export in place — the
+// loader's auto-migration rewrote the fetched charly.yml to the CONSUMER
+// binary's schema CalVer, so a v1 cache could carry content that no longer
+// matched the commit it named. A v1 sidecar therefore cannot certify the tree,
+// so it is treated as stale and re-fetched once, restoring pristine content.
+// After the derive-not-mutate cutover no consumer rewrites an export, so a v2
+// export's content is always exactly what the commit names.
+const repoCacheProvenanceVersion = 2
+
+// RepoCacheProvenance is the parsed provenance sidecar.
+type RepoCacheProvenance struct {
+	Version int    `json:"version"`
+	Commit  string `json:"commit"`
+}
+
+// RefProvenancePath is the sidecar recording how a cache export was produced.
+func RefProvenancePath(cachePath string) string {
 	return cachePath + ".ref"
 }
 
-// writeRefProvenance records the clone's resolved commit next to the export.
-func writeRefProvenance(cachePath, commit string) error {
-	return os.WriteFile(refProvenancePath(cachePath), []byte(commit+"\n"), 0o644)
+// WriteRepoCacheProvenance records the clone's resolved commit next to the export.
+func WriteRepoCacheProvenance(cachePath, commit string) error {
+	data, err := json.Marshal(RepoCacheProvenance{Version: repoCacheProvenanceVersion, Commit: commit})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(RefProvenancePath(cachePath), append(data, '\n'), 0o644)
+}
+
+// ReadRepoCacheProvenance parses the sidecar. The legacy bare-commit format (and
+// any unknown version) is NOT a provenance: it returns ok=false so the caller
+// re-fetches, which is how a polluted legacy cache self-heals.
+func ReadRepoCacheProvenance(cachePath string) (RepoCacheProvenance, bool) {
+	data, err := os.ReadFile(RefProvenancePath(cachePath))
+	if err != nil {
+		return RepoCacheProvenance{}, false
+	}
+	var p RepoCacheProvenance
+	if json.Unmarshal(data, &p) != nil {
+		return RepoCacheProvenance{}, false
+	}
+	if p.Version != repoCacheProvenanceVersion || p.Commit == "" {
+		return RepoCacheProvenance{}, false
+	}
+	return p, true
 }
 
 // repoCacheFresh reports whether the cache at cachePath is a complete export
-// cloned from exactly commit. A missing export, a missing provenance sidecar
-// (a cache written before this contract), a sidecar naming a different commit
-// (the ref moved upstream), or an INCOMPLETE export all count as stale.
+// cloned from exactly commit AND carrying v2 provenance. A missing export, a
+// legacy/invalid provenance sidecar (see RepoCacheProvenance), a sidecar naming
+// a different commit (the ref moved upstream), or an INCOMPLETE export all count
+// as stale.
 //
 // Completeness is checked, not assumed. This function has always claimed to
 // verify "a complete export" and never did — it compared only the commit — so a
@@ -415,11 +458,8 @@ func repoCacheFresh(cachePath, commit string) bool {
 	if st, err := os.Stat(cachePath); err != nil || !st.IsDir() {
 		return false
 	}
-	recorded, err := os.ReadFile(refProvenancePath(cachePath))
-	if err != nil {
-		return false
-	}
-	if strings.TrimSpace(string(recorded)) != commit {
+	p, ok := ReadRepoCacheProvenance(cachePath)
+	if !ok || p.Commit != commit {
 		return false
 	}
 	return submodulesPopulated(cachePath)
@@ -471,15 +511,19 @@ type submoduleCacheValue struct {
 // submoduleCacheStore opens the persistent submodule-verdict Store (the ONE
 // shared cache mechanism). An inert store (no config dir) makes every lookup a
 // miss without error.
-func submoduleCacheStore() *cache.Store {
-	return cache.OpenNamed("submodules")
+func submoduleCacheStore() *cache.Layout {
+	return cache.OpenNamedLayout("submodules")
 }
 
 // readSubmoduleCache returns the cached verdict for cachePath if fresh, else
 // (false, false). A corrupt/absent entry is a cache miss.
 func readSubmoduleCache(cachePath string) (bool, bool) {
+	e, ok := submoduleCacheStore().Get(cachePath)
+	if !ok || !e.FreshTTL(submoduleCacheTTL) {
+		return false, false
+	}
 	var v submoduleCacheValue
-	if !submoduleCacheStore().ReadTTL(cachePath, submoduleCacheTTL, &v) {
+	if !e.Decode(&v) {
 		return false, false
 	}
 	return v.Populated, true
@@ -487,7 +531,11 @@ func readSubmoduleCache(cachePath string) (bool, bool) {
 
 // writeSubmoduleCache persists the verdict (best-effort).
 func writeSubmoduleCache(cachePath string, populated bool) {
-	submoduleCacheStore().WriteValue(cachePath, submoduleCacheValue{Populated: populated})
+	raw, err := json.Marshal(submoduleCacheValue{Populated: populated})
+	if err != nil {
+		return
+	}
+	_ = submoduleCacheStore().Put(cachePath, cache.Entry{Payload: raw})
 }
 
 func submodulesPopulatedUncached(cachePath string) bool {
@@ -612,7 +660,7 @@ func downloadRepoFrom(repoURL, repoPath, version string) (string, error) {
 	}
 	_ = os.RemoveAll(gcPath)
 
-	return cachePath, writeRefProvenance(cachePath, commit)
+	return cachePath, WriteRepoCacheProvenance(cachePath, commit)
 }
 
 // GitDefaultBranch detects the default branch of a remote repository.

@@ -2,58 +2,163 @@ package cache
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	ociv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// cache_test.go — the generalized Store. Each test FAILS without its behavior:
-// the three validity modes, the Fill double-check, atomic publication, prune.
+// cache_test.go — the OCI-layout ArtifactStore. Each test FAILS without its
+// behavior: the three validity modes, the Fill double-check, the on-disk OCI
+// Image Layout shape, atomic publication, and GC.
+
+// putRaw stores e under key preserving Resolved (the backdating seam).
+func putRaw(t *testing.T, l *Layout, key string, e Entry) {
+	t.Helper()
+	if err := l.put(key, e); err != nil {
+		t.Fatalf("put %q: %v", key, err)
+	}
+}
 
 func TestTTLValidity(t *testing.T) {
-	s := Open(t.TempDir())
-	s.WriteValue("k", "v")
-	var got string
-	if !s.ReadTTL("k", time.Minute, &got) || got != "v" {
-		t.Fatalf("fresh read = %q", got)
+	l := OpenLayout(t.TempDir())
+	if err := l.Put("k", Entry{Payload: []byte(`"v"`)}); err != nil {
+		t.Fatal(err)
 	}
-	// Backdate past the TTL → miss.
-	e, _ := s.Get("k")
-	e.Resolved = time.Now().Add(-2 * time.Minute)
-	s.PutEntry("k", e)
-	if s.ReadTTL("k", time.Minute, &got) {
-		t.Fatal("stale entry must miss")
+	e, ok := l.Get("k")
+	if !ok || !e.FreshTTL(time.Minute) || string(e.Payload) != `"v"` {
+		t.Fatalf("fresh read = %+v ok=%v", e, ok)
+	}
+	// Backdate past the TTL → stale.
+	putRaw(t, l, "k", Entry{Payload: []byte(`"v"`), Resolved: time.Now().Add(-2 * time.Minute)})
+	e, _ = l.Get("k")
+	if e.FreshTTL(time.Minute) {
+		t.Fatal("stale entry must not be fresh")
 	}
 }
 
 func TestComponentsValidity(t *testing.T) {
-	s := Open(t.TempDir())
-	e := Entry{Value: json.RawMessage(`"v"`), Components: map[string]string{"sha": "abc", "repo": "o/r"}}
-	s.Put("k", e)
-	got, ok := s.Get("k")
-	if !ok || !got.FreshComponents(map[string]string{"sha": "abc", "repo": "o/r"}) {
+	l := OpenLayout(t.TempDir())
+	if err := l.Put("k", Entry{Payload: []byte(`"v"`), Components: map[string]string{"sha": "abc", "repo": "o/r"}}); err != nil {
+		t.Fatal(err)
+	}
+	e, ok := l.Get("k")
+	if !ok || !e.FreshComponents(map[string]string{"sha": "abc", "repo": "o/r"}) {
 		t.Fatal("matching components must be fresh")
 	}
-	if got.FreshComponents(map[string]string{"sha": "def", "repo": "o/r"}) {
+	if e.FreshComponents(map[string]string{"sha": "def", "repo": "o/r"}) {
 		t.Fatal("drifted component must be stale")
 	}
-	if got.FreshComponents(map[string]string{"sha": "abc"}) {
+	if e.FreshComponents(map[string]string{"sha": "abc"}) {
 		t.Fatal("a different component count must be stale")
 	}
 }
 
 func TestValidatorRoundTrip(t *testing.T) {
-	s := Open(t.TempDir())
-	s.Put("k", Entry{Value: json.RawMessage(`"v"`), Validator: `W/"etag-1"`})
-	got, ok := s.Get("k")
-	if !ok || got.Validator != `W/"etag-1"` {
-		t.Fatalf("validator = %q", got.Validator)
+	l := OpenLayout(t.TempDir())
+	if err := l.Put("k", Entry{Payload: []byte(`"v"`), Validator: `W/"etag-1"`}); err != nil {
+		t.Fatal(err)
+	}
+	e, ok := l.Get("k")
+	if !ok || e.Validator != `W/"etag-1"` || !e.FreshValidator(`W/"etag-1"`) {
+		t.Fatalf("validator = %q", e.Validator)
+	}
+	if e.FreshValidator(`W/"etag-2"`) {
+		t.Fatal("a changed validator must be stale")
+	}
+}
+
+// TestOnDiskIsOCILayout locks the storage contract: the store directory is a
+// valid OCI Image Layout (oci-layout marker + index.json + content-addressed
+// blobs). This is what makes registry push/pull possible at all.
+func TestOnDiskIsOCILayout(t *testing.T) {
+	dir := t.TempDir()
+	l := OpenLayout(dir)
+	if err := l.Put("k", Entry{Payload: []byte(`{"hello":"world"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	// oci-layout marker with the required field.
+	marker, err := os.ReadFile(filepath.Join(dir, ociv1.ImageLayoutFile))
+	if err != nil {
+		t.Fatalf("missing oci-layout marker: %v", err)
+	}
+	var layout ociv1.ImageLayout
+	if json.Unmarshal(marker, &layout) != nil || layout.Version != ociv1.ImageLayoutVersion {
+		t.Fatalf("bad oci-layout marker: %s", marker)
+	}
+	// index.json is a valid image index naming the entry.
+	idxBytes, err := os.ReadFile(filepath.Join(dir, ociv1.ImageIndexFile))
+	if err != nil {
+		t.Fatalf("missing index.json: %v", err)
+	}
+	var idx ociv1.Index
+	if json.Unmarshal(idxBytes, &idx) != nil || len(idx.Manifests) != 1 {
+		t.Fatalf("bad index.json: %s", idxBytes)
+	}
+	// Every referenced blob exists at blobs/<alg>/<encoded> AND hashes to its name.
+	for _, d := range idx.Manifests {
+		if got := d.Annotations[AnnotationCacheKey]; got != "k" {
+			t.Fatalf("manifest annotation key = %q, want k", got)
+		}
+		body, rerr := os.ReadFile(l.blobPath(d.Digest))
+		if rerr != nil {
+			t.Fatalf("manifest blob %s missing: %v", d.Digest, rerr)
+		}
+		var m ociv1.Manifest
+		if json.Unmarshal(body, &m) != nil {
+			t.Fatalf("manifest blob not a manifest: %s", body)
+		}
+		for _, bd := range append([]ociv1.Descriptor{m.Config}, m.Layers...) {
+			blob, berr := os.ReadFile(l.blobPath(bd.Digest))
+			if berr != nil {
+				t.Fatalf("blob %s missing: %v", bd.Digest, berr)
+			}
+			if int64(len(blob)) != bd.Size {
+				t.Fatalf("blob %s size = %d, want %d", bd.Digest, len(blob), bd.Size)
+			}
+			if bd.MediaType == MediaTypeCacheConfig {
+				var cfg entryConfig
+				if json.Unmarshal(blob, &cfg) != nil {
+					t.Fatalf("config blob not decodable: %s", blob)
+				}
+			}
+		}
+	}
+}
+
+func TestPutIsContentAddressedAndIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	l := OpenLayout(dir)
+	// Two keys with identical payloads share the payload blob (CAS dedup).
+	if err := l.Put("a", Entry{Payload: []byte("same")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Put("b", Entry{Payload: []byte("same")}); err != nil {
+		t.Fatal(err)
+	}
+	blobsRoot := filepath.Join(dir, ociv1.ImageBlobsDir)
+	var payloadCount int
+	_ = filepath.WalkDir(blobsRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		b, _ := os.ReadFile(path)
+		if string(b) == "same" {
+			payloadCount++
+		}
+		return nil
+	})
+	if payloadCount != 1 {
+		t.Fatalf("identical payloads stored %d times, want 1 (content addressing)", payloadCount)
 	}
 }
 
 func TestFillComputesOnceUnderConcurrency(t *testing.T) {
-	s := Open(t.TempDir())
+	l := OpenLayout(t.TempDir())
 	var calls atomic.Int32
 	const workers = 16
 	var wg sync.WaitGroup
@@ -61,10 +166,10 @@ func TestFillComputesOnceUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = s.Fill("k", func() (Entry, error) {
+			_, _ = l.Fill("k", func() (Entry, error) {
 				calls.Add(1)
 				time.Sleep(2 * time.Millisecond) // widen the contention window
-				return Entry{Value: json.RawMessage(`"computed"`)}, nil
+				return Entry{Payload: []byte(`"computed"`)}, nil
 			})
 		}()
 	}
@@ -72,17 +177,19 @@ func TestFillComputesOnceUnderConcurrency(t *testing.T) {
 	if n := calls.Load(); n != 1 {
 		t.Fatalf("fill ran %d times, want 1 (the per-key flock must serialize first-missers)", n)
 	}
-	var got string
-	if !s.Read("k", &got) || got != "computed" {
-		t.Fatalf("cached value = %q", got)
+	e, ok := l.Get("k")
+	if !ok || string(e.Payload) != `"computed"` {
+		t.Fatalf("cached value = %q ok=%v", e.Payload, ok)
 	}
 }
 
 func TestFillReturnsExistingWithoutCallingFill(t *testing.T) {
-	s := Open(t.TempDir())
-	s.WriteValue("k", "existing")
+	l := OpenLayout(t.TempDir())
+	if err := l.Put("k", Entry{Payload: []byte(`"existing"`)}); err != nil {
+		t.Fatal(err)
+	}
 	called := false
-	e, err := s.Fill("k", func() (Entry, error) {
+	e, err := l.Fill("k", func() (Entry, error) {
 		called = true
 		return Entry{}, nil
 	})
@@ -96,34 +203,35 @@ func TestFillReturnsExistingWithoutCallingFill(t *testing.T) {
 }
 
 func TestPruneReclaimsOldest(t *testing.T) {
-	s := OpenLimited(t.TempDir(), 3)
-	for _, k := range []string{"a", "b", "c", "d", "e"} {
-		// Space the write times so ordering is deterministic.
-		s.Put(k, Entry{Value: json.RawMessage(`1`)})
-		time.Sleep(time.Millisecond)
+	l := OpenLayoutLimited(t.TempDir(), 3)
+	base := time.Now().Add(-time.Hour)
+	for i, k := range []string{"a", "b", "c", "d", "e"} {
+		putRaw(t, l, k, Entry{Payload: []byte(`1`), Resolved: base.Add(time.Duration(i) * time.Minute)})
 	}
-	if s.Len() > 3 {
-		t.Fatalf("store holds %d entries, want <= 3", s.Len())
+	if l.Len() > 3 {
+		t.Fatalf("store holds %d entries, want <= 3", l.Len())
 	}
-	if _, ok := s.Get("a"); ok {
+	if _, ok := l.Get("a"); ok {
 		t.Fatal("the oldest entry must be reclaimed")
 	}
-	if _, ok := s.Get("e"); !ok {
+	if _, ok := l.Get("e"); !ok {
 		t.Fatal("the newest entry must survive")
 	}
 }
 
 func TestInertStoreNeverErr(t *testing.T) {
-	s := Open("")
-	if _, ok := s.Get("k"); ok {
+	l := OpenLayout("")
+	if _, ok := l.Get("k"); ok {
 		t.Fatal("inert store must miss")
 	}
-	s.WriteValue("k", "v") // no-op, no panic
-	if s.Len() != 0 {
+	if err := l.Put("k", Entry{Payload: []byte(`"v"`)}); err != nil {
+		t.Fatalf("inert Put must not error: %v", err)
+	}
+	if l.Len() != 0 {
 		t.Fatal("inert store must stay empty")
 	}
-	e, err := s.Fill("k", func() (Entry, error) {
-		return Entry{Value: json.RawMessage(`"inline"`)}, nil
+	e, err := l.Fill("k", func() (Entry, error) {
+		return Entry{Payload: []byte(`"inline"`)}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -135,33 +243,76 @@ func TestInertStoreNeverErr(t *testing.T) {
 }
 
 func TestDeleteRemovesEntry(t *testing.T) {
-	s := Open(t.TempDir())
-	s.WriteValue("k", "v")
-	if _, ok := s.Get("k"); !ok {
+	l := OpenLayout(t.TempDir())
+	if err := l.Put("k", Entry{Payload: []byte(`"v"`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := l.Get("k"); !ok {
 		t.Fatal("entry missing after write")
 	}
-	if err := s.Delete("k"); err != nil {
+	if err := l.Delete("k"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, ok := s.Get("k"); ok {
+	if _, ok := l.Get("k"); ok {
 		t.Fatal("entry must be gone after Delete")
 	}
-	// Deleting an absent key is a no-op, never an error.
-	if err := s.Delete("absent"); err != nil {
+	if err := l.Delete("absent"); err != nil {
 		t.Fatalf("Delete of an absent key must not error: %v", err)
 	}
 }
 
-func TestOpenNamedResolvesUnderRoot(t *testing.T) {
+// TestGCReclaimsUnreferencedBlobs proves GC drops an orphaned blob (written by a
+// superseded entry) while keeping the live one.
+func TestGCReclaimsUnreferencedBlobs(t *testing.T) {
+	dir := t.TempDir()
+	l := OpenLayout(dir)
+	if err := l.Put("k", Entry{Payload: []byte("old")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Put("k", Entry{Payload: []byte("new")}); err != nil {
+		t.Fatal(err)
+	}
+	blobsRoot := filepath.Join(dir, ociv1.ImageBlobsDir)
+	hasBlob := func(want string) bool {
+		found := false
+		_ = filepath.WalkDir(blobsRoot, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			b, _ := os.ReadFile(path)
+			if string(b) == want {
+				found = true
+			}
+			return nil
+		})
+		return found
+	}
+	if !hasBlob("old") {
+		t.Fatal("precondition: superseded payload blob should exist before GC")
+	}
+	if err := l.GC(); err != nil {
+		t.Fatalf("GC: %v", err)
+	}
+	if hasBlob("old") {
+		t.Fatal("GC must reclaim the unreferenced payload blob")
+	}
+	if !hasBlob("new") {
+		t.Fatal("GC must keep the live payload blob")
+	}
+}
+
+func TestOpenNamedLayoutResolvesUnderRoot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CHARLY_CACHE_DIR", root)
-	s := OpenNamed("things")
-	if got, want := s.Dir(), root+"/things"; got != want {
-		t.Fatalf("OpenNamed dir = %q, want %q", got, want)
+	l := OpenNamedLayout("things")
+	if got, want := l.Dir(), filepath.Join(root, "things"); got != want {
+		t.Fatalf("OpenNamedLayout dir = %q, want %q", got, want)
 	}
-	s.WriteValue("k", "v")
-	if _, ok := OpenNamed("things").Get("k"); !ok {
-		t.Fatal("OpenNamed must reopen the SAME store on disk")
+	if err := l.Put("k", Entry{Payload: []byte(`"v"`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := OpenNamedLayout("things").Get("k"); !ok {
+		t.Fatal("OpenNamedLayout must reopen the SAME store on disk")
 	}
 }
 

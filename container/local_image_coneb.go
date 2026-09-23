@@ -148,8 +148,8 @@ func InvalidateImageCache() {
 // imageCacheStore opens the persistent image-list Store under the charly dir
 // (~/.config/charly/cache/images/). An inert store (no config dir) makes every
 // lookup a miss without error.
-func imageCacheStore() *cache.Store {
-	return cache.OpenNamed("images")
+func imageCacheStore() *cache.Layout {
+	return cache.OpenNamedLayout("images")
 }
 
 // imageCacheValue is the cached image list for one engine.
@@ -160,17 +160,25 @@ type imageCacheValue struct {
 
 // readImageCache returns the cached image list if fresh for engine, else (nil,
 // false). A corrupt/absent entry is a cache miss.
-func readImageCache(store *cache.Store, engine string) ([]LocalImageInfo, bool) {
+func readImageCache(store *cache.Layout, engine string) ([]LocalImageInfo, bool) {
+	e, ok := store.Get(engine)
+	if !ok || !e.FreshTTL(imageCacheTTL) {
+		return nil, false
+	}
 	var v imageCacheValue
-	if !store.ReadTTL(engine, imageCacheTTL, &v) || v.Engine != engine {
+	if !e.Decode(&v) || v.Engine != engine {
 		return nil, false
 	}
 	return v.Images, true
 }
 
 // writeImageCache persists the image list (best-effort).
-func writeImageCache(store *cache.Store, engine string, images []LocalImageInfo) {
-	store.WriteValue(engine, imageCacheValue{Engine: engine, Images: images})
+func writeImageCache(store *cache.Layout, engine string, images []LocalImageInfo) {
+	raw, err := json.Marshal(imageCacheValue{Engine: engine, Images: images})
+	if err != nil {
+		return
+	}
+	_ = store.Put(engine, cache.Entry{Payload: raw})
 }
 
 // listLocalImagesTimeout bounds the image enumeration. `podman images --format json`
