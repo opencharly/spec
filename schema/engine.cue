@@ -130,6 +130,13 @@
 	// docker has no `image exists`). A capability fact so local-image probes do
 	// not switch on the engine name.
 	image_exists_argv: [...string] @go(ImageExistsArgv)
+	// no_remove_with_detach — the engine REJECTS `-d` (detach) together with `--rm`
+	// (auto-remove). nerdctl does ("flags -d and --rm cannot be specified
+	// together", measured live on nerdctl 2.3.5); podman/docker accept both. A
+	// capability fact so a detached-argv builder drops `--rm` where it is illegal
+	// (the container is then cleaned by the unit's ExecStop / an explicit rm)
+	// instead of switching on the engine name.
+	no_remove_with_detach: bool @go(NoRemoveWithDetach)
 }
 
 // #EngineBinaryRequest / #EngineBinaryReply — the `binary` op: resolve the CLI
