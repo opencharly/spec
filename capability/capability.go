@@ -96,6 +96,14 @@ type ProvidedCapability struct {
 	// CommandModel is set ONLY for Class=="command". Its generated #CLIModel
 	// describes the plugin-owned leaf grammar for host and MCP reflection.
 	CommandModel *spec.CLIModel
+	// Interactive is set ONLY for Class=="command": the command needs a real
+	// terminal (stdin/stdout/stderr/TTY) — `shell`, `logs -f`, `mcp serve --stdio`.
+	// A command DECLARING this keeps the process-replacing exec lane (the child
+	// becomes the process and inherits the terminal); every non-interactive
+	// command dispatches through the broker-backed Invoke(OpRun) path so it behaves
+	// identically compiled-in and runtime-loaded. Data-driven, never a class-wide
+	// exemption.
+	Interactive bool
 }
 
 // CLISubcommand is one DECLARED child of a class="command" capability's own CLI word — the

@@ -1503,11 +1503,22 @@
 
 // #CliRequest is the "cli" host-builder envelope (M4): a lifecycle plugin
 // asks the HOST to run a `charly <argv>` subcommand.
+//
+// `env` carries PER-CALL environment variables for the child, threaded as
+// EXPLICIT DATA rather than the caller mutating its own process env. This is
+// what makes the cli host-builder placement-invariant: a compiled-in caller
+// that `os.Setenv`s isolation vars (CHARLY_REPO_OVERRIDE / CHARLY_DEPLOY_CONFIG /
+// CHARLY_PREEMPT_LEASE) only reaches the forked child when caller and child
+// share a process; an out-of-process caller's `os.Setenv` lands in the WRONG
+// process. Passing the vars here makes the child receive them identically in
+// both placements. Merged into the child's environment (overriding the inherited
+// value for the same key).
 #CliRequest: {
 	argv!: [...string] @go(Argv)
 	capture?:     bool @go(Capture)
 	combined?:    bool @go(Combined)
 	best_effort?: bool @go(BestEffort)
+	env?: {[string]: string} @go(Env,type=map[string]string)
 }
 
 // #CliReply is the "cli" host-builder reply: captured stdout (Capture=true),
