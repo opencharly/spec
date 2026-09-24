@@ -283,7 +283,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 
 // ProjectTemplates decodes the uf.Local/Kubernetes/Pod/VM/Android raw template maps (map[string]json.RawMessage)
 // into the resolved kind-template maps validate/check-include/status read. Returns nil when no template
-// kind is present. Recurses into uf.Namespaces, mirroring FillBoxPlans's prefix-accumulation pattern, so a
+// kind is present. Recurses into uf.Namespaces with the accumulated prefix, so a
 // namespace-qualified template ref (`local: <ns>.<tmpl>`, `kind:kubernetes` entity `<ns>.<name>`, …) is visible in
 // the envelope too. Purely ADDITIVE (qualified keys never collide with a bare name, since a bare name can
 // never contain "."), so every existing root-scoped consumer is unaffected.

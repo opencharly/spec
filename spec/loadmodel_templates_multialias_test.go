@@ -8,6 +8,7 @@ package spec
 
 import (
 	"encoding/json"
+	"sort"
 	"testing"
 )
 
@@ -52,5 +53,6 @@ func sortedRawKeys(m map[string]RawBody) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+	sort.Strings(out)
 	return out
 }
