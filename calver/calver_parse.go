@@ -134,9 +134,20 @@ func SchemaFloorCalVer() ParsedCalVer {
 // stripped before comparison, so semver-style tags ("v1.2.3") sort correctly against multi-digit
 // majors ("v10.0.0") — the single comparator for both CalVer and git-tag strings (refs.CompareSemver
 // delegates here).
+//
+// TWO TAG ENCODINGS, ONE TIMELINE. The org's Go-module repos (sdk, spec, plugin-gh) are tagged in
+// Go's required semver form `v0.<YYYYDDD>.<HHMM>` (a leading-zero major, so it is a valid module
+// version — semver forbids a leading-zero patch segment, so `0733`→`733`), while every other repo
+// tags the plain CalVer `v<YYYY>.<DDD>.<HHMM>`. A repo mid-migration carries BOTH forms, and a
+// naive component-wise compare ranks the Go form's major `0` below the plain form's `2026`, so the
+// STALE plain tag wins over a NEWER Go-form tag (measured: plugin-gh `v2026.252.1501` beat
+// `v0.2026266.2326`; spec `v2026.240.1944` beat `v0.2026266.2126`). normalizeCalVer maps the Go
+// form back onto the canonical `<YYYY>.<DDD>.<HHMM>` tuple so both forms sort on ONE timeline;
+// it is a no-op for the plain form and for any genuine semver ("v1.2.3"), so those keep their
+// existing component-wise semantics.
 func CompareCalVer(a, b string) int {
-	a = strings.TrimPrefix(a, "v")
-	b = strings.TrimPrefix(b, "v")
+	a = normalizeCalVer(strings.TrimPrefix(a, "v"))
+	b = normalizeCalVer(strings.TrimPrefix(b, "v"))
 	aParts := strings.Split(a, ".")
 	bParts := strings.Split(b, ".")
 	n := min(len(aParts), len(bParts))
@@ -167,4 +178,28 @@ func CompareCalVer(a, b string) int {
 		return 1
 	}
 	return 0
+}
+
+// normalizeCalVer rewrites a stripped (no leading "v") version string from the Go-module tag
+// encoding `0.<YYYYDDD>.<HHMM-as-int>` to the canonical CalVer `<YYYY>.<DDD>.<HHMM>` so the two
+// encodings share one comparison timeline. It returns s unchanged unless it matches the Go form
+// EXACTLY — first component "0", second exactly seven ASCII digits, third a non-empty all-digit
+// run — so the plain CalVer form ("2026.240.1944") and any other semver ("1.2.3", "0.1.2") pass
+// through untouched. The day/HHMM components are re-padded to their canonical widths (a
+// zero-stripped HHMM such as "623" becomes "0623") so the returned string is always canonical.
+func normalizeCalVer(s string) string {
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 || parts[0] != "0" {
+		return s
+	}
+	ymd, hhmm := parts[1], parts[2]
+	if len(ymd) != 7 || !calverAllDigits(ymd) || hhmm == "" || !calverAllDigits(hhmm) {
+		return s
+	}
+	year, day := ymd[:4], ymd[4:]
+	hhmmInt, err := strconv.Atoi(hhmm)
+	if err != nil {
+		return s
+	}
+	return fmt.Sprintf("%s.%s.%04d", year, day, hhmmInt)
 }
