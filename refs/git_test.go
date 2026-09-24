@@ -330,3 +330,41 @@ func TestDownloadRepoHonorsOverrideAtTheLeaf(t *testing.T) {
 		t.Fatalf("DownloadRepo = %q, want the override dir %q", got, dir)
 	}
 }
+
+// TestGitLatestTag_MixedTagForms pins the mixed-tag-form fix end-to-end on a
+// LOCAL repo (no network): a repo mid-migration carries BOTH the plain CalVer
+// tags (v<YYYY>.<DDD>.<HHMM>) and the newer Go-module tags (v0.<YYYYDDD>.<HHMM>),
+// and the Go form must win when it is newer. Before the normalization the Go
+// form's major `0` ranked below the plain form's `2026`, so the stale plain tag
+// was returned — the defect that broke docs `extra_repos` resolution for
+// plugin-gh/spec/sdk.
+func TestGitLatestTag_MixedTagForms(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("SKIP: git not on PATH")
+	}
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-q", "--initial-branch=main")
+	run("commit", "-q", "--allow-empty", "-m", "c")
+	// A stale plain tag, then NEWER Go-form tags (the real plugin-gh shape).
+	for _, tag := range []string{"v2026.252.1500", "v2026.252.1501", "v0.2026266.2326", "v0.2026267.723"} {
+		run("tag", tag)
+	}
+	got, err := GitLatestTag(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "v0.2026267.723" {
+		t.Fatalf("GitLatestTag = %q, want v0.2026267.723 (the NEWER Go-form tag; the stale plain v2026.252.1501 must not win)", got)
+	}
+}
