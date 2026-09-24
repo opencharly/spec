@@ -33,8 +33,9 @@ func bedFold() *UnifiedFile {
 
 func TestBeds_NamespaceAware(t *testing.T) {
 	uf := bedFold()
-	got := make([]string, 0)
-	for k := range uf.Beds() {
+	beds := uf.Beds()
+	got := make([]string, 0, len(beds))
+	for k := range beds {
 		got = append(got, k)
 	}
 	sort.Strings(got)
