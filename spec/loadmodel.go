@@ -283,7 +283,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 
 // ProjectTemplates decodes the uf.Local/Kubernetes/Pod/VM/Android raw template maps (map[string]json.RawMessage)
 // into the resolved kind-template maps validate/check-include/status read. Returns nil when no template
-// kind is present. Recurses into uf.Namespaces, mirroring FillBoxPlans's prefix-accumulation pattern, so a
+// kind is present. Recurses into uf.Namespaces with the accumulated prefix, so a
 // namespace-qualified template ref (`local: <ns>.<tmpl>`, `kind:kubernetes` entity `<ns>.<name>`, …) is visible in
 // the envelope too. Purely ADDITIVE (qualified keys never collide with a bare name, since a bare name can
 // never contain "."), so every existing root-scoped consumer is unaffected.
@@ -325,13 +325,21 @@ func (t *ProjectTemplates) ByKind(kind string) map[string]RawBody {
 }
 
 // fillNamespacedTemplates recursively copies uf's OWN template maps (qualified by prefix) into t, then
-// descends into uf.Namespaces with the accumulated prefix. The visited set guards the pointer-keyed
-// namespace cache against a self-referential cycle (mirrors FillBoxPlans's own guard).
-func fillNamespacedTemplates(uf *UnifiedFile, prefix string, t *ProjectTemplates, visited map[*UnifiedFile]bool) {
-	if uf == nil || visited[uf] {
+// descends into uf.Namespaces with the accumulated prefix.
+//
+// The guard is PATH-SCOPED (an ancestor stack), NOT a global visited set: the SAME namespace repo
+// can be imported at MULTIPLE alias paths (`charly.arch`, `charly.cachyos.arch`,
+// `charly.omarchy.arch` all mount distro-arch). A global pointer-visited set folded only the
+// FIRST alias encountered (map-iteration order → nondeterministic) and skipped the rest, so a bed
+// in the skipped alias (`charly.arch.check-arch-vm` with `from: arch`) resolved against a scope
+// missing its own template. An ancestor stack folds EVERY alias path while still terminating a
+// genuine cycle (a namespace that contains itself up the stack).
+func fillNamespacedTemplates(uf *UnifiedFile, prefix string, t *ProjectTemplates, ancestors map[*UnifiedFile]bool) {
+	if uf == nil || ancestors[uf] {
 		return
 	}
-	visited[uf] = true
+	ancestors[uf] = true
+	defer delete(ancestors, uf)
 	// KIND-BLIND copy: the raw template bytes ride into the envelope verbatim as opaque RawBody. The
 	// host NEVER decodes them into a concrete <Kind> (that would be per-kind knowledge in the kernel —
 	// a boundary-law violation the TestNoConcreteKindInKernel gate catches). The consuming PLUGINS
@@ -358,7 +366,7 @@ func fillNamespacedTemplates(uf *UnifiedFile, prefix string, t *ProjectTemplates
 		if prefix != "" {
 			child = prefix + "." + ns
 		}
-		fillNamespacedTemplates(sub, child, t, visited)
+		fillNamespacedTemplates(sub, child, t, ancestors)
 	}
 }
 
