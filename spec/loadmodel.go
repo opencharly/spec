@@ -145,21 +145,107 @@ func (uf *UnifiedFile) Kubernetes() map[string]json.RawMessage { return uf.Plugi
 func (uf *UnifiedFile) Local() map[string]json.RawMessage      { return uf.PluginKinds["local"] }
 func (uf *UnifiedFile) Android() map[string]json.RawMessage    { return uf.PluginKinds["android"] }
 
-// CheckBeds returns the disposable R10 beds keyed by name. In the unified node-form model a bed
-// IS a `disposable: true` deploy, so the bed set is derived directly from the disposable deploys
-// in the Deploy map. Members are instruments (brought up alongside a driver), never standalone
-// beds. Single enumeration source for `charly check run <bed>` (and the /verify-beds fan-out).
-func (uf *UnifiedFile) CheckBeds() map[string]DeployNode {
+// Beds returns every disposable R10 bed in the fold, keyed by QUALIFIED name. In
+// the unified node-form model a bed IS a `disposable: true` deploy, so the bed set
+// is derived directly from the disposable deploys in the Deploy map. Members are
+// instruments (brought up alongside a driver), never standalone beds.
+//
+// This is the ONE bed-enumeration source: it folds LOCAL beds (bare name) and
+// every imported NAMESPACE's beds (`ns.name`), recursively for nested namespaces —
+// the SAME qualified-key convention FillBoxPlans uses. It replaces the former
+// local-only CheckBeds() plus the bool-only loaderkit.bedRef(), which disagreed
+// on namespace scope and made a namespaced bed validate-but-not-run.
+func (uf *UnifiedFile) Beds() map[string]DeployNode {
 	if uf == nil {
 		return nil
 	}
 	beds := map[string]DeployNode{}
+	uf.collectBeds("", beds)
+	return beds
+}
+
+// collectBeds folds this file's local beds under prefix, then recurses into every
+// namespace with the namespace segment prepended (`ns.name`, nested `nsA.nsB.name`).
+func (uf *UnifiedFile) collectBeds(prefix string, out map[string]DeployNode) {
 	for name, node := range uf.Deploy {
 		if node.IsDisposable() && node.MemberOf == "" {
-			beds[name] = node
+			key := name
+			if prefix != "" {
+				key = prefix + "." + name
+			}
+			out[key] = node
 		}
 	}
-	return beds
+	for ns, sub := range uf.Namespaces {
+		if sub == nil {
+			continue
+		}
+		child := ns
+		if prefix != "" {
+			child = prefix + "." + ns
+		}
+		sub.collectBeds(child, out)
+	}
+}
+
+// ResolveBed resolves ref to its disposable R10 bed node. The unqualified form
+// matches a LOCAL bed only; the qualified form (`ns.bed`) reaches into an imported
+// namespace (an unqualified ref into a namespace would be ambiguous). Returns
+// (node, true) when ref names a bed. This is the ONE bed-ref resolver —
+// validate, resolve, and run all use it, so a namespaced bed runs exactly like a
+// local one.
+func (uf *UnifiedFile) ResolveBed(ref string) (DeployNode, bool) {
+	if uf == nil || ref == "" {
+		return DeployNode{}, false
+	}
+	node, ok := uf.Beds()[ref]
+	return node, ok
+}
+
+// BedScope returns the UnifiedFile that OWNS the bed named by qualified ref, plus
+// the bed's unqualified leaf name — nil when ref names no bed. An unqualified ref
+// (a local bed) returns uf itself. A qualified ref (`ns.bed`, nested `nsA.nsB.bed`)
+// descends `uf.Namespaces` along the dot segments. A bed's `from:`/`box:` cross-ref
+// resolves WITHIN its owning scope, so this is the resolver a bed validator uses to
+// check a namespaced bed's references the same way its own namespace sees them.
+func (uf *UnifiedFile) BedScope(ref string) (*UnifiedFile, string) {
+	if uf == nil || ref == "" {
+		return nil, ""
+	}
+	if _, ok := uf.Deploy[ref]; ok && uf.Deploy[ref].IsDisposable() && uf.Deploy[ref].MemberOf == "" {
+		return uf, ref
+	}
+	// Descend the dot-qualified namespace path: try the longest namespace prefix
+	// first so a nested namespace name containing a dot is not mis-split.
+	seg := ref
+	for {
+		i := strings.LastIndexByte(seg, '.')
+		if i < 0 {
+			break
+		}
+		nsPath, leaf := seg[:i], seg[i+1:]
+		if sub := uf.namespaceAt(nsPath); sub != nil {
+			if node, ok := sub.Deploy[leaf]; ok && node.IsDisposable() && node.MemberOf == "" {
+				return sub, leaf
+			}
+		}
+		seg = nsPath
+	}
+	return nil, ""
+}
+
+// namespaceAt returns the imported namespace subtree at a dot-qualified path
+// (`nsA.nsB`), or nil when the path does not resolve.
+func (uf *UnifiedFile) namespaceAt(path string) *UnifiedFile {
+	cur := uf
+	for _, seg := range strings.Split(path, ".") {
+		next := cur.Namespaces[seg]
+		if next == nil {
+			return nil
+		}
+		cur = next
+	}
+	return cur
 }
 
 // ProjectConfig returns the *Config equivalent of uf (the box config view).

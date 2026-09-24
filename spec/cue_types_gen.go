@@ -9061,6 +9061,16 @@ type PostTeardownReply struct {
 
 // #CliRequest is the "cli" host-builder envelope (M4): a lifecycle plugin
 // asks the HOST to run a `charly <argv>` subcommand.
+//
+// `env` carries PER-CALL environment variables for the child, threaded as
+// EXPLICIT DATA rather than the caller mutating its own process env. This is
+// what makes the cli host-builder placement-invariant: a compiled-in caller
+// that `os.Setenv`s isolation vars (CHARLY_REPO_OVERRIDE / CHARLY_DEPLOY_CONFIG /
+// CHARLY_PREEMPT_LEASE) only reaches the forked child when caller and child
+// share a process; an out-of-process caller's `os.Setenv` lands in the WRONG
+// process. Passing the vars here makes the child receive them identically in
+// both placements. Merged into the child's environment (overriding the inherited
+// value for the same key).
 type CliRequest struct {
 	Argv []string `yaml:"argv,omitempty" json:"argv"`
 
@@ -9069,6 +9079,8 @@ type CliRequest struct {
 	Combined bool `yaml:"combined,omitempty" json:"combined,omitempty"`
 
 	BestEffort bool `yaml:"best_effort,omitempty" json:"best_effort,omitempty"`
+
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
 // #CliReply is the "cli" host-builder reply: captured stdout (Capture=true),

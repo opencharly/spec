@@ -129,6 +129,12 @@ protocol: {
 					"number": 13
 					"doc":    "CUE #CLIModel JSON for class=command; lets CLI and MCP reflect plugin-owned leaves without importing plugin code"
 				},
+				{
+					"name":   "interactive"
+					"type":   "bool"
+					"number": 14
+					"doc":    "set ONLY for class=\"command\": the command needs a real terminal (stdin/stdout/stderr/TTY) — `shell`, `logs -f`, `mcp serve --stdio`. A command DECLARING this keeps the process-replacing exec lane (the child becomes the process and inherits the terminal); every non-interactive command dispatches through the broker-backed Invoke(OpRun) path so it behaves identically compiled-in and runtime-loaded. Data-driven, never a class-wide exemption."
+				},
 			]
 		},
 		{

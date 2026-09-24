@@ -160,8 +160,10 @@ type ProvidedCapability struct {
 	Subcommands []*CLISubcommand `protobuf:"bytes,12,rep,name=subcommands,proto3" json:"subcommands,omitempty"`
 	// CUE #CLIModel JSON for class=command; lets CLI and MCP reflect plugin-owned leaves without importing plugin code
 	CommandModelJson []byte `protobuf:"bytes,13,opt,name=command_model_json,json=commandModelJson,proto3" json:"command_model_json,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// set ONLY for class="command": the command needs a real terminal (stdin/stdout/stderr/TTY) — `shell`, `logs -f`, `mcp serve --stdio`. A command DECLARING this keeps the process-replacing exec lane (the child becomes the process and inherits the terminal); every non-interactive command dispatches through the broker-backed Invoke(OpRun) path so it behaves identically compiled-in and runtime-loaded. Data-driven, never a class-wide exemption.
+	Interactive   bool `protobuf:"varint,14,opt,name=interactive,proto3" json:"interactive,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProvidedCapability) Reset() {
@@ -283,6 +285,13 @@ func (x *ProvidedCapability) GetCommandModelJson() []byte {
 		return x.CommandModelJson
 	}
 	return nil
+}
+
+func (x *ProvidedCapability) GetInteractive() bool {
+	if x != nil {
+		return x.Interactive
+	}
+	return false
 }
 
 // CLISubcommand — one DECLARED child of a class="command" capability's own CLI word (F-CLI-NEST).
@@ -2423,7 +2432,7 @@ const file_plugin_proto_rawDesc = "" +
 	"\x06calver\x18\x01 \x01(\tR\x06calver\x12<\n" +
 	"\bprovided\x18\x03 \x03(\v2 .charlyplugin.ProvidedCapabilityR\bprovided\x12\x1d\n" +
 	"\n" +
-	"schema_cue\x18\x04 \x01(\tR\tschemaCueJ\x04\b\x02\x10\x03\"\xf6\x03\n" +
+	"schema_cue\x18\x04 \x01(\tR\tschemaCueJ\x04\b\x02\x10\x03\"\x98\x04\n" +
 	"\x12ProvidedCapability\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x1b\n" +
@@ -2442,7 +2451,8 @@ const file_plugin_proto_rawDesc = "" +
 	" \x01(\tR\aprimary\x12?\n" +
 	"\rdeploy_traits\x18\v \x01(\v2\x1a.charlyplugin.DeployTraitsR\fdeployTraits\x12=\n" +
 	"\vsubcommands\x18\f \x03(\v2\x1b.charlyplugin.CLISubcommandR\vsubcommands\x12,\n" +
-	"\x12command_model_json\x18\r \x01(\fR\x10commandModelJson\"O\n" +
+	"\x12command_model_json\x18\r \x01(\fR\x10commandModelJson\x12 \n" +
+	"\vinteractive\x18\x0e \x01(\bR\vinteractive\"O\n" +
 	"\rCLISubcommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04help\x18\x02 \x01(\tR\x04help\x12\x16\n" +
