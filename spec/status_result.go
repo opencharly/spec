@@ -3,7 +3,7 @@ package spec
 // status_result.go — the check-engine's pass/fail/skip verdict enum (FLOOR-SLIM Unit 4,
 // moved from sdk/kit as part of the CheckResult wire-envelope split). HAND-WRITTEN — a
 // distinct named int type with the iota consts + String() method, NOT emitted by
-// `task cue:gen` (gengotypes has no construct for an iota-based enum + a Stringer method;
+// `charly task cue-gen` (gengotypes has no construct for an iota-based enum + a Stringer method;
 // CUE owns the wire VALUE SET via #CheckResult.status's plain `int` shape, referenced here
 // via @go(Status,type=Status) — this file supplies the named Go type that reference
 // points at). Mirrors the #SubstrateKind split in status_types.go (a string-backed enum

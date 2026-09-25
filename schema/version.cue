@@ -1,5 +1,5 @@
 // version.cue — the HEAD schema version + the migration floor: the SINGLE source
-// of truth for schema versioning. `task cue:gen` reads these via the CUE API and
+// of truth for schema versioning. `charly task cue-gen` reads these via the CUE API and
 // emits spec/version_gen.go (const SchemaVersion / SchemaFloor); the
 // parsed HEAD lives in kit.LatestSchemaVersion() / kit.SchemaFloor(), which
 // parse those generated consts. All three defs are @go(-) so `cue exp

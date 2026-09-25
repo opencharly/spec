@@ -1,9 +1,9 @@
 // CUE schema for the generic `task` kind. A task is a named, host-native,
 // REUSABLE plan — the SAME #Step grammar a candy's `plan:` uses, plus
 // task-level execution config (workdir, env, vars, incremental staleness,
-// dependencies, parameters). It is the declarative replacement for a Taskfile
-// entry: any task a repository needs — build, test, lint, release, verify,
-// notify — is authored as a `task:` node in charly.yml and run with
+// dependencies, parameters). It is the declarative replacement for a repo
+// task-runner entry: any task a repository needs — build, test, lint, release,
+// verify, notify — is authored as a `task:` node in charly.yml and run with
 // `charly task <name>`.
 //
 // #Task references the BASE #Step/#Op grammar (unlike a self-contained plugin

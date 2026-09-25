@@ -6,7 +6,7 @@
 // keeps in core); this generic node tree is the wire between the parse (plugin) and the
 // materialize (host). Package-less; concatenated into the spec compilation unit. NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire type, single-sourced here so
-// `task cue:gen` produces the Go struct (charly aliases it via vmshared/spec_aliases.go).
+// `charly task cue-gen` produces the Go struct (charly aliases it via vmshared/spec_aliases.go).
 
 // #ParsedNode — one decomposed reserved-word node: its name, kind discriminator, the opaque
 // entity body (the complete kind value as JSON, materialized per-kind by the host), and any

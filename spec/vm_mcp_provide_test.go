@@ -13,7 +13,7 @@ import (
 	"github.com/opencharly/spec/schemaconcat"
 )
 
-// loadSchema compiles the SAME concatenation the runtime and `task cue:gen` use
+// loadSchema compiles the SAME concatenation the runtime and `charly task cue-gen` use
 // (schemaconcat.ConcatSchema — R3: one concatenation contract), so the CUE-level
 // assertions below exercise the schema as it actually ships, not a hand-written
 // excerpt (same helper as libvirt_gpu_vocab_cue_test.go).

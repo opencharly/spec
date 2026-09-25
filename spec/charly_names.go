@@ -15,7 +15,7 @@
 // field-level `@go(GoName,…)` attributes (which DO work) carry the per-field
 // name + pointer + type overrides in schema/*.cue.
 //
-// HAND-WRITTEN — not emitted by `task cue:gen`; the reproducibility gate
+// HAND-WRITTEN — not emitted by `charly task cue-gen`; the reproducibility gate
 // (gen_repro_test.go) only covers cue_types_gen.go + vocab_gen.go.
 package spec
 
