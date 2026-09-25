@@ -17,6 +17,7 @@ var ResourceKinds = []string{
 	"local",
 	"android",
 	"kindcluster",
+	"kubevirt",
 }
 
 // ProviderClasses is the CLOSED provider-class vocabulary (#ProviderClassNames) — the classes a `plugin.providers:` capability may name. charly/provider.go's providerClasses and plugin-box's validPluginClasses derive from it; the #PluginCapability regex derives from the same list (never a hand-maintained copy anywhere).
@@ -265,6 +266,7 @@ var KindValueDefs = map[string]string{
 	"candy":       "#CandyValue",
 	"kindcluster": "#KindclusterValue",
 	"kubernetes":  "#KubernetesValue",
+	"kubevirt":    "#KubevirtValue",
 	"local":       "#LocalValue",
 	"pod":         "#PodValue",
 	"task":        "#TaskValue",

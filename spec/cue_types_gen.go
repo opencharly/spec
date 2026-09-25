@@ -2840,6 +2840,8 @@ type ProjectTemplates struct {
 
 	Kindcluster map[string]RawBody `yaml:"kindcluster,omitempty" json:"kindcluster,omitempty"`
 
+	KubeVirt map[string]RawBody `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+
 	Pod map[string]RawBody `yaml:"pod,omitempty" json:"pod,omitempty"`
 
 	VM map[string]RawBody `yaml:"vm,omitempty" json:"vm,omitempty"`
@@ -4528,10 +4530,19 @@ type Deploy struct {
 
 	VmState *VmDeployState `yaml:"vm_state,omitempty" json:"vm_state,omitempty"`
 
+	// kubevirt_state — the persisted runtime identity of a kind:kubevirt deploy
+	// (the KubeVirt analog of vm_state): the cluster/context/namespace the domain
+	// landed in, the boot-medium ref, and the managed port-forward local port.
+	// Written by candy/plugin-kubevirt's lifecycle; the source of truth for
+	// idempotent re-add + teardown. Validation-only (the Go type is hand-written,
+	// mirroring VmState's own treatment).
+	KubeVirtState *KubeVirtDeployState `yaml:"kubevirt_state,omitempty" json:"kubevirt_state,omitempty"`
+
 	// snapshot — the check-bed snapshot-anchoring policy (§5.3.1): capture at
 	// install finalize and reset before every check run, so a batch of PR runs
 	// shares ONE golden disk (revert ≈ seconds vs fresh install ≈ 20-30 min).
-	// VM-only (the substrate-word checks reject it on other substrates).
+	// VM-family only (vm + kubevirt; the substrate-word checks reject it on other
+	// substrates).
 	Snapshot *VmSnapshotPolicy `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
 
 	// update_gate — the check-bed's declarative R10 fresh-update change-class
@@ -6526,6 +6537,12 @@ type Kubernetes struct {
 
 	NetworkPolicy string `yaml:"network_policy,omitempty" json:"network_policy,omitempty"`
 
+	// kubevirt — cluster-specific KubeVirt knobs (the kind:kubevirt substrate's
+	// cluster side). Mirrors the storage/ingress/secret "one cluster template owns
+	// the cluster-specific policy" partition: a kind:kubevirt VM names its cluster
+	// by `cluster:` and these knobs apply.
+	KubeVirt KubernetesKubeVirt `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+
 	Defaults KubernetesResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
@@ -6607,6 +6624,38 @@ type KubernetesObservability struct {
 	ServiceMonitor bool `yaml:"service_monitor,omitempty" json:"service_monitor,omitempty"`
 
 	ServiceMonitorInterval string `yaml:"service_monitor_interval,omitempty" json:"service_monitor_interval,omitempty"`
+}
+
+// #KubernetesKubeVirt — the KubeVirt platform knobs a cluster template carries.
+// The kubevirt-operator install + the kind:kubevirt substrate's defaults resolve
+// from here.
+type KubernetesKubeVirt struct {
+	// enabled — whether this cluster has KubeVirt available (informational;
+	// the operator candy owns the actual install).
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+
+	// cdi_enabled — whether CDI is installed (needed for a data_volume boot).
+	CDIEnabled bool `yaml:"cdi_enabled,omitempty" json:"cdi_enabled,omitempty"`
+
+	CDINamespace string `yaml:"cdi_namespace,omitempty" json:"cdi_namespace,omitempty"`
+
+	// use_emulation runs KubeVirt's software emulation (no /dev/kvm on the node).
+	// The R10 bed uses REAL KVM, so this defaults false.
+	UseEmulation bool `yaml:"use_emulation,omitempty" json:"use_emulation,omitempty"`
+
+	DefaultStorageClass string `yaml:"default_storage_class,omitempty" json:"default_storage_class,omitempty"`
+
+	DefaultInstancetype string `yaml:"default_instancetype,omitempty" json:"default_instancetype,omitempty"`
+
+	DefaultPreference string `yaml:"default_preference,omitempty" json:"default_preference,omitempty"`
+
+	// snapshot_class names the VolumeSnapshotClass a VirtualMachineSnapshot uses.
+	SnapshotClass string `yaml:"snapshot_class,omitempty" json:"snapshot_class,omitempty"`
+
+	// virtctl_version pins the virtctl CLI release the operator candy installs.
+	VirtctlVersion string `yaml:"virtctl_version,omitempty" json:"virtctl_version,omitempty"`
+
+	FeatureGates []string `yaml:"feature_gates,omitempty" json:"feature_gates,omitempty"`
 }
 
 type KubernetesResourceDefaults struct {
@@ -6704,6 +6753,343 @@ type KindclusterPortMapping struct {
 	ListenAddress string `yaml:"listen_address,omitempty" json:"listen_address"`
 
 	Protocol string `yaml:"protocol,omitempty" json:"protocol"`
+}
+
+type KubeVirt struct {
+	// cluster — a kind:kubernetes cluster template name (the SAME cluster model the
+	// Kubernetes deploy substrate uses). kube_context pins a concrete kubeconfig
+	// context directly, bypassing the template lookup.
+	Cluster string `yaml:"cluster,omitempty" json:"cluster,omitempty"`
+
+	KubeContext string `yaml:"kube_context,omitempty" json:"kube_context,omitempty"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	StorageClass string `yaml:"storage_class,omitempty" json:"storage_class,omitempty"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	// source — the boot medium. Exactly one arm (enforced in OpValidate).
+	Source KubevirtSource `yaml:"source,omitempty" json:"source"`
+
+	// --- domain shape ---
+	Memory VmSize `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	CPU *KubevirtCPU `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+
+	Machine string `yaml:"machine,omitempty" json:"machine,omitempty"`
+
+	Firmware *KubevirtFirmware `yaml:"firmware,omitempty" json:"firmware,omitempty"`
+
+	Devices *KubevirtDevices `yaml:"devices,omitempty" json:"devices,omitempty"`
+
+	// gpus — KubeVirt host-device passthrough. Each entry names EITHER a cluster
+	// device-plugin resource (resource_name: "nvidia.com/gpu") XOR a specific host
+	// device (device_name), enforced in OpValidate. Maps requires_exclusive: to
+	// KubeVirt's spec.domain.devices.gpus — the cluster device plugin owns the
+	// physical card (no host arbiter involvement, unlike the vm substrate).
+	GPUs []KubevirtGPU `yaml:"gpus,omitempty" json:"gpus,omitempty"`
+
+	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
+
+	Network *KubevirtNetwork `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Instancetype string `yaml:"instancetype,omitempty" json:"instancetype,omitempty"`
+
+	Preference string `yaml:"preference,omitempty" json:"preference,omitempty"`
+
+	RunStrategy string `yaml:"run_strategy,omitempty" json:"run_strategy,omitempty"`
+
+	EvictionStrategy string `yaml:"eviction_strategy,omitempty" json:"eviction_strategy,omitempty"`
+
+	TerminationGracePeriodSeconds int `yaml:"termination_grace_period_seconds,omitempty" json:"termination_grace_period_seconds,omitempty"`
+
+	NodeSelector map[string]string `yaml:"node_selector,omitempty" json:"node_selector,omitempty"`
+
+	// affinity — a raw Kubernetes Affinity object; genuine passthrough.
+	Affinity map[string]any/* CUE top */ `yaml:"affinity,omitempty" json:"affinity,omitempty"`
+
+	Migration *KubevirtMigration `yaml:"migration,omitempty" json:"migration,omitempty"`
+
+	Snapshots []KubevirtSnapshot `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
+}
+
+type KubevirtCPU struct {
+	Cores int `yaml:"cores,omitempty" json:"cores,omitempty"`
+
+	Sockets int `yaml:"sockets,omitempty" json:"sockets,omitempty"`
+
+	Threads int `yaml:"threads,omitempty" json:"threads,omitempty"`
+
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+
+	DedicatedCPUPlacement bool `yaml:"dedicated_cpu_placement,omitempty" json:"dedicated_cpu_placement,omitempty"`
+}
+
+type KubevirtFirmware struct {
+	// bootloader selects BIOS or UEFI. Required-with-default so the efi-secure
+	// cross-rule below can reference it (an optional field errors when absent).
+	Bootloader string `yaml:"bootloader,omitempty" json:"bootloader"`
+
+	EFISecureBoot bool `yaml:"efi_secure_boot,omitempty" json:"efi_secure_boot,omitempty"`
+}
+
+type KubevirtDevices struct {
+	// autoattach_* mirror the KubeVirt autoattach toggles.
+	AutoattachPodInterface bool `yaml:"autoattach_pod_interface,omitempty" json:"autoattach_pod_interface,omitempty"`
+
+	AutoattachGraphicsDevice bool `yaml:"autoattach_graphics_device,omitempty" json:"autoattach_graphics_device,omitempty"`
+
+	AutoattachSerialConsole bool `yaml:"autoattach_serial_console,omitempty" json:"autoattach_serial_console,omitempty"`
+
+	// rng adds a virtio-rng device (entropy for a cloud-init guest).
+	Rng bool `yaml:"rng,omitempty" json:"rng,omitempty"`
+
+	// disks/filesystems are the extra (non-boot) volumes, typed-open passthrough.
+	Disks []map[string]any/* CUE top */ `yaml:"disks,omitempty" json:"disks,omitempty"`
+
+	Inputs []KubevirtInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
+
+	Watchdog *KubevirtWatchdog `yaml:"watchdog,omitempty" json:"watchdog,omitempty"`
+}
+
+type KubevirtInput struct {
+	Type string `yaml:"type,omitempty" json:"type"`
+
+	Bus string `yaml:"bus,omitempty" json:"bus,omitempty"`
+}
+
+type KubevirtWatchdog struct {
+	Model string `yaml:"model,omitempty" json:"model"`
+
+	Action string `yaml:"action,omitempty" json:"action,omitempty"`
+}
+
+type KubevirtGPU struct {
+	ResourceName string `yaml:"resource_name,omitempty" json:"resource_name,omitempty"`
+
+	DeviceName string `yaml:"device_name,omitempty" json:"device_name,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// cloud_init: VmCloudInit. CLOSED. Genuine passthroughs:
+// extra (raw cloud-config string) and network.ethernets (network-config v2,
+// map[string]map[string]any → {[string]: {[string]: _}}).
+// ---------------------------------------------------------------------------
+type VmCloudInit struct {
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
+
+	Users []VmCloudInitUser `yaml:"users,omitempty" json:"users,omitempty"`
+
+	Package []string `yaml:"package,omitempty" json:"package,omitempty"`
+
+	RunCmd []string `yaml:"runcmd,omitempty" json:"runcmd,omitempty"`
+
+	BootCmd []string `yaml:"bootcmd,omitempty" json:"bootcmd,omitempty"`
+
+	WriteFiles []VmCloudInitFile `yaml:"write_files,omitempty" json:"write_files,omitempty"`
+
+	Network *VmCloudInitNetwork `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Mirrors *VmCloudInitMirrors `yaml:"mirrors,omitempty" json:"mirrors,omitempty"`
+
+	CharlyInstall *VmCharlyInstall `yaml:"charly_install,omitempty" json:"charly_install,omitempty"`
+
+	Extra string `yaml:"extra,omitempty" json:"extra,omitempty"`
+}
+
+type VmCloudInitUser struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Sudo bool `yaml:"sudo,omitempty" json:"sudo,omitempty"`
+
+	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
+
+	Shell string `yaml:"shell,omitempty" json:"shell,omitempty"`
+
+	LockPasswd *bool `yaml:"lock_passwd,omitempty" json:"lock_passwd,omitempty"`
+}
+
+type VmCloudInitFile struct {
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	Content string `yaml:"content,omitempty" json:"content,omitempty"`
+
+	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
+
+	Perms string `yaml:"perms,omitempty" json:"perms,omitempty"`
+
+	Encoding string `yaml:"encoding,omitempty" json:"encoding,omitempty"`
+}
+
+type VmCloudInitNetwork struct {
+	Version int `yaml:"version,omitempty" json:"version,omitempty"`
+
+	// network-config v2 map[string]map[string]any — typed-open passthrough.
+	Ethernets map[string]map[string]any/* CUE top */ `yaml:"ethernets,omitempty" json:"ethernets,omitempty"`
+}
+
+type VmCloudInitMirrors struct {
+	APT []string `yaml:"apt,omitempty" json:"apt,omitempty"`
+
+	DNF []string `yaml:"dnf,omitempty" json:"dnf,omitempty"`
+
+	Pacman []string `yaml:"pacman,omitempty" json:"pacman,omitempty"`
+}
+
+type VmCharlyInstall struct {
+	// VmCharlyInstall has ONLY `strategy` (the vm-spec skill's url/checksum are
+	// STALE — the Go struct dropped them). auto: scp host binary post-boot;
+	// scp: explicit form; skip: user-managed.
+	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+}
+
+type KubevirtNetwork struct {
+	// pod is the default KubeVirt network (a masquerade interface over the pod net).
+	Interface string `yaml:"interface,omitempty" json:"interface,omitempty"`
+
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+
+	// ports declare named ports on the interface (informational for a Service).
+	Ports []KubevirtPort `yaml:"ports,omitempty" json:"ports,omitempty"`
+}
+
+type KubevirtPort struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Port int `yaml:"port,omitempty" json:"port"`
+
+	Protocol string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+}
+
+type KubevirtMigration struct {
+	AllowAutoConverge bool `yaml:"allow_auto_converge,omitempty" json:"allow_auto_converge,omitempty"`
+
+	AllowPostCopy bool `yaml:"allow_post_copy,omitempty" json:"allow_post_copy,omitempty"`
+
+	BandwidthPerMigration string `yaml:"bandwidth_per_migration,omitempty" json:"bandwidth_per_migration,omitempty"`
+
+	CompletionTimeoutSeconds int `yaml:"completion_timeout_seconds,omitempty" json:"completion_timeout_seconds,omitempty"`
+}
+
+type KubevirtSnapshot struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	// snapshot_class names the VolumeSnapshotClass; empty → the cluster default.
+	SnapshotClass string `yaml:"snapshot_class,omitempty" json:"snapshot_class,omitempty"`
+}
+
+// #KubeVirtPluginEnv is the host→plugin env for an internal KubeVirt-resolution
+// RPC. vm_op selects the operation: list / vm-state / resolve-vnc / resolve-console
+// / snapshot-internal / migrate.
+type KubeVirtPluginEnv struct {
+	VmOp string `yaml:"vm_op,omitempty" json:"vm_op"`
+
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	Cluster string `yaml:"cluster,omitempty" json:"cluster,omitempty"`
+
+	KubeContext string `yaml:"kube_context,omitempty" json:"kube_context,omitempty"`
+
+	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
+
+	Force bool `yaml:"force,omitempty" json:"force,omitempty"`
+
+	DeleteVolumes bool `yaml:"delete_volumes,omitempty" json:"delete_volumes,omitempty"`
+
+	Snap *KubeVirtSnapInternalReq `yaml:"snap,omitempty" json:"snap,omitempty"`
+
+	Migrate *KubeVirtMigrationReq `yaml:"migrate,omitempty" json:"migrate,omitempty"`
+}
+
+// #KubeVirtSnapInternalReq is the snapshot-internal op payload.
+type KubeVirtSnapInternalReq struct {
+	SnapOp string `yaml:"snap_op,omitempty" json:"snap_op"`
+
+	VmName string `yaml:"vm_name,omitempty" json:"vm_name"`
+
+	Opts *KubeVirtSnapshotCreateOpts `yaml:"opts,omitempty" json:"opts,omitempty"`
+
+	Entry *KubeVirtSnapshotEntry `yaml:"entry,omitempty" json:"entry,omitempty"`
+}
+
+// #KubeVirtSnapshotCreateOpts parameterizes a VirtualMachineSnapshot create.
+type KubeVirtSnapshotCreateOpts struct {
+	VmName string `yaml:"vm_name,omitempty" json:"vm_name"`
+
+	SnapName string `yaml:"snap_name,omitempty" json:"snap_name"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	SnapshotClass string `yaml:"snapshot_class,omitempty" json:"snapshot_class,omitempty"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+// #KubeVirtSnapshotEntry is one snapshot record (the on-disk registry shape) —
+// carried on delete/revert ops so the plugin has the full record.
+type KubeVirtSnapshotEntry struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	SnapshotClass string `yaml:"snapshot_class,omitempty" json:"snapshot_class,omitempty"`
+
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Created string `yaml:"created,omitempty" json:"created,omitempty"`
+
+	Phase string `yaml:"phase,omitempty" json:"phase,omitempty"`
+
+	Refcount int `yaml:"refcount,omitempty" json:"refcount"`
+}
+
+// #KubeVirtMigrationReq parameterizes a VirtualMachineInstanceMigration.
+type KubeVirtMigrationReq struct {
+	VmName string `yaml:"vm_name,omitempty" json:"vm_name"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	ToNode string `yaml:"to_node,omitempty" json:"to_node,omitempty"`
+}
+
+// #KubeVirtDomainInfo mirrors a live KubeVirt VM row for status collection.
+type KubeVirtDomainInfo struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	State string `yaml:"state,omitempty" json:"state"`
+}
+
+// #KubeVirtConsoleEndpoint describes how to reach a running VM's console/VNC.
+type KubeVirtConsoleEndpoint struct {
+	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	Port int `yaml:"port,omitempty" json:"port,omitempty"`
+
+	TunnelNeeded bool `yaml:"tunnel_needed,omitempty" json:"tunnel_needed,omitempty"`
+}
+
+// #KubeVirtResolveResult decodes a resolve-console reply.
+type KubeVirtResolveResult struct {
+	Endpoint KubeVirtConsoleEndpoint `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
 // #LedgerConfig is the top-level `ledger:` block. `deploys` maps deploy-id →
@@ -9084,83 +9470,6 @@ type VmNetwork struct {
 	PortForwards []string `yaml:"port_forwards,omitempty" json:"port_forwards,omitempty"`
 }
 
-// ---------------------------------------------------------------------------
-// cloud_init: VmCloudInit. CLOSED. Genuine passthroughs:
-// extra (raw cloud-config string) and network.ethernets (network-config v2,
-// map[string]map[string]any → {[string]: {[string]: _}}).
-// ---------------------------------------------------------------------------
-type VmCloudInit struct {
-	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-
-	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
-
-	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
-
-	Users []VmCloudInitUser `yaml:"users,omitempty" json:"users,omitempty"`
-
-	Package []string `yaml:"package,omitempty" json:"package,omitempty"`
-
-	RunCmd []string `yaml:"runcmd,omitempty" json:"runcmd,omitempty"`
-
-	BootCmd []string `yaml:"bootcmd,omitempty" json:"bootcmd,omitempty"`
-
-	WriteFiles []VmCloudInitFile `yaml:"write_files,omitempty" json:"write_files,omitempty"`
-
-	Network *VmCloudInitNetwork `yaml:"network,omitempty" json:"network,omitempty"`
-
-	Mirrors *VmCloudInitMirrors `yaml:"mirrors,omitempty" json:"mirrors,omitempty"`
-
-	CharlyInstall *VmCharlyInstall `yaml:"charly_install,omitempty" json:"charly_install,omitempty"`
-
-	Extra string `yaml:"extra,omitempty" json:"extra,omitempty"`
-}
-
-type VmCloudInitUser struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Sudo bool `yaml:"sudo,omitempty" json:"sudo,omitempty"`
-
-	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
-
-	Shell string `yaml:"shell,omitempty" json:"shell,omitempty"`
-
-	LockPasswd *bool `yaml:"lock_passwd,omitempty" json:"lock_passwd,omitempty"`
-}
-
-type VmCloudInitFile struct {
-	Path string `yaml:"path,omitempty" json:"path"`
-
-	Content string `yaml:"content,omitempty" json:"content,omitempty"`
-
-	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
-
-	Perms string `yaml:"perms,omitempty" json:"perms,omitempty"`
-
-	Encoding string `yaml:"encoding,omitempty" json:"encoding,omitempty"`
-}
-
-type VmCloudInitNetwork struct {
-	Version int `yaml:"version,omitempty" json:"version,omitempty"`
-
-	// network-config v2 map[string]map[string]any — typed-open passthrough.
-	Ethernets map[string]map[string]any/* CUE top */ `yaml:"ethernets,omitempty" json:"ethernets,omitempty"`
-}
-
-type VmCloudInitMirrors struct {
-	APT []string `yaml:"apt,omitempty" json:"apt,omitempty"`
-
-	DNF []string `yaml:"dnf,omitempty" json:"dnf,omitempty"`
-
-	Pacman []string `yaml:"pacman,omitempty" json:"pacman,omitempty"`
-}
-
-type VmCharlyInstall struct {
-	// VmCharlyInstall has ONLY `strategy` (the vm-spec skill's url/checksum are
-	// STALE — the Go struct dropped them). auto: scp host binary post-boot;
-	// scp: explicit form; skip: user-managed.
-	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
-}
-
 type VmSnapshot struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
@@ -9634,6 +9943,30 @@ type KubernetesResolveReply struct {
 	Resolved *ResolvedKubernetes `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
+// #ResolvedKubeVirt is the resolve-to-envelope form of a `kubevirt:` VM template.
+// The kernel reads only Cluster/KubeContext (the deploy preresolver's cluster
+// target); the full VM model rides opaquely in Raw and is decoded by
+// candy/plugin-kubevirt, never the kernel.
+type ResolvedKubeVirt struct {
+	Cluster string `yaml:"cluster,omitempty" json:"cluster,omitempty"`
+
+	KubeContext string `yaml:"kube_context,omitempty" json:"kube_context,omitempty"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
+}
+
+// #KubeVirtResolveInput carries one opaque kind:kubevirt template body to project.
+type KubeVirtResolveInput struct {
+	KubeVirt RawBody `yaml:"kubevirt,omitempty" json:"kubevirt"`
+}
+
+// #KubeVirtResolveReply wraps the resolved kubevirt template.
+type KubeVirtResolveReply struct {
+	Resolved *ResolvedKubeVirt `yaml:"resolved,omitempty" json:"resolved,omitempty"`
+}
+
 // #LocalResolveInput / #AndroidResolveInput carry one opaque template body to
 // project.
 type LocalResolveInput struct {
@@ -9667,6 +10000,8 @@ type SubstrateTemplateResolveRequest struct {
 	Kindcluster *KindclusterResolveInput `yaml:"kindcluster,omitempty" json:"kindcluster,omitempty"`
 
 	Vm *VmResolveInput `yaml:"vm,omitempty" json:"vm,omitempty"`
+
+	KubeVirt *KubeVirtResolveInput `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
 }
 
 // #VmResolveInput carries one opaque vm template body to project (Cutover L).

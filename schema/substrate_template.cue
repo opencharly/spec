@@ -102,6 +102,27 @@
 	resolved?: #ResolvedKubernetes @go(Resolved,optional=nillable)
 }
 
+// #ResolvedKubeVirt is the resolve-to-envelope form of a `kubevirt:` VM template.
+// The kernel reads only Cluster/KubeContext (the deploy preresolver's cluster
+// target); the full VM model rides opaquely in Raw and is decoded by
+// candy/plugin-kubevirt, never the kernel.
+#ResolvedKubeVirt: {
+	cluster?:      string @go(Cluster)
+	kube_context?: string @go(KubeContext)
+	namespace?:    string @go(Namespace)
+	raw?:          bytes  @go(Raw,type=RawBody)
+}
+
+// #KubeVirtResolveInput carries one opaque kind:kubevirt template body to project.
+#KubeVirtResolveInput: {
+	kubevirt!: bytes @go(KubeVirt,type=RawBody)
+}
+
+// #KubeVirtResolveReply wraps the resolved kubevirt template.
+#KubeVirtResolveReply: {
+	resolved?: #ResolvedKubeVirt @go(Resolved,optional=nillable)
+}
+
 // #LocalResolveInput / #AndroidResolveInput carry one opaque template body to
 // project.
 #LocalResolveInput: {
@@ -130,6 +151,7 @@
 	kubernetes?: #KubernetesResolveInput @go(Kubernetes,optional=nillable)
 	kindcluster?: #KindclusterResolveInput @go(Kindcluster,optional=nillable)
 	vm?:      #VmResolveInput      @go(Vm,optional=nillable)
+	kubevirt?: #KubeVirtResolveInput @go(KubeVirt,optional=nillable)
 }
 
 // #VmResolveInput carries one opaque vm template body to project (Cutover L).

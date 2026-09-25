@@ -87,3 +87,43 @@ type EphemeralRuntime struct {
 	// dotted path (VmDomainIdentity's "." -> "-" replacement is lossy).
 	DeployAddress string `yaml:"deploy_address,omitempty" json:"deploy_address,omitempty"`
 }
+
+// KubeVirtDeployState is the persisted runtime identity of a kind:kubevirt
+// deploy — the KubeVirt analog of VmDeployState (MACHINE-WRITTEN, open forward-
+// evolving record, so #KubeVirtDeployState is @go(-)'d and this faithful struct
+// is mirrored here). Written by candy/plugin-kubevirt's lifecycle; the source of
+// truth for idempotent re-add + teardown. Kept in lockstep with the CUE def
+// (schema/deploy.cue #KubeVirtDeployState).
+type KubeVirtDeployState struct {
+	// Cluster is the kind:kubernetes cluster template name the VM landed in.
+	Cluster string `yaml:"cluster,omitempty" json:"cluster,omitempty"`
+	// KubeContext is the resolved kubeconfig context (from the template or the
+	// entity's explicit kube_context).
+	KubeContext string `yaml:"kube_context,omitempty" json:"kube_context,omitempty"`
+	Namespace   string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	// VMName is the VirtualMachine CR name (DOMAIN-scoped, not the shared entity —
+	// sibling beds on one entity get distinct CRs).
+	VMName string `yaml:"vm_name,omitempty" json:"vm_name,omitempty"`
+	// BootRef is the resolved boot medium (a containerDisk image ref, a DataVolume
+	// name, or a PVC name) — the source of truth for idempotent re-add.
+	BootRef string `yaml:"boot_ref,omitempty" json:"boot_ref,omitempty"`
+	// BootKind is the source arm that produced BootRef (container_disk |
+	// data_volume | pvc | clone).
+	BootKind string `yaml:"boot_kind,omitempty" json:"boot_kind,omitempty"`
+	// SSHPort is the managed `virtctl port-forward` LOCAL host port the deploy
+	// SSHes through (auto-allocated, persisted so a re-add reuses it).
+	SSHPort int    `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`
+	SSHUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+	// Snapshots is the VirtualMachineSnapshot ledger (names + refcounts) for
+	// teardown refcounting.
+	Snapshots []KubeVirtDeploySnapshot `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
+	Ephemeral *EphemeralRuntime        `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty"`
+}
+
+// KubeVirtDeploySnapshot mirrors one VirtualMachineSnapshot in the
+// kubevirt_state record.
+type KubeVirtDeploySnapshot struct {
+	Name     string `yaml:"name,omitempty" json:"name,omitempty"`
+	Phase    string `yaml:"phase,omitempty" json:"phase,omitempty"`
+	Refcount int    `yaml:"refcount,omitempty" json:"refcount,omitempty"`
+}

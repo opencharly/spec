@@ -49,7 +49,7 @@
 // the ProjectLoader seam) and threaded to the plugin via
 // op.Env (F5); the parser gate admits them because resourceKindSet has them. candy is NOT a
 // resource kind (it nests no deploy members — it is the box⊻layer factory).
-#ResourceKind: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster") @go(-)
+#ResourceKind: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" | "kubevirt") @go(-)
 
 // ---------------------------------------------------------------------------
 // Per-kind node VALUES — the COMPLETE per-kind def, authored INLINE: the kind
@@ -87,17 +87,22 @@
 // (validateKindValueCUE) — the SAME closedness the #Node arm gave — because a
 // self-contained plugin schema cannot carry these rich core-referencing values. So these
 // defs stay REACHABLE from Go (via runPluginKind's kindValueDef lookup) while contributing
-// NO #Node arm (KindWords drops the 5). #CandyValue above is the C2-candy analogue.
+// NO #Node arm (KindWords drops the 6). #CandyValue above is the C2-candy analogue.
 #LocalValue:   (#Local | #DeployValue) @go(-)
 #PodValue:     (#Pod | #DeployValue) @go(-)
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #KubernetesValue: (#Kubernetes | #DeployValue) @go(-)
 #KindclusterValue: (#Kindcluster | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
+// kubevirt is the 6th substrate kind (a KubeVirt VM: a cluster-scheduled VM whose
+// plan walks in the guest over SSH, like vm). Its kind/deploy/verb/command surface is
+// served by the external plugin-kubevirt; the value gate below is derived by schemagen
+// (kindValueDefs) from this def, so no hand map entry is needed.
+#KubevirtValue: (#KubeVirt | #DeployValue) @go(-)
 // EVERY authoring kind is externalized to a plugin unit — the build-vocabulary kinds
 // (`distro:`/`builder:`/`init:`/`resource:`), the AI-CLI grader `agent:`, the sidecar
 // `sidecar:`, the substrate kinds
-// `pod:`/`vm:`/`kubernetes:`/`local:`/`android:`/`kindcluster:` (C2-substrate), AND the box⊻layer
+// `pod:`/`vm:`/`kubernetes:`/`local:`/`android:`/`kindcluster:`/`kubevirt:` (C2-substrate), AND the box⊻layer
 // factory `candy:` (C2-candy) — so NONE has a #Node arm; such a node passes #NodeDoc as a
 // registered non-core discriminator (the OPEN #Node struct). The former targetless deploy kind
 // `group:` (C2-group) is REMOVED (the member-tree cutover — the dual representation is forbidden
@@ -109,7 +114,7 @@
 // (#Vm/#Deploy/#LibvirtDomain/#Candy/#Box/…) and so cannot be a self-contained plugin schema, are
 // validated HOST-SIDE against the KEPT #<Kind>Value / #CandyValue defs above (runPluginKind →
 // validateKindValueCUE). The core #Distro / #Builder / #Init / #Resource / #Agent /
-// #Sidecar / #Pod / #Vm / #Kubernetes / #Local / #Android / #Deploy / #Candy / #Box defs
+// #Sidecar / #Pod / #Vm / #KubeVirt / #Kubernetes / #Local / #Android / #Deploy / #Candy / #Box defs
 // (schema/*.cue) are KEPT — they still generate spec.Distro / spec.Vm / spec.Candy / spec.Box /
 // … (the canonical types the plugins' Invoke and the host decode into). For the substrates
 // candy/plugin-substrate ECHOES the host-pre-decoded canonical node (deploy DeployNode or

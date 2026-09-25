@@ -305,6 +305,38 @@ type VmSsh struct {
 }
 
 // ---------------------------------------------------------------------------
+// KubevirtSource — #KubevirtSource. The flat discriminated-union BOOT MEDIUM for
+// a kind:kubevirt VM (Kind selects the arm: container_disk / data_volume / pvc /
+// clone). Mirrors VmSource's hand-written flat shape (the #VmSource precedent:
+// a CUE union with per-arm `_|_` forbids degrades under gengotypes, so the union
+// itself is @go(-) and this faithful Go shape is hand-built).
+// ---------------------------------------------------------------------------
+
+// KubevirtSource is the discriminated-union boot medium for a KubeVirt VM.
+type KubevirtSource struct {
+	Kind string `yaml:"kind" json:"kind"`
+	// container_disk arm: an OCI image whose layers carry the disk (a charly VM
+	// box, or any KubeVirt containerDisk image).
+	Image      string `yaml:"image,omitempty" json:"image,omitempty"`
+	PullPolicy string `yaml:"pull_policy,omitempty" json:"pull_policy,omitempty"`
+	PullSecret string `yaml:"pull_secret,omitempty" json:"pull_secret,omitempty"`
+	// data_volume arm: the CDI import source (http/registry/pvc/blank) + size.
+	DataVolume   map[string]any `yaml:"data_volume,omitempty" json:"data_volume,omitempty"`
+	Size         string         `yaml:"size,omitempty" json:"size,omitempty"`
+	StorageClass string         `yaml:"storage_class,omitempty" json:"storage_class,omitempty"`
+	ContentType  string         `yaml:"content_type,omitempty" json:"content_type,omitempty"`
+	// pvc arm: an existing PersistentVolumeClaim name.
+	PVC string `yaml:"pvc,omitempty" json:"pvc,omitempty"`
+	// clone arm: create a DataVolume as a clone of an existing VM/DataVolume.
+	Clone *KubevirtCloneSource `yaml:"clone,omitempty" json:"clone,omitempty"`
+}
+
+// KubevirtCloneSource is the `clone:` arm of #KubevirtSource.
+type KubevirtCloneSource struct {
+	From string `yaml:"from" json:"from"`
+}
+
+// ---------------------------------------------------------------------------
 // ApkPackageSpec — #CandyApk (android_spec.go). package XOR apk.
 // ---------------------------------------------------------------------------
 type ApkPackageSpec struct {
