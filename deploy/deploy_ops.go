@@ -23,6 +23,17 @@ import (
 // ResolveNodePath resolves a dotted deployment path against a root map, returning the leaf node,
 // its ancestor chain, and any lookup error.
 func ResolveNodePath(roots map[string]spec.DeployNode, path string) (*spec.DeployNode, []*spec.DeployNode, error) {
+	if path == "" {
+		return nil, nil, fmt.Errorf("empty or malformed deployment path %q", path)
+	}
+	// EXACT full-key match FIRST: a NAMESPACE-QUALIFIED deploy key (`charly.check-agentteams-vm`)
+	// contains dots that are namespace separators, NOT member-path separators — so the dotted-path
+	// split below would treat `charly` as a root name and miss the real entry. A key that is present
+	// verbatim is a top-level deploy (local bare or `ns.name`), so return it directly. Member
+	// descent (`openclaw-stack.web.db`) only applies when the full key is absent.
+	if rootEntry, ok := roots[path]; ok {
+		return &rootEntry, nil, nil
+	}
 	parts := SplitDottedPath(path)
 	if len(parts) == 0 {
 		return nil, nil, fmt.Errorf("empty or malformed deployment path %q", path)

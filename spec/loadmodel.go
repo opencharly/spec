@@ -214,6 +214,60 @@ func (uf *UnifiedFile) ResolveBed(ref string) (DeployNode, bool) {
 	return node, ok
 }
 
+// Deploys returns every deploy node in the fold, keyed by QUALIFIED name: local
+// deploys under their bare name, and every imported namespace's deploys as
+// `ns.name` (recursively `nsA.nsB.name`). This is the namespace-aware sibling of
+// the raw `Deploy` map: a MERGED-ROOT consumer (a `charly deploy add <ns.bed>`
+// resolving against the fold) must find a namespaced deploy as `ns.bed`, exactly
+// as Beds() already folds the disposable subset. A qualified key never collides
+// with a bare local name, so this is ADDITIVE to the local map.
+//
+// The guard is the same path-scoped ANCESTOR stack Beds() uses, so a mutual import
+// terminates while a shared multi-alias mount still folds at each path.
+func (uf *UnifiedFile) Deploys() map[string]DeployNode {
+	if uf == nil {
+		return nil
+	}
+	out := map[string]DeployNode{}
+	uf.collectDeploys("", out, map[*UnifiedFile]bool{})
+	return out
+}
+
+func (uf *UnifiedFile) collectDeploys(prefix string, out map[string]DeployNode, ancestors map[*UnifiedFile]bool) {
+	if uf == nil || ancestors[uf] {
+		return
+	}
+	ancestors[uf] = true
+	defer delete(ancestors, uf)
+	for name, node := range uf.Deploy {
+		key := name
+		if prefix != "" {
+			key = prefix + "." + name
+		}
+		// Qualify the node's namespace-LOCAL `from:` cross-ref so a merged-root consumer
+		// resolves it — plugin-deploy-vm's prepare-venue resolves the node's `from:` as a
+		// kind:vm entity, which lives in this namespace as `ns.leaf`. ONLY `from:` is
+		// qualified: an `image:` is a box CONFIG ref that doubles as an OCI artifact base
+		// (the pod overlay's ExtractMetadata/alias-tag path uses its LEAF name), and the bed
+		// root's OWN image: is already qualified by ResolveBedForRoot. Qualifying image: here
+		// would break the pod overlay's OCI base resolution (measured: alias-tag exit 125).
+		if prefix != "" {
+			node.From = qualifyLocalRef(node.From, prefix+".")
+		}
+		out[key] = node
+	}
+	for ns, sub := range uf.Namespaces {
+		if sub == nil {
+			continue
+		}
+		child := ns
+		if prefix != "" {
+			child = prefix + "." + ns
+		}
+		sub.collectDeploys(child, out, ancestors)
+	}
+}
+
 // BedScope returns the UnifiedFile that OWNS the bed named by qualified ref, plus
 // the bed's unqualified leaf name — nil when ref names no bed. An unqualified ref
 // (a local bed) returns uf itself. A qualified ref (`ns.bed`, nested `nsA.nsB.bed`)
