@@ -238,7 +238,8 @@
 	// The host fills these in the validate-project path only (empty for the resolved-project path);
 	// clause-D kind/word-recognition DATA consulted BY WORD, never a per-kind branch.
 	//   provider_capabilities — every compiled-in provider as "<class>:<word>" (validatePluginCandy
-	//     checks a `source: builtin` candy's declared providers are actually compiled in).
+	//     checks a compiled-in plugin candy's declared providers are actually members of the binary's
+	//     compiled_plugins selection).
 	//   act_capable_verbs — the plugin WORDS whose act form has a build/deploy install path (the host
 	//     type-asserts ProvisionActor/TypedStepProvider/BuildEmitter + connected/declared externals +
 	//     command, exactly as core's opActsInBuildDeploy does), so validateCheck's act-form rule keeps
@@ -288,8 +289,8 @@
 	primaries?: {[string]: string} @go(Primaries)
 }
 
-// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android: template maps carried as OPAQUE payloads
-// (the uf.Pod/VM/Local/Kubernetes/Android raw bytes, verbatim). The host projector stays KIND-BLIND — it
+// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android:/kindcluster: template maps carried as OPAQUE payloads
+// (the uf.Pod/VM/Local/Kubernetes/Android/Kindcluster raw bytes, verbatim). The host projector stays KIND-BLIND — it
 // copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Pod/…
 // would violate the boundary law + trip TestNoConcreteKindInKernel). The CONSUMING PLUGINS
 // (validate localtemplates, check-include pod/vm arms, status kubernetes/adb) decode a RawBody into the
@@ -297,6 +298,7 @@
 #ProjectTemplates: {
 	local?: {[string]: bytes} @go(Local,type=map[string]RawBody)
 	kubernetes?: {[string]: bytes} @go(Kubernetes,type=map[string]RawBody)
+	kindcluster?: {[string]: bytes} @go(Kindcluster,type=map[string]RawBody)
 	kubevirt?: {[string]: bytes} @go(KubeVirt,type=map[string]RawBody)
 	pod?: {[string]: bytes} @go(Pod,type=map[string]RawBody)
 	vm?: {[string]: bytes} @go(VM,type=map[string]RawBody)

@@ -73,6 +73,25 @@
 	raw?: bytes @go(Raw,type=RawBody)
 }
 
+// #ResolvedKindcluster is the resolve-to-envelope form of a `kindcluster:` cluster
+// template. The kernel reads only KubeconfigContext (the deploy preresolver); the
+// full cluster model rides opaquely in Raw and is decoded by the deploy:kindcluster
+// provider (candy/plugin-kube), never the kernel. Mirrors #ResolvedKubernetes (R3).
+#ResolvedKindcluster: {
+	kubeconfig_context?: string @go(KubeconfigContext)
+	raw?: bytes @go(Raw,type=RawBody)
+}
+
+// #KindclusterResolveInput carries one opaque kindcluster cluster template body to project.
+#KindclusterResolveInput: {
+	kindcluster!: bytes @go(Kindcluster,type=RawBody)
+}
+
+// #KindclusterResolveReply wraps the resolved kindcluster cluster template.
+#KindclusterResolveReply: {
+	resolved?: #ResolvedKindcluster @go(Resolved,optional=nillable)
+}
+
 // #KubernetesResolveInput carries one opaque kubernetes cluster template body to project.
 #KubernetesResolveInput: {
 	kubernetes!: bytes @go(Kubernetes,type=RawBody)
@@ -130,6 +149,7 @@
 	android?: #AndroidResolveInput @go(Android,optional=nillable)
 	pod?:     #PodResolveInput     @go(Pod,optional=nillable)
 	kubernetes?: #KubernetesResolveInput @go(Kubernetes,optional=nillable)
+	kindcluster?: #KindclusterResolveInput @go(Kindcluster,optional=nillable)
 	vm?:      #VmResolveInput      @go(Vm,optional=nillable)
 	kubevirt?: #KubeVirtResolveInput @go(KubeVirt,optional=nillable)
 }

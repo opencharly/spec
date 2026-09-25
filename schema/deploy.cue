@@ -82,7 +82,7 @@
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
-	target?: ("pod" | "vm" | "kubernetes" | "local" | "android") @go(Target,type=string) // loader-DERIVED (yaml:"-")
+	target?: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster") @go(Target,type=string) // loader-DERIVED (yaml:"-")
 
 	// member_of is a loader-DERIVED runtime field (never authored; rejected by
 	// #DeployValue): it marks a folded deploy-level member entry registered as a
@@ -811,6 +811,24 @@
 	tree_root?:    string @go(TreeRoot)    // <root> = .opencharly/k8s/<name> — removed at teardown
 	kube_context?: string @go(KubeContext) // kind:kubernetes template's kubeconfig_context → `kubectl --context` (empty → current-context)
 	deploy_name?:  string @go(DeployName)  // for plugin-side log messages
+}
+
+// #KindclusterDeployVenue is the preresolved deploy:kindcluster substrate payload the
+// kindcluster deploy preresolver produces in DeployVenue.Substrate and the
+// candy/plugin-kube deploy:kindcluster provider decodes. Mirrors #KubernetesDeployVenue (R3),
+// plus the kind-specific facts (cluster name, resolved engine → KIND_EXPERIMENTAL_PROVIDER,
+// the node-image digest pin) the create leg needs.
+#KindclusterDeployVenue: {
+	cluster_name!: string @go(ClusterName) // kind cluster name (also the node-container name prefix)
+	provider!:     string @go(Provider)    // KIND_EXPERIMENTAL_PROVIDER (docker|podman|nerdctl)
+	node_image!:   string @go(NodeImage)   // digest-pinned kindest/node image
+	// cluster_config is the egress-validated rendered kind Cluster config YAML (the
+	// `kind create cluster --config` argument). Rendered + validated plugin-side.
+	cluster_config!: bytes @go(ClusterConfig,type=RawBody)
+	kube_context?:   string @go(KubeContext) // kubeconfig context → `kubectl --context` (empty → `kind-<cluster_name>`)
+	overlay_path?:   string @go(OverlayPath) // optional workload: <root>/overlays/<inst> — the `kubectl apply -k` argument
+	tree_root?:      string @go(TreeRoot)    // optional workload: <root> = .opencharly/k8s/<name> — removed at teardown
+	deploy_name?:    string @go(DeployName)  // for plugin-side log messages
 }
 
 // #DeployReply is the structured result an external deploy provider returns

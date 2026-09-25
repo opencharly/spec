@@ -16,6 +16,7 @@ var ResourceKinds = []string{
 	"kubernetes",
 	"local",
 	"android",
+	"kindcluster",
 	"kubevirt",
 }
 
@@ -261,14 +262,15 @@ var AuthoringVerbs = []string{
 
 // KindValueDefs is the word→#<Kind>Value CUE-def map the host uses to closedness-gate a substrate/candy node's authored VALUE (validateKindValueCUE). DERIVED from the #<X>Value defs themselves (every one except the shared #DeployValue disjunct), so a new value-gated kind needs no hand-maintained map.
 var KindValueDefs = map[string]string{
-	"android":    "#AndroidValue",
-	"candy":      "#CandyValue",
-	"kubernetes": "#KubernetesValue",
-	"kubevirt":   "#KubevirtValue",
-	"local":      "#LocalValue",
-	"pod":        "#PodValue",
-	"task":       "#TaskValue",
-	"vm":         "#VmValue",
+	"android":     "#AndroidValue",
+	"candy":       "#CandyValue",
+	"kindcluster": "#KindclusterValue",
+	"kubernetes":  "#KubernetesValue",
+	"kubevirt":    "#KubevirtValue",
+	"local":       "#LocalValue",
+	"pod":         "#PodValue",
+	"task":        "#TaskValue",
+	"vm":          "#VmValue",
 }
 
 // EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.
