@@ -245,6 +245,72 @@ func (uf *UnifiedFile) BedScope(ref string) (*UnifiedFile, string) {
 	return nil, ""
 }
 
+// ResolveBedForRoot resolves ref to its bed node with every namespace-LOCAL
+// cross-reference rewritten to the ROOT-qualified form (`ns.<leaf>`) so a
+// MERGED-ROOT consumer resolves it. The bed run sequence drives `charly box build
+// <image>`, `charly deploy add <name> <image>`, and `charly vm build <from>` from
+// the project ROOT, where a namespaced bed's bare `image:`/`from:` (and the same on
+// each member, recursively) does NOT resolve — the owning namespace does. This is
+// the runtime sibling of BedScope: validate resolves the bed in its own scope, and
+// the run resolves its cross-refs in the root by qualifying them here. A local bed
+// (no namespace) has root-scoped refs already and is returned unchanged.
+//
+// The returned node is a DEEP COPY: ResolveBed returns the stored node by value,
+// but its Member entries carry *Deploy pointers into the stored tree, so qualifying
+// in place would rewrite the stored members. qualifyBedRefs clones each member node
+// before rewriting, leaving the stored Deploy tree untouched — `charly box validate`
+// still reads the unqualified authored refs.
+func (uf *UnifiedFile) ResolveBedForRoot(ref string) (DeployNode, bool) {
+	node, ok := uf.ResolveBed(ref)
+	if !ok {
+		return DeployNode{}, false
+	}
+	scope, leaf := uf.BedScope(ref)
+	if scope == nil || scope == uf || leaf == "" {
+		return node, true
+	}
+	qualifyBedRefs(&node, ref[:len(ref)-len(leaf)])
+	return node, true
+}
+
+// qualifyBedRefs rewrites n's namespace-LOCAL cross-refs (from:, image:) and every
+// member's, recursively, to the root-qualified form under prefix. The Member slice
+// (its backing array is shared by the value copy ResolveBed returns) and every
+// member node are CLONED before rewriting, so the stored tree is never mutated.
+func qualifyBedRefs(n *DeployNode, prefix string) {
+	if n == nil || prefix == "" {
+		return
+	}
+	n.From = qualifyLocalRef(n.From, prefix)
+	n.Image = qualifyLocalRef(n.Image, prefix)
+	if len(n.Member) == 0 {
+		return
+	}
+	members := make([]Member, len(n.Member))
+	copy(members, n.Member)
+	n.Member = members
+	for i := range n.Member {
+		child := n.Member[i].Node
+		if child == nil {
+			continue
+		}
+		clone := *child
+		qualifyBedRefs(&clone, prefix)
+		n.Member[i].Node = &clone
+	}
+}
+
+// qualifyLocalRef prefixes a bare namespace-local entity ref with prefix. An empty
+// ref, an already-qualified ref (a dot), or a non-local ref (a path or a tagged/OCI
+// ref, containing `/` or `:`) is returned unchanged — only a bare local name is
+// namespace-relative.
+func qualifyLocalRef(ref, prefix string) string {
+	if ref == "" || prefix == "" || strings.ContainsAny(ref, "./:") {
+		return ref
+	}
+	return prefix + ref
+}
+
 // namespaceAt returns the imported namespace subtree at a dot-qualified path
 // (`nsA.nsB`), or nil when the path does not resolve.
 func (uf *UnifiedFile) namespaceAt(path string) *UnifiedFile {

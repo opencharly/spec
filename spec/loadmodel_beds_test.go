@@ -80,6 +80,67 @@ func TestResolveBed_Forms(t *testing.T) {
 	}
 }
 
+// TestBedResolveForRoot_QualifiesNamespacedRefs is the regression for the
+// namespaced-bed box-build defect: a bed run drives `charly box build <image>` /
+// `charly deploy add <name> <image>` / `charly vm build <from>` from the project
+// ROOT, where a namespaced bed's bare image:/from: does NOT resolve (measured live:
+// `charly.check-sidecar-pod` failed with `unknown box "check-k8s-deploy-app"`).
+// ResolveBedForRoot rewrites them to ns.<leaf>, recursively through members.
+func TestBedResolveForRoot_QualifiesNamespacedRefs(t *testing.T) {
+	ns := &UnifiedFile{
+		Deploy: map[string]DeployNode{
+			"ns-pod": {Image: "ns-app", Disposable: disposable(),
+				Member: []Member{{Name: "m", Position: PositionInSubstrate,
+					Node: &Deploy{Image: "ns-app", From: "ns-vm"}}}},
+			"ns-vm-bed": {From: "ns-vm", Disposable: disposable()},
+		},
+	}
+	root := &UnifiedFile{
+		Deploy: map[string]DeployNode{
+			"local-pod": {Image: "root-app", Disposable: disposable()},
+			// An already-qualified ref must NOT be double-prefixed, and a local one stays.
+			"local-mixed": {Image: "other.thing", From: "local-vm", Disposable: disposable()},
+		},
+		Namespaces: map[string]*UnifiedFile{"omarchy": ns},
+	}
+
+	// Namespaced pod bed: image + member image/from qualify.
+	n, ok := root.ResolveBedForRoot("omarchy.ns-pod")
+	if !ok {
+		t.Fatal("omarchy.ns-pod did not resolve")
+	}
+	if n.Image != "omarchy.ns-app" {
+		t.Fatalf("image = %q, want omarchy.ns-app", n.Image)
+	}
+	if len(n.Member) != 1 || n.Member[0].Node.Image != "omarchy.ns-app" || n.Member[0].Node.From != "omarchy.ns-vm" {
+		t.Fatalf("member refs not qualified: %+v", n.Member)
+	}
+	// The stored tree is unmutated (validate reads the authored refs) — including
+	// every member node, which carries a *Deploy pointer into the stored tree.
+	if ns.Deploy["ns-pod"].Image != "ns-app" {
+		t.Fatal("ResolveBedForRoot mutated the stored Deploy tree (root image)")
+	}
+	stored := ns.Deploy["ns-pod"]
+	if len(stored.Member) != 1 || stored.Member[0].Node == nil ||
+		stored.Member[0].Node.Image != "ns-app" || stored.Member[0].Node.From != "ns-vm" {
+		t.Fatalf("ResolveBedForRoot mutated the stored member node: %+v", stored.Member)
+	}
+
+	// Namespaced vm bed: from qualifies.
+	if n, ok := root.ResolveBedForRoot("omarchy.ns-vm-bed"); !ok || n.From != "omarchy.ns-vm" {
+		t.Fatalf("omarchy.ns-vm-bed From = %q, want omarchy.ns-vm", n.From)
+	}
+
+	// A local bed is returned unchanged.
+	if n, ok := root.ResolveBedForRoot("local-pod"); !ok || n.Image != "root-app" {
+		t.Fatalf("local-pod image = %q, want root-app (unchanged)", n.Image)
+	}
+	// An already-qualified ref is never double-prefixed; a local from: stays.
+	if n, ok := root.ResolveBedForRoot("local-mixed"); !ok || n.Image != "other.thing" || n.From != "local-vm" {
+		t.Fatalf("local-mixed = (%q,%q), want (other.thing, local-vm) unchanged", n.Image, n.From)
+	}
+}
+
 func TestBedScope_OwningNamespace(t *testing.T) {
 	uf := bedFold()
 	scope, leaf := uf.BedScope("omarchy.ns-bed")
