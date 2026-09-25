@@ -2045,7 +2045,8 @@ type ResolvedProject struct {
 	// clause-D kind/word-recognition DATA consulted BY WORD, never a per-kind branch.
 	//
 	//	provider_capabilities — every compiled-in provider as "<class>:<word>" (validatePluginCandy
-	//	  checks a `source: builtin` candy's declared providers are actually compiled in).
+	//	  checks a compiled-in plugin candy's declared providers are actually members of the binary's
+	//	  compiled_plugins selection).
 	//	act_capable_verbs — the plugin WORDS whose act form has a build/deploy install path (the host
 	//	  type-asserts ProvisionActor/TypedStepProvider/BuildEmitter + connected/declared externals +
 	//	  command, exactly as core's opActsInBuildDeploy does), so validateCheck's act-form rule keeps
@@ -9699,7 +9700,7 @@ type ValidateWordSetsRequest struct {
 
 // #ValidateWordSetsReply — the two registry-derived D-data word sets the validate rules consume as
 // membership sets. provider_capabilities is every compiled-in provider as "<class>:<word>" (the
-// TARGET set a `source: builtin` plugin candy's declared providers must be a member of);
+// TARGET set a compiled-in plugin candy's declared providers must be a member of);
 // act_capable_verbs is the subset of the request's plugin_words whose act form has a build/deploy
 // install path (the check act-form rule).
 type ValidateWordSetsReply struct {

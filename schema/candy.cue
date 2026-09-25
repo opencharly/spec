@@ -539,7 +539,9 @@
 // #GithubRef — the ONE canonical github module/candy ref shape
 // (github.com/org/repo[/sub-path]), shared by every field that names a remote
 // plugin/candy repo (the plugin `source:`, a requirement's `source:`) so the
-// pattern is defined once (R3).
+// pattern is defined once (R3). @go(-): a plain string SHAPE, not a generated Go
+// type — the SAME convention as the sibling scalar defs in this file (#EntityRef,
+// #CalVer, #CandyRef); each referencing field pins its Go type (`@go(...,type=string)`).
 #GithubRef: string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$" @go(-)
 
 // #PluginRequirement — one declared inter-plugin dependency. CLOSED.

@@ -48,7 +48,7 @@
 
 // #ValidateWordSetsReply — the two registry-derived D-data word sets the validate rules consume as
 // membership sets. provider_capabilities is every compiled-in provider as "<class>:<word>" (the
-// TARGET set a `source: builtin` plugin candy's declared providers must be a member of);
+// TARGET set a compiled-in plugin candy's declared providers must be a member of);
 // act_capable_verbs is the subset of the request's plugin_words whose act form has a build/deploy
 // install path (the check act-form rule).
 #ValidateWordSetsReply: {
