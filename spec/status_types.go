@@ -44,6 +44,7 @@ type SubstrateKind string
 const (
 	SubstratePod        SubstrateKind = "pod"
 	SubstrateVM         SubstrateKind = "vm"
+	SubstrateKubevirt   SubstrateKind = "kubevirt"
 	SubstrateKubernetes SubstrateKind = "kubernetes"
 	SubstrateLocal      SubstrateKind = "local"
 	SubstrateAndroid    SubstrateKind = "android"
