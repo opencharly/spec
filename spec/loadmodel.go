@@ -160,13 +160,24 @@ func (uf *UnifiedFile) Beds() map[string]DeployNode {
 		return nil
 	}
 	beds := map[string]DeployNode{}
-	uf.collectBeds("", beds)
+	uf.collectBeds("", beds, map[*UnifiedFile]bool{})
 	return beds
 }
 
 // collectBeds folds this file's local beds under prefix, then recurses into every
 // namespace with the namespace segment prepended (`ns.name`, nested `nsA.nsB.name`).
-func (uf *UnifiedFile) collectBeds(prefix string, out map[string]DeployNode) {
+//
+// The guard is an ANCESTOR stack (path-scoped): a mutual import (`main` imports
+// `sub`, `sub` imports `main`) makes the Namespaces graph cyclic, so an unguarded
+// recursion loops forever. A global visited set would drop a shared namespace
+// legitimately mounted at multiple alias paths, so the stack clears on the way out
+// and only a genuine back-edge (a namespace already on the current path) is skipped.
+func (uf *UnifiedFile) collectBeds(prefix string, out map[string]DeployNode, ancestors map[*UnifiedFile]bool) {
+	if uf == nil || ancestors[uf] {
+		return
+	}
+	ancestors[uf] = true
+	defer delete(ancestors, uf)
 	for name, node := range uf.Deploy {
 		if node.IsDisposable() && node.MemberOf == "" {
 			key := name
@@ -184,7 +195,7 @@ func (uf *UnifiedFile) collectBeds(prefix string, out map[string]DeployNode) {
 		if prefix != "" {
 			child = prefix + "." + ns
 		}
-		sub.collectBeds(child, out)
+		sub.collectBeds(child, out, ancestors)
 	}
 }
 
