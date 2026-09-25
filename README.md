@@ -32,12 +32,12 @@ program so core depends only on the contract, never on a mechanism kit.
 ## Generate
 
 This repo's maintenance surface is the generic `charly task` surface (declared as
-`kind: task` entities in `charly.yml`), served by `candy/plugin-task`. Run it from a
-surrounding checkout with a built binary, e.g. from the umbrella root:
+`kind: task` entities in `charly.yml`), served by `candy/plugin-task`. With the
+`charly` binary installed (native package, or a checkout-built one), run:
 
 ```bash
-./charly/bin/charly -C spec task list      # the spec task surface
-./charly/bin/charly -C spec task cue-gen   # regenerate every CUE-owned artifact
+charly task list      # the spec task surface
+charly task cue-gen   # regenerate every CUE-owned artifact
 ```
 
 - **`charly task cue-gen`** — spec types from `schema/*.cue` (reproducibility-gated: a clean regen

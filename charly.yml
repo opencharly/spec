@@ -1,14 +1,14 @@
 version: 2026.261.1747
-# The spec module's project manifest. After the Taskfile cutover this repo's
-# maintenance surface is the `charly task` verbs below — the same generic
-# plugin-task surface the umbrella and charly use. spec owns NO candies/boxes,
-# so there is no `discover:`; only the task entities are declared.
+# The spec module's project manifest. Its maintenance surface is the
+# `charly task` verbs below — the same generic plugin-task surface the umbrella
+# and charly use. spec owns NO candies/boxes, so there is no `discover:`; only
+# the task entities are declared.
 #
-# Run a task with a charly binary from the surrounding checkout (spec is a
-# submodule of opencharly/opencharly and opencharly/charly):
-#   ./charly/bin/charly -C spec task cue-gen    # from the umbrella root
-# The binary is built once per clone by the OWNING checkout's
-# `scripts/bootstrap-charly.sh` — spec ships no Go binary of its own.
+# Run a task with the `charly` binary (spec is a submodule of
+# opencharly/opencharly and opencharly/charly):
+#   charly task cue-gen
+# The binary is installed as a native package or built once per clone by a
+# checkout's `scripts/bootstrap-charly.sh` — spec ships no Go binary of its own.
 #
 # Two authoring notes every task here obeys:
 #   * `run:` shell snippets must use LOWERCASE shell locals: an uppercase ${NAME}
