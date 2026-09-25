@@ -3770,6 +3770,13 @@ type ProvidesConfig struct {
 	MCP []MCPProvideEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 }
 
+// #GithubRef — the ONE canonical github module/candy ref shape
+// (github.com/org/repo[/sub-path]), shared by every field that names a remote
+// plugin/candy repo (the plugin `source:`, a requirement's `source:`) so the
+// pattern is defined once (R3). Each referencing field pins its Go type to string
+// (`@go(...,type=string)`), so `spec.PluginSource`/`Plugin.Source` stay plain strings.
+type GithubRef string
+
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire/render struct, single-sourced
 // here so `charly task cue-gen` produces the Go struct charly core's registry-coupled floor files
