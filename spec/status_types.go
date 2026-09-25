@@ -42,9 +42,10 @@ func StatusFromState(state string) string {
 type SubstrateKind string
 
 const (
-	SubstratePod        SubstrateKind = "pod"
-	SubstrateVM         SubstrateKind = "vm"
-	SubstrateKubernetes SubstrateKind = "kubernetes"
-	SubstrateLocal      SubstrateKind = "local"
-	SubstrateAndroid    SubstrateKind = "android"
+	SubstratePod         SubstrateKind = "pod"
+	SubstrateVM          SubstrateKind = "vm"
+	SubstrateKubernetes  SubstrateKind = "kubernetes"
+	SubstrateLocal       SubstrateKind = "local"
+	SubstrateAndroid     SubstrateKind = "android"
+	SubstrateKindcluster SubstrateKind = "kindcluster"
 )

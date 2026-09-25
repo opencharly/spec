@@ -41,7 +41,7 @@
 // per-arm child gate stays structural `_` — the deployable-vs-not check is the layered
 // loader check; this enum is its single vocabulary source.)
 //
-// NOTE: NONE of these has a #Node arm anymore — the 5 substrates
+// NOTE: NONE of these has a #Node arm anymore — the substrate kinds
 // (C2-substrate) and candy (C2-candy) are ALL plugin-served, so the arm-derived KindWords is
 // now EMPTY (group's arm left at C2-group; the group KIND itself is now removed from this set). #ResourceKind is INDEPENDENT of KindWords: it is the set of kinds that NEST members
 // (so the loader classifies a resource child + nests it), NOT the set with a #Node arm. Their
@@ -49,7 +49,7 @@
 // the ProjectLoader seam) and threaded to the plugin via
 // op.Env (F5); the parser gate admits them because resourceKindSet has them. candy is NOT a
 // resource kind (it nests no deploy members — it is the box⊻layer factory).
-#ResourceKind: ("pod" | "vm" | "kubernetes" | "local" | "android") @go(-)
+#ResourceKind: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster") @go(-)
 
 // ---------------------------------------------------------------------------
 // Per-kind node VALUES — the COMPLETE per-kind def, authored INLINE: the kind
@@ -81,7 +81,7 @@
 // overlapping fields. @go(-): the Go types come from #Local/#Pod/#Vm/#Kubernetes/#Android +
 // #Deploy directly; this value def is validation-only.
 //
-// C2-substrate: these 5 substrate kinds have NO #Node arm anymore (externalized to
+// C2-substrate: these substrate kinds have NO #Node arm anymore (externalized to
 // candy/plugin-substrate). They are KEPT here as the HOST-SIDE value
 // gate: runPluginKind validates a substrate node's authored value against #<Kind>Value
 // (validateKindValueCUE) — the SAME closedness the #Node arm gave — because a
@@ -92,11 +92,12 @@
 #PodValue:     (#Pod | #DeployValue) @go(-)
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #KubernetesValue: (#Kubernetes | #DeployValue) @go(-)
+#KindclusterValue: (#Kindcluster | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
 // EVERY authoring kind is externalized to a plugin unit — the build-vocabulary kinds
 // (`distro:`/`builder:`/`init:`/`resource:`), the AI-CLI grader `agent:`, the sidecar
-// `sidecar:`, the 5 substrate kinds
-// `pod:`/`vm:`/`kubernetes:`/`local:`/`android:` (C2-substrate), AND the box⊻layer
+// `sidecar:`, the substrate kinds
+// `pod:`/`vm:`/`kubernetes:`/`local:`/`android:`/`kindcluster:` (C2-substrate), AND the box⊻layer
 // factory `candy:` (C2-candy) — so NONE has a #Node arm; such a node passes #NodeDoc as a
 // registered non-core discriminator (the OPEN #Node struct). The former targetless deploy kind
 // `group:` (C2-group) is REMOVED (the member-tree cutover — the dual representation is forbidden

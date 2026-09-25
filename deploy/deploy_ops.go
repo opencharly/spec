@@ -73,8 +73,8 @@ func PathLeaf(path string) string {
 }
 
 // ClassifyNodeTarget picks the target discriminator for a node. Uses node.Target when non-empty
-// (canonical pod|vm|kubernetes|local|android, set from the node-form kind by the loader's
-// deployTargetForDisc). For ref-based deploys with no charly.yml entry, the deploy name itself is
+// (canonical pod|vm|kubernetes|local|android|kindcluster, set from the node-form kind by the
+// loader's deployTargetForDisc). For ref-based deploys with no charly.yml entry, the deploy name itself is
 // the hint: a literal `host`/`local` LEAF → local target; anything else → pod. A pure function of
 // node+path with no LoadUnified/executor dependency.
 func ClassifyNodeTarget(node *spec.DeployNode, path string) string {
