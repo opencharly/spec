@@ -7,7 +7,7 @@
 // emitter (sdk/deploykit) consumes to render the tailscale serve/funnel + cloudflare
 // companion-unit directives.
 //
-// SINGLE-SOURCED here per the SDD wire-type mandate: `task cue:gen` produces the
+// SINGLE-SOURCED here per the SDD wire-type mandate: `charly task cue-gen` produces the
 // Go structs (spec.TunnelConfig / spec.TunnelPort); the former HAND-WRITTEN
 // charly/tunnel.go mirror is DELETED. This repairs a pre-existing wire-mandate
 // VIOLATION (a host↔plugin wire struct that was hand-maintained) surfaced during

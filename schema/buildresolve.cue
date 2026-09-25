@@ -22,7 +22,7 @@
 //
 // Package-less; concatenated into the spec compilation unit. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire types, single-sourced here so
-// `task cue:gen` produces the Go structs (WIRE TYPES ARE CUE-SOURCED WITHOUT
+// `charly task cue-gen` produces the Go structs (WIRE TYPES ARE CUE-SOURCED WITHOUT
 // EXCEPTION, CLAUDE.md SDD). All fields are plain scalars/lists/nested structs
 // that `cue exp gengotypes` generates faithfully — no disjunction, no RawBody
 // envelope needed (the per-box descriptor carries only the drive-relevant

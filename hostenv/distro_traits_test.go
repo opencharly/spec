@@ -9,7 +9,7 @@ import (
 // distro_traits_test.go — gates the GENERATED distro vocabulary.
 //
 // There is no hand-written distro table to keep in step any more: schema/distro_vocab.cue's
-// #Distros is the single source, and `task cue:gen` projects it into spec.DistroFormats /
+// #Distros is the single source, and `charly task cue-gen` projects it into spec.DistroFormats /
 // DistroSSHUnits / DistroInits / DistroIDs. So the thing worth testing is no longer "do two
 // tables agree" — it is "did the generator actually project every row", since a harvest that
 // silently returned a partial map would produce a table that looks fine and answers "" for

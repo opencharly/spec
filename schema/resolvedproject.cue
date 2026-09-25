@@ -13,7 +13,7 @@
 // #CandyView — composed with the existing #Deploy tree.
 //
 // Package-less; concatenated into the spec compilation unit. NOT an authoring kind (never in
-// #Node/#Op) — pure generated wire/projection types, single-sourced here so `task cue:gen` produces
+// #Node/#Op) — pure generated wire/projection types, single-sourced here so `charly task cue-gen` produces
 // the Go structs (charly aliases them via vmshared/spec_aliases.go). Shared defs (#BoxMerge,
 // #CandyRef, #CandyMCPProvide, #Deploy) come from box.cue / _common.cue / candy.cue / deploy.cue.
 

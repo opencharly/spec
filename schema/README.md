@@ -10,7 +10,7 @@ truth for two consumers:
    via `schemaconcat.ConcatSchema` (sorted, newline-joined) into ONE compiled
    `cue.Value`, and validates every loaded entity against its `#<Kind>` def.
    See `/charly-build:validate`.
-2. **Generated Go param types + vocabulary (`spec`).** `task cue:gen`
+2. **Generated Go param types + vocabulary (`spec`).** `charly task cue-gen`
    turns these same files into the committed `spec/*_gen.go` — so the Go
    structs the loader decodes into, and the kind/verb/method word lists the CLI
    dispatches on, can never drift from what the schema validates.
@@ -20,15 +20,17 @@ truth for two consumers:
 > attribute that `cue exp gengotypes` needs are injected by the gen pipeline
 > (`internal/schemagen -mode=concat`), NEVER written into the source.
 
-## Regenerating `spec` — `task cue:gen`
+## Regenerating `spec` — `charly task cue-gen`
 
 In THIS repository:
 
 ```sh
-task cue:gen
+charly task cue-gen
 ```
 
-The task (`Taskfile.yml`):
+The task is `cue-gen` in this repo's `charly.yml` (the `kind: task` surface). It
+depends on `bootstrap-cue` + `wire-gen` (which in turn depends on
+`bootstrap-protoc`):
 
 1. **Bootstraps the pinned cue CLI** into `./bin/cue` (gitignored) — `v0.16.1`,
    the SAME version as charly's embedded `cuelang.org/go` library, so the CLI that
@@ -47,15 +49,18 @@ The task (`Taskfile.yml`):
    schema-version consts from `schema/version.cue`).
 5. **`gofmt`** the committed generated files.
 
-The superproject's `task cue:gen` (`taskfiles/Cue.yml`) wraps this: it asserts
-the two repos' cue pins match, runs THIS task first (base schema → `spec`),
-then regenerates every plugin candy's `params` package from its own
-self-contained `candy/plugin-*/schema/*.cue` via the SAME pipeline (R3).
+`wire-gen` (chained first) additionally renders `protocol/schema/*.cue` into
+`proto/plugin.proto` and compiles the Go gRPC stubs.
 
-Both runs are **reproducible**: two consecutive `task cue:gen` invocations produce
-no diff, and `TestGenReproducible` (in `spec/`) fails CI if the committed
-`*_gen.go` differs from a fresh regeneration. **Never hand-edit the `*_gen.go`
-files** — change the `*.cue` source and regenerate.
+Each plugin's OWN `params/cue_types_gen.go` is generated from its self-contained
+`candy/plugin-*/schema/*.cue` in the plugin's OWN repository, via the SAME
+`internal/schemagen` + pinned cue pipeline (R3). There is no superproject
+`cue:gen` wrapper any more — plugin param generation lives with the plugin.
+
+These runs are **reproducible**: two consecutive `charly task cue-gen`
+invocations produce no diff, and `TestGenReproducible` (in `spec/`) fails CI if
+the committed `*_gen.go` differs from a fresh regeneration. **Never hand-edit
+the `*_gen.go` files** — change the `*.cue` source and regenerate.
 
 ## The `@go(...)` annotations
 

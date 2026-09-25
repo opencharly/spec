@@ -24,7 +24,7 @@ func TestGeneratedProtocolReproducible(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := renderProto(&model); !bytes.Equal(got, want) {
-		t.Fatal("proto/plugin.proto drifted from protocol/schema/*.cue; run task wire:gen")
+		t.Fatal("proto/plugin.proto drifted from protocol/schema/*.cue; run charly task wire-gen")
 	}
 }
 

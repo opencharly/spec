@@ -36,7 +36,7 @@ func StatusFromState(state string) string {
 // this type; #DeploymentStatus.kind references it via @go(Kind,type=SubstrateKind).
 //
 // HAND-WRITTEN — a distinct named string type with the substrate consts, NOT emitted
-// by `task cue:gen` (gengotypes references it from the generated DeploymentStatus.Kind
+// by `charly task cue-gen` (gengotypes references it from the generated DeploymentStatus.Kind
 // field but does not define it; a CUE string enum would degrade to a plain string and
 // lose the typed consts the collectors switch on).
 type SubstrateKind string
