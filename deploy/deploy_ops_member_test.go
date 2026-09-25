@@ -85,3 +85,25 @@ func TestMergeDeployNodeMemberTree(t *testing.T) {
 		t.Fatalf("merge = %+v, want Target vm + [zulu]", got)
 	}
 }
+
+// TestResolveNodePath_NamespaceQualifiedExactKey pins the qualified-key regression: a
+// namespace-qualified deploy key (`charly.check-agentteams-vm`) contains dots that are
+// namespace separators, NOT member-path separators. The exact full-key match must win; the
+// dotted member descent would otherwise read it as root `charly` + member `check-agentteams-vm`
+// and miss (the roster bug that defaulted the target to "pod").
+func TestResolveNodePath_NamespaceQualifiedExactKey(t *testing.T) {
+	roots := map[string]spec.DeployNode{
+		"charly.check-vm": {Target: "vm", From: "charly.base-vm"},
+		"local-pod":       {Target: "pod", Image: "x"},
+	}
+	node, ancestors, err := ResolveNodePath(roots, "charly.check-vm")
+	if err != nil {
+		t.Fatalf("ResolveNodePath(charly.check-vm): %v", err)
+	}
+	if node.Target != "vm" || node.From != "charly.base-vm" {
+		t.Fatalf("resolved = %+v, want the exact qualified entry", node)
+	}
+	if len(ancestors) != 0 {
+		t.Fatalf("ancestors = %v, want none (an exact key is a top-level deploy)", ancestors)
+	}
+}

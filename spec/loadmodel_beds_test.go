@@ -203,7 +203,7 @@ func TestDeploys_NamespaceQualified(t *testing.T) {
 // overlay resolves).
 func TestDeploys_QualifiesNamespacedFrom(t *testing.T) {
 	ns := &UnifiedFile{Deploy: map[string]DeployNode{
-		"check-vm": {From: "base-vm", Target: "vm"},
+		"check-vm":  {From: "base-vm", Target: "vm"},
 		"check-pod": {Image: "docs-site-app", Target: "pod"},
 	}}
 	root := &UnifiedFile{Namespaces: map[string]*UnifiedFile{"charly": ns}}
