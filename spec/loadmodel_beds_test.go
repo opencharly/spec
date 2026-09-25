@@ -94,3 +94,27 @@ func TestBedScope_OwningNamespace(t *testing.T) {
 		t.Fatalf("BedScope(missing) = %v, want nil", scope)
 	}
 }
+
+// TestBeds_MutualCycleTerminates: a mutual import (main imports sub, sub imports
+// main) makes the Namespaces graph cyclic; Beds() must terminate (an unguarded
+// walk loops forever; a global visited set would drop a shared multi-alias mount).
+func TestBeds_MutualCycleTerminates(t *testing.T) {
+	main := &UnifiedFile{}
+	sub := &UnifiedFile{Deploy: map[string]DeployNode{
+		"sub-bed": {From: "x", Disposable: disposable()},
+	}}
+	main.Deploy = map[string]DeployNode{"main-bed": {From: "y", Disposable: disposable()}}
+	main.Namespaces = map[string]*UnifiedFile{"sub": sub}
+	sub.Namespaces = map[string]*UnifiedFile{"up": main} // mutual cycle
+
+	beds := main.Beds()
+	if _, ok := beds["main-bed"]; !ok {
+		t.Fatal("local bed missing")
+	}
+	if _, ok := beds["sub.sub-bed"]; !ok {
+		t.Fatal("nested bed missing")
+	}
+	if _, ok := beds["sub.up.main-bed"]; ok {
+		t.Fatal("mutual-cycle back-edge was not skipped")
+	}
+}
