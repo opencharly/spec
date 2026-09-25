@@ -2,6 +2,7 @@ package spec
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -63,5 +64,44 @@ func TestDefaultDeployConfigPath_CtxOverrideWins(t *testing.T) {
 	}
 	if got != "/process/charly.yml" {
 		t.Fatalf("path = %q, want /process/charly.yml", got)
+	}
+}
+
+// TestDefaultDeployConfigPath_ConcurrentBedsDistinctOverlays is the decisive
+// regression for the headline roster deadlock (RCA issue 1): N beds resolve their
+// deploy-config path concurrently, and EVERY bed must get its OWN path — so two
+// beds never contend on one overlay lock. With process-global os.Setenv (the
+// retired mechanism) every bed read one shared value and they serialized/hung.
+func TestDefaultDeployConfigPath_ConcurrentBedsDistinctOverlays(t *testing.T) {
+	const n = 64
+	type result struct {
+		bed  int
+		path string
+		err  error
+	}
+	results := make(chan result, n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			ctx := WithRunEnv(context.Background(), RunEnv{
+				DeployConfigEnv: fmt.Sprintf("/tmp/bed-%02d/charly.yml", i),
+			})
+			p, err := DefaultDeployConfigPath(ctx)
+			results <- result{bed: i, path: p, err: err}
+		}(i)
+	}
+	seen := make(map[string]int, n)
+	for i := 0; i < n; i++ {
+		r := <-results
+		if r.err != nil {
+			t.Fatalf("bed %d: %v", r.bed, r.err)
+		}
+		want := fmt.Sprintf("/tmp/bed-%02d/charly.yml", r.bed)
+		if r.path != want {
+			t.Fatalf("bed %d resolved %q, want %q (cross-bed bleed)", r.bed, r.path, want)
+		}
+		if other, dup := seen[r.path]; dup {
+			t.Fatalf("beds %d and %d resolved the SAME overlay %q — they would contend on one lock", other, r.bed, r.path)
+		}
+		seen[r.path] = r.bed
 	}
 }

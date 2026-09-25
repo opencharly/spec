@@ -44,22 +44,18 @@ var lockTimeout = 30 * time.Minute
 // silent stall. A package var (not a const) so a test can shorten it.
 var lockWaitReportInterval = 30 * time.Second
 
-// flockBounded acquires an exclusive flock, QUEUEING behind a contended lock: it polls LOCK_NB,
-// reports periodically what it is waiting on, and — if the lock is still held when lockTimeout
-// elapses — fails with a message that NAMES the holder (pid + command, resolved from the kernel;
-// see holder.go) and says what to do.
+// flockBoundedWithin acquires an exclusive flock, QUEUEING behind a contended lock: it polls
+// LOCK_NB, reports periodically what it is waiting on, and — if the lock is still held when
+// timeout elapses — fails with a message that NAMES the holder (pid + command, resolved from the
+// kernel; see holder.go) and says what to do.
 //
 // The bounded POLL is deliberate on both counts: a blocking flock(2) cannot be given a deadline
 // portably, and an UNBOUNDED wait is exactly what the original bound was added to prevent (the
-// recurring deploy-del stall). So the wait is bounded-but-long and VISIBLE rather than silent.
-func flockBounded(f *os.File, path string) error {
-	return flockBoundedWithin(f, path, lockTimeout)
-}
-
-// flockBoundedWithin is flockBounded with an explicit bound. A brief critical section (a
-// config-file read-modify-write, whose whole hold is milliseconds) passes a SHORT bound so a
-// contended acquire fails FAST and LOUDLY instead of masquerading as a legitimate slow build for
-// the full 30-minute image-build bound (the silent cross-bed deadlock of plan RCA issue #2).
+// recurring deploy-del stall). So the wait is bounded-but-LONG for a legitimate slow holder (the
+// 30-minute image-build bound, passed by AcquireFileLock) and SHORT for a brief critical section
+// (a config-file read-modify-write, whose whole hold is milliseconds) — the latter so a contended
+// acquire fails FAST and LOUDLY instead of masquerading as a legitimate slow build for the full
+// image-build bound (the silent cross-bed deadlock of plan RCA issue #2).
 func flockBoundedWithin(f *os.File, path string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	start := time.Now()
