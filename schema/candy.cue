@@ -518,7 +518,7 @@
 	// a manifest sentinel. (The former `source: builtin` form was retired — it
 	// duplicated the compiled_plugins selection and had a dead in-repo-module
 	// fallback.)
-	source: string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$"
+	source: #GithubRef @go(Source,type=string)
 	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
 	// capabilities; the host resolves each against the provider registry and
 	// connects it declaratively (the same lazy-connect chain a call-time
@@ -536,13 +536,19 @@
 	primary?: {[string]: string & !=""}
 })
 
+// #GithubRef — the ONE canonical github module/candy ref shape
+// (github.com/org/repo[/sub-path]), shared by every field that names a remote
+// plugin/candy repo (the plugin `source:`, a requirement's `source:`) so the
+// pattern is defined once (R3).
+#GithubRef: string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$" @go(-)
+
 // #PluginRequirement — one declared inter-plugin dependency. CLOSED.
 #PluginRequirement: close({
 	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
 	capability: #PluginCapability
 	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
 	// fetched declaratively instead of by a call-time ExtraRef.
-	source?: string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$"
+	source?: #GithubRef @go(Source,type=string)
 	// optional: when true, an absent peer is recorded and skipped rather than
 	// failing the load. Default false — a declared dependency must resolve.
 	optional?: bool
