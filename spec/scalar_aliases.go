@@ -16,7 +16,7 @@
 // name. Exposing the name as a Go alias here makes every reference compile while
 // collapsing the Go type to the builtin.
 //
-// HAND-WRITTEN — not emitted by `task cue:gen`.
+// HAND-WRITTEN — not emitted by `charly task cue-gen`.
 package spec
 
 import "encoding/json"

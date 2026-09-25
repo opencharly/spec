@@ -11,7 +11,7 @@ import (
 	"github.com/opencharly/spec/schemaconcat"
 )
 
-// loadVmSchema compiles the SAME concatenation the runtime and `task cue:gen` use
+// loadVmSchema compiles the SAME concatenation the runtime and `charly task cue-gen` use
 // (schemaconcat.ConcatSchema — R3: one concatenation contract), so this test exercises the
 // schema as it actually ships rather than a hand-written excerpt of it.
 func loadVmSchema(t *testing.T) cue.Value {

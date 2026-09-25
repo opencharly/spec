@@ -3605,7 +3605,7 @@ type Candy struct {
 
 // #EngineName — the CLOSED engine vocabulary. THE single source for the engine
 // words: the authored candy.engine/deploy.engine fields are this def, and
-// `task cue:gen` emits it as spec.EngineNames, from which IsEngineName derives.
+// `charly task cue-gen` emits it as spec.EngineNames, from which IsEngineName derives.
 // EngineBinary/EngineCapabilityFor answer from the capability table keyed by
 // these same words (drift-tested against spec.EngineNames).
 //
@@ -3742,7 +3742,7 @@ type ProvidesConfig struct {
 
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire/render struct, single-sourced
-// here so `task cue:gen` produces the Go struct charly core's registry-coupled floor files
+// here so `charly task cue-gen` produces the Go struct charly core's registry-coupled floor files
 // (provider.go/provider_verb.go/verb_builtins.go/unified_targets.go/provider_checkenv.go)
 // reference directly (spec.CheckResult), with zero new sdk/kit import.
 //
@@ -5652,7 +5652,7 @@ type EncExecReply struct {
 //	               quadlet equivalent exists).
 //	direct       — an ephemeral argv launch with no unit (docker today).
 //
-// `task cue:gen` emits this as spec.EngineRunModes; ValidateRunMode derives
+// `charly task cue-gen` emits this as spec.EngineRunModes; ValidateRunMode derives
 // from it, and container.IsRunMode reads it.
 type EngineRunMode string
 

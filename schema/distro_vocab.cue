@@ -1,7 +1,7 @@
 // distro_vocab.cue — the SINGLE source for the distro id space and each id's traits.
 //
 // Everything that used to be a hand-written Go table or a hardcoded switch on a distro
-// name derives from here via `task cue:gen`:
+// name derives from here via `charly task cue-gen`:
 //
 //   #Distros  →  spec.DistroFormats   (id → package format)   replaces hostenv.distroIDToFormat
 //             →  spec.DistroSSHUnits  (id → OpenSSH service)  replaces vmshared.sshUnitForDistro
