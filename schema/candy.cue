@@ -510,16 +510,42 @@
 	// serves (e.g. "verb:exampleprobe", "kind:my-thing"). Each is registered into
 	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
 	providers: [...#PluginCapability]
-	// source: "builtin" (Go compiled into the charly binary, init()-registered) OR
-	// a git ref (github.com/org/repo[/sub][@tag]) fetched via the @github resolver +
-	// built into a provider binary. Default builtin.
-	source: *"builtin" | (string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$")
+	// source: the plugin's Go module path — a git ref
+	// (github.com/org/repo[/sub]) fetched via the @github resolver + built into a
+	// provider binary when the candy is NOT compiled in. REQUIRED: every plugin
+	// candy names its module; whether the plugin runs compiled-in (in-proc) or
+	// out-of-process is the SEPARATE charly.yml `compiled_plugins:` selection, never
+	// a manifest sentinel. (The former `source: builtin` form was retired — it
+	// duplicated the compiled_plugins selection and had a dead in-repo-module
+	// fallback.)
+	source: string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$"
+	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
+	// capabilities; the host resolves each against the provider registry and
+	// connects it declaratively (the same lazy-connect chain a call-time
+	// ExtraRef drives), so a plugin's internal peer need no longer depends on the
+	// peer being referenced by the project's own plans. `source` names the peer's
+	// candy ref for a peer outside the project closure; `optional: true` makes an
+	// absent peer a skip rather than a load failure. Applied identically in every
+	// placement (compiled-in, project-declared external, demand-loaded).
+	requires?: [...#PluginRequirement] @go(Requires)
 	// primary: verb word → the input field its scalar sugar shorthand targets
 	// (`file: /x` → plugin_input: {<primary>: "/x"}). Declared in the MANIFEST so
 	// the byte-gated prescan registers it BEFORE the out-of-process provider
 	// connects (the parse-time desugar needs it pre-parse); the served
 	// ProvidedCapability.Primary mirrors it for the compiled-in placement.
 	primary?: {[string]: string & !=""}
+})
+
+// #PluginRequirement — one declared inter-plugin dependency. CLOSED.
+#PluginRequirement: close({
+	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
+	capability: #PluginCapability
+	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
+	// fetched declaratively instead of by a call-time ExtraRef.
+	source?: string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$"
+	// optional: when true, an absent peer is recorded and skipped rather than
+	// failing the load. Default false — a declared dependency must resolve.
+	optional?: bool
 })
 
 // #PluginCapability — a "<class>:<word>" capability string. class ∈ the closed

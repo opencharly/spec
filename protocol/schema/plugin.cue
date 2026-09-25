@@ -38,6 +38,50 @@ protocol: {
 					"number": 4
 					"doc":    "the unit's package-less, SELF-CONTAINED .cue source text"
 				},
+				{
+					"name":     "requires"
+					"type":     "PluginRequirement"
+					"number":   5
+					"doc":      "the OTHER plugins this unit declares it depends on; the host resolves each (class,word) against the provider registry and connects it declaratively — identically in every placement"
+					"repeated": true
+				},
+			]
+		},
+		{
+			"name": "PluginRequirement"
+			"doc":  """
+				PluginRequirement — one declared inter-plugin dependency a plugin advertises over
+				Describe (the wire twin of the candy `plugin.requires:` entry). The host resolves
+				every requirement before the plugin is treated as loaded: a miss connects the peer
+				(the lazy-connect chain, driven by declared data) or, when `source` is set, fetches it
+				by that candy ref; an unresolvable NON-optional requirement fails the load naming the
+				plugin and the missing peer. `optional` turns an absent peer into a recorded skip.
+				"""
+			"fields": [
+				{
+					"name":   "class"
+					"type":   "string"
+					"number": 1
+					"doc":    "the peer's ProviderClass (\"verb\"/\"kind\"/...)"
+				},
+				{
+					"name":   "word"
+					"type":   "string"
+					"number": 2
+					"doc":    "the peer's reserved word, e.g. \"enc\""
+				},
+				{
+					"name":   "source"
+					"type":   "string"
+					"number": 3
+					"doc":    "OPTIONAL canonical candy ref for a peer absent from the project's candy closure — fetched declaratively instead of by a call-time ExtraRef"
+				},
+				{
+					"name":   "optional"
+					"type":   "bool"
+					"number": 4
+					"doc":    "when true, an absent peer is recorded and skipped rather than failing the load"
+				},
 			]
 		},
 		{
