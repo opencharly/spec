@@ -205,11 +205,19 @@
 	from_snapshot?:    string & !=""  @go(FromSnapshot)
 	cloud_init_clean?: bool           @go(CloudInitClean)
 	vm_state?:         #VmDeployState @go(VmState,type=*VmDeployState)
+	// kubevirt_state — the persisted runtime identity of a kind:kubevirt deploy
+	// (the KubeVirt analog of vm_state): the cluster/context/namespace the domain
+	// landed in, the boot-medium ref, and the managed port-forward local port.
+	// Written by candy/plugin-kubevirt's lifecycle; the source of truth for
+	// idempotent re-add + teardown. Validation-only (the Go type is hand-written,
+	// mirroring VmState's own treatment).
+	kubevirt_state?: #KubeVirtDeployState @go(KubeVirtState,type=*KubeVirtDeployState)
 
 	// snapshot — the check-bed snapshot-anchoring policy (§5.3.1): capture at
 	// install finalize and reset before every check run, so a batch of PR runs
 	// shares ONE golden disk (revert ≈ seconds vs fresh install ≈ 20-30 min).
-	// VM-only (the substrate-word checks reject it on other substrates).
+	// VM-family only (vm + kubevirt; the substrate-word checks reject it on other
+	// substrates).
 	snapshot?: #VmSnapshotPolicy @go(Snapshot,optional=nillable)
 
 	// update_gate — the check-bed's declarative R10 fresh-update change-class
@@ -390,6 +398,39 @@
 		// FINAL/K5 unit 6a.
 		deploy_address?: string
 	}
+	...
+} @go(-)
+
+// #KubeVirtDeployState — the persisted runtime identity of a kind:kubevirt deploy
+// (the KubeVirt analog of #VmDeployState). Written by candy/plugin-kubevirt's
+// lifecycle. Validation-only (the Go type is hand-written, mirroring VmState's own
+// @go(-) treatment).
+#KubeVirtDeployState: {
+	// cluster is the kind:kubernetes cluster template name the VM landed in.
+	cluster?:      string
+	kube_context?: string
+	namespace?:    string
+	// vm_name is the VirtualMachine CR name (domain-scoped, not the shared entity).
+	vm_name?: string
+	// boot_ref is the resolved boot medium (a containerDisk image ref, a DataVolume
+	// name, or a PVC name) — the source of truth for idempotent re-add.
+	boot_ref?: string
+	// boot_kind is the source arm that produced boot_ref (container_disk |
+	// data_volume | pvc | clone).
+	boot_kind?: string
+	// ssh_port is the managed `virtctl port-forward` LOCAL host port the deploy
+	// SSHes through (auto-allocated, persisted so a re-add reuses it).
+	ssh_port?: int
+	ssh_user?: string
+	// snapshot ledger (names + refcounts) for VirtualMachineSnapshot teardown.
+	snapshots?: [...#KubeVirtDeploySnapshot]
+	...
+} @go(-)
+
+#KubeVirtDeploySnapshot: {
+	name?:  string
+	phase?: string
+	refcount?: int
 	...
 } @go(-)
 

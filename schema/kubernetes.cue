@@ -27,9 +27,37 @@
 	pod_default?:    #KubernetesPodDefaults    @go(PodDefault)
 	observability?:  #KubernetesObservability
 	network_policy?: "auto" | "strict" | "none" @go(NetworkPolicy)
-	defaults?:       #KubernetesResourceDefaults
+	// kubevirt — cluster-specific KubeVirt knobs (the kind:kubevirt substrate's
+	// cluster side). Mirrors the storage/ingress/secret "one cluster template owns
+	// the cluster-specific policy" partition: a kind:kubevirt VM names its cluster
+	// by `cluster:` and these knobs apply.
+	kubevirt?: #KubernetesKubeVirt @go(KubeVirt)
+	defaults?: #KubernetesResourceDefaults
 
 	plan?: [...#Step]
+}
+
+// #KubernetesKubeVirt — the KubeVirt platform knobs a cluster template carries.
+// The kubevirt-operator install + the kind:kubevirt substrate's defaults resolve
+// from here.
+#KubernetesKubeVirt: {
+	// enabled — whether this cluster has KubeVirt available (informational;
+	// the operator candy owns the actual install).
+	enabled?: bool
+	// cdi_enabled — whether CDI is installed (needed for a data_volume boot).
+	cdi_enabled?: bool @go(CDIEnabled)
+	cdi_namespace?: string @go(CDINamespace)
+	// use_emulation runs KubeVirt's software emulation (no /dev/kvm on the node).
+	// The R10 bed uses REAL KVM, so this defaults false.
+	use_emulation?: bool @go(UseEmulation)
+	default_storage_class?: string @go(DefaultStorageClass)
+	default_instancetype?:  string @go(DefaultInstancetype)
+	default_preference?:    string @go(DefaultPreference)
+	// snapshot_class names the VolumeSnapshotClass a VirtualMachineSnapshot uses.
+	snapshot_class?: string @go(SnapshotClass)
+	// virtctl_version pins the virtctl CLI release the operator candy installs.
+	virtctl_version?: string @go(VirtctlVersion)
+	feature_gates?: [...string] @go(FeatureGates)
 }
 
 #KubernetesResources: {

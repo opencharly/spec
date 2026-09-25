@@ -97,6 +97,14 @@
 // rewrite the LIVE `security: {cpus: "2.5"}` string quota into a schema-invalid
 // `security: {cpu: …}`. Re-adding under the correct spelling sidesteps that.
 // Re-stamped to the merge-time CalVer by the fresh pr-validator.
+//
+// Bumped again by the kubevirt-substrate cutover: a NEW authored WIRE surface —
+// the 6th deploy substrate `kubevirt:` (#ResourceKind gains the word; #KubeVirt +
+// #KubevirtSource + the GPU/firmware/network/instancetype blocks are new), a new
+// `kubevirt:` sub-block on `#Kubernetes`, and the new machine-written
+// `kubevirt_state:` deploy field. Purely ADDITIVE (no existing authored key changes
+// shape), so nothing authored needs migrating; the bump widens the migratable
+// window per policy. No migration-table entry (the surface is new, not renamed).
 #SchemaVersion: #CanonCalVer & "2026.261.1747" @go(-)
 
 // #SchemaFloor is the OLDEST schema version `charly migrate` can migrate FROM. At
