@@ -2045,7 +2045,8 @@ type ResolvedProject struct {
 	// clause-D kind/word-recognition DATA consulted BY WORD, never a per-kind branch.
 	//
 	//	provider_capabilities — every compiled-in provider as "<class>:<word>" (validatePluginCandy
-	//	  checks a `source: builtin` candy's declared providers are actually compiled in).
+	//	  checks a compiled-in plugin candy's declared providers are actually members of the binary's
+	//	  compiled_plugins selection).
 	//	act_capable_verbs — the plugin WORDS whose act form has a build/deploy install path (the host
 	//	  type-asserts ProvisionActor/TypedStepProvider/BuildEmitter + connected/declared externals +
 	//	  command, exactly as core's opActsInBuildDeploy does), so validateCheck's act-form rule keeps
@@ -3626,10 +3627,25 @@ type Plugin struct {
 	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
 	Providers []PluginCapability `yaml:"providers,omitempty" json:"providers"`
 
-	// source: "builtin" (Go compiled into the charly binary, init()-registered) OR
-	// a git ref (github.com/org/repo[/sub][@tag]) fetched via the @github resolver +
-	// built into a provider binary. Default builtin.
+	// source: the plugin's Go module path — a git ref
+	// (github.com/org/repo[/sub]) fetched via the @github resolver + built into a
+	// provider binary when the candy is NOT compiled in. REQUIRED: every plugin
+	// candy names its module; whether the plugin runs compiled-in (in-proc) or
+	// out-of-process is the SEPARATE charly.yml `compiled_plugins:` selection, never
+	// a manifest sentinel. (The former `source: builtin` form was retired — it
+	// duplicated the compiled_plugins selection and had a dead in-repo-module
+	// fallback.)
 	Source string `yaml:"source,omitempty" json:"source"`
+
+	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
+	// capabilities; the host resolves each against the provider registry and
+	// connects it declaratively (the same lazy-connect chain a call-time
+	// ExtraRef drives), so a plugin's internal peer need no longer depends on the
+	// peer being referenced by the project's own plans. `source` names the peer's
+	// candy ref for a peer outside the project closure; `optional: true` makes an
+	// absent peer a skip rather than a load failure. Applied identically in every
+	// placement (compiled-in, project-declared external, demand-loaded).
+	Requires []PluginRequirement `yaml:"requires,omitempty" json:"requires,omitempty"`
 
 	// primary: verb word → the input field its scalar sugar shorthand targets
 	// (`file: /x` → plugin_input: {<primary>: "/x"}). Declared in the MANIFEST so
@@ -3642,6 +3658,20 @@ type Plugin struct {
 // #PluginCapability — a "<class>:<word>" capability string. class ∈ #ProviderClassNames;
 // word is lowercase-hyphenated.
 type PluginCapability string
+
+// #PluginRequirement — one declared inter-plugin dependency. CLOSED.
+type PluginRequirement struct {
+	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
+	Capability PluginCapability `yaml:"capability,omitempty" json:"capability"`
+
+	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
+	// fetched declaratively instead of by a call-time ExtraRef.
+	Source string `yaml:"source,omitempty" json:"source,omitempty"`
+
+	// optional: when true, an absent peer is recorded and skipped rather than
+	// failing the load. Default false — a declared dependency must resolve.
+	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
+}
 
 // RouteYAML — generic service-route metadata (traefik / tunnel).
 type CandyRoute struct {
@@ -3741,6 +3771,13 @@ type ProvidesConfig struct {
 
 	MCP []MCPProvideEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 }
+
+// #GithubRef — the ONE canonical github module/candy ref shape
+// (github.com/org/repo[/sub-path]), shared by every field that names a remote
+// plugin/candy repo (the plugin `source:`, a requirement's `source:`) so the
+// pattern is defined once (R3). Each referencing field pins its Go type to string
+// (`@go(...,type=string)`), so `spec.PluginSource`/`Plugin.Source` stay plain strings.
+type GithubRef string
 
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire/render struct, single-sourced
@@ -9787,7 +9824,7 @@ type ValidateWordSetsRequest struct {
 
 // #ValidateWordSetsReply — the two registry-derived D-data word sets the validate rules consume as
 // membership sets. provider_capabilities is every compiled-in provider as "<class>:<word>" (the
-// TARGET set a `source: builtin` plugin candy's declared providers must be a member of);
+// TARGET set a compiled-in plugin candy's declared providers must be a member of);
 // act_capable_verbs is the subset of the request's plugin_words whose act form has a build/deploy
 // install path (the check act-form rule).
 type ValidateWordSetsReply struct {
