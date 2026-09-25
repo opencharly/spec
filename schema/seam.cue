@@ -11,7 +11,7 @@
 //
 // Package-less; concatenated into the spec compilation unit. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire types, single-sourced here so
-// `task cue:gen` produces the Go structs (WIRE TYPES ARE CUE-SOURCED WITHOUT
+// `charly task cue-gen` produces the Go structs (WIRE TYPES ARE CUE-SOURCED WITHOUT
 // EXCEPTION, CLAUDE.md SDD). Fields that carry a hand-written runtime type with
 // NO CUE def (*ResolvedVm, map[string]*ResolvedResource) travel as opaque
 // bytes/RawBody envelopes the consumer marshals/unmarshals at the boundary (the

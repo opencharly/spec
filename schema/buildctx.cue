@@ -3,7 +3,7 @@
 // text/template renders against — host-computed, and (future) handed to a
 // builder plugin over OpResolve. Package-less; concatenated into the spec
 // compilation unit. NOT authoring kinds (never in #Node/#Op) — pure generated
-// param types, single-sourced here so `task cue:gen` produces the Go structs
+// param types, single-sourced here so `charly task cue-gen` produces the Go structs
 // (charly aliases them via vmshared/spec_aliases.go). #CacheMount is shared
 // (_common.cue). @go names match the Go field names the templates reference.
 

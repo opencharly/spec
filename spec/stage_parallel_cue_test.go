@@ -13,7 +13,7 @@ import (
 	"github.com/opencharly/spec/schemaconcat"
 )
 
-// loadStageParallelSchema compiles the SAME concatenation the runtime and `task cue:gen` use
+// loadStageParallelSchema compiles the SAME concatenation the runtime and `charly task cue-gen` use
 // (schemaconcat.ConcatSchema — R3: one concatenation contract), so this test exercises the
 // schema as it actually ships rather than a hand-written excerpt of it.
 func loadStageParallelSchema(t *testing.T) cue.Value {

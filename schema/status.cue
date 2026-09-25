@@ -2,7 +2,7 @@
 // command:status plugin renders and every substrate plugin's status-collect Op
 // returns. Package-less; concatenated into the spec compilation unit. These are
 // NOT authoring kinds (never in #Node/#Op) — pure generated wire/render structs,
-// single-sourced here so `task cue:gen` produces the Go structs (charly aliases
+// single-sourced here so `charly task cue-gen` produces the Go structs (charly aliases
 // them via vmshared/spec_aliases.go). @go names match the Go field names the
 // renderers reference; JSON tags drive both the `charly status --json` output and
 // the host<->plugin wire.

@@ -1,11 +1,11 @@
 package spec
 
 // Reproducibility gate: the committed cue_types_gen.go and vocab_gen.go MUST
-// equal a fresh `task cue:gen`. This re-runs the SAME tools the task runs (the
+// equal a fresh `charly task cue-gen`. This re-runs the SAME tools the task runs (the
 // internal/schemagen concat + the pinned cue exp gengotypes + the
 // schemagen vocab emitter) into a temp dir and diffs the result against the
 // committed files. It skips gracefully when the pinned cue CLI is unavailable
-// (a dev box without ./bin/cue), but in CI — where `task cue:gen` has run — it
+// (a dev box without ./bin/cue), but in CI — where `charly task cue-gen` has run — it
 // catches any drift between schema/*.cue and the committed generated Go.
 
 import (
@@ -125,21 +125,21 @@ func committed(t *testing.T, name string) []byte {
 func TestGenReproducible(t *testing.T) {
 	cue := findCue(t)
 	if cue == "" {
-		t.Skipf("pinned cue %s not available (run `task cue:gen` to bootstrap ./bin/cue) — skipping reproducibility gate", cueVersion)
+		t.Skipf("pinned cue %s not available (run `charly task cue-gen` to bootstrap ./bin/cue) — skipping reproducibility gate", cueVersion)
 	}
 
 	if got, want := freshTypesGen(t, cue), committed(t, "cue_types_gen.go"); !equalBytes(got, want) {
-		t.Errorf("cue_types_gen.go is STALE: a fresh `task cue:gen` differs from the committed file.\n"+
-			"Run `task cue:gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
+		t.Errorf("cue_types_gen.go is STALE: a fresh `charly task cue-gen` differs from the committed file.\n"+
+			"Run `charly task cue-gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
 	}
 	if got, want := freshVocabGen(t), committed(t, "vocab_gen.go"); !equalBytes(got, want) {
-		t.Errorf("vocab_gen.go is STALE: a fresh `task cue:gen` differs from the committed file.\n"+
-			"Run `task cue:gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
+		t.Errorf("vocab_gen.go is STALE: a fresh `charly task cue-gen` differs from the committed file.\n"+
+			"Run `charly task cue-gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
 	}
 	if got, want := freshVersionGen(t), committed(t, "version_gen.go"); !equalBytes(got, want) {
-		t.Errorf("version_gen.go is STALE: a fresh `task cue:gen` differs from the committed file "+
-			"(did you bump #SchemaVersion in schema/version.cue without running `task cue:gen`?).\n"+
-			"Run `task cue:gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
+		t.Errorf("version_gen.go is STALE: a fresh `charly task cue-gen` differs from the committed file "+
+			"(did you bump #SchemaVersion in schema/version.cue without running `charly task cue-gen`?).\n"+
+			"Run `charly task cue-gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
 	}
 }
 

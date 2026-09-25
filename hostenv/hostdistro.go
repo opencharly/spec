@@ -165,7 +165,7 @@ func (hd *HostDistro) PrimaryTag() string {
 // distro: vocabulary key — the same token space) to its package format.
 //
 // The table is spec.DistroFormats, GENERATED from schema/distro_vocab.cue's #Distros by
-// `task cue:gen`. It was a hand-written Go map here, which duplicated the id space the
+// `charly task cue-gen`. It was a hand-written Go map here, which duplicated the id space the
 // CUE schema separately declared for a VM source's `distro:` — two lists to keep in
 // step, with no gate, and the SDD rule is that schema-shaped Go is generated rather than
 // transcribed. Returns "" for an unknown ID.

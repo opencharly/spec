@@ -10,7 +10,7 @@
 // / #ParsedNode verbatim (see parsedproject.cue). Package-less; concatenated into the spec
 // compilation unit. NOT an authoring kind (never in #Node/#Op) — a pure generated wire type
 // (it becomes candy/plugin-loader's OpLoad reply at the K5 envelope unit), single-sourced here
-// so `task cue:gen` produces the Go struct.
+// so `charly task cue-gen` produces the Go struct.
 
 // #LoadedDoc — one parsed document of a namespace's flattened file tree (root file OR a flat
 // import), in merge order. `directives` is the RAW reserved-directive mapping bytes

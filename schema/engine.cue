@@ -11,7 +11,7 @@
 // The split (kernel/plugin boundary law):
 //   - the engine VOCABULARY (which engine words, which run modes, which modes are
 //     unit-supervised) is data, owned here by #EngineName / #EngineRunMode /
-//     #EngineUnitRunModes. `task cue:gen` emits them as spec.EngineNames /
+//     #EngineUnitRunModes. `charly task cue-gen` emits them as spec.EngineNames /
 //     spec.EngineRunModes / spec.EngineUnitRunModeWords, and each consumer
 //     predicate reads its OWN list: IsEngineName reads spec.EngineNames,
 //     IsRunMode reads spec.EngineRunModes, and IsUnitRunMode reads
@@ -40,7 +40,7 @@
 
 // #EngineName — the CLOSED engine vocabulary. THE single source for the engine
 // words: the authored candy.engine/deploy.engine fields are this def, and
-// `task cue:gen` emits it as spec.EngineNames, from which IsEngineName derives.
+// `charly task cue-gen` emits it as spec.EngineNames, from which IsEngineName derives.
 // EngineBinary/EngineCapabilityFor answer from the capability table keyed by
 // these same words (drift-tested against spec.EngineNames).
 //
@@ -56,7 +56,7 @@
 //   systemd-unit — a generated .service wrapping the engine CLI (nerdctl; no
 //                  quadlet equivalent exists).
 //   direct       — an ephemeral argv launch with no unit (docker today).
-// `task cue:gen` emits this as spec.EngineRunModes; ValidateRunMode derives
+// `charly task cue-gen` emits this as spec.EngineRunModes; ValidateRunMode derives
 // from it, and container.IsRunMode reads it.
 #EngineRunMode: ("quadlet" | "systemd-unit" | "direct")
 
@@ -64,7 +64,7 @@
 // generated unit file (as opposed to an ephemeral argv launch). This is the
 // data fact that `direct` is not unit-supervised, so a caller never hand-lists
 // {"quadlet","systemd-unit"} — that pair was a drift-prone second source.
-// @go(-) suppresses a useless generated Go type; `task cue:gen` emits the list
+// @go(-) suppresses a useless generated Go type; `charly task cue-gen` emits the list
 // as spec.EngineUnitRunModeWords, which container.IsUnitRunMode reads.
 #EngineUnitRunModes: ["quadlet", "systemd-unit"] @go(-)
 

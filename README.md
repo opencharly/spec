@@ -13,7 +13,7 @@ program so core depends only on the contract, never on a mechanism kit.
 | `schema/` | The single-source CUE schema (`*.cue`, package-less) — embedded as `schema.FS` |
 | `spec/` | The generated + hand-written config/wire/IR types (`cue_types_gen.go`, `vocab_gen.go`, `version_gen.go`, `union_types.go`, …) — the module's core |
 | `proto/` | The generated gRPC plugin transport (`plugin.proto` + `*.pb.go`) |
-| `protocol/` | The CUE protocol model that `task wire:gen` renders into `proto/` |
+| `protocol/` | The CUE protocol model that `charly task wire-gen` renders into `proto/` |
 | `schemaconcat/` | The one concatenation contract (`ConcatSchema`) shared by runtime validation and the gen pipeline |
 | `capability/` | The SDK-facing authoring surface (`ProvidedCapability`, `CLISubcommand`, …) that `BuildCapabilities` marshals into the proto wire forms |
 | `calver/` | CalVer parse/compare + the schema-version gates (`ParseCalVer`, `CompareCalVer`, `LatestSchemaCalVer`) — sliced out of `spec/` |
@@ -31,9 +31,19 @@ program so core depends only on the contract, never on a mechanism kit.
 
 ## Generate
 
-- **`task cue:gen`** — spec types from `schema/*.cue` (reproducibility-gated: a clean regen is a
-  no-op, `TestGenReproducible` enforces it).
-- **`task wire:gen`** — proto from `protocol/schema/*.cue`.
+This repo's maintenance surface is the generic `charly task` surface (declared as
+`kind: task` entities in `charly.yml`), served by `candy/plugin-task`. With the
+`charly` binary installed (native package, or a checkout-built one), run:
+
+```bash
+charly task list      # the spec task surface
+charly task cue-gen   # regenerate every CUE-owned artifact
+```
+
+- **`charly task cue-gen`** — spec types from `schema/*.cue` (reproducibility-gated: a clean regen
+  is a no-op, `TestGenReproducible` enforces it).
+- **`charly task wire-gen`** — proto from `protocol/schema/*.cue`.
+- **`charly task proto-gen`** — alias for `wire-gen`.
 
 ## Go-module tags
 
