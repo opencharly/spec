@@ -48,6 +48,21 @@ func TestProjectTemplates_SelfCycleTerminates(t *testing.T) {
 	_ = self.ProjectTemplates()
 }
 
+// TestProjectTemplates_KindclusterFolds verifies the kindcluster substrate-template
+// kind folds into the envelope like every other standalone-substrate kind (its
+// PluginKinds[disc] bodies are copied + reachable via ByKind).
+func TestProjectTemplates_KindclusterFolds(t *testing.T) {
+	root := &UnifiedFile{
+		PluginKinds: map[string]map[string]json.RawMessage{
+			"kindcluster": {"lab": json.RawMessage(`{"kindcluster":{"box":"","engine":"podman"}}`)},
+		},
+	}
+	kc := root.ProjectTemplates().ByKind("kindcluster")
+	if _, ok := kc["lab"]; !ok {
+		t.Fatalf("kindcluster template %q missing from the projection; got keys %v", "lab", sortedRawKeys(kc))
+	}
+}
+
 func sortedRawKeys(m map[string]RawBody) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

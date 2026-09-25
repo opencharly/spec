@@ -289,8 +289,8 @@
 	primaries?: {[string]: string} @go(Primaries)
 }
 
-// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android: template maps carried as OPAQUE payloads
-// (the uf.Pod/VM/Local/Kubernetes/Android raw bytes, verbatim). The host projector stays KIND-BLIND — it
+// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android:/kindcluster: template maps carried as OPAQUE payloads
+// (the uf.Pod/VM/Local/Kubernetes/Android/Kindcluster raw bytes, verbatim). The host projector stays KIND-BLIND — it
 // copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Pod/…
 // would violate the boundary law + trip TestNoConcreteKindInKernel). The CONSUMING PLUGINS
 // (validate localtemplates, check-include pod/vm arms, status kubernetes/adb) decode a RawBody into the
@@ -298,6 +298,7 @@
 #ProjectTemplates: {
 	local?: {[string]: bytes} @go(Local,type=map[string]RawBody)
 	kubernetes?: {[string]: bytes} @go(Kubernetes,type=map[string]RawBody)
+	kindcluster?: {[string]: bytes} @go(Kindcluster,type=map[string]RawBody)
 	pod?: {[string]: bytes} @go(Pod,type=map[string]RawBody)
 	vm?: {[string]: bytes} @go(VM,type=map[string]RawBody)
 	android?: {[string]: bytes} @go(Android,type=map[string]RawBody)

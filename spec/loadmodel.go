@@ -139,11 +139,12 @@ func (uf *UnifiedFile) SetCandy(name string, il *InlineCandy) {
 // switch). Each returns the opaque name→body map for its kind (nil when none configured); the
 // kernel never decodes the bodies itself — consuming PLUGINS decode a body into the concrete
 // kind they need.
-func (uf *UnifiedFile) VM() map[string]json.RawMessage         { return uf.PluginKinds["vm"] }
-func (uf *UnifiedFile) Pod() map[string]json.RawMessage        { return uf.PluginKinds["pod"] }
-func (uf *UnifiedFile) Kubernetes() map[string]json.RawMessage { return uf.PluginKinds["kubernetes"] }
-func (uf *UnifiedFile) Local() map[string]json.RawMessage      { return uf.PluginKinds["local"] }
-func (uf *UnifiedFile) Android() map[string]json.RawMessage    { return uf.PluginKinds["android"] }
+func (uf *UnifiedFile) VM() map[string]json.RawMessage          { return uf.PluginKinds["vm"] }
+func (uf *UnifiedFile) Pod() map[string]json.RawMessage         { return uf.PluginKinds["pod"] }
+func (uf *UnifiedFile) Kubernetes() map[string]json.RawMessage  { return uf.PluginKinds["kubernetes"] }
+func (uf *UnifiedFile) Kindcluster() map[string]json.RawMessage { return uf.PluginKinds["kindcluster"] }
+func (uf *UnifiedFile) Local() map[string]json.RawMessage       { return uf.PluginKinds["local"] }
+func (uf *UnifiedFile) Android() map[string]json.RawMessage     { return uf.PluginKinds["android"] }
 
 // Beds returns every disposable R10 bed in the fold, keyed by QUALIFIED name. In
 // the unified node-form model a bed IS a `disposable: true` deploy, so the bed set
@@ -370,7 +371,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 func (uf *UnifiedFile) ProjectTemplates() *ProjectTemplates {
 	t := &ProjectTemplates{}
 	fillNamespacedTemplates(uf, "", t, map[*UnifiedFile]bool{})
-	if t.Local == nil && t.Kubernetes == nil && t.Pod == nil && t.VM == nil && t.Android == nil {
+	if t.Local == nil && t.Kubernetes == nil && t.Kindcluster == nil && t.Pod == nil && t.VM == nil && t.Android == nil {
 		return nil
 	}
 	return t
@@ -390,6 +391,8 @@ func (t *ProjectTemplates) ByKind(kind string) map[string]RawBody {
 		return t.Local
 	case "kubernetes":
 		return t.Kubernetes
+	case "kindcluster":
+		return t.Kindcluster
 	case "pod":
 		return t.Pod
 	case "vm":
@@ -435,6 +438,7 @@ func fillNamespacedTemplates(uf *UnifiedFile, prefix string, t *ProjectTemplates
 	}
 	cp(uf.Local(), &t.Local)
 	cp(uf.Kubernetes(), &t.Kubernetes)
+	cp(uf.Kindcluster(), &t.Kindcluster)
 	cp(uf.Pod(), &t.Pod)
 	cp(uf.VM(), &t.VM)
 	cp(uf.Android(), &t.Android)
