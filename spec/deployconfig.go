@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,8 +21,18 @@ const DeployConfigEnv = "CHARLY_DEPLOY_CONFIG"
 
 // DefaultDeployConfigPath returns the per-host deploy overlay file
 // (~/.config/charly/charly.yml), honoring the DeployConfigEnv override.
-func DefaultDeployConfigPath() (string, error) {
-	if p := os.Getenv(DeployConfigEnv); p != "" {
+//
+// An optional ctx carries a per-invocation RunEnv (spec.WithRunEnv): when present,
+// its DeployConfigEnv value WINS over the process env. This is what makes a
+// concurrent in-process bed roster safe — each bed's ctx names its own overlay, so
+// the shared process env is never the source of truth (plan §4.2 / F8). A caller
+// with no ctx (or no RunEnv) reads os.Getenv, byte-identical to the legacy behavior.
+func DefaultDeployConfigPath(ctxs ...context.Context) (string, error) {
+	if len(ctxs) > 0 {
+		if p, ok := RunEnvGet(ctxs[0], DeployConfigEnv); ok && p != "" {
+			return p, nil
+		}
+	} else if p := os.Getenv(DeployConfigEnv); p != "" {
 		return p, nil
 	}
 	configDir, err := os.UserConfigDir()

@@ -53,9 +53,20 @@ var lockWaitReportInterval = 30 * time.Second
 // portably, and an UNBOUNDED wait is exactly what the original bound was added to prevent (the
 // recurring deploy-del stall). So the wait is bounded-but-long and VISIBLE rather than silent.
 func flockBounded(f *os.File, path string) error {
-	deadline := time.Now().Add(lockTimeout)
+	return flockBoundedWithin(f, path, lockTimeout)
+}
+
+// flockBoundedWithin is flockBounded with an explicit bound. A brief critical section (a
+// config-file read-modify-write, whose whole hold is milliseconds) passes a SHORT bound so a
+// contended acquire fails FAST and LOUDLY instead of masquerading as a legitimate slow build for
+// the full 30-minute image-build bound (the silent cross-bed deadlock of plan RCA issue #2).
+func flockBoundedWithin(f *os.File, path string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
 	start := time.Now()
 	nextReport := start.Add(lockWaitReportInterval)
+	if lockWaitReportInterval > timeout {
+		nextReport = deadline
+	}
 	for {
 		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
@@ -66,10 +77,10 @@ func flockBounded(f *os.File, path string) error {
 		}
 		now := time.Now()
 		if now.After(deadline) {
-			return fmt.Errorf("flock %s: still held by %s after %s — that process is still running; wait for it to finish and retry (the kernel releases the lock when it exits, so there is nothing to clean up)", path, holderDescription(path), lockTimeout)
+			return fmt.Errorf("flock %s: still held by %s after %s — that process is still running; wait for it to finish and retry (the kernel releases the lock when it exits, so there is nothing to clean up)", path, holderDescription(path), timeout)
 		}
 		if now.After(nextReport) {
-			fmt.Fprintf(os.Stderr, "charly: waiting %s for file lock %s — held by %s; giving up after %s\n", now.Sub(start).Round(time.Second), path, holderDescription(path), lockTimeout)
+			fmt.Fprintf(os.Stderr, "charly: waiting %s for file lock %s — held by %s; giving up after %s\n", now.Sub(start).Round(time.Second), path, holderDescription(path), timeout)
 			nextReport = now.Add(lockWaitReportInterval)
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -88,6 +99,15 @@ func flockBounded(f *os.File, path string) error {
 // that already opened the prior inode). flock is per-open-file-description, so two acquires of the
 // same path — even within ONE process — contend, which the duplicate-run guard relies on.
 func AcquireFileLock(path string, blocking bool) (release func() error, err error) {
+	return AcquireFileLockWithin(path, blocking, lockTimeout)
+}
+
+// AcquireFileLockWithin is AcquireFileLock with an explicit blocking bound (ignored when blocking
+// is false). It exists for a SHORT critical section — a config-file read-modify-write — so a
+// contended acquire fails FAST with a clear message instead of waiting the full 30-minute
+// image-build bound. flock is per-open-file-description, so a same-process contention (two beds in
+// one roster) is detected identically.
+func AcquireFileLockWithin(path string, blocking bool, timeout time.Duration) (release func() error, err error) {
 	if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
 		return nil, fmt.Errorf("create lock dir %s: %w", filepath.Dir(path), mkErr)
 	}
@@ -100,7 +120,7 @@ func AcquireFileLock(path string, blocking bool) (release func() error, err erro
 			_ = f.Close()
 			return nil, fmt.Errorf("%s: %w", path, ErrLockBusy)
 		}
-	} else if flockErr := flockBounded(f, path); flockErr != nil {
+	} else if flockErr := flockBoundedWithin(f, path, timeout); flockErr != nil {
 		_ = f.Close()
 		return nil, flockErr
 	}
