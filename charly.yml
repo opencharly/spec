@@ -88,7 +88,7 @@ bootstrap-protoc:
 #   proto/plugin_grpc.pb.go  (services)
 #
 # proto/plugin.proto is generated output, never an authoring surface.
-# Reproducible: rm -f bin/protoc*; task proto-gen && git diff --exit-code proto
+# Reproducible: rm -f bin/protoc*; charly task proto-gen && git diff --exit-code proto
 # -----------------------------------------------------------------------------
 wire-gen:
   task:
