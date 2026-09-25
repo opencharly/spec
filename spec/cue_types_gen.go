@@ -2837,6 +2837,8 @@ type ProjectTemplates struct {
 
 	Kubernetes map[string]RawBody `yaml:"kubernetes,omitempty" json:"kubernetes,omitempty"`
 
+	KubeVirt map[string]RawBody `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+
 	Pod map[string]RawBody `yaml:"pod,omitempty" json:"pod,omitempty"`
 
 	VM map[string]RawBody `yaml:"vm,omitempty" json:"vm,omitempty"`

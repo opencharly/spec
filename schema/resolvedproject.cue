@@ -297,6 +297,7 @@
 #ProjectTemplates: {
 	local?: {[string]: bytes} @go(Local,type=map[string]RawBody)
 	kubernetes?: {[string]: bytes} @go(Kubernetes,type=map[string]RawBody)
+	kubevirt?: {[string]: bytes} @go(KubeVirt,type=map[string]RawBody)
 	pod?: {[string]: bytes} @go(Pod,type=map[string]RawBody)
 	vm?: {[string]: bytes} @go(VM,type=map[string]RawBody)
 	android?: {[string]: bytes} @go(Android,type=map[string]RawBody)
