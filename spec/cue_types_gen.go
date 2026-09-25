@@ -2826,8 +2826,8 @@ type CandySecret struct {
 	Env string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
-// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android: template maps carried as OPAQUE payloads
-// (the uf.Pod/VM/Local/Kubernetes/Android raw bytes, verbatim). The host projector stays KIND-BLIND — it
+// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android:/kindcluster: template maps carried as OPAQUE payloads
+// (the uf.Pod/VM/Local/Kubernetes/Android/Kindcluster raw bytes, verbatim). The host projector stays KIND-BLIND — it
 // copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Pod/…
 // would violate the boundary law + trip TestNoConcreteKindInKernel). The CONSUMING PLUGINS
 // (validate localtemplates, check-include pod/vm arms, status kubernetes/adb) decode a RawBody into the
@@ -2836,6 +2836,8 @@ type ProjectTemplates struct {
 	Local map[string]RawBody `yaml:"local,omitempty" json:"local,omitempty"`
 
 	Kubernetes map[string]RawBody `yaml:"kubernetes,omitempty" json:"kubernetes,omitempty"`
+
+	Kindcluster map[string]RawBody `yaml:"kindcluster,omitempty" json:"kindcluster,omitempty"`
 
 	Pod map[string]RawBody `yaml:"pod,omitempty" json:"pod,omitempty"`
 
@@ -4941,6 +4943,31 @@ type KubernetesDeployVenue struct {
 	DeployName string `yaml:"deploy_name,omitempty" json:"deploy_name,omitempty"`
 }
 
+// #KindclusterDeployVenue is the preresolved deploy:kindcluster substrate payload the
+// kindcluster deploy preresolver produces in DeployVenue.Substrate and the
+// candy/plugin-kube deploy:kindcluster provider decodes. Mirrors #KubernetesDeployVenue (R3),
+// plus the kind-specific facts (cluster name, resolved engine → KIND_EXPERIMENTAL_PROVIDER,
+// the node-image digest pin) the create leg needs.
+type KindclusterDeployVenue struct {
+	ClusterName string `yaml:"cluster_name,omitempty" json:"cluster_name"`
+
+	Provider string `yaml:"provider,omitempty" json:"provider"`
+
+	NodeImage string `yaml:"node_image,omitempty" json:"node_image"`
+
+	// cluster_config is the egress-validated rendered kind Cluster config YAML (the
+	// `kind create cluster --config` argument). Rendered + validated plugin-side.
+	ClusterConfig RawBody `yaml:"cluster_config,omitempty" json:"cluster_config"`
+
+	KubeContext string `yaml:"kube_context,omitempty" json:"kube_context,omitempty"`
+
+	OverlayPath string `yaml:"overlay_path,omitempty" json:"overlay_path,omitempty"`
+
+	TreeRoot string `yaml:"tree_root,omitempty" json:"tree_root,omitempty"`
+
+	DeployName string `yaml:"deploy_name,omitempty" json:"deploy_name,omitempty"`
+}
+
 // #DeployReply is the structured result an external deploy provider returns
 // from an OpExecute Invoke: the teardown ops the host records into the
 // ledger, plus a provenance record.
@@ -6572,6 +6599,74 @@ type KubernetesGenReply struct {
 	OverlayRelPath string `yaml:"overlay_rel_path,omitempty" json:"overlay_rel_path"`
 
 	Files []KubernetesGenFile `yaml:"files,omitempty" json:"files"`
+}
+
+type Kindcluster struct {
+	// May be empty (a cluster-policy-only template runs no workload itself).
+	Box string `yaml:"box,omitempty" json:"box"`
+
+	// engine selects the container engine kind provisions its node containers with.
+	// It maps 1:1 to kind's KIND_EXPERIMENTAL_PROVIDER (podman/docker/nerdctl), so
+	// the authored #EngineName vocabulary is used directly — no separate selector.
+	// Absent → the resolved runtime engine (engine.run).
+	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
+
+	// node_image is the digest-pinned kind node image (kindest/node:vX@sha256:…).
+	// Empty → the plugin's pinned default (the kind release's default node image).
+	// A digest pin is required for reproducibility (kind's own guidance).
+	NodeImage string `yaml:"node_image,omitempty" json:"node_image,omitempty"`
+
+	// nodes is the cluster topology. Absent → a single control-plane node.
+	Nodes []KindclusterNode `yaml:"nodes,omitempty" json:"nodes,omitempty"`
+
+	// kubeconfig_context is the kubeconfig context this cluster deploys to. kind
+	// writes the context named after the cluster; a deploy may override it.
+	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
+
+	// default_namespace mirrors the kubernetes template's default namespace.
+	DefaultNamespace string `yaml:"default_namespace,omitempty" json:"default_namespace,omitempty"`
+
+	// admission_policy mirrors the kubernetes template's admission policy (read by
+	// candy/plugin-k8sgen to set the pod security context).
+	AdmissionPolicy string `yaml:"admission_policy,omitempty" json:"admission_policy,omitempty"`
+
+	// Cluster policy — the SAME defs the `kubernetes:` template uses (R3).
+	Storage *KubernetesStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Ingress *KubernetesIngressDefaults `yaml:"ingress,omitempty" json:"ingress,omitempty"`
+
+	ImageDefault *KubernetesImagesDefaults `yaml:"image_default,omitempty" json:"image_default,omitempty"`
+
+	PodDefault *KubernetesPodDefaults `yaml:"pod_default,omitempty" json:"pod_default,omitempty"`
+
+	Defaults KubernetesResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+}
+
+// #KindclusterNode — one node in the cluster topology. role discriminates the
+// control plane from workers; kind names control-plane nodes `<cluster>-control-plane`
+// and workers `<cluster>-worker`, `<cluster>-worker2`, …
+type KindclusterNode struct {
+	Role string `yaml:"role,omitempty" json:"role"`
+
+	// image overrides the cluster-level node_image for this node.
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+
+	// extra_port_mappings maps node ports to host ports (kind extraPortMappings) —
+	// the ingress/NodePort reach path. Bind a high host port to avoid needing
+	// net.ipv4.ip_unprivileged_port_start lowered for 80/443.
+	ExtraPortMappings []KindclusterPortMapping `yaml:"extra_port_mappings,omitempty" json:"extra_port_mappings,omitempty"`
+}
+
+type KindclusterPortMapping struct {
+	ContainerPort int `yaml:"container_port,omitempty" json:"container_port"`
+
+	HostPort int `yaml:"host_port,omitempty" json:"host_port"`
+
+	ListenAddress string `yaml:"listen_address,omitempty" json:"listen_address"`
+
+	Protocol string `yaml:"protocol,omitempty" json:"protocol"`
 }
 
 // #LedgerConfig is the top-level `ledger:` block. `deploys` maps deploy-id →
@@ -9272,7 +9367,7 @@ type ToolStatus struct {
 }
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
-// deployment substrate (pod / vm / kubernetes / local / android). kind discriminates the
+// deployment substrate (pod / vm / kubernetes / local / android / kindcluster). kind discriminates the
 // substrate; nested carries multi-hop children (RECURSIVE self-reference, populated
 // by the nested overlay); source records provenance (libvirt|ledger|adb|tree|podman).
 type DeploymentStatus struct {
@@ -9363,7 +9458,7 @@ type StatusSubstrateReply struct {
 // #SubstrateStatusRequest — the per-substrate COLLECTOR request the host sends to the substrate
 // plugin's OpStatusCollect (P14a: the cleanly-movable collectors — pod live + local + the probes —
 // relocated into candy/plugin-substrate, served on the kind provider's Invoke by word
-// pod/vm/kubernetes/local/android). The host passes the scalar inputs a sdk-only candy cannot derive:
+// pod/vm/kubernetes/local/android/kindcluster). The host passes the scalar inputs a sdk-only candy cannot derive:
 // the engine binary name (engine_bin), the run mode, the quadlet dir (pod's quadlet-description
 // enrichment + enabled-but-not-running append), include_all (--all), and — on the single path —
 // box+instance. NO deploy-cone (FleetConfig/UnifiedFile) crosses this seam: the deploy
@@ -9472,6 +9567,26 @@ type ResolvedKubernetes struct {
 	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
 
+// #ResolvedKindcluster is the resolve-to-envelope form of a `kindcluster:` cluster
+// template. The kernel reads only KubeconfigContext (the deploy preresolver); the
+// full cluster model rides opaquely in Raw and is decoded by the deploy:kindcluster
+// provider (candy/plugin-kube), never the kernel. Mirrors #ResolvedKubernetes (R3).
+type ResolvedKindcluster struct {
+	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
+
+	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
+}
+
+// #KindclusterResolveInput carries one opaque kindcluster cluster template body to project.
+type KindclusterResolveInput struct {
+	Kindcluster RawBody `yaml:"kindcluster,omitempty" json:"kindcluster"`
+}
+
+// #KindclusterResolveReply wraps the resolved kindcluster cluster template.
+type KindclusterResolveReply struct {
+	Resolved *ResolvedKindcluster `yaml:"resolved,omitempty" json:"resolved,omitempty"`
+}
+
 // #KubernetesResolveInput carries one opaque kubernetes cluster template body to project.
 type KubernetesResolveInput struct {
 	Kubernetes RawBody `yaml:"kubernetes,omitempty" json:"kubernetes"`
@@ -9511,6 +9626,8 @@ type SubstrateTemplateResolveRequest struct {
 	Pod *PodResolveInput `yaml:"pod,omitempty" json:"pod,omitempty"`
 
 	Kubernetes *KubernetesResolveInput `yaml:"kubernetes,omitempty" json:"kubernetes,omitempty"`
+
+	Kindcluster *KindclusterResolveInput `yaml:"kindcluster,omitempty" json:"kindcluster,omitempty"`
 
 	Vm *VmResolveInput `yaml:"vm,omitempty" json:"vm,omitempty"`
 }

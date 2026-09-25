@@ -30,10 +30,10 @@
 // the wire boundary; @go(-) suppresses a (degraded) generated Go type — the named
 // Go type + typed consts are hand-written in spec/status_types.go and referenced by
 // #DeploymentStatus.kind via @go(Kind,type=SubstrateKind).
-#SubstrateKind: "pod" | "vm" | "kubernetes" | "local" | "android" @go(-)
+#SubstrateKind: "pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" @go(-)
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
-// deployment substrate (pod / vm / kubernetes / local / android). kind discriminates the
+// deployment substrate (pod / vm / kubernetes / local / android / kindcluster). kind discriminates the
 // substrate; nested carries multi-hop children (RECURSIVE self-reference, populated
 // by the nested overlay); source records provenance (libvirt|ledger|adb|tree|podman).
 #DeploymentStatus: {
@@ -98,7 +98,7 @@
 // #SubstrateStatusRequest — the per-substrate COLLECTOR request the host sends to the substrate
 // plugin's OpStatusCollect (P14a: the cleanly-movable collectors — pod live + local + the probes —
 // relocated into candy/plugin-substrate, served on the kind provider's Invoke by word
-// pod/vm/kubernetes/local/android). The host passes the scalar inputs a sdk-only candy cannot derive:
+// pod/vm/kubernetes/local/android/kindcluster). The host passes the scalar inputs a sdk-only candy cannot derive:
 // the engine binary name (engine_bin), the run mode, the quadlet dir (pod's quadlet-description
 // enrichment + enabled-but-not-running append), include_all (--all), and — on the single path —
 // box+instance. NO deploy-cone (FleetConfig/UnifiedFile) crosses this seam: the deploy
