@@ -54,8 +54,15 @@ depends on `bootstrap-cue` + `wire-gen` (which in turn depends on
 
 Each plugin's OWN `params/cue_types_gen.go` is generated from its self-contained
 `candy/plugin-*/schema/*.cue` in the plugin's OWN repository, via the SAME
-`internal/schemagen` + pinned cue pipeline (R3). There is no superproject
-`cue:gen` wrapper any more — plugin param generation lives with the plugin.
+`internal/schemagen` + pinned cue pipeline (R3). The former superproject
+`taskfiles/Cue.yml` wrapper — which chained this repo's `cue:gen` and then looped
+over each plugin — was removed with the candy de-submodule work (charly#452,
+merged 2026-08-29); plugin param generation now lives with the plugin.
+
+The spec task rename (`cue:gen` → `cue-gen`) has no cross-repo consumer: the
+superproject wrapper that once invoked `spec/Taskfile.yml`'s `cue:gen` no longer
+exists on charly's `origin/main` (verified: `git -C charly ls-tree -r
+origin/main --name-only | grep -c taskfiles/Cue.yml` → `0`).
 
 These runs are **reproducible**: two consecutive `charly task cue-gen`
 invocations produce no diff, and `TestGenReproducible` (in `spec/`) fails CI if
