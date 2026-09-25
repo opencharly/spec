@@ -6614,14 +6614,14 @@ type Kindcluster struct {
 	// node_image is the digest-pinned kind node image (kindest/node:vX@sha256:…).
 	// Empty → the plugin's pinned default (the kind release's default node image).
 	// A digest pin is required for reproducibility (kind's own guidance).
-	Node_image string `yaml:"node_image,omitempty" json:"node_image,omitempty"`
+	NodeImage string `yaml:"node_image,omitempty" json:"node_image,omitempty"`
 
 	// nodes is the cluster topology. Absent → a single control-plane node.
 	Nodes []KindclusterNode `yaml:"nodes,omitempty" json:"nodes,omitempty"`
 
 	// kubeconfig_context is the kubeconfig context this cluster deploys to. kind
 	// writes the context named after the cluster; a deploy may override it.
-	Kubeconfig_context string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
+	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
 
 	// default_namespace mirrors the kubernetes template's default namespace.
 	DefaultNamespace string `yaml:"default_namespace,omitempty" json:"default_namespace,omitempty"`
