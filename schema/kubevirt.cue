@@ -60,7 +60,7 @@
 	snapshot?:  [...#KubevirtSnapshot] @go(Snapshots)
 }
 
-// 5-way discriminated union on source.kind; each arm pins kind, requires its
+// 4-way discriminated union on source.kind; each arm pins kind, requires its
 // fields, forbids cross-branch fields via _|_, and is CLOSED.
 #KubevirtSource:
 	{

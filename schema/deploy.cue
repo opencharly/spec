@@ -422,8 +422,16 @@
 	// SSHes through (auto-allocated, persisted so a re-add reuses it).
 	ssh_port?: int
 	ssh_user?: string
-	// snapshot ledger (names + refcounts) for VirtualMachineSnapshot teardown.
-	snapshots?: [...#KubeVirtDeploySnapshot]
+	// snapshot is the VirtualMachineSnapshot ledger (names + refcounts) for
+	// teardown refcounting — the key matches the Go yaml/json tag (hand_state_types.go
+	// KubeVirtDeployState.Snapshots) and the #VmDeployState.snapshot convention.
+	snapshot?: [...#KubeVirtDeploySnapshot]
+	// ephemeral persists the cross-substrate ephemeral-instance lifecycle state,
+	// mirroring #VmDeployState.ephemeral (both mirror spec.EphemeralRuntime). The Go
+	// hand type carries it as `Ephemeral *EphemeralRuntime`.
+	ephemeral?: {
+		...
+	}
 	...
 } @go(-)
 
