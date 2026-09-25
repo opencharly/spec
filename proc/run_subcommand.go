@@ -58,6 +58,14 @@ var RunCharlySubcommandCtx = func(ctx context.Context, args ...string) error {
 	if err != nil {
 		exe = os.Args[0]
 	}
+	return runCharlySubcommandCtx(ctx, exe, args)
+}
+
+// runCharlySubcommandCtx is the testable exec body: it runs exe with args,
+// inheriting stdin/stdout/stderr and merging the ctx RunEnv over the parent env.
+// Extracted so a test can exercise the cmd.Env wiring against a real child (a
+// shell that prints the env) without os.Executable being a charly binary.
+func runCharlySubcommandCtx(ctx context.Context, exe string, args []string) error {
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

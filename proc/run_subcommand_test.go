@@ -2,6 +2,7 @@ package proc
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -61,22 +62,51 @@ func TestMergedChildEnv_EmptyIsInherit(t *testing.T) {
 	}
 }
 
-// TestRunCharlySubcommandCtx_ThreadsRunEnv proves the ctx form hands the RunEnv to
-// the child process, while the legacy no-ctx form inherits. Uses /bin/sh -c printenv
-// as the child so no charly binary is needed (the resolver picks os.Executable, so
-// this stubs the var to run a real env-printing child).
+// TestRunCharlySubcommandCtx_ThreadsRunEnv proves the exec wiring hands the ctx
+// RunEnv to a REAL child process, and that the legacy no-ctx form inherits. It runs
+// /bin/sh printing one variable as the child (so no charly binary is needed) via the
+// testable runCharlySubcommandCtx body.
 func TestRunCharlySubcommandCtx_ThreadsRunEnv(t *testing.T) {
-	// Exercise the merge directly (the exec path is covered by mergedChildEnv above);
-	// a real fork here would depend on os.Executable being a charly binary.
-	ctx := spec.WithRunEnv(context.Background(), spec.RunEnv{"CHARLY_DEPLOY_CONFIG": "/tmp/bed/charly.yml"})
-	env := mergedChildEnv(spec.RunEnvFrom(ctx))
-	found := false
-	for _, kv := range env {
-		if kv == "CHARLY_DEPLOY_CONFIG=/tmp/bed/charly.yml" {
-			found = true
-		}
+	if _, err := os.Stat("/bin/sh"); err != nil {
+		t.Skip("/bin/sh unavailable")
 	}
-	if !found {
-		t.Fatal("ctx RunEnv was not carried into the child env")
+	// A per-call RunEnv value must reach the child.
+	ctx := spec.WithRunEnv(context.Background(), spec.RunEnv{"CHARLY_PROC_TEST": "per-call"})
+	out := captureRun(t, ctx, "/bin/sh", []string{"-c", "printf %s \"$CHARLY_PROC_TEST\""})
+	if out != "per-call" {
+		t.Fatalf("child saw CHARLY_PROC_TEST=%q, want per-call (ctx RunEnv not threaded)", out)
 	}
+	// An inherited value is overridden by the per-call one.
+	t.Setenv("CHARLY_PROC_TEST", "inherited")
+	out = captureRun(t, ctx, "/bin/sh", []string{"-c", "printf %s \"$CHARLY_PROC_TEST\""})
+	if out != "per-call" {
+		t.Fatalf("child saw CHARLY_PROC_TEST=%q, want per-call override", out)
+	}
+	// No RunEnv → os/exec inherits the parent env unchanged.
+	t.Setenv("CHARLY_PROC_TEST", "inherited-only")
+	out = captureRun(t, context.Background(), "/bin/sh", []string{"-c", "printf %s \"$CHARLY_PROC_TEST\""})
+	if out != "inherited-only" {
+		t.Fatalf("child saw CHARLY_PROC_TEST=%q, want inherited-only (no-ctx must inherit)", out)
+	}
+}
+
+// captureRun runs runCharlySubcommandCtx's wiring against /bin/sh with stdout
+// redirected to a pipe (the production body streams to os.Stdout).
+func captureRun(t *testing.T, ctx context.Context, exe string, args []string) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	runErr := runCharlySubcommandCtx(ctx, exe, args)
+	os.Stdout = old
+	_ = w.Close()
+	buf := make([]byte, 4096)
+	n, _ := r.Read(buf)
+	if runErr != nil {
+		t.Fatalf("run %s %v: %v", exe, args, runErr)
+	}
+	return string(buf[:n])
 }

@@ -255,8 +255,11 @@ func (uf *UnifiedFile) BedScope(ref string) (*UnifiedFile, string) {
 // the run resolves its cross-refs in the root by qualifying them here. A local bed
 // (no namespace) has root-scoped refs already and is returned unchanged.
 //
-// The returned node is a COPY; the stored Deploy tree is never mutated, so
-// `charly box validate` (which reads the unqualified authored refs) is unaffected.
+// The returned node is a DEEP COPY: ResolveBed returns the stored node by value,
+// but its Member entries carry *Deploy pointers into the stored tree, so qualifying
+// in place would rewrite the stored members. qualifyBedRefs clones each member node
+// before rewriting, leaving the stored Deploy tree untouched — `charly box validate`
+// still reads the unqualified authored refs.
 func (uf *UnifiedFile) ResolveBedForRoot(ref string) (DeployNode, bool) {
 	node, ok := uf.ResolveBed(ref)
 	if !ok {
@@ -271,15 +274,29 @@ func (uf *UnifiedFile) ResolveBedForRoot(ref string) (DeployNode, bool) {
 }
 
 // qualifyBedRefs rewrites n's namespace-LOCAL cross-refs (from:, image:) and every
-// member's, recursively, to the root-qualified form under prefix.
+// member's, recursively, to the root-qualified form under prefix. The Member slice
+// (its backing array is shared by the value copy ResolveBed returns) and every
+// member node are CLONED before rewriting, so the stored tree is never mutated.
 func qualifyBedRefs(n *DeployNode, prefix string) {
 	if n == nil || prefix == "" {
 		return
 	}
 	n.From = qualifyLocalRef(n.From, prefix)
 	n.Image = qualifyLocalRef(n.Image, prefix)
+	if len(n.Member) == 0 {
+		return
+	}
+	members := make([]Member, len(n.Member))
+	copy(members, n.Member)
+	n.Member = members
 	for i := range n.Member {
-		qualifyBedRefs(n.Member[i].Node, prefix)
+		child := n.Member[i].Node
+		if child == nil {
+			continue
+		}
+		clone := *child
+		qualifyBedRefs(&clone, prefix)
+		n.Member[i].Node = &clone
 	}
 }
 

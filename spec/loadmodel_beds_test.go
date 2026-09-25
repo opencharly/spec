@@ -115,9 +115,15 @@ func TestBedResolveForRoot_QualifiesNamespacedRefs(t *testing.T) {
 	if len(n.Member) != 1 || n.Member[0].Node.Image != "omarchy.ns-app" || n.Member[0].Node.From != "omarchy.ns-vm" {
 		t.Fatalf("member refs not qualified: %+v", n.Member)
 	}
-	// The stored tree is unmutated (validate reads the authored refs).
+	// The stored tree is unmutated (validate reads the authored refs) — including
+	// every member node, which carries a *Deploy pointer into the stored tree.
 	if ns.Deploy["ns-pod"].Image != "ns-app" {
-		t.Fatal("ResolveBedForRoot mutated the stored Deploy tree")
+		t.Fatal("ResolveBedForRoot mutated the stored Deploy tree (root image)")
+	}
+	stored := ns.Deploy["ns-pod"]
+	if len(stored.Member) != 1 || stored.Member[0].Node == nil ||
+		stored.Member[0].Node.Image != "ns-app" || stored.Member[0].Node.From != "ns-vm" {
+		t.Fatalf("ResolveBedForRoot mutated the stored member node: %+v", stored.Member)
 	}
 
 	// Namespaced vm bed: from qualifies.
