@@ -66,3 +66,27 @@ func TestCloudInitStatusScript_ReadsUnprivileged(t *testing.T) {
 		}
 	})
 }
+
+// TestPollCloudInitSettled proves the OTHER half of the fix: that the TERMINAL classifier
+// (which decides whether the poll RETURNS) treats the script's `status: disabled` — the Cua
+// containerDisk's state — as settled, so the wait cannot run to its cap on that guest.
+func TestPollCloudInitSettled(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		out  string
+		want bool
+	}{
+		{"disabled settles (the Cua containerDisk)", "status: disabled\n", true},
+		{"done settles", "status: done\n", true},
+		{"error settles", "status: error\n", true},
+		{"running does NOT settle", "status: running\n", false},
+		{"a blank/transient read does NOT settle", "", false},
+		{"a not-startable read does NOT settle", "not started\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := pollCloudInitSettled(tc.out); got != tc.want {
+				t.Errorf("pollCloudInitSettled(%q) = %v, want %v", tc.out, got, tc.want)
+			}
+		})
+	}
+}

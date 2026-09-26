@@ -323,9 +323,10 @@ func (e *SSHExecutor) remotePoll(label string) PollFunc {
 	}
 }
 
-// WaitForCloudInit polls `sudo cloud-init status` on the guest until cloud-init
-// settles (status done/error/disabled). Only meaningful for cloud-image VMs;
-// callers should skip this for bootc sources with no cidata ISO attached.
+// WaitForCloudInit polls cloud-init's status on the guest until it settles
+// (status done/error/disabled); the read is unprivileged with a `sudo -n` fallback
+// (see exec.WaitForCloudInit). Only meaningful for cloud-image VMs; callers should
+// skip this for bootc sources with no cidata ISO attached.
 func (e *SSHExecutor) WaitForCloudInit(ctx context.Context) error {
 	return WaitForCloudInit(ctx, e.kitSSHArgs(), e.remotePoll("cloud-init"))
 }
