@@ -11131,6 +11131,9 @@ type VmBoxSource struct {
 
 	// cloud_image | iso: the artifact url the disk was fetched from.
 	URL string `yaml:"url,omitempty" json:"url,omitempty"`
+
+	// container_disk: the OCI artifact ref the disk was pulled from.
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
 }
 
 // #VmSnapshotCreateOpts parameterizes the creation of a snapshot — the host-resolved payload for

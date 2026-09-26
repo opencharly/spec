@@ -181,6 +181,45 @@
 		disk_format?:   _|_
 		builder?:       _|_
 		builder_image?: _|_
+	} | {
+		kind: "container_disk"
+		// image is the OCI artifact carrying a bootable guest disk (the KubeVirt
+		// containerDisk contract: an OCI image whose layer holds a disk file, by
+		// default at /disk/disk.img — the directory KubeVirt scans). charly pulls
+		// the layer, extracts the disk, and boots it through the UNCHANGED
+		// libvirt/qemu/cloud-init path — so a Cua Fleet image (or any containerDisk)
+		// is consumed and deployed locally with no KubeVirt. Pin a DIGEST
+		// (`repo@sha256:…`) for immutability; a mutable tag is allowed but weaker.
+		image: string & !=""
+		// disk_path_in_image is the path INSIDE the image's layer; default
+		// /disk/disk.img. KubeVirt also supports a custom `path:` on the VMI — this
+		// is the charly-side equivalent for a foreign artifact laid out elsewhere.
+		disk_path_in_image?: string
+		// cache overrides the content-addressed image cache root.
+		cache?: string
+		// distro is OPTIONAL here (like the cloud_image arm), enforced for PRESENCE
+		// by the vm kind's own OpValidate only where it genuinely matters. It keys
+		// the guest package-manager selection + the five-id candy vocabulary — the
+		// SAME silent-zero-package trap the cloud_image arm documents: naming a
+		// near relative is a workaround, naming the right id is the repair.
+		distro?: #DistroID
+		// Cross-branch fields.
+		url?:            _|_
+		checksum?:       _|_
+		box?:            _|_
+		transport?:      _|_
+		rootfs?:         _|_
+		root_size?:      _|_
+		kernel_args?:    _|_
+		from_vm?:        _|_
+		from_snapshot?:  _|_
+		libvirt_name?:   _|_
+		disk_path?:      _|_
+		disk_format?:    _|_
+		builder?:        _|_
+		builder_image?:  _|_
+		installer?:      _|_
+		base_user?:      _|_
 	} @go(-) // gengotypes: hand VmSource (spec/union_types.go) — flat discriminated struct
 
 #VmChecksum: {

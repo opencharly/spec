@@ -53,7 +53,7 @@
 // (cloud_image | bootc | clone | bootstrap | iso) so every arm a VM was built from
 // leaves a resolvable provenance record; one arm's fields are populated per kind.
 #VmBoxSource: {
-	kind!: "cloud_image" | "bootc" | "clone" | "bootstrap" | "iso" @go(Kind)
+	kind!: "cloud_image" | "bootc" | "clone" | "bootstrap" | "iso" | "container_disk" @go(Kind)
 	// clone: the source entity the box's disk was cloned from.
 	from_vm?: string @go(FromVm)
 	// clone: the base snapshot id the clone overlay was created from.
@@ -62,4 +62,6 @@
 	box?: string @go(Box)
 	// cloud_image | iso: the artifact url the disk was fetched from.
 	url?: string @go(URL)
+	// container_disk: the OCI artifact ref the disk was pulled from.
+	image?: string @go(Image)
 }
