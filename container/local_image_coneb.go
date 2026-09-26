@@ -286,13 +286,20 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 			}
 		}
 		if len(refs) == 0 {
-			// docker `images --format json`: Repository + Tag scalars ("<none>" when absent).
+			// docker `images --format json`: Repository + Tag scalars ("<none>" when absent),
+			// plus a Digest for a digest-pinned row (a pull-by-digest leaves Tag "<none>").
+			// A digest-pinned row yields `repo@sha256:…`, which identifies that image exactly;
+			// falling back to a bare `repo` would match a DIFFERENT image.
 			repo, _ := raw["Repository"].(string)
 			tag, _ := raw["Tag"].(string)
+			digest, _ := raw["Digest"].(string)
 			if repo != "" && repo != "<none>" {
-				if tag == "" || tag == "<none>" {
+				switch {
+				case digest != "" && digest != "<none>":
+					refs = append(refs, repo+"@"+digest)
+				case tag == "" || tag == "<none>":
 					refs = append(refs, repo)
-				} else {
+				default:
 					refs = append(refs, repo+":"+tag)
 				}
 			}
@@ -346,13 +353,16 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 
 // decodeLocalImagesJSON decodes either engine's `images --format json` shape into a flat
 // row list: podman's single JSON ARRAY, or docker's JSON LINES (one object per line, which
-// is NOT an array and fails a whole-buffer Unmarshal). The array is tried first (the podman
-// shape); on failure each non-empty line is decoded as one object (the docker shape). A line
-// that is not valid JSON is an error — never silently skipped. EMPTY output (e.g.
-// `docker images --filter dangling=true --format json` on a store with no dangling images)
-// is a valid empty result, not an error.
+// is NOT an array and fails a whole-buffer Unmarshal). EMPTY (or whitespace-only) output —
+// what docker emits when a filter matches nothing, e.g. `--filter dangling=true` — is a
+// valid empty result, not an error.
+//
+// The array is tried first (the podman shape); on failure each non-empty line is decoded as
+// one object (the docker shape). A line that is not valid JSON is an error — never silently
+// skipped. Input that is neither an array nor a JSON line therefore fails LOUDLY at the
+// malformed-line decode (the array error is not a second, dead path).
 func decodeLocalImagesJSON(out []byte) ([]map[string]any, error) {
-	if len(strings.TrimSpace(string(out))) == 0 {
+	if strings.TrimSpace(string(out)) == "" {
 		return nil, nil
 	}
 	var arr []map[string]any
@@ -370,12 +380,6 @@ func decodeLocalImagesJSON(out []byte) ([]map[string]any, error) {
 			return nil, err
 		}
 		rows = append(rows, row)
-	}
-	if len(rows) == 0 {
-		// Neither an array nor any JSON line: surface the array-decode error (the
-		// canonical shape) rather than a bare "empty".
-		var arr2 []map[string]any
-		return nil, json.Unmarshal(out, &arr2)
 	}
 	return rows, nil
 }

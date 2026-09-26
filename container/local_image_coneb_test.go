@@ -98,14 +98,38 @@ func TestParseLocalImagesJSON_DockerNDJSON(t *testing.T) {
 // `unexpected end of JSON input` error `charly clean` reported. Fails on the pre-change
 // parser, which returned that error for empty input.
 func TestParseLocalImagesJSON_EmptyOutput(t *testing.T) {
-	for _, in := range [][]byte{nil, {}, []byte("\n")} {
+	cases := map[string][]byte{
+		"nil":              nil,
+		"empty slice":      {},
+		"newline only":     []byte("\n"),
+		"whitespace only":  []byte("   \n\t"),
+	}
+	for name, in := range cases {
 		imgs, err := ParseLocalImagesJSON(in)
 		if err != nil {
-			t.Fatalf("empty output %q must parse to no images, got error: %v", in, err)
+			t.Fatalf("%s: must parse to no images, got error: %v", name, err)
 		}
 		if len(imgs) != 0 {
-			t.Fatalf("empty output %q produced %d images, want 0", in, len(imgs))
+			t.Fatalf("%s: produced %d images, want 0", name, len(imgs))
 		}
+	}
+}
+
+// TestParseLocalImagesJSON_DockerDigestPin covers a digest-pinned docker row (Repository set,
+// Tag "<none>", Digest "sha256:…"): the ref must be `repo@sha256:…`, which identifies that
+// image exactly. A bare `repo` would match a DIFFERENT image, so this FAILS if the Digest is
+// ignored.
+func TestParseLocalImagesJSON_DockerDigestPin(t *testing.T) {
+	js := []byte(`{"ID":"deadbeef","Repository":"ghcr.io/opencharly/check-pod","Tag":"\u003cnone\u003e","Digest":"sha256:abc123"}`)
+	imgs, err := ParseLocalImagesJSON(js)
+	if err != nil {
+		t.Fatalf("digest-pin parse: %v", err)
+	}
+	if len(imgs) != 1 {
+		t.Fatalf("got %d entries, want 1", len(imgs))
+	}
+	if len(imgs[0].Names) != 1 || imgs[0].Names[0] != "ghcr.io/opencharly/check-pod@sha256:abc123" {
+		t.Fatalf("digest-pinned ref = %v, want [ghcr.io/opencharly/check-pod@sha256:abc123]", imgs[0].Names)
 	}
 }
 
