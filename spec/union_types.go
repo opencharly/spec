@@ -262,7 +262,8 @@ func PackageNames(items []PackageItem) []string {
 // ---------------------------------------------------------------------------
 
 // VmSource is the discriminated-union source for a VM disk image (Kind selects
-// the active branch: cloud_image / bootc / clone / imported / bootstrap).
+// the active branch: cloud_image / bootc / clone / imported / bootstrap / iso /
+// container_disk).
 type VmSource struct {
 	Kind             string     `yaml:"kind" json:"kind"`
 	URL              string     `yaml:"url,omitempty" json:"url,omitempty"`
@@ -288,6 +289,13 @@ type VmSource struct {
 	Package          []string   `yaml:"package,omitempty" json:"package,omitempty"`
 	BootstrapArch    string     `yaml:"bootstrap_arch,omitempty" json:"bootstrap_arch,omitempty"`
 	BootstrapVariant string     `yaml:"bootstrap_variant,omitempty" json:"bootstrap_variant,omitempty"`
+
+	// container_disk arm. Image is the OCI artifact carrying a bootable guest disk
+	// (KubeVirt containerDisk: the disk lives in a layer, by default /disk/disk.img);
+	// DiskPathInImage overrides that in-image path. charly pulls the layer, extracts
+	// the disk, and boots it through the unchanged libvirt/qemu path.
+	Image           string `yaml:"image,omitempty" json:"image,omitempty"`
+	DiskPathInImage string `yaml:"disk_path_in_image,omitempty" json:"disk_path_in_image,omitempty"`
 
 	// iso arm. Installer carries the unattended-install ANSWERS; the distro owns the
 	// FORMAT that renders them (Distro.Installer / #DistroInstaller).
