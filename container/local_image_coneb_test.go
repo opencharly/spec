@@ -68,6 +68,79 @@ func TestParseLocalImagesJSON_DockerRepoTags(t *testing.T) {
 	}
 }
 
+// TestParseLocalImagesJSON_DockerNDJSON covers the REAL `docker images --format json`
+// shape: JSON LINES (one object per line, NOT an array), which a whole-buffer
+// json.Unmarshal rejects with `invalid character '{' after top-level value`. Rows are a
+// faithful capture from `docker images --format json` (docker 29). This test FAILS on the
+// pre-change single-Unmarshal parser — the exact failure `charly clean` hit on a
+// docker-backed host.
+func TestParseLocalImagesJSON_DockerNDJSON(t *testing.T) {
+	js := []byte(`{"Containers":"0","CreatedAt":"2026-08-26 23:01:37 +0200 CEST","CreatedSince":"4 weeks ago","Digest":"","ID":"a1ed56cfb0e7","Repository":"kindest/node","SharedSize":"N/A","Size":"1.34GB","Tag":"\u003cnone\u003e","UniqueSize":"N/A"}
+{"Containers":"2","CreatedAt":"2026-08-27 10:00:00 +0200 CEST","CreatedSince":"4 weeks ago","Digest":"","ID":"2ddb47af8f66","Repository":"kindloadtest","SharedSize":"N/A","Size":"200MB","Tag":"2026.001.0000","UniqueSize":"N/A"}`)
+	imgs, err := ParseLocalImagesJSON(js)
+	if err != nil {
+		t.Fatalf("docker NDJSON parse: %v", err)
+	}
+	if len(imgs) != 2 {
+		t.Fatalf("got %d entries, want 2: %+v", len(imgs), imgs)
+	}
+	// A `<none>` tag contributes the bare repository ref; a real tag contributes repo:tag.
+	if imgs[0].ID != "a1ed56cfb0e7" || len(imgs[0].Names) != 1 || imgs[0].Names[0] != "kindest/node" {
+		t.Fatalf("entry 0 = %+v, want id a1ed56cfb0e7 with ref kindest/node", imgs[0])
+	}
+	if imgs[1].ID != "2ddb47af8f66" || len(imgs[1].Names) != 1 || imgs[1].Names[0] != "kindloadtest:2026.001.0000" {
+		t.Fatalf("entry 1 = %+v, want id 2ddb47af8f66 with ref kindloadtest:2026.001.0000", imgs[1])
+	}
+}
+
+// TestParseLocalImagesJSON_EmptyOutput covers `docker images --filter dangling=true --format
+// json` on a store with no dangling images: EMPTY output is a valid empty result, NOT the
+// `unexpected end of JSON input` error `charly clean` reported. Fails on the pre-change
+// parser, which returned that error for empty input.
+func TestParseLocalImagesJSON_EmptyOutput(t *testing.T) {
+	cases := map[string][]byte{
+		"nil":             nil,
+		"empty slice":     {},
+		"newline only":    []byte("\n"),
+		"whitespace only": []byte("   \n\t"),
+	}
+	for name, in := range cases {
+		imgs, err := ParseLocalImagesJSON(in)
+		if err != nil {
+			t.Fatalf("%s: must parse to no images, got error: %v", name, err)
+		}
+		if len(imgs) != 0 {
+			t.Fatalf("%s: produced %d images, want 0", name, len(imgs))
+		}
+	}
+}
+
+// TestParseLocalImagesJSON_DockerDigestPin covers a digest-pinned docker row (Repository set,
+// Tag "<none>", Digest "sha256:…"): the ref must be `repo@sha256:…`, which identifies that
+// image exactly. A bare `repo` would match a DIFFERENT image, so this FAILS if the Digest is
+// ignored.
+func TestParseLocalImagesJSON_DockerDigestPin(t *testing.T) {
+	js := []byte(`{"ID":"deadbeef","Repository":"ghcr.io/opencharly/check-pod","Tag":"\u003cnone\u003e","Digest":"sha256:abc123"}`)
+	imgs, err := ParseLocalImagesJSON(js)
+	if err != nil {
+		t.Fatalf("digest-pin parse: %v", err)
+	}
+	if len(imgs) != 1 {
+		t.Fatalf("got %d entries, want 1", len(imgs))
+	}
+	if len(imgs[0].Names) != 1 || imgs[0].Names[0] != "ghcr.io/opencharly/check-pod@sha256:abc123" {
+		t.Fatalf("digest-pinned ref = %v, want [ghcr.io/opencharly/check-pod@sha256:abc123]", imgs[0].Names)
+	}
+}
+
+// TestParseLocalImagesJSON_MalformedRejected proves a line that is not valid JSON is an
+// error, never a silent skip.
+func TestParseLocalImagesJSON_MalformedRejected(t *testing.T) {
+	if _, err := ParseLocalImagesJSON([]byte(`{"ID":"ok"}` + "\nnot-json\n")); err == nil {
+		t.Fatal("a non-JSON line must be rejected, not silently skipped")
+	}
+}
+
 // TestShortNameMatchesRef — relocated from charly/checkrun_charly_verbs_test.go (it tests this
 // package's unexported shortNameMatchesRef).
 func TestShortNameMatchesRef(t *testing.T) {
