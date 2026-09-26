@@ -2313,6 +2313,12 @@ type CandyView struct {
 
 	PluginSource string `yaml:"plugin_source,omitempty" json:"plugin_source,omitempty"`
 
+	// plugin_requires — the candy's OWN declared `plugin.requires:` list, projected so the
+	// host reaches a plugin's declared inter-plugin dependencies through the resolved view
+	// (the SAME path plugin_source/plugin_providers take) rather than the manifest alone.
+	// Each entry names a peer CAPABILITY identity + an optional source ref + optional.
+	PluginRequires []PluginRequirement `yaml:"plugin_requires,omitempty" json:"plugin_requires,omitempty"`
+
 	Require []CandyRef `yaml:"require,omitempty" json:"require,omitempty"`
 
 	IncludedCandy []CandyRef `yaml:"candy,omitempty" json:"candy,omitempty"`
@@ -2360,6 +2366,25 @@ type CandyView struct {
 	// an R-rule in core.
 	Capabilities *CandyCapabilitiesView `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
 }
+
+// #PluginRequirement — one declared inter-plugin dependency. CLOSED.
+type PluginRequirement struct {
+	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
+	Capability PluginCapability `yaml:"capability,omitempty" json:"capability"`
+
+	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
+	// fetched declaratively instead of by a call-time ExtraRef.
+	Source string `yaml:"source,omitempty" json:"source,omitempty"`
+
+	// optional: when true, an absent peer is recorded and skipped rather than
+	// failing the load. Default false — a declared dependency must resolve.
+	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
+}
+
+// #PluginCapability — a capability identity: "<class>:<word>", or the command-only
+// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
+// parent are lowercase-hyphenated.
+type PluginCapability string
 
 // #RouteConfig — a resolved route declaration (host + port-as-string). Mirrors deploykit.RouteConfig.
 // Port is a STRING here (the resolved form), distinct from #CandyRoute.port (authored int).
@@ -3655,25 +3680,6 @@ type Plugin struct {
 	// connects (the parse-time desugar needs it pre-parse); the served
 	// ProvidedCapability.Primary mirrors it for the compiled-in placement.
 	Primary map[string]string `yaml:"primary,omitempty" json:"primary,omitempty"`
-}
-
-// #PluginCapability — a capability identity: "<class>:<word>", or the command-only
-// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
-// parent are lowercase-hyphenated.
-type PluginCapability string
-
-// #PluginRequirement — one declared inter-plugin dependency. CLOSED.
-type PluginRequirement struct {
-	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
-	Capability PluginCapability `yaml:"capability,omitempty" json:"capability"`
-
-	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
-	// fetched declaratively instead of by a call-time ExtraRef.
-	Source string `yaml:"source,omitempty" json:"source,omitempty"`
-
-	// optional: when true, an absent peer is recorded and skipped rather than
-	// failing the load. Default false — a declared dependency must resolve.
-	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
 }
 
 // RouteYAML — generic service-route metadata (traefik / tunnel).
