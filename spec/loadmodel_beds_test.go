@@ -179,3 +179,39 @@ func TestBeds_MutualCycleTerminates(t *testing.T) {
 		t.Fatal("mutual-cycle back-edge was not skipped")
 	}
 }
+
+// TestDeploys_NamespaceQualified pins the namespace-aware deploy fold: a merged-root consumer
+// resolving `charly.check-agentteams-vm` needs the qualified key, not the root-scope-only raw map.
+func TestDeploys_NamespaceQualified(t *testing.T) {
+	ns := &UnifiedFile{Deploy: map[string]DeployNode{"ns-vm": {From: "base-vm", Target: "vm"}}}
+	root := &UnifiedFile{
+		Deploy:     map[string]DeployNode{"local-pod": {Image: "x", Target: "pod"}},
+		Namespaces: map[string]*UnifiedFile{"charly": ns},
+	}
+	d := root.Deploys()
+	if _, ok := d["local-pod"]; !ok {
+		t.Fatal("local deploy missing")
+	}
+	if _, ok := d["charly.ns-vm"]; !ok {
+		t.Fatalf("namespaced deploy missing; keys = %v", d)
+	}
+}
+
+// TestDeploys_QualifiesNamespacedFrom pins that a namespaced deploy's `from:` is root-qualified in
+// the fold (so plugin-deploy-vm's prepare-venue, which resolves `from:` as a kind:vm entity, finds
+// it), while its `image:` is left UNqualified (it doubles as an OCI base ref whose leaf the pod
+// overlay resolves).
+func TestDeploys_QualifiesNamespacedFrom(t *testing.T) {
+	ns := &UnifiedFile{Deploy: map[string]DeployNode{
+		"check-vm":  {From: "base-vm", Target: "vm"},
+		"check-pod": {Image: "docs-site-app", Target: "pod"},
+	}}
+	root := &UnifiedFile{Namespaces: map[string]*UnifiedFile{"charly": ns}}
+	d := root.Deploys()
+	if got := d["charly.check-vm"].From; got != "charly.base-vm" {
+		t.Fatalf("namespaced from = %q, want charly.base-vm (must be root-qualified)", got)
+	}
+	if got := d["charly.check-pod"].Image; got != "docs-site-app" {
+		t.Fatalf("namespaced image = %q, want docs-site-app (must stay UNqualified)", got)
+	}
+}
