@@ -2,7 +2,7 @@
 // `base:`/`from:` (the former `box:` kind, merged INTO `candy:` by EDGE-INHERIT cutover
 // D; the image arm of #CandyValue) in a discovered box/<distro>/box/<name>/charly.yml.
 // Per-entity model.
-// CLOSED (an unknown key is a typo). Shared defs (#Step/#Security/#Shell/#CalVer/
+// CLOSED (an unknown key is a typo). Shared defs (#Step/#Security/#Shell/
 // #EntityRef) come from _common.cue. Source of truth: charly/config.go
 // BoxConfig (the `defaults:` block reuses BoxConfig but is NOT validated against
 // #Box — only box ENTITIES are — so every BoxConfig field is modeled here even
@@ -57,7 +57,6 @@
 // so an unknown key is still a typo.
 #Box: {
 	name?:        #EntityRef
-	version?:     #CalVer
 	description?: string & !=""
 	enabled?:     bool @go(,type=*bool)
 

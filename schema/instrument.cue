@@ -6,7 +6,7 @@
 // pipeline. The bed runner owns instruments across run phases; evidence rows
 // land in ONE manifest (evidence.yml) and pipelines are blind word dispatches —
 // core and the runner never branch on capture kind. Shared defs REFERENCED, not
-// redefined (R3): #Context/#Duration/#CalVer live in _common.cue.
+// redefined (R3): #Context/#Duration live in _common.cue.
 
 // #Phase — the RUN-PHASE bracket enum: which check-run phase brackets an
 // instrument's capture segment (build = the image/domain build steps; live =

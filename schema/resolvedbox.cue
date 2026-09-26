@@ -67,11 +67,9 @@
 // are REQUIRED (`!`) here; fields that already carried `,omitempty` are OPTIONAL (`?`).
 #ResolvedBox: {
 	name!: string @go(Name)
-	// version is the authored per-entity CalVer (the box config `version:`); optional.
-	version?: string @go(Version)
 	// effective_version is the content-derived identity emitted as the ai.opencharly.version
-	// label: the dedicated version if set, else the highest candy version across the full
-	// chain. Stable across builds when no candy changed.
+	// label: the highest source candy git tag across the full
+	// chain, else the internal base image's effective version.
 	effective_version?: string @go(EffectiveVersion)
 	status?:             string @go(Status)      // effective status (worst of box + candies)
 	info?:                string @go(Info)        // aggregated info from box + candies

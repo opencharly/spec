@@ -1,30 +1,28 @@
 package calver
 
-// calver_parse.go — the parsed YYYY.DDD.HHMM schema-version type + the HEAD schema version /
-// migration floor + chronological comparison, sliced out of the spec contract module's spec/spec
-// catch-all (#55 CHECK-ENGINE cone Option A — the version/calver cone; originally relocated from
-// sdk/kit calver.go + calver_compare.go, #55 value extraction). Pure value/transform over the
-// version E-envelope: it PARSES the CUE-owned SchemaVersion/SchemaFloor consts (spec/spec
-// version_gen.go, generated from schema/version.cue) — there is no hand-maintained HEAD literal.
+// calver_parse.go — the parsed YYYY.DDD.HHMM timestamp type + chronological comparison, sliced
+// out of the spec contract module's spec/spec catch-all (#55 CHECK-ENGINE cone Option A — the
+// version/calver cone; originally relocated from sdk/kit calver.go + calver_compare.go, #55
+// value extraction). Pure value/transform, with NO schema-version gate: the arbitrary
+// config/schema HEAD/floor constants this file once parsed are GONE (the schema-versioning
+// removal cutover). CalVer is used ONLY for two REAL identities: the binary's stamped build
+// identity (charly version) and git release/candy tags. Nothing here compares an authored file
+// against a build; the authored `version:` field no longer exists.
 //
 // The PARSED type is named ParsedCalVer, NOT CalVer, because this package ALREADY binds
-// `CalVer = string` (scalar_aliases.go — the CUE wire scalar for `version:` fields), a DIFFERENT
-// concept. sdk/kit re-exports the parsed type as `type CalVer = calver.ParsedCalVer` so every existing
-// kit.CalVer / kit.ParseCalVer call site (charly core's migrate/version gate + plugin-box/clean/
-// migrate) is unchanged.
+// `CalVer = string` (scalar_aliases.go — a wire scalar), a DIFFERENT concept. sdk/kit
+// re-exports the parsed type as `type CalVer = calver.ParsedCalVer` so every existing
+// kit.CalVer / kit.ParseCalVer call site is unchanged.
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/opencharly/spec/spec"
 )
 
-// ParsedCalVer is a parsed YYYY.DDD.HHMM calendar version. The same format that ComputeCalVer
-// emits for image tags is, since the 2026-05 schema-versioning cutover, the schema-version stamp
-// carried by every versioned YAML config. The declarative migration table is ordered by
-// ParsedCalVer, and the load-time gate compares a file's version against LatestSchemaCalVer.
+// ParsedCalVer is a parsed YYYY.DDD.HHMM calendar version. The format is used for the binary's
+// stamped build identity (charly version) and for git release/candy tags. Nothing compares an
+// authored config against a build: the authored schema `version:` no longer exists.
 type ParsedCalVer struct {
 	Year int // calendar year (e.g. 2026)
 	Day  int // day of year, 1-366
@@ -35,12 +33,11 @@ type ParsedCalVer struct {
 // 3-digit zero-padded day-of-year, and a 4-digit zero-padded HHMM, separated by dots. It is
 // EXTREMELY STRICT and has NO backward compatibility: every component must be the exact width, pure
 // ASCII digits (no sign, no inner whitespace), within range (day 1-366, hour 0-23, minute 0-59).
-// Anything else — the legacy integer "4", a non-padded "2026.45.830", an empty string, junk —
+// Anything else — a legacy integer "4", a non-padded "2026.45.830", an empty string, junk —
 // returns ok=false. (Surrounding whitespace, a transport artifact of e.g. a `charly version`
 // trailing newline, is trimmed before the format check.)
 //
-// A false result is exactly what the schema gate and migration runner treat as "older than every
-// real CalVer", so a non-canonical config flows into `charly migrate` and is re-stamped canonical.
+// A false result is treated by the freshness comparison as "older than every real CalVer".
 //
 // Because the canonical form is fixed-width zero-padded, a plain alphanumeric (lexicographic) sort
 // of CalVer strings is chronological (see ParsedCalVer.Less).
@@ -90,41 +87,6 @@ func (c ParsedCalVer) String() string {
 // comparison.
 func (c ParsedCalVer) Less(o ParsedCalVer) bool {
 	return c.String() < o.String()
-}
-
-// MustCalVer parses a compile-time-constant CalVer literal, panicking on a malformed value. Used
-// for the CUE-owned HEAD/floor consts (SchemaVersion / SchemaFloor), so a non-canonical literal
-// that slipped past the strict #CanonCalVer CUE gate still fails fast at process start rather than
-// silently mis-ordering the migration table.
-func MustCalVer(s string) ParsedCalVer {
-	v, ok := ParseCalVer(s)
-	if !ok {
-		panic("spec: invalid CalVer literal " + s)
-	}
-	return v
-}
-
-// latestSchemaVersion is the HEAD schema CalVer, PARSED from the CUE-owned SchemaVersion string
-// const (version_gen.go, generated from schema/version.cue). Every current-format versioned file is
-// stamped to it and the load-time gate requires it. Bump the HEAD by editing #SchemaVersion.
-var latestSchemaVersion = MustCalVer(spec.SchemaVersion)
-
-// schemaFloor is the OLDEST schema CalVer `charly migrate` can migrate FROM, PARSED from the
-// CUE-owned SchemaFloor string const. A config below it predates the current migration baseline.
-var schemaFloor = MustCalVer(spec.SchemaFloor)
-
-// LatestSchemaCalVer is the HEAD schema CalVer (parsed) — every current-format versioned file is
-// stamped to it and the load-time gate requires it. Named distinctly from the SchemaVersion string
-// const it parses; sdk/kit re-exports it as kit.LatestSchemaVersion.
-func LatestSchemaCalVer() ParsedCalVer {
-	return latestSchemaVersion
-}
-
-// SchemaFloorCalVer is the oldest schema CalVer (parsed) `charly migrate` can migrate FROM. A config
-// below it (or with a non-CalVer version) is unmigratable. Named distinctly from the SchemaFloor
-// string const it parses; sdk/kit re-exports it as kit.SchemaFloor.
-func SchemaFloorCalVer() ParsedCalVer {
-	return schemaFloor
 }
 
 // CompareCalVer compares two CalVer strings numerically component-by-component, falling back to

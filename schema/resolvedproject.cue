@@ -25,7 +25,6 @@
 // stable key.
 #ResolvedBoxView: {
 	name!:                    string
-	version?:                 string
 	effective_version?:       string @go(EffectiveVersion)
 	status?:                  string
 	info?:                    string
@@ -219,7 +218,6 @@
 // generates map[string]*Deploy (recursive tree, faithful). provides/sidecar are additive later
 // members of this same envelope (added by the consumer unit that first needs them).
 #ResolvedProject: {
-	version?: string
 	boxes?: {[string]: #ResolvedBoxView}
 	candies?: {[string]: #CandyView}
 	// candy_models — the serializable candy BUILD models (validate, the plan-include splicer, K3-D)

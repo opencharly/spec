@@ -359,7 +359,7 @@ func (c Deploy) LifecycleTag() string {
 // non-nil per-shell pointer = that shell was authored. (The former sibling
 // DeployShellOverlay method was retired with the field itself — the
 // validation-correctness batch's deploy-scope `shell:` overlay removal: it
-// had zero live consumer, see #SchemaVersion's history comment.)
+// had zero live consumer.)
 // ---------------------------------------------------------------------------
 
 func shellMap(bash, zsh, fish, sh *ShellSpec) map[string]*ShellSpec {

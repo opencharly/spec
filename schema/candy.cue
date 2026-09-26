@@ -3,15 +3,14 @@
 // key is a typo) — this replaces the Go UnmarshalYAML known-field typo guard
 // (sdk/loaderkit candyKnownFields, relocated from charly/layers.go in K-wave 2 cone R1 A2).
 // Every key in candyKnownFields is modeled.
-// Shared defs (#Step/#Security/#Shell/#CalVer/#EntityRef/#CandyRef/#PackageItem/
+// Shared defs (#Step/#Security/#Shell/#EntityRef/#CandyRef/#PackageItem/
 // #DistroPackages) come from _common.cue. Source of truth: charly/layers.go
 // CandyYAML + its sub-types (PortSpec, VolumeYAML, AliasYAML, ExtractYAML,
 // DataYAML, RouteYAML, EnvDependency, MCPServerYAML, SecretYAML, HooksConfig,
 // CandyArtifact, CandyCapabilities, ApkPackageSpec, LocalPkgMap, ServiceEntry).
 
 #Candy: {
-	// --- identity (required: ADE mandates version+name+description+plan) ---
-	version:     #CalVer
+	// --- identity (required: ADE mandates name+description+plan) ---
 	name?:       #EntityRef
 	description: string & !=""
 	plan?: [...#Step]
@@ -221,7 +220,6 @@
 // to a network fetch.
 #PackagingConfig: {
 	path:        string & !=""          // e.g. /etc/charly/charly.yml
-	version:     string & !=""          // the SCHEMA version of the packaged charly (see §3.4)
 	description: string & !=""
 	// plugins — the plugin candy refs the MCP server needs (e.g. plugin-mcp).
 	plugins?:    [...(string & !="")]
