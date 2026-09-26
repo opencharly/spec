@@ -320,6 +320,9 @@ type KubevirtSource struct {
 	Image      string `yaml:"image,omitempty" json:"image,omitempty"`
 	PullPolicy string `yaml:"pull_policy,omitempty" json:"pull_policy,omitempty"`
 	PullSecret string `yaml:"pull_secret,omitempty" json:"pull_secret,omitempty"`
+	// DiskPathInImage: the disk's location inside a containerDisk image when it is
+	// not the scanned default (/disk/disk.img) — renders the VMI `containerDisk.path`.
+	DiskPathInImage string `yaml:"disk_path_in_image,omitempty" json:"disk_path_in_image,omitempty"`
 	// data_volume arm: the CDI import source (http/registry/pvc/blank) + size.
 	DataVolume   map[string]any `yaml:"data_volume,omitempty" json:"data_volume,omitempty"`
 	Size         string         `yaml:"size,omitempty" json:"size,omitempty"`
