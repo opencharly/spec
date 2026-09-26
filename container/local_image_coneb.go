@@ -248,107 +248,137 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 	byKey := make(map[string]*LocalImageInfo)
 	order := make([]string, 0, len(rawImages))
 	for i, raw := range rawImages {
-		// Image ID: podman uses "Id", docker uses "ID".
-		id := ""
-		if s, ok := raw["Id"].(string); ok {
-			id = s
-		} else if s, ok := raw["ID"].(string); ok {
-			id = s
-		}
-		key := id
-		if key == "" {
-			key = fmt.Sprintf("\x00row%d", i) // never merge distinct untagged images
-		}
+		key := imageRowKey(raw, i)
 		info, ok := byKey[key]
 		if !ok {
-			info = &LocalImageInfo{ID: id, Labels: make(map[string]string)}
+			info = &LocalImageInfo{ID: imageRowID(raw), Labels: make(map[string]string)}
 			byKey[key] = info
 			order = append(order, key)
 		}
-		// Tag refs: podman uses "Names". The "RepoTags" fallback is the docker INSPECT shape.
-		// `docker images --format json` (measured on docker 29) emits neither, using separate
-		// "Repository" + "Tag" scalars instead, so that pair is the third fallback. Merge + dedup.
-		var refs []string
-		if names, ok := raw["Names"].([]any); ok {
-			for _, n := range names {
-				if s, ok := n.(string); ok {
-					refs = append(refs, s)
-				}
-			}
-		}
-		if len(refs) == 0 {
-			if tags, ok := raw["RepoTags"].([]any); ok {
-				for _, t := range tags {
-					if s, ok := t.(string); ok {
-						refs = append(refs, s)
-					}
-				}
-			}
-		}
-		if len(refs) == 0 {
-			// docker `images --format json`: Repository + Tag scalars ("<none>" when absent),
-			// plus a Digest for a digest-pinned row (a pull-by-digest leaves Tag "<none>").
-			// A digest-pinned row yields `repo@sha256:…`, which identifies that image exactly;
-			// falling back to a bare `repo` would match a DIFFERENT image.
-			repo, _ := raw["Repository"].(string)
-			tag, _ := raw["Tag"].(string)
-			digest, _ := raw["Digest"].(string)
-			if repo != "" && repo != "<none>" {
-				switch {
-				case digest != "" && digest != "<none>":
-					refs = append(refs, repo+"@"+digest)
-				case tag == "" || tag == "<none>":
-					refs = append(refs, repo)
-				default:
-					refs = append(refs, repo+":"+tag)
-				}
-			}
-		}
-		seen := make(map[string]bool, len(info.Names))
-		for _, n := range info.Names {
-			seen[n] = true
-		}
-		for _, n := range refs {
-			if !seen[n] {
-				info.Names = append(info.Names, n)
-				seen[n] = true
-			}
-		}
-		// Labels are identical across rows for one id; first-writer wins.
-		if labels, ok := raw["Labels"].(map[string]any); ok {
-			for k, v := range labels {
-				if s, ok := v.(string); ok {
-					if _, exists := info.Labels[k]; !exists {
-						info.Labels[k] = s
-					}
-				}
-			}
-		}
-		// Size (bytes) is identical across rows for one id; podman JSON-decodes it as a
-		// float64 (json.Unmarshal's numeric default into map[string]any). Absent/unparsed → 0.
-		if sz, ok := raw["Size"].(float64); ok {
-			info.Size = int64(sz)
-		}
-		// Created (unix seconds), same shape as Size: identical across rows for one id, decoded as
-		// float64 by json.Unmarshal into map[string]any.
-		//
-		// PODMAN emits it (measured: 427/427 rows). DOCKER does NOT — `docker images --format json`
-		// emits `CreatedAt`/`CreatedSince` and no numeric `Created` (measured: 0/3 rows). That is
-		// not a gap this field introduces: docker's output from that command is JSON-LINES rather
-		// than the JSON ARRAY this parser unmarshals, and carries no `Names`, no `RepoTags` and no
-		// `Labels` either, so the whole path is already degenerate upstream of recency. The
-		// consequence is the RIGHT one rather than an accident: with no creation time, the
-		// resolution reports OrderKnown=false and a build-scope verdict REFUSES instead of
-		// guessing — which is exactly the behaviour a degenerate engine path should get.
-		if cr, ok := raw["Created"].(float64); ok {
-			info.Created = int64(cr)
-		}
+		mergeImageNames(info, imageRowRefs(raw))
+		mergeImageLabels(info, raw)
+		mergeImageScalars(info, raw)
 	}
 	result := make([]LocalImageInfo, 0, len(order))
 	for _, key := range order {
 		result = append(result, *byKey[key])
 	}
 	return result, nil
+}
+
+// imageRowID returns a row's image ID across the two engine spellings: podman's
+// "Id", docker's "ID". Empty for a dangling/untagged row.
+func imageRowID(raw map[string]any) string {
+	if s, ok := raw["Id"].(string); ok {
+		return s
+	}
+	if s, ok := raw["ID"].(string); ok {
+		return s
+	}
+	return ""
+}
+
+// imageRowKey is the merge key for a row: its image ID, or a per-row sentinel for an
+// empty ID so distinct untagged images never merge into one another.
+func imageRowKey(raw map[string]any, row int) string {
+	if id := imageRowID(raw); id != "" {
+		return id
+	}
+	return fmt.Sprintf("\x00row%d", row)
+}
+
+// imageRowRefs extracts a row's tag refs across the three engine shapes: podman's
+// "Names" array, docker-INSPECT's "RepoTags" array, and `docker images --format json`'s
+// "Repository"+"Tag"(+"Digest") scalars (measured on docker 29, which emits neither
+// array). A digest-pinned row yields `repo@sha256:…`, which identifies that image
+// exactly; falling back to a bare `repo` would match a DIFFERENT image. Merge + dedup
+// happens in mergeImageNames.
+func imageRowRefs(raw map[string]any) []string {
+	if refs := stringArrayField(raw["Names"]); len(refs) > 0 {
+		return refs
+	}
+	if refs := stringArrayField(raw["RepoTags"]); len(refs) > 0 {
+		return refs
+	}
+	repo, _ := raw["Repository"].(string)
+	if repo == "" || repo == "<none>" {
+		return nil
+	}
+	if digest, _ := raw["Digest"].(string); digest != "" && digest != "<none>" {
+		return []string{repo + "@" + digest}
+	}
+	tag, _ := raw["Tag"].(string)
+	if tag == "" || tag == "<none>" {
+		return []string{repo}
+	}
+	return []string{repo + ":" + tag}
+}
+
+// stringArrayField returns the string elements of a JSON-decoded array field, ignoring
+// non-string entries. nil for a missing/non-array field (or an all-non-string array).
+func stringArrayField(v any) []string {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, e := range arr {
+		if s, ok := e.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// mergeImageNames appends refs not already present, deduping across the rows for one id.
+func mergeImageNames(info *LocalImageInfo, refs []string) {
+	seen := make(map[string]bool, len(info.Names))
+	for _, n := range info.Names {
+		seen[n] = true
+	}
+	for _, n := range refs {
+		if !seen[n] {
+			info.Names = append(info.Names, n)
+			seen[n] = true
+		}
+	}
+}
+
+// mergeImageLabels fills labels first-writer-wins (they are identical across the rows for
+// one id).
+func mergeImageLabels(info *LocalImageInfo, raw map[string]any) {
+	labels, ok := raw["Labels"].(map[string]any)
+	if !ok {
+		return
+	}
+	for k, v := range labels {
+		if s, ok := v.(string); ok {
+			if _, exists := info.Labels[k]; !exists {
+				info.Labels[k] = s
+			}
+		}
+	}
+}
+
+// mergeImageScalars reads the numeric scalars shared across the rows for one id. Size
+// (bytes) and Created (unix seconds) both JSON-decode as a float64 (json.Unmarshal's
+// numeric default into map[string]any); absent/unparsed leaves the zero value.
+//
+// PODMAN emits Created (measured: 427/427 rows). DOCKER does NOT — `docker images
+// --format json` emits `CreatedAt`/`CreatedSince` and no numeric `Created` (measured: 0/3
+// rows). That is not a gap this field introduces: docker's output from that command is
+// JSON-LINES rather than the JSON ARRAY this parser unmarshals, and carries no `Names`,
+// no `RepoTags` and no `Labels` either, so the whole path is already degenerate upstream
+// of recency. The consequence is the RIGHT one rather than an accident: with no creation
+// time, the resolution reports OrderKnown=false and a build-scope verdict REFUSES instead
+// of guessing — which is exactly the behaviour a degenerate engine path should get.
+func mergeImageScalars(info *LocalImageInfo, raw map[string]any) {
+	if sz, ok := raw["Size"].(float64); ok {
+		info.Size = int64(sz)
+	}
+	if cr, ok := raw["Created"].(float64); ok {
+		info.Created = int64(cr)
+	}
 }
 
 // decodeLocalImagesJSON decodes either engine's `images --format json` shape into a flat
