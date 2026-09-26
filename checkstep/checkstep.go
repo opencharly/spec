@@ -11,11 +11,14 @@
 // a core kind switch is an incomplete seam (the kernel/plugin boundary law).
 //
 // Housing this contract here (not spec/spec) lets charly core's in-proc kitVerbAdapter
-// reference it importing zero kit, while sdk/kit re-exports each symbol
-// (sdk/kit/check_step_descriptors.go) so every candy call site compiles UNCHANGED.
-// CheckVerbProvider / CheckContext / the CheckContext scalar types stay in spec/spec
-// (checkcontext.go) — this cluster is the step-role sibling, imported here alongside
-// spec/spec for the *spec.Op the StepProvider / ProvisionActor methods take.
+// reference it importing zero kit, while sdk/kit re-exports the surviving symbols
+// (sdk/kit/check_step_descriptors.go) so a candy that NAMES the roles compiles against the
+// same identifier. The C7 re-signature is a hard cutover: every StepProvider implementer
+// (plugin-service / plugin-package) adopts StepKind() → spec.StepKind + MaterializeStep in
+// the same producer-first chain. CheckVerbProvider / CheckContext / the CheckContext scalar
+// types stay in spec/spec (checkcontext.go) — this cluster is the step-role sibling,
+// imported here alongside spec/spec for the *spec.Op the StepProvider / ProvisionActor
+// methods take.
 package checkstep
 
 import "github.com/opencharly/spec/spec"
