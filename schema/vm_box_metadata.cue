@@ -49,9 +49,12 @@
 }
 
 // #VmBoxSource — provenance of a VM box's disk artifact: the source kind that produced
-// it plus the kind-specific origin reference. The kind space mirrors #VmSource's arms
-// (cloud_image | bootc | clone | bootstrap | iso | container_disk) so every arm a VM was
-// built from leaves a resolvable provenance record; one arm's fields are populated per kind.
+// it plus the kind-specific origin reference. The kind space is the arms a VM BOX can be
+// built from — (cloud_image | bootc | clone | bootstrap | iso | container_disk) — so every
+// arm that emits a box leaves a resolvable provenance record; one arm's fields are
+// populated per kind. A #VmSource arm that emits NO box is deliberately absent: `imported`
+// tracks an externally-managed disk for lifecycle only (`charly vm build` is a no-op), so
+// it can never produce the artifact this record describes.
 #VmBoxSource: {
 	kind!: "cloud_image" | "bootc" | "clone" | "bootstrap" | "iso" | "container_disk" @go(Kind)
 	// clone: the source entity the box's disk was cloned from.
