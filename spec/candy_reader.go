@@ -127,6 +127,12 @@ type CandyReader interface {
 	IsPluginCandy() bool
 	GetPluginSource() string
 	GetPluginProviders() []string
+	// GetPluginRequires is GetPluginProviders' sibling for the OTHER half of the candy's
+	// `plugin:` block: the authored `plugin.requires:` inter-plugin dependencies. The same
+	// resolved-view projection reaches it (CandyView.plugin_requires), so a plugin's
+	// declared peer dependencies are readable wherever the identity/graph view is — the
+	// host's requires gate consumes them beside the wire Capabilities.requires.
+	GetPluginRequires() []PluginRequirement
 
 	// W9 pipeline-retype fill: identity-view scalars multiple OCI-label-collector consumers
 	// (render_baked_metadata.go's candyStatus/worst-of-status + info-parts walk) need directly —

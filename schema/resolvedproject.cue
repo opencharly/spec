@@ -164,6 +164,11 @@
 	// set). Empty for a non-plugin candy. is_plugin stays the cheap presence bool for inspect/list.
 	plugin_providers?: [...string] @go(PluginProviders)
 	plugin_source?: string @go(PluginSource)
+	// plugin_requires — the candy's OWN declared `plugin.requires:` list, projected so the
+	// host reaches a plugin's declared inter-plugin dependencies through the resolved view
+	// (the SAME path plugin_source/plugin_providers take) rather than the manifest alone.
+	// Each entry names a peer CAPABILITY identity + an optional source ref + optional.
+	plugin_requires?: [...#PluginRequirement] @go(PluginRequires)
 	require?: [...#CandyRef] @go(Require)
 	candy?: [...#CandyRef] @go(IncludedCandy)
 	env_provide?: {[string]: string} @go(EnvProvides)

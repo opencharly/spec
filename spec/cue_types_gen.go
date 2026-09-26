@@ -2313,6 +2313,12 @@ type CandyView struct {
 
 	PluginSource string `yaml:"plugin_source,omitempty" json:"plugin_source,omitempty"`
 
+	// plugin_requires — the candy's OWN declared `plugin.requires:` list, projected so the
+	// host reaches a plugin's declared inter-plugin dependencies through the resolved view
+	// (the SAME path plugin_source/plugin_providers take) rather than the manifest alone.
+	// Each entry names a peer CAPABILITY identity + an optional source ref + optional.
+	PluginRequires []PluginRequirement `yaml:"plugin_requires,omitempty" json:"plugin_requires,omitempty"`
+
 	Require []CandyRef `yaml:"require,omitempty" json:"require,omitempty"`
 
 	IncludedCandy []CandyRef `yaml:"candy,omitempty" json:"candy,omitempty"`
@@ -2360,6 +2366,25 @@ type CandyView struct {
 	// an R-rule in core.
 	Capabilities *CandyCapabilitiesView `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
 }
+
+// #PluginRequirement — one declared inter-plugin dependency. CLOSED.
+type PluginRequirement struct {
+	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
+	Capability PluginCapability `yaml:"capability,omitempty" json:"capability"`
+
+	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
+	// fetched declaratively instead of by a call-time ExtraRef.
+	Source string `yaml:"source,omitempty" json:"source,omitempty"`
+
+	// optional: when true, an absent peer is recorded and skipped rather than
+	// failing the load. Default false — a declared dependency must resolve.
+	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
+}
+
+// #PluginCapability — a capability identity: "<class>:<word>", or the command-only
+// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
+// parent are lowercase-hyphenated.
+type PluginCapability string
 
 // #RouteConfig — a resolved route declaration (host + port-as-string). Mirrors deploykit.RouteConfig.
 // Port is a STRING here (the resolved form), distinct from #CandyRoute.port (authored int).
@@ -3655,25 +3680,6 @@ type Plugin struct {
 	// connects (the parse-time desugar needs it pre-parse); the served
 	// ProvidedCapability.Primary mirrors it for the compiled-in placement.
 	Primary map[string]string `yaml:"primary,omitempty" json:"primary,omitempty"`
-}
-
-// #PluginCapability — a capability identity: "<class>:<word>", or the command-only
-// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
-// parent are lowercase-hyphenated.
-type PluginCapability string
-
-// #PluginRequirement — one declared inter-plugin dependency. CLOSED.
-type PluginRequirement struct {
-	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
-	Capability PluginCapability `yaml:"capability,omitempty" json:"capability"`
-
-	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
-	// fetched declaratively instead of by a call-time ExtraRef.
-	Source string `yaml:"source,omitempty" json:"source,omitempty"`
-
-	// optional: when true, an absent peer is recorded and skipped rather than
-	// failing the load. Default false — a declared dependency must resolve.
-	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
 }
 
 // RouteYAML — generic service-route metadata (traefik / tunnel).
@@ -7508,6 +7514,43 @@ type CacheTransferReply struct {
 	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
 }
 
+// #ContainerDiskEmitRequest — the verb:oci container-disk-emit wire input: a
+// materialized guest disk, the in-layer path it is stored at, the OCI config
+// labels to carry, and the registry reference to push. Single-sourced here (R3)
+// so candy/plugin-oci's emit leg and its callers (`charly vm box publish`, the
+// Cua Fleet surface) share ONE decoded type instead of two hand-written copies.
+// disk_path is the host path of the disk; in_image_path defaults to the KubeVirt
+// containerDisk contract /disk/disk.img; layout_dir optionally also writes a
+// local OCI Image Layout (oci:<dir>).
+type ContainerDiskEmitRequest struct {
+	DiskPath string `yaml:"disk_path,omitempty" json:"disk_path"`
+
+	InImagePath string `yaml:"in_image_path,omitempty" json:"in_image_path,omitempty"`
+
+	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+
+	Ref string `yaml:"ref,omitempty" json:"ref"`
+
+	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
+
+	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
+}
+
+// #ContainerDiskEmitReply — the emit result: the pushed digest, the media type
+// actually written (the caller asserts the +gzip containerDisk contract), the
+// layer byte size, and the layout dir when one was requested.
+type ContainerDiskEmitReply struct {
+	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
+
+	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
+
+	MediaType string `yaml:"media_type,omitempty" json:"media_type,omitempty"`
+
+	LayerSize int64 `yaml:"layer_size,omitempty" json:"layer_size,omitempty"`
+
+	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
+}
+
 type Pod struct {
 	// References a kind:box (bare lowercase-hyphenated name or remote ref).
 	// Optional: the Go field has no non-empty validator.
@@ -11114,9 +11157,12 @@ type VmBoxMetadata struct {
 }
 
 // #VmBoxSource — provenance of a VM box's disk artifact: the source kind that produced
-// it plus the kind-specific origin reference. The kind space mirrors #VmSource's arms
-// (cloud_image | bootc | clone | bootstrap | iso) so every arm a VM was built from
-// leaves a resolvable provenance record; one arm's fields are populated per kind.
+// it plus the kind-specific origin reference. The kind space is the arms a VM BOX can be
+// built from — (cloud_image | bootc | clone | bootstrap | iso | container_disk) — so every
+// arm that emits a box leaves a resolvable provenance record; one arm's fields are
+// populated per kind. A #VmSource arm that emits NO box is deliberately absent: `imported`
+// tracks an externally-managed disk for lifecycle only (`charly vm build` is a no-op), so
+// it can never produce the artifact this record describes.
 type VmBoxSource struct {
 	Kind string `yaml:"kind,omitempty" json:"kind"`
 
@@ -11131,6 +11177,9 @@ type VmBoxSource struct {
 
 	// cloud_image | iso: the artifact url the disk was fetched from.
 	URL string `yaml:"url,omitempty" json:"url,omitempty"`
+
+	// container_disk: the OCI artifact ref the disk was pulled from.
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
 }
 
 // #VmSnapshotCreateOpts parameterizes the creation of a snapshot — the host-resolved payload for

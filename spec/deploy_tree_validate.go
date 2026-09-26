@@ -17,8 +17,10 @@ import (
 // ValidateDeploymentTree enforces structural invariants on the deployments tree
 // that can't be expressed in the YAML struct tags:
 //
-//   - Map keys at every level MUST NOT contain "." (dots are reserved
-//     for dotted-path CLI addressing like `charly deploy add a.b.c`).
+//   - Every key is a well-formed deploy IDENTITY: a dot-joined path of
+//     non-empty segments, optionally suffixed with `/<instance>`
+//     (ValidateDeploymentName). Dots ARE legal — they separate the
+//     namespace/member path (that is what a qualified key means).
 //   - Every explicit pod deploy must declare `box:` (ValidateDeployRequiresBox).
 //
 // Errors include the offending path so the user sees exactly which entry needs
@@ -99,9 +101,11 @@ func ValidateDeployRequiresBox(deploy map[string]DeployNode) error {
 	return nil
 }
 
-// ValidateDeploymentMembers recurses ValidateDeploymentName over node's uniform
-// ordered member tree (Cutover C task 0): every member entry's key — deploy-level
-// and in-substrate alike — is validated at every level.
+// ValidateDeploymentMembers recurses the SEGMENT rule over node's uniform ordered
+// member tree (Cutover C task 0). A member NAME is a single identity SEGMENT: the
+// dot is the JOIN operator owned by the path builder (`parent.member`), so it must
+// not appear INSIDE a segment — that keeps the joined identity unambiguous with
+// member-path descent. Every member's key is validated at every level.
 func ValidateDeploymentMembers(path string, node *DeployNode) error {
 	if node == nil || len(node.Member) == 0 {
 		return nil
@@ -112,7 +116,7 @@ func ValidateDeploymentMembers(path string, node *DeployNode) error {
 		if path != "" {
 			childPath = path + "." + m.Name
 		}
-		if err := ValidateDeploymentName(m.Name, path); err != nil {
+		if err := validateIdentitySegment(m.Name, childPath); err != nil {
 			return err
 		}
 		if err := ValidateDeploymentMembers(childPath, m.Node); err != nil {
@@ -122,23 +126,47 @@ func ValidateDeploymentMembers(path string, node *DeployNode) error {
 	return nil
 }
 
-// ValidateDeploymentName rejects a deploy-tree key containing ".", reserved
-// for dotted-path CLI addressing (`charly deploy add a.b.c`).
+// validateIdentitySegment rejects a single path SEGMENT (a member name) that is
+// empty, carries a dot (the join operator belongs BETWEEN segments), or carries
+// the `/` instance separator (which belongs only at the end of a full identity).
+func validateIdentitySegment(seg, full string) error {
+	if seg == "" {
+		return fmt.Errorf("deploy identity %q has an empty path segment", full)
+	}
+	if strings.ContainsAny(seg, "./") {
+		return fmt.Errorf("deploy identity segment %q (in %q) contains '.', the path join separator, or '/', the instance separator — a segment is a single dot-free name; the identity joins segments with '.' and appends `/<instance>`", seg, full)
+	}
+	return nil
+}
+
+// ValidateDeploymentName enforces that a deploy IDENTITY is well-formed: a
+// dot-joined path of NON-EMPTY segments, optionally followed by `/<instance>`.
+//
+// Dots are LEGAL and MEANINGFUL — a dotted key is a NAMESPACE-QUALIFIED (or nested)
+// deploy identity (`charly.check-docs`), the single string used unchanged as the
+// tree key, the per-host overlay key, the CLI address, and the lookup key. The
+// former rule that forbade dots existed only because the overlay used to be keyed
+// by a lossy `vm:<dashed>` projection and dotted-path addressing was mistaken for a
+// key constraint; with the identity unified on the dotted form, a dot is no longer
+// a defect. What is rejected is a MALFORMED identity: an empty segment
+// (leading/trailing/doubled `.`) or an empty instance (a trailing `/`) — the same
+// malformed-path rule SplitDottedPath applies.
 func ValidateDeploymentName(name, parentPath string) error {
 	full := name
 	if parentPath != "" {
 		full = parentPath + "." + name
 	}
-	if strings.Contains(name, ".") {
-		// This gate runs against BOTH authored charly.yml entries AND machine-written per-host
-		// overlay entries (RCA #6, FINAL/K5 unit 6a) — a prior message revision assumed only a
-		// human authored the offending key and told them to "Rename this entry," which is wrong
-		// advice for an entry a writer bug produced (nothing to manually rename; the fix is the
-		// writer). Kept source-agnostic: names the constraint, not a remedy that only fits one case.
-		return fmt.Errorf(
-			"deployment key %q contains '.' — the character is reserved for dotted-path addressing (charly deploy add a.b.c), never a literal deploy-tree key",
-			full,
-		)
+	path := full
+	if before, instance, ok := strings.Cut(path, "/"); ok {
+		if instance == "" {
+			return fmt.Errorf("deploy identity %q has an empty instance segment — a `/` separates the optional instance (e.g. `versa/ecovoyage`)", full)
+		}
+		path = before
+	}
+	for _, seg := range strings.Split(path, ".") {
+		if seg == "" {
+			return fmt.Errorf("deploy identity %q has an empty path segment — `.` joins the namespace/member path and must not lead, trail, or repeat", full)
+		}
 	}
 	return nil
 }
