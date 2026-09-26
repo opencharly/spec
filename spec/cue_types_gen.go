@@ -11115,8 +11115,8 @@ type VmBoxMetadata struct {
 
 // #VmBoxSource — provenance of a VM box's disk artifact: the source kind that produced
 // it plus the kind-specific origin reference. The kind space mirrors #VmSource's arms
-// (cloud_image | bootc | clone | bootstrap | iso) so every arm a VM was built from
-// leaves a resolvable provenance record; one arm's fields are populated per kind.
+// (cloud_image | bootc | clone | bootstrap | iso | container_disk) so every arm a VM was
+// built from leaves a resolvable provenance record; one arm's fields are populated per kind.
 type VmBoxSource struct {
 	Kind string `yaml:"kind,omitempty" json:"kind"`
 
