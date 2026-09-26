@@ -1,69 +1,30 @@
 // Package checkstep hosts the TYPED-STEP state-provision contract cluster for host-coupled
-// check-verb candies (#55 CHECK-ENGINE cone Option A): the StepKindName candy-contract string
-// type + its consts, the StepDescriptor / ServicePackagedDesc / SystemPackagesDesc construction
-// inputs, the ResolvePackageName cross-distro resolver, and the OPTIONAL StepProvider /
-// ProvisionActor roles a kit candy implements alongside CheckVerbProvider.
+// check-verb candies (#55 CHECK-ENGINE cone Option A): the OPTIONAL StepProvider /
+// ProvisionActor roles a kit candy implements alongside CheckVerbProvider, and the
+// ResolvePackageName cross-distro resolver.
 //
-// This cluster is its OWN package (not spec/spec) as the candy-facing step-role contract: the
-// StepKindName constants are named StepKindName* (StepKindNameServicePackaged /
-// StepKindNameSystemPackages) to disambiguate from the INTERNAL InstallPlan IR enum
-// (spec/spec/ir_enums.go's `StepKind` string enum, values "ServicePackaged" / "SystemPackages") —
-// a deliberately different type (the candy-facing kit.StepKindName string, values
-// "service-packaged" / "system-packages") that charly's kitStepKindToCharly MAPS onto the
-// internal StepKind. Housing the candy contract here lets charly core's in-proc kitVerbAdapter
-// (check_kit_adapter.go) reference it importing zero kit, while sdk/kit re-exports each symbol
+// The StepProvider role lets the CANDY own BOTH halves of its typed install-step lowering:
+// StepKind names the internal InstallPlan IR spec.StepKind it lowers into, and MaterializeStep
+// builds the real spec.InstallStep from the op's plugin_input + the host-resolved ctx scalars
+// (run-as user, candy name, package format, distro tags). Core holds NO per-kind switch — its
+// in-proc kit adapter (charly/check_kit_adapter.go) delegates both calls to the provider, since
+// a core kind switch is an incomplete seam (the kernel/plugin boundary law).
+//
+// Housing this contract here (not spec/spec) lets charly core's in-proc kitVerbAdapter
+// reference it importing zero kit, while sdk/kit re-exports each symbol
 // (sdk/kit/check_step_descriptors.go) so every candy call site compiles UNCHANGED.
 // CheckVerbProvider / CheckContext / the CheckContext scalar types stay in spec/spec
-// (checkcontext.go) — the StepKindName cluster is the step-role sibling, imported here alongside
-// spec/spec for the *Op the StepProvider / ProvisionActor methods take.
+// (checkcontext.go) — this cluster is the step-role sibling, imported here alongside
+// spec/spec for the *spec.Op the StepProvider / ProvisionActor methods take.
 package checkstep
 
 import "github.com/opencharly/spec/spec"
-
-// StepKindName names the TYPED install-plan step a step-providing verb lowers into. The
-// host maps it to its internal StepKind enum (kitStepKindToCharly); kept a string so the
-// contract need not import charly's package main.
-type StepKindName string
-
-const (
-	// StepKindNameServicePackaged — the `service` verb (enable a packaged unit; load-bearing reversals).
-	StepKindNameServicePackaged StepKindName = "service-packaged"
-	// StepKindNameSystemPackages — the `package` verb (install system packages).
-	StepKindNameSystemPackages StepKindName = "system-packages"
-)
-
-// ServicePackagedDesc is the candy-decodable construction input for a service-packaged
-// step: the host materializer adds the op-resolved scope + candy name and keeps the
-// load-bearing Reverse() (disable / restore-enabled / remove-dropin) in package main.
-type ServicePackagedDesc struct {
-	Unit   string
-	Enable bool
-}
-
-// SystemPackagesDesc is the candy-decodable construction input for a system-packages step
-// (the `package` verb): the authored package name + per-distro map. The host materializer
-// resolves the cross-distro name (ResolvePackageName against the image's tags), sets the
-// image format + PhaseInstall, and builds the SystemPackagesStep.
-type SystemPackagesDesc struct {
-	Package    string
-	PackageMap map[string]string
-}
-
-// StepDescriptor is the candy-decodable construction input for a TYPED install-plan step
-// (the build/deploy install timeline). Exactly one variant is non-nil; the host
-// materializer rebuilds the real package-main InstallStep from it (computing the
-// package-main-only inputs — scope from op.RunAs+img, candy name — and keeping the
-// load-bearing Reverse() in package main, so the candy never imports an IR type).
-type StepDescriptor struct {
-	ServicePackaged *ServicePackagedDesc
-	SystemPackages  *SystemPackagesDesc
-}
 
 // ResolvePackageName picks the correct package name for the running image's distro: if
 // packageMap has a key matching any of the image's distro tags (first match wins — tags
 // are authored most-specific-first, "fedora:43" before "fedora"), that mapping is used;
 // otherwise the bare pkg name. The single cross-distro name resolver shared by the
-// `package` candy's check + act AND the host's step materializer (R3).
+// `package` candy's check + act + step materializer (R3).
 func ResolvePackageName(pkg string, packageMap map[string]string, distros []string) string {
 	if len(packageMap) == 0 {
 		return pkg
@@ -77,15 +38,23 @@ func ResolvePackageName(pkg string, packageMap map[string]string, distros []stri
 }
 
 // StepProvider is the OPTIONAL third role of a host-coupled verb candy: a verb whose
-// build/deploy ACT lowers into a TYPED install-plan step (service → service-packaged,
-// package → system-packages) rather than a shell (ProvisionActor) or a generic OpStep.
-// StepKind names the target step (static); ConstructStepDescriptor returns the
-// candy-decodable construction inputs for one op. The host wraps a candy implementing
-// this in an adapter that satisfies package-main's TypedStepProvider, materializing the
-// descriptor into the real IR step.
+// build/deploy ACT lowers into a TYPED install-plan step (service → ServicePackagedStep,
+// package → SystemPackagesStep) rather than a shell (ProvisionActor) or a generic OpStep.
+// The CANDY owns the whole lowering: StepKind names the target internal IR spec.StepKind
+// (the static half), and MaterializeStep builds the real spec.InstallStep for one op (the
+// dynamic half). The host's kit adapter (charly/check_kit_adapter.go) delegates both calls
+// to the provider, so core keeps NO per-kind mapping and NO materializer switch — the
+// kernel/plugin boundary law's incomplete-seam tell is exactly a per-kind branch in core.
+//
+// op is the verb's *spec.Op (the verb's plugin_input rides op.PluginInput). The four ctx
+// scalars are host-RESOLVED before the call: runAsUser is the resolved user directive
+// (deploykit.ResolveUserSpec's result), candyName the layer's name, pkgFormat the image's
+// package format, and distroTags the image's distro tag list (most-specific-first, the input
+// ResolvePackageName consumes). The load-bearing Reverse()s stay on the returned step
+// (package main owns the reversal timeline); the candy owns only the construction.
 type StepProvider interface {
-	StepKind() StepKindName
-	ConstructStepDescriptor(op *spec.Op) StepDescriptor
+	StepKind() spec.StepKind
+	MaterializeStep(op *spec.Op, runAsUser, candyName, pkgFormat string, distroTags []string) spec.InstallStep
 }
 
 // ProvisionActor is the OPTIONAL second role of a host-coupled verb candy: the do:act
