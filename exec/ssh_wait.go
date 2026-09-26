@@ -123,14 +123,43 @@ func isPermanentSSHFailure(stderr string) bool {
 	return false
 }
 
-// WaitForCloudInit polls `sudo cloud-init status` (as root — charly guests have passwordless sudo)
-// until cloud-init reaches an EXPLICIT terminal status (done/error/disabled) over a SURVIVING ssh
-// connection — that is the deterministic signal that first-boot host-key regen finished (sshd stable)
-// AND the seed-package phase (which holds the distro package lock) completed. Ready ONLY on a terminal
-// token: a blank/transient/"running" read keeps polling, so the deploy's first `pacman -Sy` can't race
-// cloud-final.service. Only meaningful for cloud-image sources; skip for bootc with no cidata ISO.
+// WaitForCloudInit polls cloud-init's status on the guest until it reaches an EXPLICIT
+// terminal status (done/error/disabled) over a SURVIVING ssh connection — that is the
+// deterministic signal that first-boot host-key regen finished (sshd stable) AND the
+// seed-package phase (which holds the distro package lock) completed. Ready ONLY on a
+// terminal token: a blank/transient/"running" read keeps polling, so the deploy's first
+// `pacman -Sy` can't race cloud-final.service. The status is read UNPRIVILEGED (it is
+// world-readable), with a NON-interactive `sudo -n` fallback — never a password-prompting
+// `sudo`, which hangs the poll on a guest without NOPASSWD (e.g. a containerDisk whose
+// cloud-init is disabled). See cloudInitStatusScript + pollCloudInitSettled. Only
+// meaningful for cloud-image sources; skip for bootc with no cidata ISO.
+// cloudInitStatusScript reads cloud-init's status on the guest. It is a package-level
+// constant so a host test can run its logic without a live guest.
+//
+// It reads UNPRIVILEGED first: `cloud-init status` is world-readable, and a bare `sudo`
+// cannot prompt over a stdin-piped ssh — it fails silently and the poll runs to its cap.
+// This mattered for a prebuilt containerDisk that ships cloud-init DISABLED (so no seed
+// grants NOPASSWD sudo): the old `sudo cloud-init status 2>/dev/null` printed nothing and
+// the check-cua-container-disk-vm bed hung 30m on "cloud-init did not settle". `sudo -n`
+// (non-interactive) is the fallback and can never hang on a prompt.
+const cloudInitStatusScript = `if ! command -v cloud-init >/dev/null 2>&1; then echo "status: done"; exit 0; fi
+out=$(cloud-init status 2>/dev/null || true)
+case "$out" in
+  *"status: done"*|*"status: error"*|*"status: disabled"*|*"status: running"*) echo "$out"; exit 0 ;;
+esac
+sudo -n cloud-init status 2>/dev/null || true`
+
 func WaitForCloudInit(ctx context.Context, ssh SSHArgs, poll PollFunc) error {
-	script := `if command -v cloud-init >/dev/null 2>&1; then sudo cloud-init status 2>/dev/null || true; else echo "status: done"; fi`
+	// Read the status UNPRIVILEGED first. `cloud-init status` is world-readable on every
+	// image, and a hardcoded `sudo cloud-init status` HANGS the poll on a guest whose
+	// cloud-init never ran: a prebuilt containerDisk may ship cloud-init DISABLED, so no
+	// seed ever grants the passwordless sudo the old comment assumed, and `sudo` (no `-n`)
+	// cannot prompt over a stdin-piped ssh — it fails, prints nothing, and the poll runs to
+	// its absolute cap (measured: the check-cua-container-disk-vm bed hung 30m on a
+	// `sudo: a password is required`). Fall back to NON-interactive `sudo -n` only when the
+	// unprivileged read is inconclusive — that covers an image that restricts the read while
+	// still granting NOPASSWD, and `-n` can never hang on a prompt.
+	script := cloudInitStatusScript
 	if err := poll(ctx, func(actx context.Context) (bool, float64, error) {
 		var buf bytes.Buffer
 		args := ssh.BaseArgs()
@@ -143,18 +172,28 @@ func WaitForCloudInit(ctx context.Context, ssh SSHArgs, poll PollFunc) error {
 			return false, 0, nil // ssh dropped (key regen in progress) — keep polling
 		}
 		out := buf.String()
-		if strings.Contains(out, "status: running") {
-			return false, 0, nil // cloud-init still working
-		}
-		if strings.Contains(out, "status: done") || strings.Contains(out, "status: error") ||
-			strings.Contains(out, "status: disabled") {
+		if pollCloudInitSettled(out) {
 			return true, 0, nil // settled (sshd stable, package phase complete)
 		}
-		return false, 0, nil // blank / not-started / transient — keep polling
+		return false, 0, nil // still running / blank / not-started — keep polling
 	}); err != nil {
 		return fmt.Errorf("cloud-init wait on %s:%d: %w", ssh.Host, ssh.Port, err)
 	}
 	return nil
+}
+
+// pollCloudInitSettled reports whether a WaitForCloudInit poll's output is TERMINAL — the
+// condition that ends the wait. Extracted (from the poll closure) so the terminal-state
+// contract, including `disabled` on a guest whose cloud-init never ran, is directly
+// unit-testable. `running` and a blank/transient read are NOT terminal; `done`/`error`/
+// `disabled` are. PURE.
+func pollCloudInitSettled(out string) bool {
+	if strings.Contains(out, "status: running") {
+		return false
+	}
+	return strings.Contains(out, "status: done") ||
+		strings.Contains(out, "status: error") ||
+		strings.Contains(out, "status: disabled")
 }
 
 // WaitForPackageLock makes the guest package manager READY for the deploy's own pacman/apt/dnf:
