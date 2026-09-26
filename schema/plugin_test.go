@@ -96,3 +96,38 @@ func TestPluginRequiresDeclared(t *testing.T) {
 		})
 	}
 }
+
+// A command capability's IDENTITY is `<class>:<word>` OR the command-only
+// three-segment `<command>:<word>:<parent>` — the parent is DECLARED, because a
+// command is dispatched through the CLI grammar where two plugins legitimately serve
+// the same word under different parents (command:feature:box vs top-level
+// command:feature). On the pre-change schema the three-segment form failed the
+// two-segment regex and the command-only rule did not exist, so the accepted nested
+// cases fail without the change.
+func TestPluginCapabilityCommandParentIdentity(t *testing.T) {
+	const src = `source: "github.com/opencharly/plugin-x/candy/plugin-x"`
+	cases := []struct {
+		name string
+		body string
+		ok   bool
+	}{
+		{"a two-segment command is accepted", `{providers: ["command:feature"], ` + src + `}`, true},
+		{"a three-segment nested command is accepted", `{providers: ["command:generate:box"], ` + src + `}`, true},
+		{"top-level and nested of the same word coexist as two identities", `{providers: ["command:feature", "command:feature:box"], ` + src + `}`, true},
+		{"a non-command class may NOT carry a parent (only commands nest)", `{providers: ["deploy:x:y"], ` + src + `}`, false},
+		{"a verb may NOT carry a parent", `{providers: ["verb:x:y"], ` + src + `}`, false},
+		{"an empty parent segment is rejected", `{providers: ["command:x:"], ` + src + `}`, false},
+		{"a nested requirement names the peer's parent", `{providers: ["verb:x"], ` + src + `, requires: [{capability: "verb:enc"}, {capability: "command:feature:box"}]}`, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := pluginValue(t, tc.body)
+			if tc.ok && err != nil {
+				t.Errorf("#Plugin rejected a valid capability identity: %v", err)
+			}
+			if !tc.ok && err == nil {
+				t.Errorf("#Plugin accepted a capability identity it must reject")
+			}
+		})
+	}
+}

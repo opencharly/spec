@@ -82,6 +82,12 @@ protocol: {
 					"number": 4
 					"doc":    "when true, an absent peer is recorded and skipped rather than failing the load"
 				},
+				{
+					"name":   "command_parent"
+					"type":   "string"
+					"number": 5
+					"doc":    "set ONLY when the peer is a NESTED class=\"command\" capability: its parent command word (e.g. \"box\"). The peer's registry key is `<class>:<word>:<command_parent>` exactly as elsewhere; \"\" names a top-level capability. Lets a plugin depend on `box feature` distinctly from top-level `feature`."
+				},
 			]
 		},
 		{
@@ -178,6 +184,12 @@ protocol: {
 					"type":   "bool"
 					"number": 14
 					"doc":    "set ONLY for class=\"command\": the command needs a real terminal (stdin/stdout/stderr/TTY) — `shell`, `logs -f`, `mcp serve --stdio`. A command DECLARING this keeps the process-replacing exec lane (the child becomes the process and inherits the terminal); every non-interactive command dispatches through the broker-backed Invoke(OpRun) path so it behaves identically compiled-in and runtime-loaded. Data-driven, never a class-wide exemption."
+				},
+				{
+					"name":   "command_parent"
+					"type":   "string"
+					"number": 15
+					"doc":    "set ONLY for class=\"command\": the PARENT command word this command NESTS under (e.g. \"box\" for `charly box generate`), or \"\" for a top-level command. Part of the capability's IDENTITY (the registry keys a nested command at `<class>:<word>:<parent>` and a top-level one at `<class>:<word>`) and DECLARED by the plugin in its manifest (`command:<word>:<parent>`) + its Describe, NOT inferred from plugin code — so an out-of-process plugin nests exactly like a compiled-in one."
 				},
 			]
 		},
@@ -363,6 +375,12 @@ protocol: {
 					"number": 6
 					"doc":    "E3b: the go-plugin broker id the host serves ExecutorService on for a deploy/step/builder op; 0 = none (verb/kind ops need no executor)"
 				},
+				{
+					"name":   "command_parent"
+					"type":   "string"
+					"number": 7
+					"doc":    "set ONLY for a NESTED class=\"command\": the parent command word, so the target resolves by its full identity `<class>:<word>:<command_parent>` (a nested command is never reachable by its bare word). Empty/absent — a top-level provider."
+				},
 			]
 		},
 		{
@@ -544,6 +562,18 @@ protocol: {
 						explicit @github canonical ref (the same Pass-2 fetch the credential/vm/kube host
 						adapters already use) needs this field set. Empty/absent — byte-identical S2
 						behavior (Pass-1 only).
+						"""
+				},
+				{
+					"name":   "command_parent"
+					"type":   "string"
+					"number": 8
+					"doc":    """
+						set ONLY when the target is a NESTED class="command" capability: its parent
+						command word (e.g. "box" for `charly box validate`). The host resolves the target
+						by its full identity `<class>:<word>:<command_parent>` — a nested command is never
+						reachable by its bare word alone, so a peer invoking one names the parent exactly
+						as the CLI grammar and the registry key do. Empty/absent — a top-level target.
 						"""
 				},
 			]

@@ -151,7 +151,9 @@ type PluginRequirement struct {
 	// OPTIONAL canonical candy ref for a peer absent from the project's candy closure — fetched declaratively instead of by a call-time ExtraRef
 	Source string `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
 	// when true, an absent peer is recorded and skipped rather than failing the load
-	Optional      bool `protobuf:"varint,4,opt,name=optional,proto3" json:"optional,omitempty"`
+	Optional bool `protobuf:"varint,4,opt,name=optional,proto3" json:"optional,omitempty"`
+	// set ONLY when the peer is a NESTED class="command" capability: its parent command word (e.g. "box"). The peer's registry key is `<class>:<word>:<command_parent>` exactly as elsewhere; "" names a top-level capability. Lets a plugin depend on `box feature` distinctly from top-level `feature`.
+	CommandParent string `protobuf:"bytes,5,opt,name=command_parent,json=commandParent,proto3" json:"command_parent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -214,6 +216,13 @@ func (x *PluginRequirement) GetOptional() bool {
 	return false
 }
 
+func (x *PluginRequirement) GetCommandParent() string {
+	if x != nil {
+		return x.CommandParent
+	}
+	return ""
+}
+
 // ProvidedCapability — one served capability plus the CUE def that validates its
 // plugin_input. The schema travels with the plugin over Describe (the same channel
 // for in-proc builtin and out-of-proc external — zero distinction), so the host
@@ -248,7 +257,9 @@ type ProvidedCapability struct {
 	// CUE #CLIModel JSON for class=command; lets CLI and MCP reflect plugin-owned leaves without importing plugin code
 	CommandModelJson []byte `protobuf:"bytes,13,opt,name=command_model_json,json=commandModelJson,proto3" json:"command_model_json,omitempty"`
 	// set ONLY for class="command": the command needs a real terminal (stdin/stdout/stderr/TTY) — `shell`, `logs -f`, `mcp serve --stdio`. A command DECLARING this keeps the process-replacing exec lane (the child becomes the process and inherits the terminal); every non-interactive command dispatches through the broker-backed Invoke(OpRun) path so it behaves identically compiled-in and runtime-loaded. Data-driven, never a class-wide exemption.
-	Interactive   bool `protobuf:"varint,14,opt,name=interactive,proto3" json:"interactive,omitempty"`
+	Interactive bool `protobuf:"varint,14,opt,name=interactive,proto3" json:"interactive,omitempty"`
+	// set ONLY for class="command": the PARENT command word this command NESTS under (e.g. "box" for `charly box generate`), or "" for a top-level command. Part of the capability's IDENTITY (the registry keys a nested command at `<class>:<word>:<parent>` and a top-level one at `<class>:<word>`) and DECLARED by the plugin in its manifest (`command:<word>:<parent>`) + its Describe, NOT inferred from plugin code — so an out-of-process plugin nests exactly like a compiled-in one.
+	CommandParent string `protobuf:"bytes,15,opt,name=command_parent,json=commandParent,proto3" json:"command_parent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -379,6 +390,13 @@ func (x *ProvidedCapability) GetInteractive() bool {
 		return x.Interactive
 	}
 	return false
+}
+
+func (x *ProvidedCapability) GetCommandParent() string {
+	if x != nil {
+		return x.CommandParent
+	}
+	return ""
 }
 
 // CLISubcommand — one DECLARED child of a class="command" capability's own CLI word (F-CLI-NEST).
@@ -676,8 +694,10 @@ type InvokeRequest struct {
 	Class string `protobuf:"bytes,5,opt,name=class,proto3" json:"class,omitempty"`
 	// E3b: the go-plugin broker id the host serves ExecutorService on for a deploy/step/builder op; 0 = none (verb/kind ops need no executor)
 	ExecutorBrokerId uint32 `protobuf:"varint,6,opt,name=executor_broker_id,json=executorBrokerId,proto3" json:"executor_broker_id,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// set ONLY for a NESTED class="command": the parent command word, so the target resolves by its full identity `<class>:<word>:<command_parent>` (a nested command is never reachable by its bare word). Empty/absent — a top-level provider.
+	CommandParent string `protobuf:"bytes,7,opt,name=command_parent,json=commandParent,proto3" json:"command_parent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InvokeRequest) Reset() {
@@ -750,6 +770,13 @@ func (x *InvokeRequest) GetExecutorBrokerId() uint32 {
 		return x.ExecutorBrokerId
 	}
 	return 0
+}
+
+func (x *InvokeRequest) GetCommandParent() string {
+	if x != nil {
+		return x.CommandParent
+	}
+	return ""
 }
 
 // CheckResult / InstallPlan / Diagnostics, JSON
@@ -1044,7 +1071,13 @@ type InvokeProviderRequest struct {
 	// explicit @github canonical ref (the same Pass-2 fetch the credential/vm/kube host
 	// adapters already use) needs this field set. Empty/absent — byte-identical S2
 	// behavior (Pass-1 only).
-	ExtraRef      string `protobuf:"bytes,7,opt,name=extra_ref,json=extraRef,proto3" json:"extra_ref,omitempty"`
+	ExtraRef string `protobuf:"bytes,7,opt,name=extra_ref,json=extraRef,proto3" json:"extra_ref,omitempty"`
+	// set ONLY when the target is a NESTED class="command" capability: its parent
+	// command word (e.g. "box" for `charly box validate`). The host resolves the target
+	// by its full identity `<class>:<word>:<command_parent>` — a nested command is never
+	// reachable by its bare word alone, so a peer invoking one names the parent exactly
+	// as the CLI grammar and the registry key do. Empty/absent — a top-level target.
+	CommandParent string `protobuf:"bytes,8,opt,name=command_parent,json=commandParent,proto3" json:"command_parent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1124,6 +1157,13 @@ func (x *InvokeProviderRequest) GetVenueDescriptorJson() []byte {
 func (x *InvokeProviderRequest) GetExtraRef() string {
 	if x != nil {
 		return x.ExtraRef
+	}
+	return ""
+}
+
+func (x *InvokeProviderRequest) GetCommandParent() string {
+	if x != nil {
+		return x.CommandParent
 	}
 	return ""
 }
@@ -2520,12 +2560,13 @@ const file_plugin_proto_rawDesc = "" +
 	"\bprovided\x18\x03 \x03(\v2 .charlyplugin.ProvidedCapabilityR\bprovided\x12\x1d\n" +
 	"\n" +
 	"schema_cue\x18\x04 \x01(\tR\tschemaCue\x12;\n" +
-	"\brequires\x18\x05 \x03(\v2\x1f.charlyplugin.PluginRequirementR\brequiresJ\x04\b\x02\x10\x03\"q\n" +
+	"\brequires\x18\x05 \x03(\v2\x1f.charlyplugin.PluginRequirementR\brequiresJ\x04\b\x02\x10\x03\"\x98\x01\n" +
 	"\x11PluginRequirement\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x16\n" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1a\n" +
-	"\boptional\x18\x04 \x01(\bR\boptional\"\x98\x04\n" +
+	"\boptional\x18\x04 \x01(\bR\boptional\x12%\n" +
+	"\x0ecommand_parent\x18\x05 \x01(\tR\rcommandParent\"\xbf\x04\n" +
 	"\x12ProvidedCapability\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x1b\n" +
@@ -2545,7 +2586,8 @@ const file_plugin_proto_rawDesc = "" +
 	"\rdeploy_traits\x18\v \x01(\v2\x1a.charlyplugin.DeployTraitsR\fdeployTraits\x12=\n" +
 	"\vsubcommands\x18\f \x03(\v2\x1b.charlyplugin.CLISubcommandR\vsubcommands\x12,\n" +
 	"\x12command_model_json\x18\r \x01(\fR\x10commandModelJson\x12 \n" +
-	"\vinteractive\x18\x0e \x01(\bR\vinteractive\"O\n" +
+	"\vinteractive\x18\x0e \x01(\bR\vinteractive\x12%\n" +
+	"\x0ecommand_parent\x18\x0f \x01(\tR\rcommandParent\"O\n" +
 	"\rCLISubcommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04help\x18\x02 \x01(\tR\x04help\x12\x16\n" +
@@ -2567,7 +2609,7 @@ const file_plugin_proto_rawDesc = "" +
 	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05venue\x18\x02 \x01(\x05R\x05venue\x12\x12\n" +
 	"\x04gate\x18\x03 \x01(\tR\x04gate\x12\x14\n" +
-	"\x05emits\x18\x04 \x01(\bR\x05emits\"\xbb\x01\n" +
+	"\x05emits\x18\x04 \x01(\bR\x05emits\"\xe2\x01\n" +
 	"\rInvokeRequest\x12\x1a\n" +
 	"\breserved\x18\x01 \x01(\tR\breserved\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x1f\n" +
@@ -2575,7 +2617,8 @@ const file_plugin_proto_rawDesc = "" +
 	"paramsJson\x12\x19\n" +
 	"\benv_json\x18\x04 \x01(\fR\aenvJson\x12\x14\n" +
 	"\x05class\x18\x05 \x01(\tR\x05class\x12,\n" +
-	"\x12executor_broker_id\x18\x06 \x01(\rR\x10executorBrokerId\".\n" +
+	"\x12executor_broker_id\x18\x06 \x01(\rR\x10executorBrokerId\x12%\n" +
+	"\x0ecommand_parent\x18\a \x01(\tR\rcommandParent\".\n" +
 	"\vInvokeReply\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\fR\n" +
 	"resultJson\"(\n" +
@@ -2602,7 +2645,7 @@ const file_plugin_proto_rawDesc = "" +
 	"\vtarget_json\x18\x0f \x01(\fR\n" +
 	"targetJson\x12\x1f\n" +
 	"\vreplay_from\x18\x10 \x01(\x04R\n" +
-	"replayFrom\"\xe6\x01\n" +
+	"replayFrom\"\x8d\x02\n" +
 	"\x15InvokeProviderRequest\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x1a\n" +
 	"\breserved\x18\x02 \x01(\tR\breserved\x12\x0e\n" +
@@ -2611,7 +2654,8 @@ const file_plugin_proto_rawDesc = "" +
 	"paramsJson\x12\x19\n" +
 	"\benv_json\x18\x05 \x01(\fR\aenvJson\x122\n" +
 	"\x15venue_descriptor_json\x18\x06 \x01(\fR\x13venueDescriptorJson\x12\x1b\n" +
-	"\textra_ref\x18\a \x01(\tR\bextraRef\"C\n" +
+	"\textra_ref\x18\a \x01(\tR\bextraRef\x12%\n" +
+	"\x0ecommand_parent\x18\b \x01(\tR\rcommandParent\"C\n" +
 	"\x10HostBuildRequest\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1b\n" +
 	"\tspec_json\x18\x02 \x01(\fR\bspecJson\"C\n" +
