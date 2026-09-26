@@ -37,6 +37,16 @@ func TestVenueSplitIsTraitDriven(t *testing.T) {
 	if kvPost.Descent.Venue != "kubevirt" {
 		t.Fatalf("kubevirt-post venue = %q, want kubevirt", kvPost.Descent.Venue)
 	}
+	// KubeVirtVenue keys on the venue token — true only for the migrated kubevirt node.
+	if KubeVirtVenue(vm) {
+		t.Fatal("KubeVirtVenue(vm) = true; the vm substrate is host-libvirt")
+	}
+	if !KubeVirtVenue(kvPost) {
+		t.Fatal("KubeVirtVenue(kubevirt-post) = false; kubevirt carries its own venue")
+	}
+	if KubeVirtVenue(kvPre) {
+		t.Fatal("KubeVirtVenue(kubevirt-pre) = true; a pre-migration node still reads venue ssh")
+	}
 	// Only the host-libvirt vm is the `charly vm` (libvirt-domain) venue — in BOTH kubevirt states.
 	if !IsVmVenue(vm) {
 		t.Fatal("IsVmVenue(vm) = false; the vm substrate IS the host-libvirt venue")

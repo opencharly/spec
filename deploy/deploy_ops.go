@@ -150,6 +150,17 @@ func IsVmVenue(node *spec.DeployNode) bool {
 	return SshVenue(node) && node.Descent.ExclusiveVenue
 }
 
+// KubeVirtVenue reports whether node's stamped venue is the KUBEVIRT substrate — an ssh hop
+// into a guest whose machine is a cluster-managed VirtualMachine CR. Its lifecycle is owned by
+// the out-of-process candy/plugin-kubevirt (`charly deploy add`/`del`), NOT `charly vm` — so a
+// bed bring-up / venue resolver keys on THIS to pick the plugin arm instead of the libvirt arm.
+// It reads the venue token kubevirt declares (candy/plugin-substrate's trait row) — never the
+// substrate kind word (the boundary law). A caller that only needs "does this reach the guest
+// over ssh" reads SshVenue (true for vm AND kubevirt).
+func KubeVirtVenue(node *spec.DeployNode) bool {
+	return node != nil && node.Descent != nil && node.Descent.Venue == "kubevirt"
+}
+
 // IsContainerVenue reports whether node's stamped venue is the container-exec (pod) substrate.
 // Mirrors HostRooted's shape (#55 W3 A4) — see IsVmVenue.
 func IsContainerVenue(node *spec.DeployNode) bool {
