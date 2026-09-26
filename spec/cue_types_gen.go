@@ -5111,6 +5111,12 @@ type SaveDeployStateInput struct {
 
 	VmCrossRef string `yaml:"vm_cross_ref,omitempty" json:"vm_cross_ref,omitempty"`
 
+	// kubevirt_state — the kind:kubevirt substrate's persisted venue identity (cluster/
+	// context/namespace + the VM name + the managed port-forward local port), shipped by
+	// plugin-kubevirt's PrepareVenue as the generic State patch — the kubevirt analogue of
+	// vm_state (deploykit.SaveDeployState writes it whenever non-nil).
+	KubeVirtState *KubeVirtDeployState `yaml:"kubevirt_state,omitempty" json:"kubevirt_state,omitempty"`
+
 	// Resource-arbitration axis: the holder-side Preemptible block + the claimant-side
 	// requires_exclusive / requires_shared token lists. Persisted so a deploy/bed MEMBER round-trips
 	// its arbiter role through the per-host overlay. Written when non-empty.

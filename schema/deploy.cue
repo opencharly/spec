@@ -917,6 +917,12 @@
 	vm_state?:     #VmDeployState @go(VmState,type=*VmDeployState)
 	vm_cross_ref?: string         @go(VmCrossRef)
 
+	// kubevirt_state — the kind:kubevirt substrate's persisted venue identity (cluster/
+	// context/namespace + the VM name + the managed port-forward local port), shipped by
+	// plugin-kubevirt's PrepareVenue as the generic State patch — the kubevirt analogue of
+	// vm_state (deploykit.SaveDeployState writes it whenever non-nil).
+	kubevirt_state?: #KubeVirtDeployState @go(KubeVirtState,type=*KubeVirtDeployState)
+
 	// Resource-arbitration axis: the holder-side Preemptible block + the claimant-side
 	// requires_exclusive / requires_shared token lists. Persisted so a deploy/bed MEMBER round-trips
 	// its arbiter role through the per-host overlay. Written when non-empty.
