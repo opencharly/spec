@@ -125,13 +125,15 @@ func HostRooted(node *spec.DeployNode) bool {
 }
 
 // SshVenue reports whether node's stamped venue is an SSH HOP — a substrate whose commands
-// execute through an ssh transport into a guest (both the host-libvirt vm AND kubevirt).
-// This is the VENUE (transport) predicate: a caller that only needs "build an ssh executor
-// for this venue" reads it. A caller that must decide whether the node is the HOST-LIBVIRT vm
-// (bed bring-up, the libvirt domain lock, the `charly vm` spec path) reads IsVmVenue instead —
-// venue is not substrate (R3).
+// execute through an ssh transport into a guest (both the host-libvirt vm AND kubevirt). This
+// is the VENUE (transport) predicate: a caller that only needs "build an ssh executor for this
+// venue" reads it. A caller that must decide whether the node is the HOST-LIBVIRT vm (bed
+// bring-up, the libvirt domain lock, the `charly vm` spec path) reads IsVmVenue instead — venue
+// is not substrate (R3). It reads the DERIVED `transport`, not the venue token, so it stays
+// true for kubevirt after that substrate migrates to its OWN `kubevirt` venue value (which
+// still descends over ssh) — matching this doc's "vm AND kubevirt" claim.
 func SshVenue(node *spec.DeployNode) bool {
-	return node != nil && node.Descent != nil && node.Descent.Venue == "ssh"
+	return node != nil && node.Descent != nil && node.Descent.Transport == "ssh"
 }
 
 // IsVmVenue reports whether node's stamped venue is the HOST-LIBVIRT vm substrate — the one

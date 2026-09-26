@@ -25,12 +25,11 @@ func TestBedVmDomainsAlongsideOnly(t *testing.T) {
 	}
 }
 
-// TestBedVmDomainsExcludesKubeVirt pins the ssh-venue/substrate split (R1): a kubevirt node
-// ALSO descends over ssh but is NOT a host libvirt domain, so it must contribute no host-global
-// domain lock. The discriminator is the ExclusiveVenue trait, declared for vm and deliberately
-// not for kubevirt.
+// TestBedVmDomainsExcludesKubeVirt pins the venue split (R1): a kubevirt node descends
+// over ssh but carries its OWN `kubevirt` venue (a cluster-managed CR, not a host
+// libvirt domain), so it must contribute no host-global domain lock.
 func TestBedVmDomainsExcludesKubeVirt(t *testing.T) {
-	kubevirt := &spec.DescentDescriptor{Transport: "ssh", Venue: "ssh", ExclusiveVenue: false}
+	kubevirt := &spec.DescentDescriptor{Transport: "ssh", Venue: "kubevirt"}
 	node := spec.DeployNode{
 		Descent: kubevirt,
 		Member: []spec.Member{

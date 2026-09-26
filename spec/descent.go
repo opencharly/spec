@@ -40,7 +40,8 @@ func StampDescent(node *Deploy, traitsFor func(word string) *DeployTraits) {
 //
 //	leaf_only            → reject          (kubernetes: a deploy-chain leaf, unreachable via exec)
 //	venue == container   → container-exec  (pod: podman/docker exec by name)
-//	venue == ssh         → ssh             (vm: an ssh hop into the guest)
+//	venue == ssh         → ssh             (vm: an ssh hop into the host machine guest)
+//	venue == kubevirt    → ssh             (kubevirt: an ssh hop into a cluster-managed CR guest)
 //	otherwise            → none            (shell/parent/none share the parent venue)
 //
 // nil traits (a targetless group / empty target / a word with no declared substrate traits)
@@ -64,7 +65,7 @@ func DescentFromTraits(t *DeployTraits) *DescentDescriptor {
 		d.Transport = "reject"
 	case t.Venue == "container":
 		d.Transport = "container-exec"
-	case t.Venue == "ssh":
+	case t.Venue == "ssh" || t.Venue == "kubevirt":
 		d.Transport = "ssh"
 	default:
 		d.Transport = "none"

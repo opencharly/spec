@@ -6,39 +6,53 @@ import (
 	"github.com/opencharly/spec/spec"
 )
 
-// TestSshVenueSplitIsTraitDriven drives the predicate through the REAL derivation
-// (spec.DescentFromTraits) with the SAME #DeployTraits the substrate provider
-// declares — not a hand-built DescentDescriptor — so it would catch a wrong or
-// missing live trait.
+// TestVenueSplitIsTraitDriven drives the venue behaviour through the REAL derivation
+// (spec.DescentFromTraits) with the SAME #DeployTraits the substrate provider declares — not a
+// hand-built DescentDescriptor — so it catches a wrong/missing live trait.
 //
-// The declared trait table is candy/plugin-substrate's substrateTraits (its single
-// source, serialized over Describe and stamped by kit.StampDescent). The vm/kubevirt
-// rows are mirrored verbatim here so the predicate is exercised against the exact
-// trait VALUES the provider ships:
-//
-//	"vm":       {Venue: "ssh", MachineVenue: true, ExclusiveVenue: true, ...}
-//	"kubevirt": {Venue: "ssh", ImageBacked: true, BedTarget: true, ...}   // NO ExclusiveVenue
-func TestSshVenueSplitIsTraitDriven(t *testing.T) {
-	vmTraits := &spec.DeployTraits{Venue: "ssh", MachineVenue: true, ExclusiveVenue: true, BedTarget: true}
-	kvTraits := &spec.DeployTraits{Venue: "ssh", ImageBacked: true, BedTarget: true}
+// It pins TRANSITION SAFETY: IsVmVenue must be false for a kubevirt node in BOTH the
+// post-migration trait state (its own `kubevirt` venue) AND the pre-migration state (ssh venue,
+// no ExclusiveVenue) — so no consumer's spec/plugin-substrate pin ordering can regress a
+// kubevirt node into the libvirt arm. It also pins that the new `kubevirt` venue still descends
+// over the ssh TRANSPORT (the venue value is consumed by DescentFromTraits).
+func TestVenueSplitIsTraitDriven(t *testing.T) {
+	vm := &spec.DeployNode{Descent: spec.DescentFromTraits(&spec.DeployTraits{Venue: "ssh", MachineVenue: true, ExclusiveVenue: true, BedTarget: true})}
+	kvPost := &spec.DeployNode{Descent: spec.DescentFromTraits(&spec.DeployTraits{Venue: "kubevirt", ImageBacked: true, BedTarget: true})}
+	kvPre := &spec.DeployNode{Descent: spec.DescentFromTraits(&spec.DeployTraits{Venue: "ssh", ImageBacked: true, BedTarget: true})}
 
-	vm := &spec.DeployNode{Descent: spec.DescentFromTraits(vmTraits)}
-	kv := &spec.DeployNode{Descent: spec.DescentFromTraits(kvTraits)}
-
-	// Both ride the ssh transport hop.
-	if !SshVenue(vm) || !SshVenue(kv) {
-		t.Fatalf("SshVenue: vm=%v kubevirt=%v — both must be the ssh venue", SshVenue(vm), SshVenue(kv))
+	// All three descend over the ssh transport (kubevirt reaches the guest over ssh).
+	for name, n := range map[string]*spec.DeployNode{"vm": vm, "kubevirt-post": kvPost, "kubevirt-pre": kvPre} {
+		if n.Descent.Transport != "ssh" {
+			t.Fatalf("%s: transport = %q, want ssh", name, n.Descent.Transport)
+		}
+		// SshVenue reads the DERIVED transport, so it is true for all three (matching its
+		// "vm AND kubevirt" doc) — including kvPost, where a `Venue == "ssh"` body would
+		// wrongly return false.
+		if !SshVenue(n) {
+			t.Fatalf("%s: SshVenue = false; it reaches the guest over ssh", name)
+		}
 	}
-	// Only the host-libvirt vm is the exclusive host lease.
+	// The distinct venue is preserved on the stamped descriptor (its value is what a
+	// consumer bed arm reads).
+	if kvPost.Descent.Venue != "kubevirt" {
+		t.Fatalf("kubevirt-post venue = %q, want kubevirt", kvPost.Descent.Venue)
+	}
+	// Only the host-libvirt vm is the `charly vm` (libvirt-domain) venue — in BOTH kubevirt states.
 	if !IsVmVenue(vm) {
 		t.Fatal("IsVmVenue(vm) = false; the vm substrate IS the host-libvirt venue")
 	}
-	if IsVmVenue(kv) {
-		t.Fatal("IsVmVenue(kubevirt) = true; kubevirt is a cluster CR, not a host libvirt domain")
+	if IsVmVenue(kvPost) {
+		t.Fatal("IsVmVenue(kubevirt-post) = true; a kubevirt node must never take the libvirt arm")
 	}
-	// A non-ssh venue is neither.
+	if IsVmVenue(kvPre) {
+		t.Fatal("IsVmVenue(kubevirt-pre) = true; a pre-migration kubevirt node must never take the libvirt arm")
+	}
+	// A non-ssh venue is not the vm venue, nor an ssh venue.
 	pod := &spec.DeployNode{Descent: spec.DescentFromTraits(&spec.DeployTraits{Venue: "container"})}
-	if IsVmVenue(pod) || SshVenue(pod) {
-		t.Fatal("a container-venue node must be neither vm nor an ssh venue")
+	if IsVmVenue(pod) {
+		t.Fatal("a container-venue node must not be the vm venue")
+	}
+	if SshVenue(pod) {
+		t.Fatal("a container-venue node must not be an ssh venue")
 	}
 }
