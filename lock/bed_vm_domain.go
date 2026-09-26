@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/opencharly/spec/deploy"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -39,13 +40,16 @@ func BedVmDomains(name string, node spec.DeployNode) []string {
 		seen[dom] = true
 		out = append(out, dom)
 	}
-	if node.Descent != nil && node.Descent.Venue == "ssh" { // vm (ssh venue) root
+	if deploy.IsVmVenue(&node) { // the HOST-LIBVIRT vm root (ssh venue + the exclusive host-lease
+		// boundary): kubevirt shares the ssh venue but NOT the host libvirt domain, so it is
+		// deliberately excluded by the ExclusiveVenue trait (R1: a bare ssh-venue test would
+		// have registered a bogus host-global domain lock for a KubeVirt CR).
 		add(spec.VmDomainIdentity(name))
 	}
 	for _, m := range node.DeployLevelMembers() { // ALONGSIDE members only: an
 		// in-substrate member's domain runs inside its parent's venue, never a
 		// host-global libvirt domain to contend on.
-		if m.Node != nil && m.Node.Descent != nil && m.Node.Descent.Venue == "ssh" {
+		if deploy.IsVmVenue(m.Node) {
 			add(spec.VmDomainIdentity(m.Name))
 		}
 	}
