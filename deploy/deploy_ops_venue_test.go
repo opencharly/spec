@@ -6,14 +6,15 @@ import (
 	"github.com/opencharly/spec/spec"
 )
 
-// TestVenueSplitIsTraitDriven drives the venue predicates through the REAL derivation
-// (spec.DescentFromTraits) with the SAME #DeployTraits the substrate provider declares —
-// not a hand-built DescentDescriptor — so it catches a wrong/missing live trait.
+// TestVenueSplitIsTraitDriven drives the venue behaviour through the REAL derivation
+// (spec.DescentFromTraits) with the SAME #DeployTraits the substrate provider declares — not a
+// hand-built DescentDescriptor — so it catches a wrong/missing live trait.
 //
 // It pins TRANSITION SAFETY: IsVmVenue must be false for a kubevirt node in BOTH the
-// post-migration trait state (its own `kubevirt` venue) AND the pre-migration state (ssh
-// venue, no ExclusiveVenue) — so no consumer's spec/plugin-substrate pin ordering can
-// regress a kubevirt node into the libvirt arm.
+// post-migration trait state (its own `kubevirt` venue) AND the pre-migration state (ssh venue,
+// no ExclusiveVenue) — so no consumer's spec/plugin-substrate pin ordering can regress a
+// kubevirt node into the libvirt arm. It also pins that the new `kubevirt` venue still descends
+// over the ssh TRANSPORT (the venue value is consumed by DescentFromTraits).
 func TestVenueSplitIsTraitDriven(t *testing.T) {
 	vm := &spec.DeployNode{Descent: spec.DescentFromTraits(&spec.DeployTraits{Venue: "ssh", MachineVenue: true, ExclusiveVenue: true, BedTarget: true})}
 	kvPost := &spec.DeployNode{Descent: spec.DescentFromTraits(&spec.DeployTraits{Venue: "kubevirt", ImageBacked: true, BedTarget: true})}
@@ -24,9 +25,11 @@ func TestVenueSplitIsTraitDriven(t *testing.T) {
 		if n.Descent.Transport != "ssh" {
 			t.Fatalf("%s: transport = %q, want ssh", name, n.Descent.Transport)
 		}
-		if !SshVenue(n) {
-			t.Fatalf("%s: SshVenue = false; it must reach the guest over ssh", name)
-		}
+	}
+	// The distinct venue is preserved on the stamped descriptor (its value is what a
+	// consumer bed arm reads).
+	if kvPost.Descent.Venue != "kubevirt" {
+		t.Fatalf("kubevirt-post venue = %q, want kubevirt", kvPost.Descent.Venue)
 	}
 	// Only the host-libvirt vm is the `charly vm` (libvirt-domain) venue — in BOTH kubevirt states.
 	if !IsVmVenue(vm) {
@@ -38,16 +41,9 @@ func TestVenueSplitIsTraitDriven(t *testing.T) {
 	if IsVmVenue(kvPre) {
 		t.Fatal("IsVmVenue(kubevirt-pre) = true; a pre-migration kubevirt node must never take the libvirt arm")
 	}
-	// The distinct venue names kubevirt once the producer migrates.
-	if KubeVirtVenue(vm) {
-		t.Fatal("KubeVirtVenue(vm) = true; the vm substrate is host-libvirt")
-	}
-	if !KubeVirtVenue(kvPost) {
-		t.Fatal("KubeVirtVenue(kubevirt-post) = false; kubevirt carries its own venue")
-	}
-	// A non-ssh venue is none of them.
+	// A non-ssh venue is not the vm venue.
 	pod := &spec.DeployNode{Descent: spec.DescentFromTraits(&spec.DeployTraits{Venue: "container"})}
-	if IsVmVenue(pod) || KubeVirtVenue(pod) {
-		t.Fatal("a container-venue node must be neither vm nor kubevirt")
+	if IsVmVenue(pod) {
+		t.Fatal("a container-venue node must not be the vm venue")
 	}
 }
