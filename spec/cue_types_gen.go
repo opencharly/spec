@@ -2007,8 +2007,6 @@ type BuildResolveReply struct {
 // generates map[string]*Deploy (recursive tree, faithful). provides/sidecar are additive later
 // members of this same envelope (added by the consumer unit that first needs them).
 type ResolvedProject struct {
-	Version string `yaml:"version,omitempty" json:"version,omitempty"`
-
 	Boxes map[string]ResolvedBoxView `yaml:"boxes,omitempty" json:"boxes,omitempty"`
 
 	Candies map[string]CandyView `yaml:"candies,omitempty" json:"candies,omitempty"`
@@ -2108,8 +2106,6 @@ type ResolvedProject struct {
 // stable key.
 type ResolvedBoxView struct {
 	Name string `yaml:"name,omitempty" json:"name"`
-
-	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 
 	EffectiveVersion string `yaml:"effective_version,omitempty" json:"effective_version,omitempty"`
 
@@ -7625,12 +7621,9 @@ type AggregatedCandyCaps struct {
 type ResolvedBox struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
-	// version is the authored per-entity CalVer (the box config `version:`); optional.
-	Version string `yaml:"version,omitempty" json:"version,omitempty"`
-
 	// effective_version is the content-derived identity emitted as the ai.opencharly.version
-	// label: the dedicated version if set, else the highest candy version across the full
-	// chain. Stable across builds when no candy changed.
+	// label: the highest source candy git tag across the full
+	// chain, else the internal base image's effective version.
 	EffectiveVersion string `yaml:"effective_version,omitempty" json:"effective_version,omitempty"`
 
 	Status string `yaml:"status,omitempty" json:"status,omitempty"`
