@@ -25,6 +25,12 @@ func TestVenueSplitIsTraitDriven(t *testing.T) {
 		if n.Descent.Transport != "ssh" {
 			t.Fatalf("%s: transport = %q, want ssh", name, n.Descent.Transport)
 		}
+		// SshVenue reads the DERIVED transport, so it is true for all three (matching its
+		// "vm AND kubevirt" doc) — including kvPost, where a `Venue == "ssh"` body would
+		// wrongly return false.
+		if !SshVenue(n) {
+			t.Fatalf("%s: SshVenue = false; it reaches the guest over ssh", name)
+		}
 	}
 	// The distinct venue is preserved on the stamped descriptor (its value is what a
 	// consumer bed arm reads).
@@ -41,9 +47,12 @@ func TestVenueSplitIsTraitDriven(t *testing.T) {
 	if IsVmVenue(kvPre) {
 		t.Fatal("IsVmVenue(kubevirt-pre) = true; a pre-migration kubevirt node must never take the libvirt arm")
 	}
-	// A non-ssh venue is not the vm venue.
+	// A non-ssh venue is not the vm venue, nor an ssh venue.
 	pod := &spec.DeployNode{Descent: spec.DescentFromTraits(&spec.DeployTraits{Venue: "container"})}
 	if IsVmVenue(pod) {
 		t.Fatal("a container-venue node must not be the vm venue")
+	}
+	if SshVenue(pod) {
+		t.Fatal("a container-venue node must not be an ssh venue")
 	}
 }
