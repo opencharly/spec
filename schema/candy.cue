@@ -555,8 +555,17 @@
 	optional?: bool
 })
 
-// #PluginCapability — a "<class>:<word>" capability string. class ∈ the closed
-// ProviderClass set; word is lowercase-hyphenated.
+// #PluginCapability — a capability IDENTITY string. class ∈ the closed ProviderClass
+// set; word is lowercase-hyphenated. A class="command" capability MAY carry a THIRD,
+// PARENT segment — "<class>:<word>:<parent>" (e.g. "command:generate:box" for
+// `charly box generate`) — because a command is dispatched through the CLI grammar,
+// where two plugins legitimately serve the SAME word under different parents
+// (command:feature:box vs top-level command:feature). The parent is part of the
+// capability's IDENTITY, so it is DECLARED here (authored) rather than inferred from
+// plugin code: the host keys the provider registry and the generated word→ref index by
+// the full identity, and an out-of-process plugin nests exactly like a compiled-in one.
+// Every non-command class is two-segment.
+//
 // #ProviderClassNames — the CLOSED provider-class vocabulary (the classes a
 // `plugin.providers:` capability may name). THE single source: schemagen emits
 // spec.ProviderClasses from it (the Go closed set both charly's providerClasses and
@@ -569,6 +578,19 @@
 // (the ONE hand-maintained list; the regex is computed, never authored).
 #ProviderClassPattern: "^(" + strings.Join(#ProviderClassNames, "|") + "):[a-z0-9][a-z0-9_-]*$" @go(-)
 
-// #PluginCapability — a "<class>:<word>" capability string. class ∈ #ProviderClassNames;
-// word is lowercase-hyphenated.
-#PluginCapability: string & =~#ProviderClassPattern
+// #CommandParentPattern — the THREE-segment form ONLY a class="command" capability
+// may carry: "command:<word>:<parent>". Kept as its own computed regex so the
+// command-only rule is enforced in the type itself (a `deploy:x:y` / `verb:x:y` is
+// rejected), not in prose.
+#CommandParentPattern: "^command:[a-z0-9][a-z0-9_-]*:[a-z0-9][a-z0-9_-]*$" @go(-)
+
+// #PluginCapabilityPattern — the ONE capability-identity regex: a two-segment
+// "<class>:<word>" for every class, OR the three-segment command-only
+// "<command>:<word>:<parent>". Composed from the two computed patterns (never a
+// hand-written alternation) and consumed by #PluginCapability.
+#PluginCapabilityPattern: #ProviderClassPattern + "|" + #CommandParentPattern @go(-)
+
+// #PluginCapability — a capability identity: "<class>:<word>", or the command-only
+// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
+// parent are lowercase-hyphenated.
+#PluginCapability: string & =~#PluginCapabilityPattern

@@ -104,6 +104,17 @@ type ProvidedCapability struct {
 	// identically compiled-in and runtime-loaded. Data-driven, never a class-wide
 	// exemption.
 	Interactive bool
+	// CommandParent is set ONLY for Class=="command": the PARENT command word this
+	// command NESTS under (e.g. "box" for `charly box generate`), or "" for a
+	// top-level command. It is part of the capability's IDENTITY — the host keys the
+	// provider registry at `<class>:<word>:<parent>` for a nested command and
+	// `<class>:<word>` for a top-level one — so a plugin DECLARES it here over
+	// Describe (authored in the candy manifest as `command:<word>:<parent>`) rather
+	// than the host inferring it from plugin code. This is what lets two plugins
+	// serve the same command word under different parents (command:feature:box vs
+	// top-level command:feature) and lets an out-of-process plugin nest exactly like
+	// a compiled-in one.
+	CommandParent string
 }
 
 // CLISubcommand is one DECLARED child of a class="command" capability's own CLI word — the

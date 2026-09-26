@@ -289,7 +289,7 @@ func (e *Executor) RunHostStep(ctx context.Context, step spec.InstallStepView, o
 // the optional S3b canonical-ref fallback; the zero value ops.InvokeProviderOpts{} reproduces the
 // pre-S1 behavior exactly.
 func (e *Executor) InvokeProvider(ctx context.Context, class, word, op string, params, env []byte, opts ops.InvokeProviderOpts) ([]byte, error) {
-	req := &pb.InvokeProviderRequest{Class: class, Reserved: word, Op: op, ParamsJson: params, EnvJson: env, ExtraRef: opts.ExtraRef}
+	req := &pb.InvokeProviderRequest{Class: class, Reserved: word, Op: op, ParamsJson: params, EnvJson: env, ExtraRef: opts.ExtraRef, CommandParent: opts.CommandParent}
 	if opts.VenueDescriptor != nil {
 		vdj, err := json.Marshal(opts.VenueDescriptor)
 		if err != nil {

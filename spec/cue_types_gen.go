@@ -3657,8 +3657,9 @@ type Plugin struct {
 	Primary map[string]string `yaml:"primary,omitempty" json:"primary,omitempty"`
 }
 
-// #PluginCapability — a "<class>:<word>" capability string. class ∈ #ProviderClassNames;
-// word is lowercase-hyphenated.
+// #PluginCapability — a capability identity: "<class>:<word>", or the command-only
+// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
+// parent are lowercase-hyphenated.
 type PluginCapability string
 
 // #PluginRequirement — one declared inter-plugin dependency. CLOSED.
