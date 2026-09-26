@@ -70,13 +70,13 @@ func TestParseLocalImagesJSON_DockerRepoTags(t *testing.T) {
 
 // TestParseLocalImagesJSON_DockerNDJSON covers the REAL `docker images --format json`
 // shape: JSON LINES (one object per line, NOT an array), which a whole-buffer
-// json.Unmarshal rejects ("invalid character '{' after top-level value"). This test FAILS
-// on the pre-change single-Unmarshal parser, the exact failure `charly clean` hit on a
+// json.Unmarshal rejects with `invalid character '{' after top-level value`. Rows are a
+// faithful capture from `docker images --format json` (docker 29). This test FAILS on the
+// pre-change single-Unmarshal parser — the exact failure `charly clean` hit on a
 // docker-backed host.
 func TestParseLocalImagesJSON_DockerNDJSON(t *testing.T) {
-	// Captured from `docker images --format json` (one object per line).
-	js := []byte(`{"Containers":"0","ID":"a1ed56cfb0e7","Repository":"kindest/node","Tag":"v1.34.0"}
-{"Containers":"2","ID":"bb22cc33dd44","Repository":"ghcr.io/opencharly/check-pod","Tag":"2026.150.0916"}`)
+	js := []byte(`{"Containers":"0","CreatedAt":"2026-08-26 23:01:37 +0200 CEST","CreatedSince":"4 weeks ago","Digest":"","ID":"a1ed56cfb0e7","Repository":"kindest/node","SharedSize":"N/A","Size":"1.34GB","Tag":"\u003cnone\u003e","UniqueSize":"N/A"}
+{"Containers":"2","CreatedAt":"2026-08-27 10:00:00 +0200 CEST","CreatedSince":"4 weeks ago","Digest":"","ID":"2ddb47af8f66","Repository":"kindloadtest","SharedSize":"N/A","Size":"200MB","Tag":"2026.001.0000","UniqueSize":"N/A"}`)
 	imgs, err := ParseLocalImagesJSON(js)
 	if err != nil {
 		t.Fatalf("docker NDJSON parse: %v", err)
@@ -84,8 +84,28 @@ func TestParseLocalImagesJSON_DockerNDJSON(t *testing.T) {
 	if len(imgs) != 2 {
 		t.Fatalf("got %d entries, want 2: %+v", len(imgs), imgs)
 	}
-	if imgs[0].ID != "a1ed56cfb0e7" || len(imgs[0].Names) != 1 || imgs[0].Names[0] != "kindest/node:v1.34.0" {
-		t.Fatalf("entry 0 = %+v, want id a1ed56cfb0e7 with kindest/node:v1.34.0", imgs[0])
+	// A `<none>` tag contributes the bare repository ref; a real tag contributes repo:tag.
+	if imgs[0].ID != "a1ed56cfb0e7" || len(imgs[0].Names) != 1 || imgs[0].Names[0] != "kindest/node" {
+		t.Fatalf("entry 0 = %+v, want id a1ed56cfb0e7 with ref kindest/node", imgs[0])
+	}
+	if imgs[1].ID != "2ddb47af8f66" || len(imgs[1].Names) != 1 || imgs[1].Names[0] != "kindloadtest:2026.001.0000" {
+		t.Fatalf("entry 1 = %+v, want id 2ddb47af8f66 with ref kindloadtest:2026.001.0000", imgs[1])
+	}
+}
+
+// TestParseLocalImagesJSON_EmptyOutput covers `docker images --filter dangling=true --format
+// json` on a store with no dangling images: EMPTY output is a valid empty result, NOT the
+// `unexpected end of JSON input` error `charly clean` reported. Fails on the pre-change
+// parser, which returned that error for empty input.
+func TestParseLocalImagesJSON_EmptyOutput(t *testing.T) {
+	for _, in := range [][]byte{nil, {}, []byte("\n")} {
+		imgs, err := ParseLocalImagesJSON(in)
+		if err != nil {
+			t.Fatalf("empty output %q must parse to no images, got error: %v", in, err)
+		}
+		if len(imgs) != 0 {
+			t.Fatalf("empty output %q produced %d images, want 0", in, len(imgs))
+		}
 	}
 }
 

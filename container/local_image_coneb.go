@@ -348,8 +348,13 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 // row list: podman's single JSON ARRAY, or docker's JSON LINES (one object per line, which
 // is NOT an array and fails a whole-buffer Unmarshal). The array is tried first (the podman
 // shape); on failure each non-empty line is decoded as one object (the docker shape). A line
-// that is not valid JSON is an error — never silently skipped.
+// that is not valid JSON is an error — never silently skipped. EMPTY output (e.g.
+// `docker images --filter dangling=true --format json` on a store with no dangling images)
+// is a valid empty result, not an error.
 func decodeLocalImagesJSON(out []byte) ([]map[string]any, error) {
+	if len(strings.TrimSpace(string(out))) == 0 {
+		return nil, nil
+	}
 	var arr []map[string]any
 	if err := json.Unmarshal(out, &arr); err == nil {
 		return arr, nil
