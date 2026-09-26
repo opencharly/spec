@@ -220,6 +220,11 @@
 		builder_image?:  _|_
 		installer?:      _|_
 		base_user?:      _|_
+		// The bootstrap arm's two build-variant fields. The arm is CLOSED, so these are
+		// already rejected behaviourally; declared explicitly here for the same reason as
+		// the others — a per-field diagnostic instead of the union's "no arm matches".
+		bootstrap_arch?:    _|_
+		bootstrap_variant?: _|_
 	} @go(-) // gengotypes: hand VmSource (spec/union_types.go) — flat discriminated struct
 
 #VmChecksum: {

@@ -102,6 +102,8 @@ func TestVmSourceContainerDiskRejectsCrossBranchFields(t *testing.T) {
 		{"base_user", `base_user: "arch"`},
 		{"kernel_args", `kernel_args: "console=ttyS0"`},
 		{"installer", `installer: {username: "user"}`},
+		{"bootstrap_arch", `bootstrap_arch: "x86_64"`},
+		{"bootstrap_variant", `bootstrap_variant: "v3"`},
 	} {
 		err := vmSource(t, `{
 			kind:  "container_disk"
