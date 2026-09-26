@@ -124,24 +124,36 @@ func HostRooted(node *spec.DeployNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.HostRooted
 }
 
+// SshVenue reports whether node's stamped venue descends over an SSH transport — the
+// host-libvirt vm (`ssh`) OR kubevirt (`kubevirt`). This is the TRANSPORT predicate: a caller
+// that only needs "build an ssh executor for this venue" reads it (both reach the guest over
+// ssh; the executor construction is identical). A caller that must distinguish them reads
+// IsVmVenue/KubeVirtVenue — venue names the substrate (R3).
+func SshVenue(node *spec.DeployNode) bool {
+	return node != nil && node.Descent != nil && node.Descent.Transport == "ssh"
+}
+
 // IsVmVenue reports whether node's stamped venue is the HOST-LIBVIRT vm substrate — the one
 // whose VM lifecycle is `charly vm build`/`vm create`/`vm destroy` over a host-global libvirt
-// domain. The venue token is the dedicated `ssh` value: kubevirt carries its OWN `kubevirt`
-// venue (it is a cluster-managed CR whose lifecycle an out-of-process plugin owns), so a
-// `Venue == "ssh"` test names libvirt unambiguously. Read BY TRAIT over the wire-stamped
-// node.Descent — never by switching on the substrate kind word (the kernel/plugin boundary
-// law). Every libvirt-domain caller shares this ONE predicate.
+// domain. A kubevirt node shares the ssh TRANSPORT but not the host domain: post-migration it
+// carries its OWN `kubevirt` venue (so `Venue == "ssh"` is false); pre-migration it still
+// carries `Venue: "ssh"` with no ExclusiveVenue. The `ExclusiveVenue` guard — the host-resource
+// lease boundary the traits table declares for vm and NOT for kubevirt — keeps this predicate
+// CORRECT IN BOTH STATES, so no consumer's spec/plugin-substrate pin ordering can regress a
+// kubevirt node into the libvirt arm. Read BY TRAIT over the wire-stamped node.Descent — never
+// by switching on the substrate kind word (the kernel/plugin boundary law). Every
+// libvirt-domain caller shares this ONE predicate.
 func IsVmVenue(node *spec.DeployNode) bool {
-	return node != nil && node.Descent != nil && node.Descent.Venue == "ssh"
+	return node != nil && node.Descent != nil && node.Descent.Venue == "ssh" && node.Descent.ExclusiveVenue
 }
 
 // KubeVirtVenue reports whether node's stamped venue is the KUBEVIRT substrate — an ssh hop
 // into a guest whose machine is a cluster-managed VirtualMachine CR. Its lifecycle is owned by
 // the out-of-process candy/plugin-kubevirt (`charly deploy add`/`del`), NOT `charly vm`; a bed
-// bring-up / venue resolver reads this to pick the plugin arm instead of the libvirt arm. A
-// caller that only needs "does this venue reach the guest over ssh" reads the stamped
-// `node.Descent.Transport == "ssh"` (both vm and kubevirt transport over ssh) rather than
-// composing this with IsVmVenue.
+// bring-up / venue resolver reads this to pick the plugin arm instead of the libvirt arm. It is
+// the venue value kubevirt declares AFTER the producer migration
+// (candy/plugin-substrate#19); a caller that must ALSO recognise a PRE-migration kubevirt node
+// (still `Venue: "ssh"`, no ExclusiveVenue) composes `Venue == "ssh" && !ExclusiveVenue`.
 func KubeVirtVenue(node *spec.DeployNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.Venue == "kubevirt"
 }

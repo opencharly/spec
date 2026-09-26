@@ -11,7 +11,7 @@ import (
 // libvirt domain contention unit covers ALONGSIDE (deploy-level) vm members only
 // — an in-substrate member's domain runs inside its parent's venue.
 func TestBedVmDomainsAlongsideOnly(t *testing.T) {
-	ssh := &spec.DescentDescriptor{Transport: "ssh", Venue: "ssh"}
+	ssh := &spec.DescentDescriptor{Transport: "ssh", Venue: "ssh", ExclusiveVenue: true}
 	node := spec.DeployNode{
 		Member: []spec.Member{
 			{Name: "peer-vm", Position: spec.PositionDeployLevel, Node: &spec.DeployNode{Descent: ssh}},
