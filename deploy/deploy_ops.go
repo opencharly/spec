@@ -127,9 +127,9 @@ func HostRooted(node *spec.DeployNode) bool {
 // SshVenue reports whether node's stamped venue is an SSH HOP — a substrate whose commands
 // execute through an ssh transport into a guest (both the host-libvirt vm AND kubevirt).
 // This is the VENUE (transport) predicate: a caller that only needs "build an ssh executor
-// for this venue" reads it. A caller that must distinguish the two ssh substrates (bed
-// bring-up, the libvirt domain lock, the `charly vm` spec path) reads IsVmVenue/KubeVirtVenue
-// instead — venue is not substrate (R3).
+// for this venue" reads it. A caller that must decide whether the node is the HOST-LIBVIRT vm
+// (bed bring-up, the libvirt domain lock, the `charly vm` spec path) reads IsVmVenue instead —
+// venue is not substrate (R3).
 func SshVenue(node *spec.DeployNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.Venue == "ssh"
 }
@@ -141,18 +141,11 @@ func SshVenue(node *spec.DeployNode) bool {
 // traits table declares for vm and deliberately NOT for kubevirt (whose machine is a
 // cluster-managed CR with no host arbiter). Read BY TRAIT over the wire-stamped node.Descent —
 // the same shape HostRooted uses — never by switching on the substrate kind word (the
-// kernel/plugin boundary law). Every libvirt-domain caller shares this ONE predicate.
+// kernel/plugin boundary law). Every libvirt-domain caller shares this ONE predicate: a
+// kubevirt node is NOT a host-libvirt vm, so it falls through to the external/deploy arm
+// (`charly deploy add`/`del`), which the plugin-kubevirt lifecycle owns.
 func IsVmVenue(node *spec.DeployNode) bool {
 	return SshVenue(node) && node.Descent.ExclusiveVenue
-}
-
-// KubeVirtVenue reports whether node's stamped venue is the KUBEVIRT substrate — an ssh hop
-// whose VM lifecycle is owned by the out-of-process candy/plugin-kubevirt (not `charly vm`).
-// It is the exact complement of IsVmVenue within the ssh venue: both descend over ssh, but
-// ExclusiveVenue splits host-libvirt (true) from kubevirt (false). A caller that must
-// distinguish the two reads this rather than re-deriving `Venue == "ssh" && !ExclusiveVenue` (R3).
-func KubeVirtVenue(node *spec.DeployNode) bool {
-	return SshVenue(node) && !node.Descent.ExclusiveVenue
 }
 
 // IsContainerVenue reports whether node's stamped venue is the container-exec (pod) substrate.
