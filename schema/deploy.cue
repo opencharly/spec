@@ -2,7 +2,7 @@
 // DeployNode (charly/deploy.go): a `deploy:` map entry, or a `kind: check`
 // bed (disposable:true + usually iterate:/plan:). #Deploy is the base node;
 // #Check narrows it to the bed invariants. CLOSED. Shared defs REFERENCED, not
-// redefined (R3): #Step/#Op/#Security/#InstallOpts/#Duration/#CalVer/
+// redefined (R3): #Step/#Op/#Security/#InstallOpts/#Duration/
 // #EntityRef/#PortPin/#VmSize/#Sidecar/#ShellSpec live in _common.cue / sidecar.cue.
 
 // #DeployTraits is a SUBSTRATE kind's DECLARED deploy behaviour (P9): a substrate plugin
@@ -76,7 +76,6 @@
 }
 
 #Deploy: {
-	version?:     #CalVer
 	description?: string & !=""
 
 	// target is DERIVED from the node's discriminator kind + cross-ref at load
@@ -547,10 +546,6 @@
 // image, tag, and the ordered candy set included in this deploy (image candies +
 // add_candy overlays, already topo-sorted).
 #DeployRecord: {
-	// schema_version is the ledger-format version (the ledger-candy-keys cutover's
-	// CalVer). Empty means a pre-cutover record (json "layer" keys) — the read path
-	// rejects it with a `charly migrate` hint.
-	schema_version?: string @go(SchemaVersion)
 	deploy_id!:      string @go(DeployID)
 	image!:          string @go(Image)
 	tag?:            string @go(Tag)
@@ -564,9 +559,7 @@
 // (packages installed, files written, services enabled, env.d file created, repo
 // changes) so reversal doesn't need to re-compile the plan from the candy manifest.
 #CandyRecord: {
-	schema_version?: string @go(SchemaVersion)
 	candy!:          string @go(Candy)
-	version?:        string @go(Version)
 	deployed_by!:    [...string] @go(DeployedBy) // set of deploy IDs
 	deployed_at!:    string @go(DeployedAt)
 	builder_image?:  string @go(BuilderImage)

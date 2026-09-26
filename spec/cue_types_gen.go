@@ -1003,8 +1003,6 @@ type Readiness struct {
 type Box struct {
 	Name EntityRef `yaml:"name,omitempty" json:"name,omitempty"`
 
-	Version CalVer `yaml:"version,omitempty" json:"version,omitempty"`
-
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
@@ -2765,8 +2763,6 @@ type Packaging struct {
 type PackagingConfig struct {
 	Path string `yaml:"path,omitempty" json:"path"`
 
-	Version string `yaml:"version,omitempty" json:"version"`
-
 	Description string `yaml:"description,omitempty" json:"description"`
 
 	// plugins — the plugin candy refs the MCP server needs (e.g. plugin-mcp).
@@ -3471,9 +3467,7 @@ type GitCacheEntry struct {
 }
 
 type Candy struct {
-	// --- identity (required: ADE mandates version+name+description+plan) ---
-	Version CalVer `yaml:"version,omitempty" json:"version"`
-
+	// --- identity (required: ADE mandates name+description+plan) ---
 	Name EntityRef `yaml:"name,omitempty" json:"name,omitempty"`
 
 	Description string `yaml:"description,omitempty" json:"description"`
@@ -4376,8 +4370,6 @@ type DescentDescriptor struct {
 }
 
 type Deploy struct {
-	Version CalVer `yaml:"version,omitempty" json:"version,omitempty"`
-
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	// target is DERIVED from the node's discriminator kind + cross-ref at load
@@ -4856,11 +4848,6 @@ type Check Deploy
 // image, tag, and the ordered candy set included in this deploy (image candies +
 // add_candy overlays, already topo-sorted).
 type DeployRecord struct {
-	// schema_version is the ledger-format version (the ledger-candy-keys cutover's
-	// CalVer). Empty means a pre-cutover record (json "layer" keys) — the read path
-	// rejects it with a `charly migrate` hint.
-	SchemaVersion string `yaml:"schema_version,omitempty" json:"schema_version,omitempty"`
-
 	DeployID string `yaml:"deploy_id,omitempty" json:"deploy_id"`
 
 	Image string `yaml:"image,omitempty" json:"image"`
@@ -4880,11 +4867,7 @@ type DeployRecord struct {
 // (packages installed, files written, services enabled, env.d file created, repo
 // changes) so reversal doesn't need to re-compile the plan from the candy manifest.
 type CandyRecord struct {
-	SchemaVersion string `yaml:"schema_version,omitempty" json:"schema_version,omitempty"`
-
 	Candy string `yaml:"candy,omitempty" json:"candy"`
-
-	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 
 	DeployedBy []string `yaml:"deployed_by,omitempty" json:"deployed_by"`
 
