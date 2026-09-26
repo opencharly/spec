@@ -99,10 +99,10 @@ func TestParseLocalImagesJSON_DockerNDJSON(t *testing.T) {
 // parser, which returned that error for empty input.
 func TestParseLocalImagesJSON_EmptyOutput(t *testing.T) {
 	cases := map[string][]byte{
-		"nil":              nil,
-		"empty slice":      {},
-		"newline only":     []byte("\n"),
-		"whitespace only":  []byte("   \n\t"),
+		"nil":             nil,
+		"empty slice":     {},
+		"newline only":    []byte("\n"),
+		"whitespace only": []byte("   \n\t"),
 	}
 	for name, in := range cases {
 		imgs, err := ParseLocalImagesJSON(in)
