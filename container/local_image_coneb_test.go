@@ -68,6 +68,35 @@ func TestParseLocalImagesJSON_DockerRepoTags(t *testing.T) {
 	}
 }
 
+// TestParseLocalImagesJSON_DockerNDJSON covers the REAL `docker images --format json`
+// shape: JSON LINES (one object per line, NOT an array), which a whole-buffer
+// json.Unmarshal rejects ("invalid character '{' after top-level value"). This test FAILS
+// on the pre-change single-Unmarshal parser, the exact failure `charly clean` hit on a
+// docker-backed host.
+func TestParseLocalImagesJSON_DockerNDJSON(t *testing.T) {
+	// Captured from `docker images --format json` (one object per line).
+	js := []byte(`{"Containers":"0","ID":"a1ed56cfb0e7","Repository":"kindest/node","Tag":"v1.34.0"}
+{"Containers":"2","ID":"bb22cc33dd44","Repository":"ghcr.io/opencharly/check-pod","Tag":"2026.150.0916"}`)
+	imgs, err := ParseLocalImagesJSON(js)
+	if err != nil {
+		t.Fatalf("docker NDJSON parse: %v", err)
+	}
+	if len(imgs) != 2 {
+		t.Fatalf("got %d entries, want 2: %+v", len(imgs), imgs)
+	}
+	if imgs[0].ID != "a1ed56cfb0e7" || len(imgs[0].Names) != 1 || imgs[0].Names[0] != "kindest/node:v1.34.0" {
+		t.Fatalf("entry 0 = %+v, want id a1ed56cfb0e7 with kindest/node:v1.34.0", imgs[0])
+	}
+}
+
+// TestParseLocalImagesJSON_MalformedRejected proves a line that is not valid JSON is an
+// error, never a silent skip.
+func TestParseLocalImagesJSON_MalformedRejected(t *testing.T) {
+	if _, err := ParseLocalImagesJSON([]byte(`{"ID":"ok"}` + "\nnot-json\n")); err == nil {
+		t.Fatal("a non-JSON line must be rejected, not silently skipped")
+	}
+}
+
 // TestShortNameMatchesRef — relocated from charly/checkrun_charly_verbs_test.go (it tests this
 // package's unexported shortNameMatchesRef).
 func TestShortNameMatchesRef(t *testing.T) {

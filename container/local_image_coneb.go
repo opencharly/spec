@@ -231,9 +231,18 @@ func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 //
 // Empty-id rows (dangling/untagged) are kept separate via a per-row sentinel
 // key so they never merge into one another.
+//
+// The two engines emit DIFFERENT JSON SHAPES for the same command:
+//
+//   - podman emits a single JSON ARRAY (`[{…},{…}]`);
+//   - docker emits JSON LINES — one object per line, NOT an array (`{…}\n{…}`).
+//
+// Both are accepted, so `charly clean` (and the short-name resolver) work on
+// either engine. A whole-buffer Unmarshal handles the array; a fallback
+// per-line decode handles the docker NDJSON stream.
 func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
-	var rawImages []map[string]any
-	if err := json.Unmarshal(out, &rawImages); err != nil {
+	rawImages, err := decodeLocalImagesJSON(out)
+	if err != nil {
 		return nil, fmt.Errorf("parsing images output: %w", err)
 	}
 	byKey := make(map[string]*LocalImageInfo)
@@ -256,9 +265,9 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 			byKey[key] = info
 			order = append(order, key)
 		}
-		// Tag refs: podman uses "Names". The "RepoTags" fallback below is the docker INSPECT shape;
-		// `docker images --format json` emits neither (measured), so it is dead for that command and
-		// live only for a caller feeding this parser inspect-shaped rows. Merge + dedup.
+		// Tag refs: podman uses "Names". The "RepoTags" fallback is the docker INSPECT shape.
+		// `docker images --format json` (measured on docker 29) emits neither, using separate
+		// "Repository" + "Tag" scalars instead, so that pair is the third fallback. Merge + dedup.
 		var refs []string
 		if names, ok := raw["Names"].([]any); ok {
 			for _, n := range names {
@@ -273,6 +282,18 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 					if s, ok := t.(string); ok {
 						refs = append(refs, s)
 					}
+				}
+			}
+		}
+		if len(refs) == 0 {
+			// docker `images --format json`: Repository + Tag scalars ("<none>" when absent).
+			repo, _ := raw["Repository"].(string)
+			tag, _ := raw["Tag"].(string)
+			if repo != "" && repo != "<none>" {
+				if tag == "" || tag == "<none>" {
+					refs = append(refs, repo)
+				} else {
+					refs = append(refs, repo+":"+tag)
 				}
 			}
 		}
@@ -321,6 +342,37 @@ func ParseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 		result = append(result, *byKey[key])
 	}
 	return result, nil
+}
+
+// decodeLocalImagesJSON decodes either engine's `images --format json` shape into a flat
+// row list: podman's single JSON ARRAY, or docker's JSON LINES (one object per line, which
+// is NOT an array and fails a whole-buffer Unmarshal). The array is tried first (the podman
+// shape); on failure each non-empty line is decoded as one object (the docker shape). A line
+// that is not valid JSON is an error — never silently skipped.
+func decodeLocalImagesJSON(out []byte) ([]map[string]any, error) {
+	var arr []map[string]any
+	if err := json.Unmarshal(out, &arr); err == nil {
+		return arr, nil
+	}
+	var rows []map[string]any
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var row map[string]any
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		// Neither an array nor any JSON line: surface the array-decode error (the
+		// canonical shape) rather than a bare "empty".
+		var arr2 []map[string]any
+		return nil, json.Unmarshal(out, &arr2)
+	}
+	return rows, nil
 }
 
 // ResolveLocalImageRef resolves a user-supplied image reference against the
