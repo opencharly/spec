@@ -71,6 +71,12 @@
 		image: string & !=""
 		pull_policy?: "Always" | "IfNotPresent" | "Never" @go(PullPolicy)
 		pull_secret?: string @go(PullSecret)
+		// disk_path_in_image points KubeVirt at the disk's location INSIDE the image
+		// when it is NOT the scanned default (/disk/disk.img) — e.g. a charly VM box
+		// whose emission places the disk at /disk.qcow2. Renders the VMI
+		// `containerDisk.path`. Empty → KubeVirt scans /disk (the /disk/disk.img
+		// contract).
+		disk_path_in_image?: string @go(DiskPathInImage)
 		data_volume?: _|_
 		pvc?:         _|_
 		clone?:       _|_
