@@ -255,4 +255,11 @@ type InvokeProviderOpts struct {
 	// declared nowhere in that closure but resolvable via an explicit @github canonical ref (the
 	// same Pass-2 fetch the credential/vm/kube host adapters already use) needs this set.
 	ExtraRef string
+
+	// CommandParent names the PARENT when the target is a NESTED class="command" capability
+	// (e.g. "box" for `charly box validate`). The host resolves the target by its full
+	// identity `<class>:<word>:<CommandParent>`; a nested command is never reachable by its
+	// bare word alone, so a peer invoking one names the parent exactly as the CLI grammar and
+	// the registry key do. Empty (the default) — a top-level target.
+	CommandParent string
 }
