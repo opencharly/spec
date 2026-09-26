@@ -7514,6 +7514,43 @@ type CacheTransferReply struct {
 	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
 }
 
+// #ContainerDiskEmitRequest — the verb:oci container-disk-emit wire input: a
+// materialized guest disk, the in-layer path it is stored at, the OCI config
+// labels to carry, and the registry reference to push. Single-sourced here (R3)
+// so candy/plugin-oci's emit leg and its callers (`charly vm box publish`, the
+// Cua Fleet surface) share ONE decoded type instead of two hand-written copies.
+// disk_path is the host path of the disk; in_image_path defaults to the KubeVirt
+// containerDisk contract /disk/disk.img; layout_dir optionally also writes a
+// local OCI Image Layout (oci:<dir>).
+type ContainerDiskEmitRequest struct {
+	DiskPath string `yaml:"disk_path,omitempty" json:"disk_path"`
+
+	InImagePath string `yaml:"in_image_path,omitempty" json:"in_image_path,omitempty"`
+
+	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+
+	Ref string `yaml:"ref,omitempty" json:"ref"`
+
+	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
+
+	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
+}
+
+// #ContainerDiskEmitReply — the emit result: the pushed digest, the media type
+// actually written (the caller asserts the +gzip containerDisk contract), the
+// layer byte size, and the layout dir when one was requested.
+type ContainerDiskEmitReply struct {
+	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
+
+	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
+
+	MediaType string `yaml:"media_type,omitempty" json:"media_type,omitempty"`
+
+	LayerSize int64 `yaml:"layer_size,omitempty" json:"layer_size,omitempty"`
+
+	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
+}
+
 type Pod struct {
 	// References a kind:box (bare lowercase-hyphenated name or remote ref).
 	// Optional: the Go field has no non-empty validator.

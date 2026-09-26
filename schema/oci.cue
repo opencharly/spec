@@ -64,3 +64,31 @@
 	entries?: int    @go(Entries,type=int)
 	ref?:     string @go(Ref)
 }
+
+// #ContainerDiskEmitRequest — the verb:oci container-disk-emit wire input: a
+// materialized guest disk, the in-layer path it is stored at, the OCI config
+// labels to carry, and the registry reference to push. Single-sourced here (R3)
+// so candy/plugin-oci's emit leg and its callers (`charly vm box publish`, the
+// Cua Fleet surface) share ONE decoded type instead of two hand-written copies.
+// disk_path is the host path of the disk; in_image_path defaults to the KubeVirt
+// containerDisk contract /disk/disk.img; layout_dir optionally also writes a
+// local OCI Image Layout (oci:<dir>).
+#ContainerDiskEmitRequest: {
+	disk_path:      string @go(DiskPath)
+	in_image_path?: string @go(InImagePath)
+	labels?:        {[string]: string} @go(Labels,type=map[string]string)
+	ref:            string @go(Ref)
+	insecure?:      bool   @go(Insecure)
+	layout_dir?:    string @go(LayoutDir)
+}
+
+// #ContainerDiskEmitReply — the emit result: the pushed digest, the media type
+// actually written (the caller asserts the +gzip containerDisk contract), the
+// layer byte size, and the layout dir when one was requested.
+#ContainerDiskEmitReply: {
+	ref?:        string @go(Ref)
+	digest?:     string @go(Digest)
+	media_type?: string @go(MediaType)
+	layer_size?: int    @go(LayerSize,type=int64)
+	layout_dir?: string @go(LayoutDir)
+}
