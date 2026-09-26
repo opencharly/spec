@@ -16,11 +16,14 @@
 #DeployTraits: {
 	// venue: how commands physically execute in this substrate's venue:
 	//   container — podman/docker exec into the container by name (pod).
-	//   ssh       — an ssh hop into the guest (vm).
+	//   ssh       — an ssh hop into the host machine guest (vm).
 	//   shell     — the substrate's own root executor runs on the host (local; kubernetes host-side).
 	//   parent    — reached via the parent's venue, no own executor (android).
+	//   kubevirt  — an ssh hop into a guest whose machine is a CLUSTER-managed CR (a KubeVirt
+	//               VirtualMachine), whose lifecycle an out-of-process plugin owns (NOT `charly vm`);
+	//               distinct from `ssh` so a venue test names the host-libvirt vm unambiguously.
 	//   none      — external-in-place (zero value).
-	venue?: ("container" | "ssh" | "shell" | "parent" | "none") @go(Venue, type=string)
+	venue?: ("container" | "ssh" | "shell" | "parent" | "kubevirt" | "none") @go(Venue, type=string)
 	// image_backed: the substrate runs a baked OCI image (pod).
 	image_backed?: bool @go(ImageBacked)
 	// image_context: the substrate composes over an image build context (pod overlay, kubernetes manifests).
@@ -61,7 +64,7 @@
 	// declared venue + leaf_only by kit.DescentFromTraits):
 	//   none           — shares the parent venue; no hop (local, android).
 	//   container-exec — enter the container by name (pod; podman/docker per engine).
-	//   ssh            — an ssh hop into the guest (vm).
+	//   ssh            — an ssh hop into the guest (vm; kubevirt shares this transport).
 	//   reject         — unreachable via the deploy chain (kubernetes → use kubectl).
 	transport: "none" | "container-exec" | "ssh" | "reject"
 	// host_rooted: the substrate's own ROOT executor runs directly on the host

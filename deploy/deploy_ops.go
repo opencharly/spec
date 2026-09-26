@@ -124,28 +124,26 @@ func HostRooted(node *spec.DeployNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.HostRooted
 }
 
-// SshVenue reports whether node's stamped venue is an SSH HOP — a substrate whose commands
-// execute through an ssh transport into a guest (both the host-libvirt vm AND kubevirt).
-// This is the VENUE (transport) predicate: a caller that only needs "build an ssh executor
-// for this venue" reads it. A caller that must decide whether the node is the HOST-LIBVIRT vm
-// (bed bring-up, the libvirt domain lock, the `charly vm` spec path) reads IsVmVenue instead —
-// venue is not substrate (R3).
-func SshVenue(node *spec.DeployNode) bool {
+// IsVmVenue reports whether node's stamped venue is the HOST-LIBVIRT vm substrate — the one
+// whose VM lifecycle is `charly vm build`/`vm create`/`vm destroy` over a host-global libvirt
+// domain. The venue token is the dedicated `ssh` value: kubevirt carries its OWN `kubevirt`
+// venue (it is a cluster-managed CR whose lifecycle an out-of-process plugin owns), so a
+// `Venue == "ssh"` test names libvirt unambiguously. Read BY TRAIT over the wire-stamped
+// node.Descent — never by switching on the substrate kind word (the kernel/plugin boundary
+// law). Every libvirt-domain caller shares this ONE predicate.
+func IsVmVenue(node *spec.DeployNode) bool {
 	return node != nil && node.Descent != nil && node.Descent.Venue == "ssh"
 }
 
-// IsVmVenue reports whether node's stamped venue is the HOST-LIBVIRT vm substrate — the one
-// whose VM lifecycle is `charly vm build`/`vm create`/`vm destroy` over a host-global libvirt
-// domain. The venue hop ("ssh") is SHARED with kubevirt, so the hop alone does NOT name
-// libvirt: the discriminating trait is ExclusiveVenue, the host-resource lease boundary the
-// traits table declares for vm and deliberately NOT for kubevirt (whose machine is a
-// cluster-managed CR with no host arbiter). Read BY TRAIT over the wire-stamped node.Descent —
-// the same shape HostRooted uses — never by switching on the substrate kind word (the
-// kernel/plugin boundary law). Every libvirt-domain caller shares this ONE predicate: a
-// kubevirt node is NOT a host-libvirt vm, so it falls through to the external/deploy arm
-// (`charly deploy add`/`del`), which the plugin-kubevirt lifecycle owns.
-func IsVmVenue(node *spec.DeployNode) bool {
-	return SshVenue(node) && node.Descent.ExclusiveVenue
+// KubeVirtVenue reports whether node's stamped venue is the KUBEVIRT substrate — an ssh hop
+// into a guest whose machine is a cluster-managed VirtualMachine CR. Its lifecycle is owned by
+// the out-of-process candy/plugin-kubevirt (`charly deploy add`/`del`), NOT `charly vm`; a bed
+// bring-up / venue resolver reads this to pick the plugin arm instead of the libvirt arm. A
+// caller that only needs "does this venue reach the guest over ssh" reads the stamped
+// `node.Descent.Transport == "ssh"` (both vm and kubevirt transport over ssh) rather than
+// composing this with IsVmVenue.
+func KubeVirtVenue(node *spec.DeployNode) bool {
+	return node != nil && node.Descent != nil && node.Descent.Venue == "kubevirt"
 }
 
 // IsContainerVenue reports whether node's stamped venue is the container-exec (pod) substrate.
