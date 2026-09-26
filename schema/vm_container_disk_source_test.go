@@ -100,6 +100,8 @@ func TestVmSourceContainerDiskRejectsCrossBranchFields(t *testing.T) {
 		{"builder", `builder: "pacstrap"`},
 		{"builder_image", `builder_image: "omarchy-pacstrap-builder"`},
 		{"base_user", `base_user: "arch"`},
+		{"kernel_args", `kernel_args: "console=ttyS0"`},
+		{"installer", `installer: {username: "user"}`},
 	} {
 		err := vmSource(t, `{
 			kind:  "container_disk"
