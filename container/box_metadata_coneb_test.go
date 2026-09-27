@@ -137,7 +137,7 @@ func TestExtractMetadata_SingularLabels(t *testing.T) {
 	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
 		return map[string]string{
 			"ai.opencharly.version":     "2026.155.1801",
-			"ai.opencharly.image":       "demo",
+			"ai.opencharly.box":         "demo",
 			"ai.opencharly.port":        `["8080:8080"]`,
 			"ai.opencharly.service":     string(svcBlob),
 			"ai.opencharly.env_provide": string(envBlob),

@@ -259,9 +259,6 @@ import "strings"
 // Cross-kind scalar/ref patterns (R3: one home, referenced everywhere).
 // ---------------------------------------------------------------------------
 
-// CalVer schema/entity version: YYYY.DDD.HHMM.
-#CalVer: string & =~"^[0-9]{4}\\.[0-9]{1,3}\\.[0-9]{3,4}$" @go(-)
-
 // A lowercase-hyphenated entity name / cross-ref.
 #EntityRef: string & =~"^[a-z0-9]+(-[a-z0-9]+)*$" @go(-)
 
