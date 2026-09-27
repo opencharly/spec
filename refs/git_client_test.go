@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,6 +157,13 @@ func TestGitClientFreshFileHasCacheSection(t *testing.T) {
 	}
 	if doc.Cache == nil || doc.Cache.Git == nil {
 		t.Fatal("cache: git: section missing")
+	}
+	// The schema-versioning removal cutover dropped the per-host `version:` stamp:
+	// a fresh cache file must carry NO top-level `version:` key (a closed-CUE
+	// unknown field would make the file unloadable). This assertion FAILS if the
+	// stamp write is reinstated.
+	if strings.Contains(string(data), "version:") {
+		t.Fatalf("fresh cache file must not carry a version: stamp, got:\n%s", data)
 	}
 }
 
