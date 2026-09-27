@@ -3,15 +3,14 @@
 // key is a typo) — this replaces the Go UnmarshalYAML known-field typo guard
 // (sdk/loaderkit candyKnownFields, relocated from charly/layers.go in K-wave 2 cone R1 A2).
 // Every key in candyKnownFields is modeled.
-// Shared defs (#Step/#Security/#Shell/#CalVer/#EntityRef/#CandyRef/#PackageItem/
+// Shared defs (#Step/#Security/#Shell/#EntityRef/#CandyRef/#PackageItem/
 // #DistroPackages) come from _common.cue. Source of truth: charly/layers.go
 // CandyYAML + its sub-types (PortSpec, VolumeYAML, AliasYAML, ExtractYAML,
 // DataYAML, RouteYAML, EnvDependency, MCPServerYAML, SecretYAML, HooksConfig,
 // CandyArtifact, CandyCapabilities, ApkPackageSpec, LocalPkgMap, ServiceEntry).
 
 #Candy: {
-	// --- identity (required: ADE mandates version+name+description+plan) ---
-	version:     #CalVer
+	// --- identity (required: ADE mandates name+description+plan) ---
 	name?:       #EntityRef
 	description: string & !=""
 	plan?: [...#Step]
@@ -168,9 +167,6 @@
 	// scope). Rendered to /usr/lib/systemd/{system,user}/<name>.service. NEVER enabled
 	// at install (no post-install enable script; optional preset files, see §3.3).
 	systemd?: [...#PackagingSystemdUnit] @go(Systemd,type=[]*PackagingSystemdUnit)
-	// config — a system-wide project charly.yml shipped in the package (e.g.
-	// /etc/charly/charly.yml) carrying the plugin config the systemd MCP server uses.
-	config?: #PackagingConfig @go(Config,optional=nillable)
 }
 
 // #PackagingVariant — one named plugin-set variant.
@@ -213,18 +209,6 @@
 	wants?:      [...(string & !="")]
 	environment?: {[string]: string} @go(Environment,type=map[string]string)
 	working_directory?: string & !=""
-}
-
-// #PackagingConfig — a system-wide project charly.yml shipped in the package
-// (e.g. /etc/charly/charly.yml) carrying the plugin config the systemd MCP
-// server uses, so the server resolves a local project instead of falling back
-// to a network fetch.
-#PackagingConfig: {
-	path:        string & !=""          // e.g. /etc/charly/charly.yml
-	version:     string & !=""          // the SCHEMA version of the packaged charly (see §3.4)
-	description: string & !=""
-	// plugins — the plugin candy refs the MCP server needs (e.g. plugin-mcp).
-	plugins?:    [...(string & !="")]
 }
 
 // ServiceEntry (spec). use_packaged XOR exec is a Go cross-field
