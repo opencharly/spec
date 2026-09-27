@@ -580,14 +580,14 @@ func (e *ValidationError) HasErrors() bool {
 	return len(e.Errors) > 0
 }
 
-// CandyCandidate is one fetched materialization of a bare candy ref. The git tag is the fetch
-// coordinate; Version is the candy's own per-entity `version:`. Relocated from loaderkit
+// CandyCandidate is one fetched materialization of a bare candy ref. The git tag IS the version
+// (the schema-versioning removal cutover deleted the per-entity authored `version:`); arbitration
+// between materializations runs on this tag. Relocated from loaderkit
 // (candy_version.go) as loader-result DATA; the PickCandyVersion ARBITER that consumes it stays in
 // loaderkit (it needs kit's semver/CalVer comparison — a mechanism).
 type CandyCandidate struct {
 	Scanned ScannedCandy
-	Version string // per-entity version (Scanned.Model.Version) — mandatory, never ""
-	GitTag  string // fetch coordinate (the @github :vTAG)
+	GitTag  string // fetch coordinate (the @github :vTAG) — the ONLY version
 	Source  string // "<repo>@<git-tag>" for warning attribution
 }
 

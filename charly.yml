@@ -130,7 +130,6 @@ proto-gen:
 #
 #   spec/cue_types_gen.go  (cue exp gengotypes — the Go param structs)
 #   spec/vocab_gen.go      (internal/schemagen — the vocab lists)
-#   spec/version_gen.go    (internal/schemagen — SchemaVersion/SchemaFloor)
 #
 # Reproducible: two consecutive runs produce no diff (TestGenReproducible).
 # -----------------------------------------------------------------------------
@@ -164,12 +163,9 @@ cue-gen:
           GOWORK=off go run ./internal/schemagen -mode=retag -out=spec/cue_types_gen.go
           # 3) Companion generator -> the vocab lists.
           GOWORK=off go run ./internal/schemagen -mode=vocab -schema=schema -out=spec/vocab_gen.go
-          # 3b) Companion generator -> the HEAD schema-version consts, read from the
-          #     CUE-owned schema/version.cue #SchemaVersion/#SchemaFloor.
-          GOWORK=off go run ./internal/schemagen -mode=version -schema=schema -out=spec/version_gen.go
           # 4) gofmt the committed generated files.
-          gofmt -w spec/cue_types_gen.go spec/vocab_gen.go spec/version_gen.go
-          echo "cue-gen: regenerated spec/{cue_types_gen.go,vocab_gen.go,version_gen.go}"
+          gofmt -w spec/cue_types_gen.go spec/vocab_gen.go
+          echo "cue-gen: regenerated spec/{cue_types_gen.go,vocab_gen.go}"
         context: [deploy]
       - check: regen is reproducible — TestGenReproducible passes on the committed tree
         command: GOWORK=off go test ./spec/ -run TestGenReproducible -count=1
