@@ -147,7 +147,6 @@
 // directives plus a flat map of name-first entity nodes. Validating a document
 // against #NodeDoc is the load-time "validate-before-execute" gate.
 #NodeDoc: close({
-	version?:  #CalVer
 	repo?:     string & !=""
 	import?:   _
 	discover?: _
@@ -212,5 +211,5 @@
 	// charly.yml (project or box) ever. candy/plugin-gpu and candy/plugin-doctor now carry
 	// their own independent copies as plain (non-#NodeDoc) embedded YAML — see
 	// candy/plugin-gpu/data.yml and candy/plugin-doctor/data.yml.
-	{[!~"^(version|repo|import|discover|defaults|provides|cache|ledger|system|providers|compiled_plugins|context_ignore_baseline|ovmf_paths|ovmf_distro_aliases)$"]: #Node}
+	{[!~"^(repo|import|discover|defaults|provides|cache|ledger|system|providers|compiled_plugins|context_ignore_baseline|ovmf_paths|ovmf_distro_aliases)$"]: #Node}
 })

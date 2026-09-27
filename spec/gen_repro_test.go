@@ -82,19 +82,6 @@ func freshVocabGen(t *testing.T) []byte {
 	return gofmt(t, raw)
 }
 
-// freshVersionGen reproduces spec/version_gen.go via schemagen -mode=version
-// — the CUE-owned SchemaVersion/SchemaFloor consts read from schema/version.cue.
-func freshVersionGen(t *testing.T) []byte {
-	t.Helper()
-	out := filepath.Join(t.TempDir(), "version_gen.go")
-	runIn(t, "..", "go", "run", "./internal/schemagen", "-mode=version", "-schema=schema", "-out="+out)
-	raw, err := os.ReadFile(out)
-	if err != nil {
-		t.Fatalf("read fresh version: %v", err)
-	}
-	return gofmt(t, raw)
-}
-
 func runIn(t *testing.T, dir, name string, args ...string) {
 	t.Helper()
 	cmd := exec.Command(name, args...)
@@ -134,11 +121,6 @@ func TestGenReproducible(t *testing.T) {
 	}
 	if got, want := freshVocabGen(t), committed(t, "vocab_gen.go"); !equalBytes(got, want) {
 		t.Errorf("vocab_gen.go is STALE: a fresh `charly task cue-gen` differs from the committed file.\n"+
-			"Run `charly task cue-gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
-	}
-	if got, want := freshVersionGen(t), committed(t, "version_gen.go"); !equalBytes(got, want) {
-		t.Errorf("version_gen.go is STALE: a fresh `charly task cue-gen` differs from the committed file "+
-			"(did you bump #SchemaVersion in schema/version.cue without running `charly task cue-gen`?).\n"+
 			"Run `charly task cue-gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
 	}
 }
