@@ -137,7 +137,7 @@ func TestExtractMetadata_SingularLabels(t *testing.T) {
 	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
 		return map[string]string{
 			"ai.opencharly.version":     "2026.155.1801",
-			"ai.opencharly.image":       "demo",
+			"ai.opencharly.box":         "demo",
 			"ai.opencharly.port":        `["8080:8080"]`,
 			"ai.opencharly.service":     string(svcBlob),
 			"ai.opencharly.env_provide": string(envBlob),
@@ -237,5 +237,50 @@ func TestExtractMetadata_SkillsLabelMalformed(t *testing.T) {
 	}
 	if _, err := ExtractMetadata("podman", "old-image"); err == nil {
 		t.Fatal("ExtractMetadata must FAIL on a malformed skills label value")
+	}
+}
+
+// TestExtractMetadata_BoundaryIsBoxLabel — the charly-vs-non-charly boundary is
+// ai.opencharly.box, NOT ai.opencharly.version. The schema-versioning removal
+// cutover made an image composed only of local (in-tree) candies carry an EMPTY
+// EffectiveVersion (no source git tag), so an image with a present box label and
+// an EMPTY version label must STILL be recognized as an opencharly image. This
+// fails under the old version-keyed boundary (which returned nil for the empty
+// version) and passes under the box-keyed boundary.
+func TestExtractMetadata_BoundaryIsBoxLabel(t *testing.T) {
+	orig := InspectLabels
+	defer func() { InspectLabels = orig }()
+
+	// (a) box present + version EMPTY → recognized, Version empty.
+	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
+		return map[string]string{
+			spec.LabelBox:     "local-only-app",
+			spec.LabelVersion: "", // empty: no source git tag to derive from
+		}, nil
+	}
+	meta, err := ExtractMetadata("podman", "localhost/local-only-app:test")
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if meta == nil {
+		t.Fatal("an image with a present ai.opencharly.box label and an EMPTY ai.opencharly.version must be recognized")
+	}
+	if meta.Box != "local-only-app" {
+		t.Errorf("meta.Box = %q, want local-only-app", meta.Box)
+	}
+	if meta.Version != "" {
+		t.Errorf("meta.Version = %q, want empty", meta.Version)
+	}
+
+	// (b) neither label → NOT an opencharly image.
+	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
+		return map[string]string{}, nil
+	}
+	meta, err = ExtractMetadata("podman", "docker.io/library/alpine:latest")
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if meta != nil {
+		t.Fatal("an image with no ai.opencharly.box label must NOT be recognized as an opencharly image")
 	}
 }
