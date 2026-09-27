@@ -47,12 +47,14 @@ func ExtractMetadata(engine, imageRef string) (*spec.BoxMetadata, error) {
 		return nil, err
 	}
 
-	version := labels[spec.LabelVersion]
-	if version == "" {
-		// Empty ai.opencharly.version => not an opencharly image (a plain
-		// registry base). This is the charly-vs-non-charly boundary, NOT a
-		// backward-compat shim: every opencharly image always emits a
-		// non-empty EffectiveVersion.
+	// The charly-vs-non-charly boundary is ai.opencharly.box — the box name label
+	// EVERY opencharly image emits. It is NOT ai.opencharly.version: the
+	// schema-versioning removal cutover deleted the authored version, so an image
+	// composed only of local (in-tree) candies carries an EMPTY EffectiveVersion
+	// (no source git tag to derive from) while still being a real opencharly image.
+	box := labels[spec.LabelBox]
+	if box == "" {
+		// Empty ai.opencharly.box => not an opencharly image (a plain registry base).
 		return nil, nil
 	}
 
@@ -60,8 +62,8 @@ func ExtractMetadata(engine, imageRef string) (*spec.BoxMetadata, error) {
 	// they are deployment choices and flow onto BoxMetadata via
 	// MergeDeployOntoMetadata (charly.yml → metadata).
 	meta := &spec.BoxMetadata{
-		Box:      labels[spec.LabelBox],
-		Version:  version,
+		Box:      box,
+		Version:  labels[spec.LabelVersion],
 		Registry: labels[spec.LabelRegistry],
 		User:     labels[spec.LabelUser],
 		Home:     labels[spec.LabelHome],

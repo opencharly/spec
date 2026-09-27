@@ -2746,23 +2746,6 @@ type Packaging struct {
 	// scope). Rendered to /usr/lib/systemd/{system,user}/<name>.service. NEVER enabled
 	// at install (no post-install enable script; optional preset files, see §3.3).
 	Systemd []*PackagingSystemdUnit `yaml:"systemd,omitempty" json:"systemd,omitempty"`
-
-	// config — a system-wide project charly.yml shipped in the package (e.g.
-	// /etc/charly/charly.yml) carrying the plugin config the systemd MCP server uses.
-	Config *PackagingConfig `yaml:"config,omitempty" json:"config,omitempty"`
-}
-
-// #PackagingConfig — a system-wide project charly.yml shipped in the package
-// (e.g. /etc/charly/charly.yml) carrying the plugin config the systemd MCP
-// server uses, so the server resolves a local project instead of falling back
-// to a network fetch.
-type PackagingConfig struct {
-	Path string `yaml:"path,omitempty" json:"path"`
-
-	Description string `yaml:"description,omitempty" json:"description"`
-
-	// plugins — the plugin candy refs the MCP server needs (e.g. plugin-mcp).
-	Plugins []string `yaml:"plugins,omitempty" json:"plugins,omitempty"`
 }
 
 // #PackageSection — a generic format-specific package section (rpm/deb/pac/aur). Raw carries the
