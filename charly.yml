@@ -1,4 +1,3 @@
-version: 2026.261.1747
 # The spec module's project manifest. Its maintenance surface is the
 # `charly task` verbs below — the same generic plugin-task surface the umbrella
 # and charly use. spec owns NO candies/boxes, so there is no `discover:`; only
