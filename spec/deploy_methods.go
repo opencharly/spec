@@ -8,11 +8,13 @@ package spec
 // method, not a type. Ported verbatim from the former hand-written
 // deploy_wire.go (deleted by the SDD conversion).
 
-// HasErrors reports whether any item is error-severity (empty severity counts
-// as error).
+// HasErrors reports whether any item is failure-severity. A non-error tier (info, warning) does
+// NOT fail the gate; an empty severity counts as error (a producer that meant INFO must say so).
+// The predicate lives on Diagnostic (diag_severity.go) so every consumer shares ONE reduction and a
+// new tier — e.g. the scan's INFO advisory — cannot silently count as an error.
 func (d Diagnostics) HasErrors() bool {
 	for _, it := range d.Items {
-		if it.Severity != "warning" {
+		if it.IsError() {
 			return true
 		}
 	}
