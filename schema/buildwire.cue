@@ -13,7 +13,7 @@
 // composition into one scope (opencharly/charly#739). Mirrors spec.ExtraCandyRef.
 #ExtraCandyRef: {
 	ref:    string  @go(Ref)
-	scope?: string  @go(Scope) // "box=<qualified-name>" | "layer=<candy>" | "" (no scope)
+	scope?: string  @go(Scope) // "box=<qualified-name>" | "layer=<candy>" | "kind:local=<template>" | "" (no scope)
 }
 
 // #BuildEnv is the build-context descriptor the host puts in op.Env for an
