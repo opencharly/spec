@@ -31,9 +31,12 @@ package spec
 // two refs in different scopes are independent compositions. An EMPTY scope means "no scope"
 // — a context with no owning composition — and never conflicts.)
 
-// ExtraCandyRefStrings projects the typed list back to its raw ref strings (the transport
-// form a wire field or a legacy consumer needs). The SCOPE is dropped here ONLY because the
-// transport carries refs alone; the receiver re-attaches a scope when it knows the box.
+// ExtraCandyRefStrings projects the typed list back to its raw ref strings for the consumers
+// that need ONLY the ref word and not its composition scope — today that is the plugin-word
+// collector (`charly`'s collectReferencedPluginWords, reached via host_build_buildengine.go)
+// and `plugin-build`'s resolve_project_word.go. It is a PROJECTION over the typed list, never a
+// second source of truth: the scope is not lost because the CALLER re-attaches it when it knows
+// its box. (The wire fields all carry []ExtraCandyRef — this is not a legacy transport path.)
 func ExtraCandyRefStrings(refs []ExtraCandyRef) []string {
 	if len(refs) == 0 {
 		return nil
