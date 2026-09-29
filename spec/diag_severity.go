@@ -20,10 +20,16 @@ const (
 	SeverityError = "error"
 )
 
-// IsError reports whether a diagnostic Severity is failure-tier. An EMPTY severity counts as error
-// (the established convention — a producer that meant INFO must say so), and every non-error tier
-// (info, warning) does NOT. This is the ONE predicate the verdicts share, so a new tier cannot
-// reintroduce the "anything not warning is an error" defect.
+// IsError reports whether a diagnostic Severity is failure-tier. The NON-error tiers are
+// enumerated EXPLICITLY below; EVERY other value — including an empty severity — is treated as an
+// error (fail-closed: a producer that means a non-error tier MUST use one of the declared
+// constants, so an unknown tier can never silently pass a gate). Adding a new NON-error tier
+// REQUIRES adding it to this switch — that is the contract, and diag_severity_test.go pins it.
 func (d Diagnostic) IsError() bool {
-	return d.Severity != SeverityInfo && d.Severity != SeverityWarning
+	switch d.Severity {
+	case SeverityInfo, SeverityWarning:
+		return false
+	default:
+		return true
+	}
 }
