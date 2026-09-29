@@ -1,5 +1,7 @@
 package spec
 
+import "strings"
+
 // resolve_opts.go — the loader-config OPTIONS (ResolveOpts), the scan/load options threaded through
 // the candy scan + project resolution. Relocated here from sdk/loaderkit (#55 loader cascade) so the
 // ~14 charly-core call sites that only NAME this options struct reach it through the dedicated spec
@@ -63,9 +65,17 @@ func ScopedExtraCandyRefs(scope string, refs ...string) []ExtraCandyRef {
 // carries and the reachability walk's referrers use are built here, so a producer and a
 // consumer can never disagree on the wire form.
 
+// ScopePrefixBox is the wire prefix of a BOX composition scope. A box is the ONLY conflict
+// -eligible composition unit — the version rule is "multiple layers INSIDE the same box pin
+// different versions of one candy" and nothing else — so this prefix (via ScopeIsBox) is the
+// predicate the arbiter consults. Declared here, beside the constructors, so the builder and
+// the tester of a scope can never disagree (R3); consumers test membership with ScopeIsBox
+// rather than re-spelling the literal.
+const ScopePrefixBox = "box="
+
 // BoxScope is the scope of a box's own candy closure (and of a deploy's `add_candy:` refs,
 // which are part of the deploy's box composition).
-func BoxScope(box string) string { return "box=" + box }
+func BoxScope(box string) string { return ScopePrefixBox + box }
 
 // LayerScope is the scope of a layer's OWN authored require:/candy: deps — used both for a
 // shared layer's attribution and for a local candy's harvested raw refs.
@@ -73,6 +83,16 @@ func LayerScope(candy string) string { return "layer=" + candy }
 
 // KindLocalScope is the scope of a `kind: local` template's candy list.
 func KindLocalScope(template string) string { return "kind:local=" + template }
+
+// ScopeIsBox reports whether a composition scope label names a BOX. A box is the ONLY
+// composition unit that can hold a genuine version conflict: two layers inside ONE box pinning
+// different versions of the same candy. Every other scope — an unattributable layer
+// ("layer=<candy>"), a kind:local template ("kind:local=<tpl>"), a bare capability-connect
+// scan (the empty scope) — is an INDEPENDENT composition and its own difference is
+// informational, never a conflict. This predicate is the single source of that rule (R3); the
+// arbiter (loaderkit.PickCandyVersion) and any producer consult it rather than re-spelling the
+// "box=" literal (opencharly/charly#739).
+func ScopeIsBox(scope string) bool { return strings.HasPrefix(scope, ScopePrefixBox) }
 
 // ResolveOpts carries the scan/load options threaded through the candy scan + project resolution.
 type ResolveOpts struct {

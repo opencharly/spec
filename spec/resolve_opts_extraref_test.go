@@ -26,3 +26,19 @@ func TestScopeGrammarIsStable(t *testing.T) {
 		t.Fatalf("scope grammar drifted: %q %q %q", BoxScope("x"), LayerScope("y"), KindLocalScope("z"))
 	}
 }
+
+// ScopeIsBox is the SINGLE owner of the conflict-eligibility rule (R3): a box is the only
+// composition unit two references genuinely share, so only a "box=" scope may conflict. Every
+// other scope form the grammar produces — plus the empty "no scope" — is silent, and the
+// predicate must agree with the constructors rather than spell the prefix itself
+// (opencharly/charly#739).
+func TestScopeIsBoxIsTheOnlyConflictEligibleScope(t *testing.T) {
+	if !ScopeIsBox(BoxScope("any-box")) {
+		t.Fatalf("a box scope must be conflict-eligible: %q", BoxScope("any-box"))
+	}
+	for _, silent := range []string{LayerScope("layer-x"), KindLocalScope("tpl"), "", "deploy=x", "box"} {
+		if ScopeIsBox(silent) {
+			t.Errorf("scope %q must NOT be conflict-eligible (only a box= scope)", silent)
+		}
+	}
+}
