@@ -9,11 +9,11 @@ type RemoteDownload struct {
 	Version  string
 	Refs     []string // bare refs to import (e.g. "github.com/org/repo/candy/name")
 	// RefReferrers maps each bare ref in Refs to the SCOPE labels that named it
-	// ("box=<name>", "layer=<name>", "kind:local=<tpl>", "deploy=add_candy"). The ref
+	// ("box=<name>", "layer=<name>", "kind:local=<tpl>"). The ref
 	// collector sees the reachability context; the post-fetch arbiter
 	// (loaderkit.PickCandyVersion) does not, so the context travels WITH the fetch descriptor
 	// and is attached to each spec.CandyCandidate it produces. It is what lets the arbiter
-	// distinguish a genuine SAME-scope conflict (≥2 referrers sharing a scope) from
+	// distinguish a genuine SAME-BOX conflict (≥2 referrers sharing a box scope) from
 	// independent boxes that legitimately pin different versions (no notice).
 	//
 	// Optional: a producer that has no referrer context (a synthetic/test download) leaves it

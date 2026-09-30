@@ -2857,6 +2857,16 @@ type BuildTarget struct {
 	Auto bool `yaml:"auto,omitempty" json:"auto,omitempty"`
 }
 
+// #ExtraCandyRef is a candy ref collected IN ADDITION to the closure, together with the
+// composition SCOPE that named it. The scope travels WITH the ref so the version arbiter never
+// has to GUESS it — a flat [...string] lost the origin and a constant label then collapsed every
+// composition into one scope (opencharly/charly#739). Mirrors spec.ExtraCandyRef.
+type ExtraCandyRef struct {
+	Ref string `yaml:"ref,omitempty" json:"ref"`
+
+	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"`
+}
+
 // #BuildEnv is the build-context descriptor the host puts in op.Env for an
 // OpEmit Invoke at image-generation time: the image's distro tags + name, so
 // a plugin can tailor its emitted Containerfile fragment per distro/arch.
@@ -2878,7 +2888,7 @@ type BuildEnv struct {
 	// overlay build correctly resolved host-side is absent from this plugin's INDEPENDENT
 	// envelope fetch, and candyByName's REMOTE-candy fallback still misses (RCA'd K1-alpha
 	// regression: check-addcandy-pod's overlay-deploy path, "candy not found").
-	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
+	ExtraCandyRefs []ExtraCandyRef `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
 }
 
 // #EmitReply is what a plugin verb/builder returns from an OpEmit Invoke at
@@ -2971,7 +2981,7 @@ type BuilderResolveInput struct {
 type BuildRequest struct {
 	Boxes []string `yaml:"boxes,omitempty" json:"boxes,omitempty"`
 
-	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
+	ExtraCandyRefs []ExtraCandyRef `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
 
 	Tag string `yaml:"tag,omitempty" json:"tag,omitempty"`
 
@@ -7744,7 +7754,7 @@ type ResolvedProjectRequest struct {
 	// pulled in via its own synthetic-augmented scan, and BuildDeployPlan fails "candy not in
 	// resolved-project envelope" (RCA'd K1-alpha regression, check-addcandy-pod/check-stepkind-
 	// emit-pod).
-	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
+	ExtraCandyRefs []ExtraCandyRef `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
 
 	// requested_boxes — the explicit build/generate targets (`charly box generate <name>`),
 	// buildkit.NormalizeBoxArgs-normalized (task #17 fix). The reachability-scoped remote-ref
@@ -8765,7 +8775,7 @@ type DeployCompileRequest struct {
 	// into the plugin's OWN InvokeProvider("build","project") re-fetch (as its extra_candy_refs) so
 	// the envelope's candy map ALSO carries them (RCA'd K1-alpha regression: the two scans were
 	// independent, so a remote add-candy resolved host-side never reached the envelope).
-	ExtraCandyRefs []string `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
+	ExtraCandyRefs []ExtraCandyRef `yaml:"extra_candy_refs,omitempty" json:"extra_candy_refs,omitempty"`
 
 	// candy_ref selects the CANDY shape above (K4 unit B): the authored ref string (bare local
 	// name OR a `@github…` remote ref) the plugin resolves via BareRef against its own

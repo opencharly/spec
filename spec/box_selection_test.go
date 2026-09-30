@@ -130,20 +130,23 @@ func TestWithLocalRawRefs(t *testing.T) {
 			t.Fatalf("ExtraCandyRefs = %v, want the %d require:/candy: raws", got.ExtraCandyRefs, len(want))
 		}
 		for _, r := range got.ExtraCandyRefs {
-			if !want[r] {
-				t.Errorf("unexpected harvested ref %q (bake_plugin: must NOT be harvested)", r)
+			if !want[r.Ref] {
+				t.Errorf("unexpected harvested ref %q (bake_plugin: must NOT be harvested)", r.Ref)
+			}
+			if r.Scope != LayerScope("local-a") {
+				t.Errorf("harvested ref %q scope = %q, want the owning layer scope %q", r.Ref, r.Scope, LayerScope("local-a"))
 			}
 		}
 	})
 
 	t.Run("pre-existing ExtraCandyRefs are preserved, input opts untouched", func(t *testing.T) {
-		in := ResolveOpts{ExtraCandyRefs: []string{"add-candy-ref"}}
+		in := ResolveOpts{ExtraCandyRefs: ScopedExtraCandyRefs(BoxScope("my-box"), "add-candy-ref")}
 		got := WithLocalRawRefs(in, scanned)
 		if len(in.ExtraCandyRefs) != 1 {
 			t.Errorf("input opts mutated: %v (must copy, never append in place)", in.ExtraCandyRefs)
 		}
-		if got.ExtraCandyRefs[0] != "add-candy-ref" {
-			t.Errorf("ExtraCandyRefs[0] = %q, want the pre-existing add_candy ref first", got.ExtraCandyRefs[0])
+		if got.ExtraCandyRefs[0].Ref != "add-candy-ref" || got.ExtraCandyRefs[0].Scope != BoxScope("my-box") {
+			t.Errorf("ExtraCandyRefs[0] = %+v, want the pre-existing add_candy ref (scope preserved) first", got.ExtraCandyRefs[0])
 		}
 		if len(got.ExtraCandyRefs) != 3 {
 			t.Errorf("ExtraCandyRefs = %v, want 1 pre-existing + 2 harvested", got.ExtraCandyRefs)

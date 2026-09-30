@@ -862,7 +862,7 @@
 	// into the plugin's OWN InvokeProvider("build","project") re-fetch (as its extra_candy_refs) so
 	// the envelope's candy map ALSO carries them (RCA'd K1-alpha regression: the two scans were
 	// independent, so a remote add-candy resolved host-side never reached the envelope).
-	extra_candy_refs?: [...string] @go(ExtraCandyRefs)
+	extra_candy_refs?: [...#ExtraCandyRef] @go(ExtraCandyRefs)
 	// candy_ref selects the CANDY shape above (K4 unit B): the authored ref string (bare local
 	// name OR a `@github…` remote ref) the plugin resolves via BareRef against its own
 	// rp.CandyModels/rp.Candies (widened, when remote, by extra_candy_refs carrying the SAME raw

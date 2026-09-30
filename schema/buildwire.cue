@@ -7,6 +7,15 @@
 // Invoke at IMAGE BUILD time. Plain structs — gengotypes generates them
 // faithfully, no disjunction needed.
 
+// #ExtraCandyRef is a candy ref collected IN ADDITION to the closure, together with the
+// composition SCOPE that named it. The scope travels WITH the ref so the version arbiter never
+// has to GUESS it — a flat [...string] lost the origin and a constant label then collapsed every
+// composition into one scope (opencharly/charly#739). Mirrors spec.ExtraCandyRef.
+#ExtraCandyRef: {
+	ref:    string  @go(Ref)
+	scope?: string  @go(Scope) // "box=<qualified-name>" | "layer=<candy>" | "kind:local=<template>" | "" (no scope)
+}
+
 // #BuildEnv is the build-context descriptor the host puts in op.Env for an
 // OpEmit Invoke at image-generation time: the image's distro tags + name, so
 // a plugin can tailor its emitted Containerfile fragment per distro/arch.
@@ -24,7 +33,7 @@
 	// overlay build correctly resolved host-side is absent from this plugin's INDEPENDENT
 	// envelope fetch, and candyByName's REMOTE-candy fallback still misses (RCA'd K1-alpha
 	// regression: check-addcandy-pod's overlay-deploy path, "candy not found").
-	extra_candy_refs?: [...string] @go(ExtraCandyRefs)
+	extra_candy_refs?: [...#ExtraCandyRef] @go(ExtraCandyRefs)
 }
 
 // #EmitReply is what a plugin verb/builder returns from an OpEmit Invoke at
@@ -90,7 +99,7 @@
 // Invoke (op.Params).
 #BuildRequest: {
 	boxes?: [...string] @go(Boxes) // positional box selection ("" → all enabled)
-	extra_candy_refs?: [...string] @go(ExtraCandyRefs) // extra candy refs to widen the resolve (e.g. an overlay's add_candy set); scanned into resolveBuildEngine
+	extra_candy_refs?: [...#ExtraCandyRef] @go(ExtraCandyRefs) // extra candy refs (with their composition scope) to widen the resolve (e.g. an overlay's add_candy set); scanned into resolveBuildEngine
 
 	tag?:              string @go(Tag)             // --tag override (empty → CalVer)
 	dir?:              string @go(Dir)              // project dir the host reconstructs config from

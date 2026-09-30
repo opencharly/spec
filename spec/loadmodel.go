@@ -594,11 +594,13 @@ type CandyCandidate struct {
 	// "box=<qualified-name>" for a box's own candy closure (a box's authored list UNION every
 	// layer its closure reaches, so "≥2 layers inside one box" is one scope), "kind:local=<tpl>"
 	// for a kind:local template, "layer=<name>" for a layer reachable from no collected box (its
-	// own silent scope), and "deploy=add_candy" for a deploy overlay. A bare ref is composed by
+	// own silent scope), and "box=<deploy>" for a deploy overlay's add_candy: refs (they belong
+	// to that deploy's box composition). A bare ref is composed by
 	// MANY independent, immutable boxes across the assembled closure; a version difference BETWEEN
-	// boxes is NOT a conflict, so a diagnostic fires only when ONE scope's own references name ≥2
-	// distinct tags. Without this, every box's legitimate choice merged into one global set and the
-	// closure reported thousands of conflicts no single composition ever saw (charly#735 §9).
+	// boxes is NOT a conflict, so a diagnostic fires only when ONE BOX scope's own references name
+	// ≥2 distinct tags (spec.ScopeIsBox — a layer/kind:local/empty scope is not conflict-eligible).
+	// Without this, every box's legitimate choice merged into one global set and the
+	// closure reported thousands of conflicts no single composition ever saw (charly#735 §9, #739).
 	Referrers []string
 }
 

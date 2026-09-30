@@ -335,7 +335,7 @@
 	// pulled in via its own synthetic-augmented scan, and BuildDeployPlan fails "candy not in
 	// resolved-project envelope" (RCA'd K1-alpha regression, check-addcandy-pod/check-stepkind-
 	// emit-pod).
-	extra_candy_refs?: [...string] @go(ExtraCandyRefs)
+	extra_candy_refs?: [...#ExtraCandyRef] @go(ExtraCandyRefs)
 	// requested_boxes — the explicit build/generate targets (`charly box generate <name>`),
 	// buildkit.NormalizeBoxArgs-normalized (task #17 fix). The reachability-scoped remote-ref
 	// COLLECTION walk (loaderkit.CollectRemoteRefsOpts) only follows base/builder edges from
