@@ -2,6 +2,7 @@ package ops
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	pb "github.com/opencharly/spec/proto"
@@ -61,6 +62,10 @@ func TestOpSelectorsStable(t *testing.T) {
 		OpConfigWrite:        "config-write",
 		OpConfigSetup:        "config-setup",
 		OpConfigRemove:       "config-remove",
+		OpWorkflowRun:        "workflow-run",
+		OpWorkflowResume:     "workflow-resume",
+		OpWorkflowSchedule:   "workflow-schedule",
+		OpWorkflowEmit:       "workflow-emit",
 		OpStatusCollect:      "status-collect",
 		OpStatusCollectAll:   "status-collect-all",
 		OpPreresolve:         "preresolve",
@@ -87,6 +92,7 @@ func TestOpSelectorsDistinct(t *testing.T) {
 		OpAttach, OpRebuild, OpConfigWrite, OpConfigSetup, OpConfigRemove,
 		OpStatusCollect, OpStatusCollectAll, OpPreresolve, OpBootstrap, OpPreflight,
 		OpEphemeralRegister, OpEphemeralTeardown, OpDeployDispatch, OpVerifyChecks,
+		OpWorkflowRun, OpWorkflowResume, OpWorkflowSchedule, OpWorkflowEmit,
 	}
 	seen := map[string]bool{}
 	for _, s := range all {
@@ -147,5 +153,63 @@ func TestParseResultJSONEmptyAndMalformed(t *testing.T) {
 	}
 	if _, _, err := ParseResultJSON(&pb.InvokeReply{ResultJson: []byte("not-json")}); err == nil {
 		t.Fatal("a malformed payload must return a non-nil error")
+	}
+}
+
+// The captured value is the workflow engine's `$<id>.captured.<field>` carrier, so the round
+// trip must preserve the STRUCTURE, not just the bytes: a consumer addresses a nested path.
+func TestResultJSONCapturedRoundTrip(t *testing.T) {
+	r, err := ResultJSONCaptured("pass", "probed", map[string]any{
+		"http": map[string]any{"status": 200, "headers": map[string]any{"x-trace": "abc"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, message, captured, err := ParseResultJSONFull(r)
+	if err != nil {
+		t.Fatalf("ParseResultJSONFull: %v", err)
+	}
+	if status != "pass" || message != "probed" {
+		t.Fatalf("round-trip = (%q, %q)", status, message)
+	}
+	var got struct {
+		HTTP struct {
+			Status  int               `json:"status"`
+			Headers map[string]string `json:"headers"`
+		} `json:"http"`
+	}
+	if err := json.Unmarshal(captured, &got); err != nil {
+		t.Fatalf("captured is not addressable JSON: %v", err)
+	}
+	if got.HTTP.Status != 200 || got.HTTP.Headers["x-trace"] != "abc" {
+		t.Fatalf("captured = %+v, want http.status 200 and x-trace abc", got.HTTP)
+	}
+
+	// The two-return decoder must keep working on the SAME reply — one wire, two entry points.
+	if s, m, err := ParseResultJSON(r); err != nil || s != "pass" || m != "probed" {
+		t.Fatalf("ParseResultJSON on a captured reply = (%q, %q, %v)", s, m, err)
+	}
+}
+
+// A verb that captured NOTHING must produce bytes byte-identical to the pre-extension form:
+// that is the compatibility guarantee every existing producer relies on.
+func TestResultJSONCapturedNilIsByteIdentical(t *testing.T) {
+	plain, err := ResultJSON("pass", "ok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nilCaptured, err := ResultJSONCaptured("pass", "ok", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(plain.GetResultJson()) != string(nilCaptured.GetResultJson()) {
+		t.Fatalf("nil capture changed the wire: %s vs %s", plain.GetResultJson(), nilCaptured.GetResultJson())
+	}
+	if strings.Contains(string(plain.GetResultJson()), "captured_value") {
+		t.Fatalf("the field must drop out entirely when unset: %s", plain.GetResultJson())
+	}
+	// And ParseResultJSONFull agrees: no status, no capture.
+	if s, _, c, err := ParseResultJSONFull(nil); s != "" || c != nil || err != nil {
+		t.Fatalf("nil reply = (%q, %v, %v), want empty", s, c, err)
 	}
 }

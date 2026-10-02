@@ -103,6 +103,23 @@ const (
 	OpEngineUnitEmit      = "unit_emit"      // engine: supervision unit file contents → spec.EngineUnitReply
 	OpEngineNetworkEnsure = "network_ensure" // engine: ensure the shared network exists → spec.EngineNetworkEnsureReply
 
+	// The `workflow` provider-class selectors (spec/schema/workflow.cue). A workflow ENGINE
+	// plugin — workflow:lobster today, workflow:github-actions later — dispatches
+	// req.GetOp() against these, decoding the matching spec.Workflow*Request and returning
+	// the spec.Workflow*Reply. The engine WORD is the capability's second segment
+	// (`workflow:lobster`); a front-end reaches it through InvokeProvider("workflow",
+	// <engine>, …) exactly as it reaches an engine, so a new engine needs no front-end
+	// change. Generic action selectors, never provider words (F11).
+	//
+	// The values are PREFIXED, like OpStatusCollect/OpStatusCollectAll above: a bare "emit"
+	// would collide with OpEmit (deploy/step) and a bare "schedule"/"run" with a future
+	// lifecycle selector, and this file's invariant is that no two selectors share a value
+	// even across classes.
+	OpWorkflowRun      = "workflow-run"      // workflow: resolve the pipeline to the IR, lower it, execute it → spec.WorkflowRunReply
+	OpWorkflowResume   = "workflow-resume"   // workflow: answer a pending approval/input gate by resume token or short id → spec.WorkflowRunReply
+	OpWorkflowSchedule = "workflow-schedule" // workflow: apply|list|remove|run-now the trigger's systemd-user timers → spec.WorkflowScheduleReply
+	OpWorkflowEmit     = "workflow-emit"     // workflow: lower the IR to a consumer's on-disk form (lobster, charly-yml, github-actions) → spec.WorkflowEmitReply
+
 	OpStatusCollect = "status-collect" // command:status: programmatic status collection → []spec.DeploymentStatus (distinct from lifecycle OpStatus)
 
 	// OpStatusCollectAll is the K6 whole-subsystem status FAN-OUT + deploy-cone ENRICHMENT
@@ -203,15 +220,44 @@ const (
 
 // resultWire is the {status,message} wire form every out-of-process check verb returns (the
 // host's pluginCheckResult). status ∈ "pass" | "fail" | "skip".
+//
+// CapturedValue is the OPTIONAL structured value a check verb captured while making its
+// judgement — the parsed body of an HTTP probe, the matched fields of a log scan, the row a
+// SQL check read. It is carried as raw JSON so a consumer addresses it by dotted path (a
+// workflow's `$<id>.captured.<field>`) WITHOUT the contract module having to name every
+// verb's shape. Omitted when a verb captures nothing, so the wire stays byte-identical to the
+// pre-extension form for every existing producer (the `omitempty` is the compatibility
+// guarantee, not a style choice).
 type resultWire struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Status        string          `json:"status"`
+	Message       string          `json:"message"`
+	CapturedValue json.RawMessage `json:"captured_value,omitempty"`
 }
 
 // ResultJSON builds the InvokeReply an out-of-process check verb's Invoke returns — the SAME
 // {status,message} shape every verb plugin (and ServeCheckVerb) emits (R3).
 func ResultJSON(status, msg string) (*pb.InvokeReply, error) {
 	j, err := json.Marshal(resultWire{Status: status, Message: msg})
+	if err != nil {
+		return nil, err
+	}
+	return &pb.InvokeReply{ResultJson: j}, nil
+}
+
+// ResultJSONCaptured is ResultJSON for a verb that ALSO captured a structured value. `captured`
+// is marshalled as-is and reaches the consumer untouched; a nil `captured` produces exactly the
+// bytes ResultJSON produces (the field drops out), so a caller may pass an optional capture
+// without branching.
+func ResultJSONCaptured(status, msg string, captured any) (*pb.InvokeReply, error) {
+	w := resultWire{Status: status, Message: msg}
+	if captured != nil {
+		raw, err := json.Marshal(captured)
+		if err != nil {
+			return nil, err
+		}
+		w.CapturedValue = raw
+	}
+	j, err := json.Marshal(w)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +280,26 @@ func ParseResultJSON(reply *pb.InvokeReply) (status, message string, err error) 
 		return "", "", err
 	}
 	return w.Status, w.Message, nil
+}
+
+// ParseResultJSONFull is ParseResultJSON for a consumer that ALSO needs the captured value
+// (the workflow engine addressing `$<id>.captured.<field>`, the CLI echoing a probe's payload).
+// It is deliberately a SEPARATE entry point rather than a fourth return on ParseResultJSON:
+// the two-return form is called from many places that must not be forced to grow a branch, and
+// one signature serves one need (R3: one declaration per wire surface, not one declaration per
+// caller).
+//
+// `captured` is nil both when the producer captured nothing AND when the reply is absent/empty
+// — callers tell those apart exactly as ParseResultJSON's callers do, by the status being "".
+func ParseResultJSONFull(reply *pb.InvokeReply) (status, message string, captured json.RawMessage, err error) {
+	if reply == nil || len(reply.GetResultJson()) == 0 {
+		return "", "", nil, nil
+	}
+	var w resultWire
+	if err := json.Unmarshal(reply.GetResultJson(), &w); err != nil {
+		return "", "", nil, err
+	}
+	return w.Status, w.Message, w.CapturedValue, nil
 }
 
 // InvokeProviderOpts carries the OPTIONAL extras to an InvokeProvider peer-dispatch call. The zero

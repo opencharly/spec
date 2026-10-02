@@ -7523,6 +7523,258 @@ type ContainerDiskEmitReply struct {
 	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
 }
 
+// #PipelineRetry — lobster `retry`: retry the failed step up to `max` attempts.
+type PipelineRetry struct {
+	Max int64 `yaml:"max,omitempty" json:"max,omitempty"`
+
+	DelayMs int64 `yaml:"delay_ms,omitempty" json:"delay_ms,omitempty"`
+
+	Factor any/* CUE number; int64 or float64 */ `yaml:"factor,omitempty" json:"factor,omitempty"`
+}
+
+// #PipelineApproval — the OBJECT form of lobster `approval`. The AUTHORED form is a
+// union (bool | string | this struct) so `approval: true` stays terse; the IR
+// (#WorkflowStep) always carries this object form.
+type PipelineApproval struct {
+	Message string `yaml:"message,omitempty" json:"message,omitempty"`
+
+	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+}
+
+// #PipelineFlow — the flow keys EVERY pipeline step carries, whatever its exec arm.
+// Embedded by each step def (gengotypes FLATTENS an embedded def into the parent
+// struct; verified against cue v0.16.1). It deliberately does NOT carry `approval`,
+// which both step defs declare with their own type.
+type PipelineFlow struct {
+	Id string `yaml:"id,omitempty" json:"id"`
+
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
+
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+
+	Stdin string `yaml:"stdin,omitempty" json:"stdin,omitempty"`
+
+	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+
+	OnError string `yaml:"on_error,omitempty" json:"on_error,omitempty"`
+
+	Retry PipelineRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
+}
+
+// #PipelineArms — the EXEC arms, embedded by both the authored step and the IR
+// step. Declaring them once (R3) keeps the authored and normalized shapes from
+// drifting; only the exec-arm XOR (Go) and the flow keys distinguish the two.
+type PipelineArms struct {
+	// --- lobster exec arms ---
+	Run string `yaml:"run,omitempty" json:"run,omitempty"`
+
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+
+	Workflow string `yaml:"workflow,omitempty" json:"workflow,omitempty"`
+
+	WorkflowArgs map[string]string `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
+
+	Parallel PipelineParallel `yaml:"parallel,omitempty" json:"parallel,omitempty"`
+
+	ForEach string `yaml:"for_each,omitempty" json:"for_each,omitempty"`
+
+	Input PipelineInput `yaml:"input,omitempty" json:"input,omitempty"`
+
+	// --- for_each companions (meaningful only alongside for_each) ---
+	ItemVar string `yaml:"item_var,omitempty" json:"item_var,omitempty"`
+
+	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
+
+	BatchSize int64 `yaml:"batch_size,omitempty" json:"batch_size,omitempty"`
+
+	PauseMs int64 `yaml:"pause_ms,omitempty" json:"pause_ms,omitempty"`
+
+	Steps []PipelineSubStep `yaml:"steps,omitempty" json:"steps,omitempty"`
+
+	// --- charly arms: the FULL charly grammar, any plugin of any class ---
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	Charly []string `yaml:"charly,omitempty" json:"charly,omitempty"`
+}
+
+// #PipelineParallel — lobster `parallel`. `wait: "any"` returns the first branch and
+// cancels the rest; `wait: "all"` (the default) collects every branch.
+type PipelineParallel struct {
+	Wait string `yaml:"wait,omitempty" json:"wait,omitempty"`
+
+	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+
+	Branches []PipelineSubStep `yaml:"branches,omitempty" json:"branches"`
+}
+
+// #PipelineSubStep — a step INSIDE `parallel.branches[]` or `for_each.steps[]`. It is
+// NON-RECURSIVE by construction (lobster's own rule): no nested parallel/for_each/
+// input/workflow and no approval, so a workflow stays flat and exportable.
+type PipelineSubStep struct {
+	Id string `yaml:"id,omitempty" json:"id"`
+
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
+
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+
+	Stdin string `yaml:"stdin,omitempty" json:"stdin,omitempty"`
+
+	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+
+	OnError string `yaml:"on_error,omitempty" json:"on_error,omitempty"`
+
+	Retry PipelineRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
+
+	Run string `yaml:"run,omitempty" json:"run,omitempty"`
+
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	Charly []string `yaml:"charly,omitempty" json:"charly,omitempty"`
+}
+
+// #PipelineInput — the lobster `input` gate. `response_schema` is a JSON Schema
+// document; the engine validates the resume response against it
+// (cuelang.org/go/encoding/jsonschema). The `.lobster` importer maps lobster's own
+// `responseSchema` spelling onto this charly snake_case key.
+type PipelineInput struct {
+	Prompt string `yaml:"prompt,omitempty" json:"prompt"`
+
+	ResponseSchema map[string]any `yaml:"response_schema,omitempty" json:"response_schema,omitempty"`
+
+	Defaults map[string]string `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+}
+
+// #PipelineStepBase — one authored workflow step.
+type PipelineStepBase struct {
+	Id string `yaml:"id,omitempty" json:"id"`
+
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
+
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+
+	Stdin string `yaml:"stdin,omitempty" json:"stdin,omitempty"`
+
+	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+
+	OnError string `yaml:"on_error,omitempty" json:"on_error,omitempty"`
+
+	Retry PipelineRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
+
+	// approval — terse authored union; the IR normalizes it to #WorkflowApproval.
+	Approval any `yaml:"approval,omitempty" json:"approval,omitempty"`
+
+	// --- lobster exec arms ---
+	Run string `yaml:"run,omitempty" json:"run,omitempty"`
+
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+
+	Workflow string `yaml:"workflow,omitempty" json:"workflow,omitempty"`
+
+	WorkflowArgs map[string]string `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
+
+	Parallel PipelineParallel `yaml:"parallel,omitempty" json:"parallel,omitempty"`
+
+	ForEach string `yaml:"for_each,omitempty" json:"for_each,omitempty"`
+
+	Input PipelineInput `yaml:"input,omitempty" json:"input,omitempty"`
+
+	// --- for_each companions (meaningful only alongside for_each) ---
+	ItemVar string `yaml:"item_var,omitempty" json:"item_var,omitempty"`
+
+	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
+
+	BatchSize int64 `yaml:"batch_size,omitempty" json:"batch_size,omitempty"`
+
+	PauseMs int64 `yaml:"pause_ms,omitempty" json:"pause_ms,omitempty"`
+
+	Steps []PipelineSubStep `yaml:"steps,omitempty" json:"steps,omitempty"`
+
+	// --- charly arms: the FULL charly grammar, any plugin of any class ---
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	Charly []string `yaml:"charly,omitempty" json:"charly,omitempty"`
+}
+
+// #PipelineStep — the step type `steps:` carries. A distinct def so the IR can add
+// per-step result state without touching the authored shape.
+type PipelineStep PipelineStepBase
+
+// #PipelineSchedule — the cron trigger. A 5-field cron, the SAME grammar
+// deploy.schedule, a k8s CronJob and GitHub Actions `on.schedule` use, so one
+// authored schedule lowers to every consumer; the lobster engine converts it to a
+// systemd `OnCalendar` (validated with `systemd-analyze calendar`).
+type PipelineSchedule struct {
+	Cron string `yaml:"cron,omitempty" json:"cron"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+
+	Persistent bool `yaml:"persistent,omitempty" json:"persistent,omitempty"`
+}
+
+// #PipelineTrigger — how a pipeline starts. Both fields optional; a trigger setting
+// NEITHER is a load error raised in Go (a closed CUE struct cannot express
+// "exactly one arm" without a disjunction — see the file header).
+type PipelineTrigger struct {
+	Manual bool `yaml:"manual,omitempty" json:"manual,omitempty"`
+
+	Schedule PipelineSchedule `yaml:"schedule,omitempty" json:"schedule,omitempty"`
+}
+
+// #Pipeline — the authored `kind: pipeline` entity body.
+//
+// `entities:` holds inline entities of ANY kind plugin (a task, a candy, a deploy,
+// another pipeline, …). It is typed as an opaque map because #Node is EXCLUDED from
+// param-gen (the plugin SDK contract forbids base refs in a self-contained schema);
+// each inline entity is validated by its OWN kind's value def and OpValidate once
+// the generated charly.yml is loaded.
+type Pipeline struct {
+	Description string `yaml:"description,omitempty" json:"description"`
+
+	// engine — the workflow engine word, dispatched as `command:<engine>` through
+	// the normal InvokeProvider path. Default "lobster".
+	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+
+	Args map[string]TaskParamSpec `yaml:"args,omitempty" json:"args,omitempty"`
+
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+
+	CostLimit any/* CUE number; int64 or float64 */ `yaml:"cost_limit,omitempty" json:"cost_limit,omitempty"`
+
+	Triggers []PipelineTrigger `yaml:"triggers,omitempty" json:"triggers,omitempty"`
+
+	// config — the former pipeline knobs (llm/media/report/skills/channels/gates/
+	// repo/redo/agent), carried opaquely so a knob the engine does not know is not a
+	// schema change.
+	Config map[string]any `yaml:"config,omitempty" json:"config,omitempty"`
+
+	Entities map[string]map[string]any `yaml:"entities,omitempty" json:"entities,omitempty"`
+
+	Steps []PipelineStep `yaml:"steps,omitempty" json:"steps"`
+}
+
+// #TaskParamSpec — the typed declaration of one task parameter: its prose, an
+// optional default, and whether it is required. Values are passed on the CLI as
+// --param NAME=VALUE and substituted into the plan's ${NAME} references.
+type TaskParamSpec struct {
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Default StrVal `yaml:"default,omitempty" json:"default,omitempty"`
+
+	Required bool `yaml:"required,omitempty" json:"required,omitempty"`
+}
+
 type Pod struct {
 	// References a kind:box (bare lowercase-hyphenated name or remote ref).
 	// Optional: the Go field has no non-empty validator.
@@ -10069,17 +10321,6 @@ type SystemInfo struct {
 	UpdatedAt string `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`
 }
 
-// #TaskParamSpec — the typed declaration of one task parameter: its prose, an
-// optional default, and whether it is required. Values are passed on the CLI as
-// --param NAME=VALUE and substituted into the plan's ${NAME} references.
-type TaskParamSpec struct {
-	Description string `yaml:"description,omitempty" json:"description,omitempty"`
-
-	Default StrVal `yaml:"default,omitempty" json:"default,omitempty"`
-
-	Required bool `yaml:"required,omitempty" json:"required,omitempty"`
-}
-
 // #Task — one generic task entity.
 //
 // The first three fields mirror the Go Task runner's authoring surface
@@ -11254,4 +11495,253 @@ type VmResolveResult struct {
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 
 	TunnelTarget string `yaml:"tunnel_target,omitempty" json:"tunnel_target,omitempty"`
+}
+
+// #WorkflowApproval — the object form of the approval gate; the IR always carries
+// this shape (the authored `approval: true` / `approval: "msg"` union is normalized
+// to it before the IR exists).
+type WorkflowApproval struct {
+	Message string `yaml:"message,omitempty" json:"message,omitempty"`
+
+	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+}
+
+// #WorkflowSchedule — the normalized cron trigger (see #PipelineSchedule).
+type WorkflowSchedule struct {
+	Cron string `yaml:"cron,omitempty" json:"cron"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+
+	Persistent bool `yaml:"persistent,omitempty" json:"persistent,omitempty"`
+}
+
+// #WorkflowTrigger — how a workflow starts.
+type WorkflowTrigger struct {
+	Manual bool `yaml:"manual,omitempty" json:"manual,omitempty"`
+
+	Schedule WorkflowSchedule `yaml:"schedule,omitempty" json:"schedule,omitempty"`
+}
+
+// #WorkflowStepResult — the OUTCOME of one step. Recorded in the run state (and in
+// a schedule/approval record), never authored. `output` is the step's decoded
+// stdout: a charly step's `--json-output` body, or a shell step's auto-parsed JSON
+// (lobster's `$id.json`), so a later `when` can address it by dotted path.
+type WorkflowStepResult struct {
+	Id string `yaml:"id,omitempty" json:"id"`
+
+	Status string `yaml:"status,omitempty" json:"status"`
+
+	ExitCode *int `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
+
+	Stdout string `yaml:"stdout,omitempty" json:"stdout,omitempty"`
+
+	Stderr string `yaml:"stderr,omitempty" json:"stderr,omitempty"`
+
+	Output any `yaml:"output,omitempty" json:"output,omitempty"`
+
+	DurationMs int64 `yaml:"duration_ms,omitempty" json:"duration_ms,omitempty"`
+
+	Attempts int64 `yaml:"attempts,omitempty" json:"attempts,omitempty"`
+}
+
+// #WorkflowStep — one IR step. Same grammar as the authored step, plus the
+// normalized approval object and the optional recorded result.
+type WorkflowStep struct {
+	Id string `yaml:"id,omitempty" json:"id"`
+
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
+
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+
+	Stdin string `yaml:"stdin,omitempty" json:"stdin,omitempty"`
+
+	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+
+	OnError string `yaml:"on_error,omitempty" json:"on_error,omitempty"`
+
+	Retry PipelineRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
+
+	Approval WorkflowApproval `yaml:"approval,omitempty" json:"approval,omitempty"`
+
+	Result WorkflowStepResult `yaml:"result,omitempty" json:"result,omitempty"`
+
+	// --- lobster exec arms ---
+	Run string `yaml:"run,omitempty" json:"run,omitempty"`
+
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+
+	Workflow string `yaml:"workflow,omitempty" json:"workflow,omitempty"`
+
+	WorkflowArgs map[string]string `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
+
+	Parallel PipelineParallel `yaml:"parallel,omitempty" json:"parallel,omitempty"`
+
+	ForEach string `yaml:"for_each,omitempty" json:"for_each,omitempty"`
+
+	Input PipelineInput `yaml:"input,omitempty" json:"input,omitempty"`
+
+	// --- for_each companions (meaningful only alongside for_each) ---
+	ItemVar string `yaml:"item_var,omitempty" json:"item_var,omitempty"`
+
+	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
+
+	BatchSize int64 `yaml:"batch_size,omitempty" json:"batch_size,omitempty"`
+
+	PauseMs int64 `yaml:"pause_ms,omitempty" json:"pause_ms,omitempty"`
+
+	Steps []PipelineSubStep `yaml:"steps,omitempty" json:"steps,omitempty"`
+
+	// --- charly arms: the FULL charly grammar, any plugin of any class ---
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	Charly []string `yaml:"charly,omitempty" json:"charly,omitempty"`
+}
+
+// #Workflow — the normalized, engine-agnostic IR. `entities:` is carried verbatim
+// from the authored form so a lowerer can emit the generated charly.yml.
+type Workflow struct {
+	Description string `yaml:"description,omitempty" json:"description"`
+
+	Engine string `yaml:"engine,omitempty" json:"engine"`
+
+	Args map[string]TaskParamSpec `yaml:"args,omitempty" json:"args,omitempty"`
+
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+
+	CostLimit any/* CUE number; int64 or float64 */ `yaml:"cost_limit,omitempty" json:"cost_limit,omitempty"`
+
+	Triggers []WorkflowTrigger `yaml:"triggers,omitempty" json:"triggers,omitempty"`
+
+	Config map[string]any `yaml:"config,omitempty" json:"config,omitempty"`
+
+	Entities map[string]map[string]any `yaml:"entities,omitempty" json:"entities,omitempty"`
+
+	Steps []WorkflowStep `yaml:"steps,omitempty" json:"steps"`
+}
+
+// #WorkflowRunRequest — start a workflow.
+type WorkflowRunRequest struct {
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline"`
+
+	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	DryRun bool `yaml:"dry_run,omitempty" json:"dry_run,omitempty"`
+
+	GenDir string `yaml:"gen_dir,omitempty" json:"gen_dir,omitempty"`
+}
+
+// #WorkflowRunReply — lobster envelope v1. `resume_token` is present exactly when
+// status is needs_approval/needs_input and is wire-compatible with upstream lobster.
+type WorkflowRunReply struct {
+	Status string `yaml:"status,omitempty" json:"status"`
+
+	Output string `yaml:"output,omitempty" json:"output,omitempty"`
+
+	RequiresApproval WorkflowApproval `yaml:"requires_approval,omitempty" json:"requires_approval,omitempty"`
+
+	RequiresInput WorkflowInputRequest `yaml:"requires_input,omitempty" json:"requires_input,omitempty"`
+
+	ResumeToken string `yaml:"resume_token,omitempty" json:"resume_token,omitempty"`
+
+	Cost any/* CUE number; int64 or float64 */ `yaml:"cost,omitempty" json:"cost,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
+
+	Steps []WorkflowStepResult `yaml:"steps,omitempty" json:"steps,omitempty"`
+}
+
+// #WorkflowInputRequest — the pending `input` gate a needs_input reply describes.
+type WorkflowInputRequest struct {
+	Step string `yaml:"step,omitempty" json:"step"`
+
+	Prompt string `yaml:"prompt,omitempty" json:"prompt"`
+
+	ResponseSchema map[string]any `yaml:"response_schema,omitempty" json:"response_schema,omitempty"`
+
+	Defaults map[string]string `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+}
+
+// #WorkflowResumeRequest — answer a pending approval/input gate. `token` resumes by
+// resume token; `id` resumes by the short approval id. Exactly one is set (Go).
+type WorkflowResumeRequest struct {
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+
+	Token string `yaml:"token,omitempty" json:"token,omitempty"`
+
+	Id string `yaml:"id,omitempty" json:"id,omitempty"`
+
+	Approve bool `yaml:"approve,omitempty" json:"approve,omitempty"`
+
+	Response map[string]any `yaml:"response,omitempty" json:"response,omitempty"`
+
+	Cancel bool `yaml:"cancel,omitempty" json:"cancel,omitempty"`
+}
+
+// #WorkflowScheduleRequest — the systemd-user-timer scheduler surface.
+type WorkflowScheduleRequest struct {
+	Op string `yaml:"op,omitempty" json:"op"`
+
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+}
+
+// #WorkflowScheduleEntry — one installed timer. `next_run` is the engine's own
+// computed next fire time; `on_calendar` is the systemd expression it installed.
+type WorkflowScheduleEntry struct {
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline"`
+
+	Timer string `yaml:"timer,omitempty" json:"timer"`
+
+	OnCalendar string `yaml:"on_calendar,omitempty" json:"on_calendar"`
+
+	Active bool `yaml:"active,omitempty" json:"active"`
+
+	NextRun string `yaml:"next_run,omitempty" json:"next_run,omitempty"`
+}
+
+// #WorkflowScheduleReply — the scheduler answer.
+type WorkflowScheduleReply struct {
+	Units []string `yaml:"units,omitempty" json:"units,omitempty"`
+
+	Entries []WorkflowScheduleEntry `yaml:"entries,omitempty" json:"entries,omitempty"`
+}
+
+// #WorkflowEmitRequest — lower the IR to a consumer's on-disk form. `format` selects
+// the consumer(s): `lobster` and `charly-yml` are the lobster engine's pair;
+// `github-actions` is the designed-but-unbuilt consumer.
+type WorkflowEmitRequest struct {
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline"`
+
+	Format []string `yaml:"format,omitempty" json:"format"`
+
+	OutDir string `yaml:"out_dir,omitempty" json:"out_dir,omitempty"`
+}
+
+// #WorkflowEmitReply — the absolute paths written, one per emitted file.
+type WorkflowEmitReply struct {
+	Files map[string]string `yaml:"files,omitempty" json:"files"`
+}
+
+// #WorkflowEngineCapability — the static facts an engine answers (OpDescribe), so a
+// caller can refuse an unsupported feature with a clear error instead of silently
+// dropping it.
+type WorkflowEngineCapability struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Execute bool `yaml:"execute,omitempty" json:"execute"`
+
+	Resume bool `yaml:"resume,omitempty" json:"resume"`
+
+	Approvals bool `yaml:"approvals,omitempty" json:"approvals"`
+
+	Schedule bool `yaml:"schedule,omitempty" json:"schedule"`
+
+	EmitFormats []string `yaml:"emit_formats,omitempty" json:"emit_formats"`
 }

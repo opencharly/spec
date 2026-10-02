@@ -190,6 +190,10 @@ func writeVocab(dir, out string) error {
 	if err != nil {
 		return err
 	}
+	pipelineClassRoutes, err := strMapDef(schema, "#PipelineClassRoutes")
+	if err != nil {
+		return err
+	}
 	kinds, err := nodeDiscriminators(schema)
 	if err != nil {
 		return err
@@ -270,24 +274,25 @@ func writeVocab(dir, out string) error {
 	}
 
 	code := renderVocab(vocabSets{
-		kinds:              kinds,
-		resourceKinds:      resourceKinds,
-		providerClasses:    providerClasses,
-		distroIDs:          distroIDs,
-		distroFormats:      distroFormats,
-		distroSSHUnits:     distroSSHUnits,
-		distroInits:        distroInits,
-		distroOvmfFamilies: distroOvmfFamilies,
-		directives:         directives,
-		stepKeywords:       stepKeywords,
-		contexts:           contexts,
-		opFields:           opFields,
-		opVerbs:            opVerbs,
-		authoringVerbs:     authoringVerbs,
-		kindValueDefs:      kindValues,
-		engineNames:        engineNames,
-		engineRunModes:     engineRunModes,
-		engineUnitRunModes: engineUnitRunModes,
+		kinds:               kinds,
+		resourceKinds:       resourceKinds,
+		providerClasses:     providerClasses,
+		pipelineClassRoutes: pipelineClassRoutes,
+		distroIDs:           distroIDs,
+		distroFormats:       distroFormats,
+		distroSSHUnits:      distroSSHUnits,
+		distroInits:         distroInits,
+		distroOvmfFamilies:  distroOvmfFamilies,
+		directives:          directives,
+		stepKeywords:        stepKeywords,
+		contexts:            contexts,
+		opFields:            opFields,
+		opVerbs:             opVerbs,
+		authoringVerbs:      authoringVerbs,
+		kindValueDefs:       kindValues,
+		engineNames:         engineNames,
+		engineRunModes:      engineRunModes,
+		engineUnitRunModes:  engineUnitRunModes,
 	})
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
@@ -473,6 +478,34 @@ func listValues(schema cue.Value, def string) ([]string, error) {
 	return out, nil
 }
 
+// strMapDef returns a def's string-valued fields as a map (the #PipelineClassRoutes
+// precedent): the def is a CLOSED struct whose every field is a concrete string, so the
+// table is DATA the Go side reads rather than a hand-maintained copy (R3). Distinct from
+// listValues (a list) and enumValues (a disjunction) — a keyed table is its own shape.
+func strMapDef(schema cue.Value, def string) (map[string]string, error) {
+	v := schema.LookupPath(cue.ParsePath(def))
+	if v.Err() != nil {
+		return nil, fmt.Errorf("%s not found: %w", def, v.Err())
+	}
+	it, err := v.Fields(cue.All())
+	if err != nil {
+		return nil, fmt.Errorf("%s is not a struct: %w", def, err)
+	}
+	out := make(map[string]string)
+	for it.Next() {
+		// Unquoted(): a class word like "agent-runtime" is an unquoted string literal in
+		// CUE and is written quoted in the table, so Selector().String() would key the map
+		// on `"agent-runtime"` and never match ProviderClasses.
+		key := it.Selector().Unquoted()
+		s, err := it.Value().String()
+		if err != nil {
+			return nil, fmt.Errorf("%s.%s is not a string literal: %w", def, key, err)
+		}
+		out[key] = s
+	}
+	return out, nil
+}
+
 func sortedKeys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -484,24 +517,25 @@ func sortedKeys(m map[string]bool) []string {
 
 // vocabSets gathers every CUE-derived word list renderVocab emits.
 type vocabSets struct {
-	kinds              []string
-	resourceKinds      []string
-	providerClasses    []string
-	distroIDs          []string
-	distroFormats      map[string]string
-	distroSSHUnits     map[string]string
-	distroInits        map[string]string
-	distroOvmfFamilies map[string]string
-	directives         []string
-	stepKeywords       []string
-	contexts           []string
-	opFields           []string
-	opVerbs            []string
-	authoringVerbs     []string
-	kindValueDefs      map[string]string
-	engineNames        []string
-	engineRunModes     []string
-	engineUnitRunModes []string
+	kinds               []string
+	resourceKinds       []string
+	providerClasses     []string
+	pipelineClassRoutes map[string]string
+	distroIDs           []string
+	distroFormats       map[string]string
+	distroSSHUnits      map[string]string
+	distroInits         map[string]string
+	distroOvmfFamilies  map[string]string
+	directives          []string
+	stepKeywords        []string
+	contexts            []string
+	opFields            []string
+	opVerbs             []string
+	authoringVerbs      []string
+	kindValueDefs       map[string]string
+	engineNames         []string
+	engineRunModes      []string
+	engineUnitRunModes  []string
 }
 
 func renderVocab(s vocabSets) string {
@@ -515,6 +549,7 @@ func renderVocab(s vocabSets) string {
 
 	writeStrSlice(&b, "KindWords", "the reserved kind keywords (the #Node disjunction discriminators).", s.kinds)
 	writeStrSlice(&b, "ResourceKinds", "the DEPLOYABLE subset of the kind keywords — the kinds whose #Node arm nests a sub-ENTITY (resource) child (#ResourceKind).", s.resourceKinds)
+	writeStrMap(&b, "PipelineClassRoutes", "the class→route table (#PipelineClassRoutes) — how EVERY provider class is reached from inside a workflow. plugin-pipeline's TestWorkflowClassCoverage iterates ProviderClasses and fails when a class has no row here, so adding a provider class forces the workflow route to be decided (R2). DERIVED from the CUE def, never a hand-maintained copy.", s.pipelineClassRoutes)
 	writeStrSlice(&b, "ProviderClasses", "the CLOSED provider-class vocabulary (#ProviderClassNames) — the classes a `plugin.providers:` capability may name. charly/provider.go's providerClasses and plugin-box's validPluginClasses derive from it; the #PluginCapability regex derives from the same list (never a hand-maintained copy anywhere).", s.providerClasses)
 	writeStrSlice(&b, "DocDirectives", "the reserved document directives (#NodeDoc top-level keys).", s.directives)
 	writeStrSlice(&b, "DistroIDs", "the CLOSED guest-distro id vocabulary, derived from #Distros' own keys (schema/distro_vocab.cue).", s.distroIDs)
