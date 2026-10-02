@@ -7740,8 +7740,9 @@ type PipelineTrigger struct {
 type Pipeline struct {
 	Description string `yaml:"description,omitempty" json:"description"`
 
-	// engine — the workflow engine word, dispatched as `command:<engine>` through
-	// the normal InvokeProvider path. Default "lobster".
+	// engine — the workflow engine word, resolved against the `workflow` PROVIDER
+	// CLASS and dispatched as InvokeProvider("workflow", <engine>, workflow-run|…)
+	// through the normal path. Default "lobster".
 	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
 
 	Args map[string]TaskParamSpec `yaml:"args,omitempty" json:"args,omitempty"`

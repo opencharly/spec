@@ -162,8 +162,9 @@
 // the generated charly.yml is loaded.
 #Pipeline: {
 	description!: string & !=""
-	// engine — the workflow engine word, dispatched as `command:<engine>` through
-	// the normal InvokeProvider path. Default "lobster".
+	// engine — the workflow engine word, resolved against the `workflow` PROVIDER
+	// CLASS and dispatched as InvokeProvider("workflow", <engine>, workflow-run|…)
+	// through the normal path. Default "lobster".
 	engine?:     string & !=""
 	args?:       {[string]: #TaskParamSpec}
 	env?:        {PATH?: _|_, [string]: #StrVal} @go(Env,type=map[string]string)
@@ -203,7 +204,7 @@
 	"builder":       "inside those candy plans — a plan build:/<verb>: step reaches the builder legs host-side"
 	"command":       "charly: [argv…] — any command-class plugin, incl. nested command:<word>:<parent>"
 	"engine":        "the entity's engine: field (pod/box), exactly as today"
-	"workflow":      "a sub-workflow: step; charly: [pipeline, run, <name>] reaches another engine explicitly"
+	"workflow":      "the engine plugin: from INSIDE a workflow, a `workflow:` sub-workflow step reaches another engine; the front-end reaches this class host-side via InvokeProvider(\"workflow\", <engine>, …)"
 	"loader":        "implicit — the generated charly.yml is loaded by the plugin loader on every charly step"
 	"refs":          "implicit — import:/@github… refs in the generated charly.yml resolve through it"
 	"agent-runtime": "plan: — the agent-run:/agent-check: intents"

@@ -34,7 +34,7 @@ var PipelineClassRoutes = map[string]string{
 	"step":          "plan: — the run:/check:/agent-run:/agent-check:/include: intents, with every #Op modifier",
 	"terminal":      "charly: [shell|tui, …] reaches the terminal providers",
 	"verb":          "plan: — a `<word>: <input>` step (single-step sugar is plan: with one step)",
-	"workflow":      "a sub-workflow: step; charly: [pipeline, run, <name>] reaches another engine explicitly",
+	"workflow":      "the engine plugin: from INSIDE a workflow, a `workflow:` sub-workflow step reaches another engine; the front-end reaches this class host-side via InvokeProvider(\"workflow\", <engine>, …)",
 }
 
 // ProviderClasses is the CLOSED provider-class vocabulary (#ProviderClassNames) — the classes a `plugin.providers:` capability may name. charly/provider.go's providerClasses and plugin-box's validPluginClasses derive from it; the #PluginCapability regex derives from the same list (never a hand-maintained copy anywhere).
@@ -289,7 +289,6 @@ var KindValueDefs = map[string]string{
 	"pod":         "#PodValue",
 	"task":        "#TaskValue",
 	"vm":          "#VmValue",
-	"workflow":    "#WorkflowValue",
 }
 
 // EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.

@@ -263,3 +263,33 @@ func TestPipelineClassCoverage(t *testing.T) {
 		}
 	}
 }
+
+// TestKindAndClassVocabulariesAreDisjoint pins the KIND-vs-CLASS split structurally.
+//
+// KindValueDefs is DERIVED from the `#<X>Value` def names, and each of those defs is the
+// host-side value gate for an AUTHORABLE ENTITY KIND — a word some plugin serves as
+// `kind: <word>`. ProviderClasses is a DISPATCH vocabulary: the faces a plugin can be
+// invoked through. The two are different axes of the same plugin, and a word that appears
+// in BOTH is a defect with a specific shape: it makes `kind: <word>` gateable while
+// `<word>:` dispatches to a plugin, so the host validates a kind no plugin actually serves.
+//
+// This is not hypothetical — it is the exact bug this change shipped once and then
+// removed: a `#WorkflowValue` def (added by analogy with `#PipelineValue`, without noticing
+// that `pipeline` is a plugin-SERVED KIND while `workflow` is a provider CLASS) silently
+// registered `workflow` in KindValueDefs. The generated map cannot show that on its own,
+// which is why the gate is here rather than in a comment: a decode-only or generation-only
+// check passes either way.
+func TestKindAndClassVocabulariesAreDisjoint(t *testing.T) {
+	if len(KindValueDefs) == 0 || len(ProviderClasses) == 0 {
+		t.Fatal("a vocabulary is empty — schemagen did not emit one of them")
+	}
+	for kind := range KindValueDefs {
+		for _, class := range ProviderClasses {
+			if kind == class {
+				t.Errorf("%q is BOTH a kind (KindValueDefs) and a provider class (ProviderClasses): "+
+					"a kind is a word a plugin SERVES as `kind: %s`, a class is a face it is DISPATCHED through — "+
+					"a word in both makes `kind: %s` gateable against a def for a kind no plugin serves", kind, kind, kind)
+			}
+		}
+	}
+}

@@ -9,9 +9,13 @@
 // The IR is deliberately the SAME step shape as the authored form (it embeds
 // #PipelineFlow + #PipelineArms), so lowering never has to re-invent the grammar;
 // what the IR ADDS is the per-step result record and the engine op envelopes. The
-// engine is selected by #Pipeline.engine and dispatched as `command:<engine>` over
-// the normal InvokeProvider path — there is no new provider class, and the op
-// envelopes below are the `--request-json` payload shapes that path carries.
+// engine is selected by #Pipeline.engine and dispatched over the normal
+// InvokeProvider path as `InvokeProvider("workflow", <engine>, <op>)` — the
+// `workflow` PROVIDER CLASS added to #ProviderClassNames by this same change, so an
+// engine is addressable exactly the way every other plugin is. `command:lobster` is a
+// SEPARATE, additional face of the same engine plugin (its CLI), never the dispatch
+// that runs a workflow. The op envelopes below are the `--request-json` payload
+// shapes that path carries.
 //
 // CLOSED. A consumer that cannot express an IR feature MUST fail hard rather than
 // silently drop it (an engine silently ignoring `approval` would run a workflow a
@@ -79,14 +83,26 @@
 	steps!:       [...#WorkflowStep]
 }
 
-// #WorkflowValue — the host-side value gate def for the IR, kept so the IR can be
-// validated as an entity body too (the #PipelineValue precedent). @go(-).
-#WorkflowValue: #Workflow @go(-)
+// NOTE — there is deliberately NO #WorkflowValue here.
+//
+// Every #<X>Value def in schema/ is the host-side value gate for an AUTHORABLE
+// ENTITY KIND (candy, local, pod, vm, task, pipeline, …), and schemagen DERIVES
+// spec.KindValueDefs from their names. A #WorkflowValue would therefore register
+// `workflow` as a KIND — and nothing serves `kind: workflow`: the kinds are
+// plugin-served (#Node is an open struct and the arm-derived KindWords is empty), and
+// plugin-lobster serves the `workflow` PROVIDER CLASS, not a kind. A registered kind
+// no plugin serves would let the host gate a `kind: workflow` node against a def for
+// a kind that does not exist. The IR is the ENGINE WIRE, not a kind: it is produced by
+// lowering and consumed by an engine, never authored in a charly.yml.
+//
+// `spec/spec/pipeline_test.go` pins this structurally (KindValueDefs and
+// ProviderClasses must stay DISJOINT — a word that is both is exactly this bug).
 
 // ---------------------------------------------------------------------------
-// Engine op envelopes. Dispatched as `command:<engine>` InvokeProvider payloads
-// (`--request-json`); the reply shapes are lobster's tool-mode envelope v1, so an
-// engine's output is interchangeable with upstream lobster's.
+// Engine op envelopes. Dispatched as InvokeProvider("workflow", <engine>, <op>)
+// payloads over the `workflow` provider class (`--request-json`); the reply shapes are
+// lobster's tool-mode envelope v1, so an engine's output is interchangeable with
+// upstream lobster's.
 // ---------------------------------------------------------------------------
 
 // #WorkflowRunRequest — start a workflow.
