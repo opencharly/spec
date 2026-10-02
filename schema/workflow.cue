@@ -45,7 +45,7 @@
 
 // #WorkflowStepResult — the OUTCOME of one step. Recorded in the run state (and in
 // a schedule/approval record), never authored. `output` is the step's decoded
-// stdout: a charly step's `--json-output` body, or a shell step's auto-parsed JSON
+// stdout: a charly step's `--output` body, or a shell step's auto-parsed JSON
 // (lobster's `$id.json`), so a later `when` can address it by dotted path.
 #WorkflowStepResult: {
 	id!:         string & !=""

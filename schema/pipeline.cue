@@ -61,7 +61,15 @@
 
 // #PipelineArms — the EXEC arms, embedded by both the authored step and the IR
 // step. Declaring them once (R3) keeps the authored and normalized shapes from
-// drifting; only the exec-arm XOR (Go) and the flow keys distinguish the two.
+// drifting.
+//
+// It does NOT distinguish the two steps, and neither do the flow keys: both
+// #PipelineStepBase and #WorkflowStep embed #PipelineFlow and #PipelineArms, so
+// everything declared here is COMMON to them. Exactly two fields separate the
+// authored step from the IR step — `approval` (the authored terse union
+// `bool | string | #PipelineApproval` vs the IR's normalized #WorkflowApproval
+// object) and `result`, which is IR-only. The exec-arm XOR is a Go rule in
+// BOTH, so it is not a CUE difference either.
 #PipelineArms: {
 	// --- lobster exec arms ---
 	run?:           string & !=""
@@ -98,14 +106,10 @@
 // NON-RECURSIVE by construction (lobster's own rule): no nested parallel/for_each/
 // input/workflow and no approval, so a workflow stays flat and exportable.
 #PipelineSubStep: {
-	id!:         string & !=""
-	when?:       string & !=""
-	env?:        {PATH?: _|_, [string]: #StrVal} @go(Env,type=map[string]string)
-	cwd?:        string & !=""
-	stdin?:      string & !=""
-	timeout_ms?: int & >0 @go(TimeoutMs)
-	on_error?:   "fail" | "continue" | "skip_rest" @go(OnError)
-	retry?:      #PipelineRetry
+	// The SAME flow block every other step def carries — embedded, never
+	// re-declared (R3). gengotypes flattens it exactly as it does for
+	// #PipelineStepBase, so the substep's Go shape is unchanged.
+	#PipelineFlow
 
 	run?:      string & !=""
 	pipeline?: string & !=""

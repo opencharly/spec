@@ -7565,7 +7565,15 @@ type PipelineFlow struct {
 
 // #PipelineArms — the EXEC arms, embedded by both the authored step and the IR
 // step. Declaring them once (R3) keeps the authored and normalized shapes from
-// drifting; only the exec-arm XOR (Go) and the flow keys distinguish the two.
+// drifting.
+//
+// It does NOT distinguish the two steps, and neither do the flow keys: both
+// #PipelineStepBase and #WorkflowStep embed #PipelineFlow and #PipelineArms, so
+// everything declared here is COMMON to them. Exactly two fields separate the
+// authored step from the IR step — `approval` (the authored terse union
+// `bool | string | #PipelineApproval` vs the IR's normalized #WorkflowApproval
+// object) and `result`, which is IR-only. The exec-arm XOR is a Go rule in
+// BOTH, so it is not a CUE difference either.
 type PipelineArms struct {
 	// --- lobster exec arms ---
 	Run string `yaml:"run,omitempty" json:"run,omitempty"`
@@ -7615,6 +7623,14 @@ type PipelineParallel struct {
 type PipelineSubStep struct {
 	Id string `yaml:"id,omitempty" json:"id"`
 
+	Run string `yaml:"run,omitempty" json:"run,omitempty"`
+
+	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	Charly []string `yaml:"charly,omitempty" json:"charly,omitempty"`
+
 	When string `yaml:"when,omitempty" json:"when,omitempty"`
 
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
@@ -7628,14 +7644,6 @@ type PipelineSubStep struct {
 	OnError string `yaml:"on_error,omitempty" json:"on_error,omitempty"`
 
 	Retry PipelineRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
-
-	Run string `yaml:"run,omitempty" json:"run,omitempty"`
-
-	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-
-	Charly []string `yaml:"charly,omitempty" json:"charly,omitempty"`
 }
 
 // #PipelineInput — the lobster `input` gate. `response_schema` is a JSON Schema
@@ -11527,7 +11535,7 @@ type WorkflowTrigger struct {
 
 // #WorkflowStepResult — the OUTCOME of one step. Recorded in the run state (and in
 // a schedule/approval record), never authored. `output` is the step's decoded
-// stdout: a charly step's `--json-output` body, or a shell step's auto-parsed JSON
+// stdout: a charly step's `--output` body, or a shell step's auto-parsed JSON
 // (lobster's `$id.json`), so a later `when` can address it by dotted path.
 type WorkflowStepResult struct {
 	Id string `yaml:"id,omitempty" json:"id"`
