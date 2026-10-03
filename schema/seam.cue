@@ -210,6 +210,20 @@
 // step: ResolveTarget + target.Del, honoring the teardown gates (the live ReverseRunner is still
 // never carried on the wire — a programmatic teardown needing a specific runner is resolved
 // host-side during dispatch).
+//
+// ancestor_paths/ancestor_nodes MIRROR the add seam's (#DeployResolveTargetAddRequest) and carry
+// the ROOT-FIRST ancestor path/node lists of the target's own tree position, so the host can
+// reconstruct the SAME parentExec chain ResolveTarget builds for that position and hand it to Del
+// as the VENUE — exactly as the add half already does via ReconstructParentExec. WITHOUT them, a
+// teardown reached from a FRESH process (the check bed's forked `charly deploy del <root>.<member>`
+// step) carries no venue at all: Add dispatches `venue_json` from the live nested parent, while Del
+// dispatched none, so the target falls back to RootExecutorForDeployNode(node) — the HOST for a
+// member whose `host:` field is empty. An in-substrate tree member's reversible ops (the
+// `package:` list's `pacman -R`) then replay against the OPERATOR'S WORKSTATION while its `add`
+// landed correctly in the guest: opencharly/charly#765, the third variant of the #627/#680
+// mechanism. An absent list leaves the previous behaviour untouched (a top-level node's teardown
+// has no ancestors). A live DeployExecutor never crosses the wire — the host re-derives the chain
+// with the registry-coupled deriveChildExecutorForPath.
 #DeployNodeDelDispatchRequest: {
 	name!:              string @go(Name)
 	node?:              #Deploy @go(Node, type=*Deploy)
@@ -218,6 +232,8 @@
 	keep_services?:     bool   @go(KeepServices)
 	keep_image?:        bool   @go(KeepImage)
 	dry_run?:           bool   @go(DryRun)
+	ancestor_paths?:    [...string] @go(AncestorPaths)
+	ancestor_nodes?:    [...#Deploy] @go(AncestorNodes)
 }
 #DeployNodeDelDispatchReply: {}
 
