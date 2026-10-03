@@ -33,11 +33,12 @@
 	cache_mount?: [...#CacheMount] @go(CacheMount)
 	section_field?: {[string]: "list" | "list_of_maps"} @go(SectionFields)
 	uninstall_template?: string    @go(UninstallTemplate)
-	// installed_template is a command rendered for this format whose stdout lists
-	// the names of currently-installed packages, one per line. It is used to
-	// compute a deploy's teardown delta, so a declared package the venue already
-	// provides is never recorded for removal.
-	installed_template?: string    @go(InstalledTemplate)
+	// present_template is a command rendered for this format whose stdout lists,
+	// one per line, the packages from the rendered set that the venue ALREADY has
+	// (already installed or already satisfied). The step executor subtracts it from
+	// the declared Packages to get the teardown delta, so a package the venue
+	// already provided is never recorded for removal.
+	present_template?: string    @go(PresentTemplate)
 	phase?:              #PhaseSet @go(Phases,optional=nillable)
 	validate?: [...#FormatRule]
 	secondary?: bool

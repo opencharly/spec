@@ -5435,11 +5435,12 @@ type Format struct {
 
 	UninstallTemplate string `yaml:"uninstall_template,omitempty" json:"uninstall_template,omitempty"`
 
-	// installed_template is a command rendered for this format whose stdout lists
-	// the names of currently-installed packages, one per line. It is used to
-	// compute a deploy's teardown delta, so a declared package the venue already
-	// provides is never recorded for removal.
-	InstalledTemplate string `yaml:"installed_template,omitempty" json:"installed_template,omitempty"`
+	// present_template is a command rendered for this format whose stdout lists,
+	// one per line, the packages from the rendered set that the venue ALREADY has
+	// (already installed or already satisfied). The step executor subtracts it from
+	// the declared Packages to get the teardown delta, so a package the venue
+	// already provided is never recorded for removal.
+	PresentTemplate string `yaml:"present_template,omitempty" json:"present_template,omitempty"`
 
 	Phases *PhaseSet `yaml:"phase,omitempty" json:"phase,omitempty"`
 
