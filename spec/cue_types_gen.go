@@ -5435,6 +5435,13 @@ type Format struct {
 
 	UninstallTemplate string `yaml:"uninstall_template,omitempty" json:"uninstall_template,omitempty"`
 
+	// present_template is a command rendered for this format whose stdout lists,
+	// one per line, the packages from the rendered set that the venue ALREADY has
+	// (already installed or already satisfied). The step executor subtracts it from
+	// the declared Packages to get the teardown delta, so a package the venue
+	// already provided is never recorded for removal.
+	PresentTemplate string `yaml:"present_template,omitempty" json:"present_template,omitempty"`
+
 	Phases *PhaseSet `yaml:"phase,omitempty" json:"phase,omitempty"`
 
 	Validate []FormatRule `yaml:"validate,omitempty" json:"validate,omitempty"`
@@ -8269,6 +8276,20 @@ type DeployDelResolveReply struct {
 // step: ResolveTarget + target.Del, honoring the teardown gates (the live ReverseRunner is still
 // never carried on the wire — a programmatic teardown needing a specific runner is resolved
 // host-side during dispatch).
+//
+// ancestor_paths/ancestor_nodes MIRROR the add seam's (#DeployResolveTargetAddRequest) and carry
+// the ROOT-FIRST ancestor path/node lists of the target's own tree position, so the host can
+// reconstruct the SAME parentExec chain ResolveTarget builds for that position and hand it to Del
+// as the VENUE — exactly as the add half already does via ReconstructParentExec. WITHOUT them, a
+// teardown reached from a FRESH process (the check bed's forked `charly deploy del <root>.<member>`
+// step) carries no venue at all: Add dispatches `venue_json` from the live nested parent, while Del
+// dispatched none, so the target falls back to RootExecutorForDeployNode(node) — the HOST for a
+// member whose `host:` field is empty. An in-substrate tree member's reversible ops (the
+// `package:` list's `pacman -R`) then replay against the OPERATOR'S WORKSTATION while its `add`
+// landed correctly in the guest: opencharly/charly#765, the third variant of the #627/#680
+// mechanism. An absent list leaves the previous behaviour untouched (a top-level node's teardown
+// has no ancestors). A live DeployExecutor never crosses the wire — the host re-derives the chain
+// with the registry-coupled deriveChildExecutorForPath.
 type DeployNodeDelDispatchRequest struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
@@ -8283,6 +8304,10 @@ type DeployNodeDelDispatchRequest struct {
 	KeepImage bool `yaml:"keep_image,omitempty" json:"keep_image,omitempty"`
 
 	DryRun bool `yaml:"dry_run,omitempty" json:"dry_run,omitempty"`
+
+	AncestorPaths []string `yaml:"ancestor_paths,omitempty" json:"ancestor_paths,omitempty"`
+
+	AncestorNodes []Deploy `yaml:"ancestor_nodes,omitempty" json:"ancestor_nodes,omitempty"`
 }
 
 type DeployNodeDelDispatchReply struct {
