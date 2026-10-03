@@ -37,15 +37,22 @@ type RepoSpec struct {
 // stages; the compiler emits one SystemPackagesStep per phase so the host
 // target can gate PhasePrepare on --allow-repo-changes.
 type SystemPackagesStep struct {
-	Format   string     // "rpm" | "deb" | "pac"
-	Phase    Phase      // PhasePrepare | PhaseInstall | PhaseCleanup
-	Packages []string   // package names (for Reverse)
-	Repos    []RepoSpec // repository entries from the candy manifest (drives PhasePrepare)
-	Options  []string   // format-specific install flags
-	Copr     []string   // RPM-only: COPR repos to enable/disable
-	Modules  []string   // RPM-only: DNF modules to enable
-	Exclude  []string   // RPM-only: packages to exclude
-	Keys     []string   // PAC-only: GPG keys to trust
+	Format   string   // "rpm" | "deb" | "pac"
+	Phase    Phase    // PhasePrepare | PhaseInstall | PhaseCleanup
+	Packages []string // package names as declared by the candy (the install request)
+	// Installed is the subset of Packages this deploy ACTUALLY installed, set at
+	// EXECUTION time by the step executor after it queries the venue. Reverse()
+	// prefers it over Packages. nil means "not determined", so Packages is used
+	// (the prior behaviour); a NON-nil EMPTY slice is authoritative and means
+	// every declared package was already present, so nothing is recorded for
+	// removal. This field is execution-time state and must NOT travel on the wire.
+	Installed []string   // subset of Packages this deploy actually installed; nil = not determined
+	Repos     []RepoSpec // repository entries from the candy manifest (drives PhasePrepare)
+	Options   []string   // format-specific install flags
+	Copr      []string   // RPM-only: COPR repos to enable/disable
+	Modules   []string   // RPM-only: DNF modules to enable
+	Exclude   []string   // RPM-only: packages to exclude
+	Keys      []string   // PAC-only: GPG keys to trust
 
 	// CacheMounts and RawInstallContext are passed to template rendering.
 	// These are populated by the compiler and consumed by the OCI target;
@@ -71,11 +78,15 @@ func (s *SystemPackagesStep) Reverse() []ReverseOp {
 	ops := []ReverseOp{}
 	switch s.Phase {
 	case PhaseInstall:
-		if len(s.Packages) > 0 {
+		targets := s.Packages
+		if s.Installed != nil {
+			targets = s.Installed
+		}
+		if len(targets) > 0 {
 			ops = append(ops, ReverseOp{
 				Kind:    ReverseOpPackageRemove,
 				Format:  s.Format,
-				Targets: s.Packages,
+				Targets: targets,
 				Scope:   ScopeSystem,
 			})
 		}
