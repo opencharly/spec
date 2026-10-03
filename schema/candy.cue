@@ -556,7 +556,7 @@
 // plugin-box's validPluginClasses derive from — parser consolidation F4.2), and
 // #PluginCapability's regex derives from the same list, so the CUE-side capability
 // gate can never drift from the Go-side class set.
-#ProviderClassNames: ["kind", "deploy", "verb", "step", "build", "builder", "command", "engine", "loader", "refs", "agent-runtime", "terminal"] @go(-)
+#ProviderClassNames: ["kind", "deploy", "verb", "step", "build", "builder", "command", "engine", "workflow", "loader", "refs", "agent-runtime", "terminal"] @go(-)
 
 // #ProviderClassPattern — the class alternation derived from #ProviderClassNames
 // (the ONE hand-maintained list; the regex is computed, never authored).
