@@ -5435,6 +5435,12 @@ type Format struct {
 
 	UninstallTemplate string `yaml:"uninstall_template,omitempty" json:"uninstall_template,omitempty"`
 
+	// installed_template is a command rendered for this format whose stdout lists
+	// the names of currently-installed packages, one per line. It is used to
+	// compute a deploy's teardown delta, so a declared package the venue already
+	// provides is never recorded for removal.
+	InstalledTemplate string `yaml:"installed_template,omitempty" json:"installed_template,omitempty"`
+
 	Phases *PhaseSet `yaml:"phase,omitempty" json:"phase,omitempty"`
 
 	Validate []FormatRule `yaml:"validate,omitempty" json:"validate,omitempty"`
