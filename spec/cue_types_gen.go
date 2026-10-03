@@ -11534,10 +11534,34 @@ type VmResolveResult struct {
 // #WorkflowApproval — the object form of the approval gate; the IR always carries
 // this shape (the authored `approval: true` / `approval: "msg"` union is normalized
 // to it before the IR exists).
+//
+// Everything below `timeout_ms` is the ENGINE's own approval envelope, which the
+// reply could not carry before: an engine computes these (from the gate's config, the
+// paused step's own `requiresApproval` JSON, or the environment) and a caller needs
+// them BOTH to present the gate and to answer it by its short id. They are IR-only —
+// never authored — so carrying them is not a charly.yml format change.
 type WorkflowApproval struct {
 	Message string `yaml:"message,omitempty" json:"message,omitempty"`
 
 	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+
+	// The SHORT id `#WorkflowResumeRequest.id` accepts in place of the resume token.
+	// An engine that issues none omits it.
+	ApprovalID string `yaml:"approval_id,omitempty" json:"approval_id,omitempty"`
+
+	// What is being approved, as the engine renders it — the SAME items the tool
+	// envelope shows a human, verbatim.
+	Items []any `yaml:"items,omitempty" json:"items,omitempty"`
+
+	Preview string `yaml:"preview,omitempty" json:"preview,omitempty"`
+
+	// The approver-identity policy the gate enforces, echoed so a caller can show WHO
+	// may approve before anyone tries (an engine enforces it at resume time).
+	InitiatedBy string `yaml:"initiated_by,omitempty" json:"initiated_by,omitempty"`
+
+	RequiredApprover string `yaml:"required_approver,omitempty" json:"required_approver,omitempty"`
+
+	RequireDifferentApprover bool `yaml:"require_different_approver,omitempty" json:"require_different_approver,omitempty"`
 }
 
 // #WorkflowSchedule — the normalized cron trigger (see #PipelineSchedule).
@@ -11701,6 +11725,11 @@ type WorkflowInputRequest struct {
 	ResponseSchema map[string]any `yaml:"response_schema,omitempty" json:"response_schema,omitempty"`
 
 	Defaults map[string]string `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+
+	// The SUBJECT the gate was shown — the engine's own resolved value (the gate's
+	// `stdin`, else the previous step's output), so a caller can render what the
+	// question is about without re-deriving it. IR-only, like the approval fields.
+	Subject any `yaml:"subject,omitempty" json:"subject,omitempty"`
 }
 
 // #WorkflowResumeRequest — answer a pending approval/input gate. `token` resumes by

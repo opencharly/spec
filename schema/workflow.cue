@@ -24,9 +24,28 @@
 // #WorkflowApproval — the object form of the approval gate; the IR always carries
 // this shape (the authored `approval: true` / `approval: "msg"` union is normalized
 // to it before the IR exists).
+//
+// Everything below `timeout_ms` is the ENGINE's own approval envelope, which the
+// reply could not carry before: an engine computes these (from the gate's config, the
+// paused step's own `requiresApproval` JSON, or the environment) and a caller needs
+// them BOTH to present the gate and to answer it by its short id. They are IR-only —
+// never authored — so carrying them is not a charly.yml format change.
 #WorkflowApproval: {
 	message?:    string & !=""
 	timeout_ms?: int & >0 @go(TimeoutMs)
+
+	// The SHORT id `#WorkflowResumeRequest.id` accepts in place of the resume token.
+	// An engine that issues none omits it.
+	approval_id?: string & !="" @go(ApprovalID)
+	// What is being approved, as the engine renders it — the SAME items the tool
+	// envelope shows a human, verbatim.
+	items?:   [..._] @go(Items,type=[]any)
+	preview?: string & !=""
+	// The approver-identity policy the gate enforces, echoed so a caller can show WHO
+	// may approve before anyone tries (an engine enforces it at resume time).
+	initiated_by?:               string & !="" @go(InitiatedBy)
+	required_approver?:          string & !="" @go(RequiredApprover)
+	require_different_approver?: bool @go(RequireDifferentApprover)
 }
 
 // #WorkflowSchedule — the normalized cron trigger (see #PipelineSchedule).
@@ -133,6 +152,10 @@
 	prompt!:          string & !=""
 	response_schema?: {[string]: _} @go(ResponseSchema,type=map[string]any)
 	defaults?:        {[string]: #StrVal} @go(Defaults,type=map[string]string)
+	// The SUBJECT the gate was shown — the engine's own resolved value (the gate's
+	// `stdin`, else the previous step's output), so a caller can render what the
+	// question is about without re-deriving it. IR-only, like the approval fields.
+	subject?: _ @go(Subject,type=any)
 }
 
 // #WorkflowResumeRequest — answer a pending approval/input gate. `token` resumes by
