@@ -16,9 +16,12 @@ package spec
 // closure lives ONLY in CUE, so this unifies concrete values into the defs and demands
 // the same judgement the host's value gate makes. The last case is the load-bearing
 // one — it holds the AUTHORED def (#PipelineApproval) to its UNCHANGED surface, which
-// is what makes the whole change IR-only: no authored wire key moved, so per
-// `references/schema-change-recipe.md` ("a schema-version bump ONLY on an authored
-// wire-key change") there is NO #SchemaVersion bump and NO migration entry.
+// is what makes the whole change IR-only: no authored wire key moved, so — the rule the
+// recipe states as "a schema-version bump ONLY on an authored wire-key change" — there
+// is no version machinery to touch. That rule no longer has a mechanism behind it: the
+// `#SchemaVersion` / `#SchemaFloor` CalVer, the `charly.yml` `version:` stamp and the
+// equality gate were DELETED (CHANGELOG/0.2026270.938.md), and `plugin-migrate` with
+// them. What survives is the distinction, and it is the one this corpus pins.
 
 import (
 	"testing"
@@ -150,8 +153,10 @@ func TestWorkflowApprovalCarriesTheEngineEnvelope(t *testing.T) {
 			// This case is the change's contract. The engine's envelope is IR-only — the
 			// authored `approval:` never gains these keys — so the authored def must NOT
 			// accept them. If someone later "conveniently" mirrors the enrichment here,
-			// that IS an authored wire-key change: it needs a #SchemaVersion bump, a
-			// plugin-migrate entry, and a declared cutover, and this test says so first.
+			// that IS an authored wire-key change: every authored document carrying
+			// `approval:` stops unifying against the CLOSED schema, so it is a declared
+			// cutover with a `charly migrate` route for the consumers — and this test
+			// says so first, instead of letting the mirror ship as a "small addition".
 			"the authored approval def does not gain the engine fields",
 			"#PipelineApproval",
 			`{message: "ok?", items: [1], approval_id: "a1b2c3d4"}`,
