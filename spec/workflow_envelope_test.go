@@ -18,10 +18,13 @@ package spec
 // one — it holds the AUTHORED def (#PipelineApproval) to its UNCHANGED surface, which
 // is what makes the whole change IR-only: no authored wire key moved, so — the rule the
 // recipe states as "a schema-version bump ONLY on an authored wire-key change" — there
-// is no version machinery to touch. That rule no longer has a mechanism behind it: the
-// `#SchemaVersion` / `#SchemaFloor` CalVer, the `charly.yml` `version:` stamp and the
-// equality gate were DELETED (CHANGELOG/0.2026270.938.md), and `plugin-migrate` with
-// them. What survives is the distinction, and it is the one this corpus pins.
+// is no version STAMP to bump. The `#SchemaVersion` / `#SchemaFloor` CalVer, the
+// `charly.yml` `version:` stamp and the equality gate were DELETED
+// (CHANGELOG/0.2026270.938.md). `charly migrate` (`plugin-migrate`, `command:migrate`)
+// was NOT deleted — it was a LEG of that same chain and survives as the live remedy: it
+// is what strips a retired `version:` stamp, and its `check-migrate-local` bed is what
+// proves it. So a future authored wire-key change still has a route; what it does not
+// have is a stamp to bump. That distinction is the one this corpus pins.
 
 import (
 	"testing"
