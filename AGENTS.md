@@ -46,8 +46,15 @@ Canonical files:
 - Define authored configuration and wire shapes in CUE before code. Edit
   `schema/*.cue`, then regenerate — never hand-transcribe a schema-shaped wire
   struct. A clean regeneration must be a no-op.
-- The schema `#SchemaVersion` CalVer and the `charly.yml` schema stamp are
-  coupled; a schema bump is a cutover that follows `/charly-build:migrate`.
+- There is no schema-version stamp to bump. The `#SchemaVersion` CalVer, the
+  `charly.yml` `version:` field and the equality gate were DELETED
+  (`CHANGELOG/0.2026270.938.md`); compatibility is enforced by unifying the
+  authored document against the CLOSED CUE schema, where an unknown or removed
+  field is a hard `field not allowed` error. A change that alters an AUTHORED
+  wire key makes `charly migrate` the consuming repo's problem and is declared
+  as such; a pure `@go()` annotation change (a Go identifier, or a pointer /
+  tri-state spelling such as `@go(,type=*bool)`) preserves the wire key and
+  needs no version machinery at all.
 - Go-module tags follow the `v0.<YYYYDDD>.<HHMM>` scheme.
 
 ## Landing
