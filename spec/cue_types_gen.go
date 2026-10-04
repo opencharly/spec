@@ -11734,6 +11734,20 @@ type WorkflowInputRequest struct {
 
 // #WorkflowResumeRequest — answer a pending approval/input gate. `token` resumes by
 // resume token; `id` resumes by the short approval id. Exactly one is set (Go).
+//
+// `approve` is TRI-STATE, and the pointer spelling below is the whole point of it. A
+// plain `bool` carrying `omitempty` makes `false` byte-identical to an ABSENT field,
+// so "the human rejected this" and "no approval answer was given at all" collapse into
+// the same wire value — a rejected gate is indistinguishable from an untouched one,
+// and the approval half of a resume is unreachable. `*bool` (the recipe's pointer /
+// tri-state arm) separates the three states on the wire: absent = no answer,
+// `false` = rejected, `true` = approved. It is an ANNOTATION, not a type change — the
+// CUE type stays `bool` and the wire key stays `approve`, so there is no authored
+// wire-key change and no version machinery to touch (see AGENTS.md, "Modify this repo").
+//
+// `cancel` is NOT the rejection arm and must not be read as one: it ABORTS the gate
+// without judging the proposal (upstream lobster's tool-mode `cancel`), so a caller
+// that maps "no" onto it loses the distinction this field exists to carry.
 type WorkflowResumeRequest struct {
 	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
 
@@ -11741,7 +11755,7 @@ type WorkflowResumeRequest struct {
 
 	Id string `yaml:"id,omitempty" json:"id,omitempty"`
 
-	Approve bool `yaml:"approve,omitempty" json:"approve,omitempty"`
+	Approve *bool `yaml:"approve,omitempty" json:"approve,omitempty"`
 
 	Response map[string]any `yaml:"response,omitempty" json:"response,omitempty"`
 
