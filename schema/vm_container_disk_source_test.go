@@ -33,7 +33,7 @@ func TestVmSourceAcceptsTheContainerDiskArm(t *testing.T) {
 func TestVmSourceAcceptsCustomDiskPathInImage(t *testing.T) {
 	err := vmSource(t, `{
 		kind:               "container_disk"
-		image:              "registry.example/fleet/workspace@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+		image:              "registry.example/deploy/workspace@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 		disk_path_in_image: "/custom-disk-path/fedora25.qcow2"
 	}`)
 	if err != nil {
