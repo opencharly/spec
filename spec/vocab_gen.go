@@ -20,13 +20,13 @@ var ResourceKinds = []string{
 	"kubevirt",
 }
 
-// PipelineClassRoutes is the class→route table (#PipelineClassRoutes) — how EVERY provider class is reached from inside a workflow. plugin-pipeline's TestWorkflowClassCoverage iterates ProviderClasses and fails when a class has no row here, so adding a provider class forces the workflow route to be decided (R2). DERIVED from the CUE def, never a hand-maintained copy.
+// PipelineClassRoutes is the class→route table (#PipelineClassRoutes) — how EVERY provider class is reached from inside a workflow. spec's own TestPipelineClassCoverage (spec/pipeline_test.go) iterates ProviderClasses and fails when a class has no row here — and when a row names a class that is not in the vocabulary — so adding a provider class forces the workflow route to be decided (R2). DERIVED from the CUE def, never a hand-maintained copy.
 var PipelineClassRoutes = map[string]string{
 	"agent-runtime": "plan: — the agent-run:/agent-check: intents",
 	"build":         "entities: candy/box + charly: [box, build|generate, <name>]",
 	"builder":       "inside those candy plans — a plan build:/<verb>: step reaches the builder legs host-side",
 	"command":       "charly: [argv…] — any command-class plugin, incl. nested command:<word>:<parent>",
-	"deploy":        "entities: + charly: [fleet, add|del|start|stop, <name>] / charly: [check, run, <bed>]",
+	"deploy":        "entities: + charly: [deploy, add|del|show|status, <name>] / charly: [start|stop|remove, <box>] / charly: [check, run, <bed>]",
 	"engine":        "the entity's engine: field (pod/box), exactly as today",
 	"kind":          "entities: — an inline node, or a project entity referenced by include:/task:/workflow:/charly:",
 	"loader":        "implicit — the generated charly.yml is loaded by the plugin loader on every charly step",

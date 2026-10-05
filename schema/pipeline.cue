@@ -191,17 +191,18 @@
 // #PipelineClassRoutes — the class→route table: how EVERY class in
 // #ProviderClassNames is reached from inside a workflow. schemagen emits
 // spec.PipelineClassRoutes from it (the #ProviderClassNames precedent — a @go(-) def
-// extracted into a Go table, never a hand-maintained copy), so plugin-pipeline's
-// TestWorkflowClassCoverage can fail the build the moment a provider class is added
-// without a decided workflow route (R2: a new class must FORCE the decision, never
-// silently get no route).
+// extracted into a Go table, never a hand-maintained copy), so spec's own
+// TestPipelineClassCoverage (spec/pipeline_test.go) can fail the build the moment a
+// provider class is added without a decided workflow route — and the moment a row
+// names a class that is not in the vocabulary (R2: a new class must FORCE the
+// decision, never silently get no route; and a stale row must not outlive its class).
 //
 // Each value names the step arm that reaches the class. The lowering special-cases no
 // word: it only emits plan steps, argv and entity nodes, so a plugin released tomorrow
 // is usable in a workflow with no change here.
 #PipelineClassRoutes: {
 	"kind":          "entities: — an inline node, or a project entity referenced by include:/task:/workflow:/charly:"
-	"deploy":        "entities: + charly: [fleet, add|del|start|stop, <name>] / charly: [check, run, <bed>]"
+	"deploy":        "entities: + charly: [deploy, add|del|show|status, <name>] / charly: [start|stop|remove, <box>] / charly: [check, run, <bed>]"
 	"verb":          "plan: — a `<word>: <input>` step (single-step sugar is plan: with one step)"
 	"step":          "plan: — the run:/check:/agent-run:/agent-check:/include: intents, with every #Op modifier"
 	"build":         "entities: candy/box + charly: [box, build|generate, <name>]"
