@@ -201,7 +201,7 @@
 // is usable in a workflow with no change here.
 #PipelineClassRoutes: {
 	"kind":          "entities: — an inline node, or a project entity referenced by include:/task:/workflow:/charly:"
-	"deploy":        "entities: + charly: [fleet, add|del|start|stop, <name>] / charly: [check, run, <bed>]"
+	"deploy":        "entities: + charly: [deploy, add|del, <name>] / charly: [check, run, <bed>]"
 	"verb":          "plan: — a `<word>: <input>` step (single-step sugar is plan: with one step)"
 	"step":          "plan: — the run:/check:/agent-run:/agent-check:/include: intents, with every #Op modifier"
 	"build":         "entities: candy/box + charly: [box, build|generate, <name>]"

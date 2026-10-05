@@ -26,7 +26,7 @@ var PipelineClassRoutes = map[string]string{
 	"build":         "entities: candy/box + charly: [box, build|generate, <name>]",
 	"builder":       "inside those candy plans — a plan build:/<verb>: step reaches the builder legs host-side",
 	"command":       "charly: [argv…] — any command-class plugin, incl. nested command:<word>:<parent>",
-	"deploy":        "entities: + charly: [fleet, add|del|start|stop, <name>] / charly: [check, run, <bed>]",
+	"deploy":        "entities: + charly: [deploy, add|del, <name>] / charly: [check, run, <bed>]",
 	"engine":        "the entity's engine: field (pod/box), exactly as today",
 	"kind":          "entities: — an inline node, or a project entity referenced by include:/task:/workflow:/charly:",
 	"loader":        "implicit — the generated charly.yml is loaded by the plugin loader on every charly step",
