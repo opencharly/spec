@@ -1,5 +1,5 @@
 // CUE schema for the `vm` kind. #Vm validates ONE value of the `vm:` map
-// (VmSpec). FULLY MODELED + CLOSED: every VmSpec field, the 5-arm #VmSource
+// (VmSpec). FULLY MODELED + CLOSED: every VmSpec field, the 7-arm #VmSource
 // union, the structured #VmCloudInit and the ~54-subtype
 // #LibvirtDomain tree are modeled and CLOSED — an unknown
 // key is a typo. Genuine passthroughs stay typed-open: libvirt.snippets /
@@ -60,7 +60,8 @@
 	snapshot?: [...#VmSnapshot] @go(Snapshots)
 }
 
-// 5-way discriminated union on source.kind; each arm pins kind, requires its
+// 7-way discriminated union on source.kind — cloud_image, bootc, clone, imported,
+// bootstrap, iso, container_disk; each arm pins kind, requires its
 // fields, forbids cross-branch fields via _|_, and is CLOSED (no trailing `...`)
 // so an unmodeled key is a typo.
 #VmSource:
