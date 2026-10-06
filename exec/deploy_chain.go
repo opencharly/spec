@@ -220,13 +220,19 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.DeployNode, flat
 // It does NOT handle the nested-inside-a-parent case (opts.ParentExec); that
 // stays in the local deploy target.Add because it's deploy-execution-specific.
 // Returns ShellExecutor{} for a nil node.
+//
+// The returned ShellExecutor is a MACHINE venue (MachineVenue: true): its
+// non-interactive commands source the venue user's candy env.d first, so a deploy
+// `run:`/`check:` sees the same `env:` an interactive shell would (charly#814). The
+// throwaway ShellExecutor{} a container-jump NestedExecutor uses as a local host
+// transport is deliberately NOT marked (see ShellExecutor.MachineVenue).
 func RootExecutorForDeployNode(node *spec.DeployNode) (spec.DeployExecutor, error) {
 	if node == nil {
-		return ShellExecutor{}, nil
+		return ShellExecutor{MachineVenue: true}, nil
 	}
 	hostField := strings.TrimSpace(node.Host)
 	if hostField == "" || hostField == "local" {
-		return ShellExecutor{}, nil
+		return ShellExecutor{MachineVenue: true}, nil
 	}
 	sshTarget, err := spec.ParseSSHTarget(hostField)
 	if err != nil {

@@ -78,7 +78,17 @@ func (e *SSHExecutor) Venue() string {
 // `ssh vm ['sudo'] bash -s` with the script fed on stdin. asRoot prepends `sudo`
 // (root on the guest) and picks the CHARLY_ROOT dry-run heredoc label; !asRoot runs
 // as the guest's unprivileged SSH-login user (CHARLY_USER label).
+//
+// An SSH venue is ALWAYS a machine venue, so the UNPRIVILEGED leg is prefixed with the
+// env.d preamble: `ssh vm bash -s` is non-interactive and never reads the guest's
+// ~/.bashrc, so a candy's `env:` would otherwise be invisible to every deploy
+// `run:`/`check:` on a VM (charly#814). `$HOME` expands on the guest, so the guest
+// user's own env.d is the source. The `sudo` (root) leg is deliberately NOT prefixed:
+// a candy's `env:` is the guest USER's, while `sudo` resets HOME to root's.
 func (e *SSHExecutor) run(ctx context.Context, script string, asRoot bool, opts spec.EmitOpts) error {
+	if !asRoot {
+		script = WithMachineVenuePreamble(script)
+	}
 	if opts.DryRun {
 		echo, label := "[dry-run] ssh vm bash -s <<CHARLY_USER", "CHARLY_USER"
 		if asRoot {
@@ -222,11 +232,14 @@ func (e *SSHExecutor) GetFile(ctx context.Context, remotePath string, asRoot boo
 // RunCapture executes a script on the guest and returns captured
 // stdout/stderr/exit. Mirrors the deleted VmTestExecutor.Exec semantics:
 // no automatic root escalation (callers that need root prefix sudo).
+//
+// The env.d preamble is prefixed here too: the check engine's `command:` probe
+// reaches a VM venue through this leg (charly#814).
 func (e *SSHExecutor) RunCapture(ctx context.Context, script string) (string, string, int, error) {
 	args := e.SSHBaseArgs()
 	args = append(args, "bash", "-s")
 	cmd := exec.CommandContext(ctx, "ssh", args...)
-	cmd.Stdin = strings.NewReader(script)
+	cmd.Stdin = strings.NewReader(WithMachineVenuePreamble(script))
 	bindProcessGroupKill(cmd)
 	return RunCaptureCmd(cmd)
 }

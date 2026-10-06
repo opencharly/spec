@@ -22,7 +22,14 @@ func VenueFromDescriptor(d spec.VenueDescriptor) (spec.DeployExecutor, error) {
 	case "":
 		return nil, nil // no venue (e.g. VenueExecutor declining → caller keeps its executor)
 	case "shell":
-		return ShellExecutor{}, nil
+		// A round-tripped shell descriptor is a MACHINE venue: the ONLY producer that
+		// emits Kind "shell" is DescriptorFromExecutor over a ShellExecutor, and a plain
+		// ShellExecutor{}/ContainerChainFromDescriptor (a bare local host TRANSPORT for a
+		// container jump) is reported as "container" or "" — never "shell". So a
+		// materialized shell venue is a target:local/host:local machine venue, and its
+		// non-interactive commands source the candy env.d (charly#814), identical to
+		// RootExecutorForDeployNode's local arm.
+		return ShellExecutor{MachineVenue: true}, nil
 	case "ssh":
 		return &SSHExecutor{User: d.User, Host: d.Host, Port: d.Port, Args: d.Args, ConnectTimeout: d.ConnectTimeout}, nil
 	case "container":

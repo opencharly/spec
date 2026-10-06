@@ -33,7 +33,21 @@ import (
 // ShellExecutor implements DeployExecutor against the invoking user's shell
 // + filesystem. Faithful behavior-preserving wrapper around the
 // existing runSudoShell / runUserShell / BuilderRun helpers.
-type ShellExecutor struct{}
+type ShellExecutor struct {
+	// MachineVenue marks this executor as a MACHINE venue (target: local, or a
+	// host:local/host:user@machine root) whose non-interactive commands must
+	// source the venue user's candy env.d directory first (charly#814 — a
+	// candy's `env:` lands in ~/.config/opencharly/env.d/, sourced only by an
+	// INTERACTIVE ~/.bashrc, so a deploy `run:`/`check:` never saw it).
+	//
+	// FALSE for the throwaway ShellExecutor{} a container-jump NestedExecutor
+	// uses purely as a LOCAL HOST transport: its payload executes INSIDE the
+	// container, whose env already comes from the image's ENV directives, so
+	// the host's own env.d must NOT be sourced into a container-bound command.
+	// RootExecutorForDeployNode sets it true for a local deploy; the container
+	// chain leaves it false (venue_descriptor.go, deploy_chain.go).
+	MachineVenue bool
+}
 
 // VenueLocal is the stable Venue() identifier for the local host.
 // Exported so install_ledger.go and tests can reference it without
@@ -47,7 +61,18 @@ func (ShellExecutor) Venue() string { return VenueLocal }
 // run is the shared body of RunSystem/RunUser: asRoot picks the sudo shell
 // (runSudoShell) over the unprivileged one (runUserShell). The ctx is unused —
 // ShellExecutor runs against the invoking user's own shell.
-func (ShellExecutor) run(_ context.Context, script string, asRoot bool, opts spec.EmitOpts) error {
+//
+// A MachineVenue prefixes the env.d preamble on the UNPRIVILEGED leg so a NON-interactive
+// `run:`/`check:` command sees the same candy env an interactive shell would
+// (charly#814). It is deliberately NOT prefixed under `sudo`: a candy's `env:` is
+// written to the deploying USER's env.d, `sudo` resets HOME to root's, and a
+// system-scoped step runs as root — so the user-scoped env is neither reachable nor
+// intended there. The image/pod path's process-wide `ENV` is not the contract for a
+// root step on a machine venue.
+func (s ShellExecutor) run(_ context.Context, script string, asRoot bool, opts spec.EmitOpts) error {
+	if s.MachineVenue && !asRoot {
+		script = WithMachineVenuePreamble(script)
+	}
 	if asRoot {
 		return runSudoShell(script, opts)
 	}
@@ -109,7 +134,14 @@ func (ShellExecutor) GetFile(ctx context.Context, remotePath string, asRoot bool
 // ImageExecutor / VmTestExecutor behaviour from the pre-cutover test-
 // time interface — callers (testrun.go verbs) get the same return
 // shape via the unified DeployExecutor interface.
-func (ShellExecutor) RunCapture(ctx context.Context, script string) (string, string, int, error) {
+//
+// The command-check leg reaches the venue here, so a MachineVenue prefixes the
+// env.d preamble — this is how a candy's own `check: command: printenv FOO`
+// sees the env its `env:` block declared (charly#814).
+func (s ShellExecutor) RunCapture(ctx context.Context, script string) (string, string, int, error) {
+	if s.MachineVenue {
+		script = WithMachineVenuePreamble(script)
+	}
 	cmd := exec.CommandContext(ctx, "bash", "-c", script)
 	bindProcessGroupKill(cmd)
 	return RunCaptureCmd(cmd)

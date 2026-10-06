@@ -296,7 +296,17 @@ func (n *NestedExecutor) RunCapture(ctx context.Context, script string) (string,
 }
 
 // prepareJump wraps a script for this executor's jump.
+//
+// A jump INTO a guest over SSH reaches a MACHINE venue whose non-interactive shell
+// never reads ~/.bashrc, so the env.d preamble is prepended BEFORE the wrap — it
+// lands inside the guest, where the guest user's own env.d lives (charly#814). A
+// container-exec jump is NOT prefixed: its payload runs inside a container whose env
+// already comes from the image's ENV directives, and the container has no candy
+// env.d of its own to source.
 func (n *NestedExecutor) prepareJump(script string, asRoot bool) (string, error) {
+	if n.Jump.Kind == JumpSSH {
+		script = WithMachineVenuePreamble(script)
+	}
 	return wrapWithJump(n.Jump, script, asRoot)
 }
 
