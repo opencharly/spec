@@ -9,7 +9,12 @@
 // plugins/profiles.json, and the .claude/settings.json plugin-owned keys.
 #Marketplace: close({
 	name:        string & =~"^[a-z][a-z0-9-]*$"         // "charly-plugins" (the marketplace name)
-	version:     string & =~"^[0-9]+[.][0-9]+[.][0-9]+$" // marketplace.json metadata.version
+	// version is DELIBERATELY not required: the marketplace versions by commit SHA
+	// (marketplace/README.md: "No `version` fields anywhere"), and the org-wide
+	// cutover dropped the stamp from every entity. Optional here — matching
+	// #MarketplaceFamily.version? — only so a legacy config carrying one still
+	// loads; the emitted manifests omit it via `omitempty`.
+	version?:    string & =~"^[0-9]+[.][0-9]+[.][0-9]+$" // (legacy) marketplace.json metadata.version
 	description?: string & !=""                          // marketplace.json metadata.description
 	families: {[string]: #MarketplaceFamily} @go(Families,type=map[string]MarketplaceFamily) // family name → its metadata (plugins/ dir = family)
 	settings?: #MarketplaceSettings                  // the harness wiring data (settings.json plugin-owned keys)
