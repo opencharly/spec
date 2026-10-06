@@ -119,6 +119,37 @@ func TestVenueFromDescriptor_ShellIsMachineVenue(t *testing.T) {
 	}
 }
 
+// TestSSHExecutorRunCaptureStdinCarriesPreamble is the B12 proof for the leg the check
+// engine's `command:` probe actually reaches on a VM venue (charly#814): the #814 symptom
+// venue is a VM, so `SSHExecutor.RunCapture`'s stdin is the path a VM check probe runs.
+// A fake `ssh` on PATH captures the stdin it is handed; the test asserts the env.d
+// preamble is there (and FAILS if the prefixing is removed).
+func TestSSHExecutorRunCaptureStdinCarriesPreamble(t *testing.T) {
+	dir := t.TempDir()
+	captured := filepath.Join(dir, "stdin.txt")
+	fakeSSH := filepath.Join(dir, "ssh")
+	script := "#!/bin/sh\ncat > " + captured + "\nexit 0\n"
+	if err := os.WriteFile(fakeSSH, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	e := &SSHExecutor{Host: "charly-vm"}
+	if _, _, _, err := e.RunCapture(context.Background(), "printenv FOO"); err != nil {
+		t.Fatalf("RunCapture: %v", err)
+	}
+	got, err := os.ReadFile(captured)
+	if err != nil {
+		t.Fatalf("the fake ssh captured nothing: %v", err)
+	}
+	if !strings.Contains(string(got), MachineVenuePreamble) {
+		t.Fatalf("SSHExecutor.RunCapture stdin must carry the env.d preamble (the VM check-probe leg):\n%s", got)
+	}
+	if !strings.Contains(string(got), "printenv FOO") {
+		t.Fatalf("the command was lost from the stdin:\n%s", got)
+	}
+}
+
 // TestSSHExecutorMachineVenueUserNotRoot proves the SSH venue (always a machine venue)
 // prefixes the env.d preamble on the UNPRIVILEGED leg and NOT the sudo leg — the same
 // contract as the local ShellExecutor (a candy's `env:` is the guest USER's; `sudo`
