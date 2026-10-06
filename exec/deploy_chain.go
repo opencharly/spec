@@ -219,7 +219,7 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.DeployNode, flat
 //
 // It does NOT handle the nested-inside-a-parent case (opts.ParentExec); that
 // stays in the local deploy target.Add because it's deploy-execution-specific.
-// Returns ShellExecutor{} for a nil node.
+// Returns a MACHINE ShellExecutor for a nil node.
 //
 // The returned ShellExecutor is a MACHINE venue (MachineVenue: true): its
 // non-interactive commands source the venue user's candy env.d first, so a deploy

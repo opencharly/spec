@@ -118,3 +118,36 @@ func TestVenueFromDescriptor_ShellIsMachineVenue(t *testing.T) {
 		t.Fatalf("a re-materialized shell venue must be a machine venue")
 	}
 }
+
+// TestDescriptorFromExecutor_JumpTransportsNeverEmitShellKind is the PRODUCER half of the
+// claim VenueFromDescriptor("shell") relies on (charly#814, B13/RDD). A re-materialized
+// "shell" venue carries MachineVenue=true, so the placement is safe only if a
+// CONTAINER-BOUND command cannot round-trip into a "shell" descriptor. It cannot: a
+// container/nested jump is always a *NestedExecutor*, and DescriptorFromExecutor reports
+// every jump as "container" (container-exec) or "" (ssh/virsh) — its bare ShellExecutor
+// PARENT (the local host transport) is never itself described. Only a ShellExecutor used
+// as an actual venue emits "shell", and that is the machine venue.
+func TestDescriptorFromExecutor_JumpTransportsNeverEmitShellKind(t *testing.T) {
+	cases := []struct {
+		name string
+		exec spec.DeployExecutor
+	}{
+		{"container-exec jump", ContainerChainFromDescriptor("podman", "charly-x-1-1")},
+		{"nested SSH jump", &NestedExecutor{Parent: ShellExecutor{}, Jump: NestedJump{Kind: JumpSSH, Target: "charly-vm"}}},
+		{"nested SSH jump over a machine parent", &NestedExecutor{Parent: ShellExecutor{MachineVenue: true}, Jump: NestedJump{Kind: JumpSSH, Target: "charly-vm"}}},
+		{"SSH venue", &SSHExecutor{Host: "charly-vm"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DescriptorFromExecutor(tc.exec).Kind; got == "shell" {
+				t.Fatalf("a jump transport reported Kind=%q — it would re-materialize as a machine venue and source the HOST env.d into a container/guest command: %#v", got, tc.exec)
+			}
+		})
+	}
+
+	// The positive half: the machine venue itself IS the "shell" descriptor, and its
+	// round-trip preserves MachineVenue.
+	if got := DescriptorFromExecutor(ShellExecutor{MachineVenue: true}).Kind; got != "shell" {
+		t.Fatalf("a machine ShellExecutor must emit Kind=\"shell\", got %q", got)
+	}
+}
