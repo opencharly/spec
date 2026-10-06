@@ -119,7 +119,63 @@ func TestVenueFromDescriptor_ShellIsMachineVenue(t *testing.T) {
 	}
 }
 
-// TestDescriptorFromExecutor_JumpTransportsNeverEmitShellKind is the PRODUCER half of the
+// TestSSHExecutorMachineVenueUserNotRoot proves the SSH venue (always a machine venue)
+// prefixes the env.d preamble on the UNPRIVILEGED leg and NOT the sudo leg — the same
+// contract as the local ShellExecutor (a candy's `env:` is the guest USER's; `sudo`
+// resets HOME to root's). The dry-run render shows what each leg would feed the guest
+// shell.
+func TestSSHExecutorMachineVenueUserNotRoot(t *testing.T) {
+	e := &SSHExecutor{Host: "charly-vm"}
+	var buf strings.Builder
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	_ = e.run(context.Background(), "printenv CHARLY_ENVD_PROBE", false, spec.EmitOpts{DryRun: true})
+	_ = e.run(context.Background(), "printenv CHARLY_ENVD_PROBE", true, spec.EmitOpts{DryRun: true})
+	_ = w.Close()
+	os.Stderr = old
+	_, _ = io.Copy(&buf, r)
+	rendered := buf.String()
+
+	userPart, rootPart, ok := strings.Cut(rendered, "[dry-run] ssh vm sudo")
+	if !ok {
+		t.Fatalf("could not find the root dry-run render:\n%s", rendered)
+	}
+	if !strings.Contains(userPart, MachineVenuePreamble) {
+		t.Errorf("the UNPRIVILEGED ssh leg must carry the env.d preamble:\n%s", userPart)
+	}
+	if strings.Contains(rootPart, MachineVenuePreamble) {
+		t.Errorf("the sudo ssh leg must NOT carry the env.d preamble (the guest user's env, not root's):\n%s", rootPart)
+	}
+}
+
+// TestNestedExecutorPrepareJumpEnvPreamble proves the nested-in-guest case: a JumpSSH
+// payload is prefixed with the env.d preamble (so it lands INSIDE the guest, where the
+// guest user's env.d lives), while a JumpContainerExec payload is NOT (a container's env
+// comes from the image's ENV directives, and it has no candy env.d to source).
+func TestNestedExecutorPrepareJumpEnvPreamble(t *testing.T) {
+	sshJump := &NestedExecutor{Parent: ShellExecutor{}, Jump: NestedJump{Kind: JumpSSH, Target: "user@guest:2222"}}
+	out, err := sshJump.prepareJump("printenv FOO", false)
+	if err != nil {
+		t.Fatalf("prepareJump(JumpSSH): %v", err)
+	}
+	if !strings.Contains(out, MachineVenuePreamble) {
+		t.Fatalf("a JumpSSH payload must carry the env.d preamble:\n%s", out)
+	}
+	if !strings.Contains(out, "printenv FOO") {
+		t.Fatalf("the payload was lost in the wrap:\n%s", out)
+	}
+
+	containerJump := &NestedExecutor{Parent: ShellExecutor{}, Jump: NestedJump{Kind: JumpContainerExec, Engine: "podman", Target: "charly-pod"}}
+	out, err = containerJump.prepareJump("printenv FOO", false)
+	if err != nil {
+		t.Fatalf("prepareJump(JumpContainerExec): %v", err)
+	}
+	if strings.Contains(out, MachineVenuePreamble) {
+		t.Fatalf("a JumpContainerExec payload must NOT carry the env.d preamble (the container has the image's ENV):\n%s", out)
+	}
+}
+
 // claim VenueFromDescriptor("shell") relies on (charly#814, B13/RDD). A re-materialized
 // "shell" venue carries MachineVenue=true, so the placement is safe only if a
 // CONTAINER-BOUND command cannot round-trip into a "shell" descriptor. It cannot: a
