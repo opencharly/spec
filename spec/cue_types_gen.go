@@ -7369,7 +7369,12 @@ type Local struct {
 type Marketplace struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
-	Version string `yaml:"version,omitempty" json:"version"`
+	// version is DELIBERATELY not required: the marketplace versions by commit SHA
+	// (marketplace/README.md: "No `version` fields anywhere"), and the org-wide
+	// cutover dropped the stamp from every entity. Optional here — matching
+	// #MarketplaceFamily.version? — only so a legacy config carrying one still
+	// loads; the emitted manifests omit it via `omitempty`.
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
