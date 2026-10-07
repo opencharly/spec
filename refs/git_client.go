@@ -555,10 +555,3 @@ func (g *GitClient) Download(repoPath, version string, download func(repoPath, v
 	return path, nil
 }
 
-// DownloadResult is the memo's read-only view for tests and diagnostics.
-func (g *GitClient) DownloadResult(repoPath, version string) (string, bool) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	v, ok := g.downloads[repoPath+"@"+version]
-	return v, ok
-}
