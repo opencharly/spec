@@ -57,17 +57,25 @@ func NormalizeRepoSpec(spc string) (repoPath, version string) {
 }
 
 // RepoIdentity returns the canonical identity of the PROJECT an import ref addresses, or "" when
-// it can't be determined (in which case the loader degrades to version/path-keyed behavior). A
-// remote `@host/org/repo[/sub]:ver` ref yields `host/org/repo` directly (no fetch, no git); a
-// local path yields ProjectRepoIdentity of the target directory.
+// it can't be determined (in which case the loader degrades to version/path-keyed behavior). Both
+// ref forms name the PROJECT, never its enclosing repo: a remote `@host/org/repo[/sub][:ver]` ref
+// yields `host/org/repo` plus `/sub` when it carries a sub-path (no fetch, no git); a local path
+// yields ProjectRepoIdentity of the target directory.
 //
-// It must name the PROJECT, not merely the enclosing repo: `git remote get-url origin` walks UP
-// to the enclosing repository, so a subdirectory project inside one repo would otherwise inherit
-// the ROOT's identity, and walkNamespace's repo-identity cycle-break would resolve that distinct
-// project as a back-reference to the root — a degenerate self-cycle.
+// The project — not the enclosing repo — is the unit the loader's cycle-break must key on:
+// `git remote get-url origin` walks UP to the enclosing repository, so a subdirectory project
+// inside one repo would otherwise inherit the ROOT's identity, and walkNamespace's repo-identity
+// cycle-break would resolve that distinct project as a back-reference to the root — a degenerate
+// self-cycle. The same collapse applies to a remote ref that names a sub-path.
 func RepoIdentity(ref, baseDir string) string {
 	if strings.HasPrefix(ref, "@") {
 		if pr := ParseRemoteRef(ref); pr != nil {
+			// A remote sub-path addresses a subdirectory PROJECT (the loader mounts the
+			// charly.yml it contains), so its identity carries that path — mirroring the local
+			// branch below, which qualifies by the path relative to the git toplevel.
+			if sub := strings.Trim(pr.SubPath, "/"); sub != "" {
+				return pr.RepoPath + "/" + sub
+			}
 			return pr.RepoPath
 		}
 		return ""

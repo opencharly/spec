@@ -7,16 +7,24 @@ import (
 	"testing"
 )
 
-// repo_identity_project_test.go — the identity a LOCAL import ref resolves to must name the
-// PROJECT, not merely the enclosing repo.
+// repo_identity_project_test.go — an import ref's identity must name the PROJECT, not merely its
+// enclosing repo, for BOTH ref forms.
 //
-// Before this fix RepoIdentity() returned the git `origin` identity of the ref's directory, which
+// RepoIdentity() used to return the git `origin` identity of a local ref's directory, which
 // `git remote get-url origin` resolves by walking UP to the enclosing repository. A namespaced
 // import of a SUBDIRECTORY project inside the same repo therefore inherited the ROOT's identity,
 // and walkNamespace's repo-identity cycle-break resolved it as a REFERENCE mount to the root — a
-// degenerate self-cycle. Pre-fix that crashed the materialized wire marshaller
-// (`json: unsupported value: encountered a cycle via map[string]*spec.UnifiedFile`); post-fix it
-// silently dropped the whole namespace.
+// degenerate self-cycle. A remote `@host/org/repo[/sub]` ref collapsed the same way, by dropping
+// its sub-path.
+//
+// The consequences are covered by two DIFFERENT fixes, and this file pins the identity one:
+//
+//   - the WIRE consequence — a plain json.Marshal of the cyclic graph is rejected with
+//     `json: unsupported value: encountered a cycle via map[string]*spec.UnifiedFile` — is fixed
+//     by the loaderkit codec (opencharly/sdk#350), whose flat form TRUNCATES a back-edge. With the
+//     identity collapse still present, that truncation silently dropped the whole namespace.
+//   - the IDENTITY consequence, the subject HERE: each subdirectory project resolves as its OWN
+//     project (a definition mount) on both the local and the remote ref form.
 
 func gitInitWithOrigin(t *testing.T, dir, origin string) {
 	t.Helper()
@@ -52,6 +60,19 @@ func TestRepoIdentity_SubdirectoryProjectIsDistinct(t *testing.T) {
 	}
 	if want := "github.com/opencharly/plugin-check/testdata/fixture"; subID != want {
 		t.Fatalf("subdirectory identity = %q, want %q", subID, want)
+	}
+}
+
+// TestRepoIdentity_RemoteSubPathIsProjectScoped: the REMOTE form must not drop its sub-path
+// either — a remote sub-path addresses the subdirectory project, not the enclosing repo.
+func TestRepoIdentity_RemoteSubPathIsProjectScoped(t *testing.T) {
+	if got := RepoIdentity("@github.com/opencharly/plugin-check/testdata/fixture:main", "/tmp"); got != "github.com/opencharly/plugin-check/testdata/fixture" {
+		t.Fatalf("remote sub-path identity = %q, want github.com/opencharly/plugin-check/testdata/fixture", got)
+	}
+	// A remote ref with NO sub-path still names the repo-level project, so a local repo-root mount
+	// and a remote ref to the same repo keep sharing one identity.
+	if got := RepoIdentity("@github.com/opencharly/charly:main", "/tmp"); got != "github.com/opencharly/charly" {
+		t.Fatalf("remote repo-root identity = %q, want github.com/opencharly/charly", got)
 	}
 }
 
