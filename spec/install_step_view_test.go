@@ -112,7 +112,6 @@ func TestStepView_RoundTrip(t *testing.T) {
 		}},
 		{"LocalPkgInstall", &LocalPkgInstallStep{
 			PackageName: "charly",
-			Version:     "2026.225.1200",
 			CandyName:   "charly",
 			Format:      "pac",
 			LocalPkg:    &LocalPkg{InstallTemplate: "pacman -U", Probe: "command -v pacman", DownloadTemplate: "https://opencharly.github.io/charly-arch/${ARCH}/charly-${ARCH}.pkg.tar.zst"},

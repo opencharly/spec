@@ -699,8 +699,6 @@ type LocalPkgInstallStep struct {
 	// PackageName is the published package name (e.g. "charly") the deploy-time
 	// executor downloads from the distro repo.
 	PackageName string
-	// Version is the release CalVer (e.g. "2026.225.1200") to download.
-	Version string
 	// CandyName is the candy that declared the packaging section.
 	CandyName string
 	// CandyDir is the candy's source dir — the anchor for the candy's charly.yml
