@@ -161,9 +161,16 @@ type CheckHTTPResponse struct {
 // CheckVerbResult is a host-coupled verb's verdict. charly converts it to its internal
 // CheckResult (stamping the Op/Verb/timing) at the dispatch boundary.
 type CheckVerbResult struct {
-	Status        Status
-	Message       string
-	CapturedValue string // value stashed under `capture:` (recorded only on PASS)
+	Status  Status
+	Message string
+	// CapturedValue is the JSON-encoded value the verb captured while making its judgement —
+	// the parsed body of an HTTP probe, the matched fields of a log scan, the row a SQL check
+	// read — and empty when it captured nothing. It is a JSON document, never prose, so a
+	// consumer addresses a field of it by dotted path without this contract having to name any
+	// verb's shape; on the wire it is the `captured_value` raw JSON of ops.resultWire. Nothing
+	// gates it: there is no `capture:` op — the verb's own RunVerb decides what, if anything,
+	// to capture, exactly as it decides the status and the message.
+	CapturedValue string
 }
 
 // CheckVerbProvider is the typed in-process contract a host-coupled check-verb candy
