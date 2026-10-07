@@ -4,9 +4,9 @@
 //
 // The authored form is #Pipeline (schema/pipeline.cue), and #Pipeline.engine selects the
 // engine, which is dispatched over the normal InvokeProvider path as
-// `InvokeProvider("workflow", <engine>, <op>)` — the `workflow` PROVIDER CLASS added to
-// #ProviderClassNames by this same change, so an engine is addressable exactly the way
-// every other plugin is. Normalizing a pipeline into the form an engine runs (lobster's
+// `InvokeProvider("workflow", <engine>, <op>)` — the `workflow` PROVIDER CLASS declared in
+// #ProviderClassNames, so an engine is addressable exactly the way every other plugin is.
+// Normalizing a pipeline into the form an engine runs (lobster's
 // `.opencharly/pipelines/<name>/workflow.lobster`, a future engine's
 // `.github/workflows/<name>.yml`) belongs to THAT engine, not to this contract, which
 // carries only the wire the dispatch crosses. `command:lobster` is a SEPARATE, additional
