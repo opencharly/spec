@@ -554,4 +554,3 @@ func (g *GitClient) Download(repoPath, version string, download func(repoPath, v
 	g.mu.Unlock()
 	return path, nil
 }
-
