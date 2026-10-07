@@ -60,15 +60,39 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, err = os.Stat(cachePath)
-	if err != nil {
-		if os.IsNotExist(err) {
+	if _, statErr := os.Stat(cachePath); statErr != nil {
+		if os.IsNotExist(statErr) {
 			return false, nil
 		}
-		return false, err
+		return false, statErr
+	}
+	return IsCertifiedExport(cachePath), nil
+}
+
+// IsCertifiedExport reports whether cachePath holds a repo export that can CERTIFY its own
+// content — the ONE content-validity predicate for a resolved ref's materialization, shared by
+// EVERY path that decides whether a cached export may be served (R3).
+//
+// An export is certified iff it is a directory AND carries v2 provenance
+// (RepoCacheProvenance — the commit it was cloned from: its CONTENT identity, not its path) AND
+// every submodule it declares has content on disk. Path existence alone is NOT validity: a
+// wiped, half-populated or provenance-less export has a directory too, and serving it silently
+// breaks the "content validity, never marker presence" invariant the resolved-ref identity
+// rests on.
+//
+// Two paths previously answered this question with two DIFFERENT predicates on the SAME object:
+// the immutable-ref fast path (IsRepoCached) asked for content, while the ref-resolution cache
+// (GitClient.Download) asked only `os.Stat().IsDir()` — strictly weaker. A persisted resolution
+// whose export had lost its provenance sidecar was therefore served for the whole TTL with ZERO
+// upstream contact (measured live 2026-10-07: 0 `git ls-remote` calls, the `.ref` sidecar never
+// restored, the content-invalid export served). One object, one predicate.
+func IsCertifiedExport(cachePath string) bool {
+	st, err := os.Stat(cachePath)
+	if err != nil || !st.IsDir() {
+		return false
 	}
 	if _, ok := ReadRepoCacheProvenance(cachePath); !ok {
-		return false, nil
+		return false
 	}
-	return submodulesPopulated(cachePath), nil
+	return submodulesPopulated(cachePath)
 }

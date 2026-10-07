@@ -268,16 +268,16 @@ func TestGitClientCacheSurface(t *testing.T) {
 	// Prime the maps directly (no network): the cache is consulted before any fetch.
 	g.mu.Lock()
 	g.latestTags["repo/A"] = gitCacheEntry{Value: "v1", Resolved: time.Now()}
-	g.resolvedRefs["repo/B main"] = gitCacheEntry{Value: "sha1", Resolved: time.Now()}
+	g.defaultBranches["https://github.com/opencharly/example"] = gitCacheEntry{Value: "main", Resolved: time.Now()}
 	g.mu.Unlock()
 
 	if _, n := g.CacheStatus(); n != 2 {
 		t.Fatalf("primed: status %d entries, want 2", n)
 	}
 
-	// BypassCache: the switch is the mechanism the three lookups honor before any
-	// cached read (LatestTag/DefaultBranch/ResolveRef check !g.disabled first) —
-	// observable via the field itself.
+	// BypassCache: the switch is the mechanism every lookup honors before any cached
+	// read (LatestTag/DefaultBranch/Download check !g.disabled first) — observable via
+	// the field itself.
 	g.BypassCache()
 	if !g.disabled {
 		t.Fatalf("bypass: disabled flag not set")
