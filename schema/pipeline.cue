@@ -21,7 +21,8 @@
 // schemagen DERIVES spec.KindValueDefs["pipeline"] from it (the #TaskValue
 // precedent), so the host closedness-gates a pipeline body with zero per-kind code.
 //
-// The NORMALIZED IR this lowers to is #Workflow (schema/workflow.cue).
+// An engine normalizes this pipeline into whatever form IT runs; schema/workflow.cue
+// carries the wire that engine is dispatched with.
 //
 // Exec-arm exclusivity (exactly one of run/pipeline/workflow/parallel/for_each/
 // input/plan/charly) is a GO rule in plugin-pipeline's OpValidate, NOT a CUE
@@ -37,8 +38,8 @@
 }
 
 // #PipelineApproval — the OBJECT form of lobster `approval`. The AUTHORED form is a
-// union (bool | string | this struct) so `approval: true` stays terse; the IR
-// (#WorkflowStep) always carries this object form.
+// union (bool | string | this struct) so `approval: true` stays terse; an engine
+// normalizes it to this object form before it evaluates the gate.
 #PipelineApproval: {
 	message?:    string & !=""
 	timeout_ms?: int & >0 @go(TimeoutMs)
@@ -59,17 +60,15 @@
 	retry?:      #PipelineRetry
 }
 
-// #PipelineArms — the EXEC arms, embedded by both the authored step and the IR
-// step. Declaring them once (R3) keeps the authored and normalized shapes from
-// drifting.
+// #PipelineArms — the EXEC arms the authored pipeline step carries. Declared ONCE here
+// (R3) and embedded by #PipelineStepBase, so the arms cannot drift from the step that
+// uses them; #PipelineSubStep deliberately re-declares its own NON-RECURSIVE subset
+// (lobster's rule: no nested parallel/for_each/input/workflow inside a branch).
 //
-// It does NOT distinguish the two steps, and neither do the flow keys: both
-// #PipelineStepBase and #WorkflowStep embed #PipelineFlow and #PipelineArms, so
-// everything declared here is COMMON to them. Exactly two fields separate the
-// authored step from the IR step — `approval` (the authored terse union
-// `bool | string | #PipelineApproval` vs the IR's normalized #WorkflowApproval
-// object) and `result`, which is IR-only. The exec-arm XOR is a Go rule in
-// BOTH, so it is not a CUE difference either.
+// It deliberately does NOT carry `approval`: that lives on #PipelineStepBase, because a
+// step INSIDE `parallel.branches[]` / `for_each.steps[]` must not open a gate. The
+// exec-arm XOR (exactly one of them) is a Go rule in plugin-pipeline's OpValidate, not a
+// CUE disjunction.
 #PipelineArms: {
 	// --- lobster exec arms ---
 	run?:           string & !=""
@@ -130,12 +129,13 @@
 	#PipelineFlow
 	#PipelineArms
 
-	// approval — terse authored union; the IR normalizes it to #WorkflowApproval.
+	// approval — terse authored union; an engine normalizes it to #PipelineApproval.
 	approval?: bool | string | #PipelineApproval @go(Approval,type=any)
 }
 
-// #PipelineStep — the step type `steps:` carries. A distinct def so the IR can add
-// per-step result state without touching the authored shape.
+// #PipelineStep — the step type `steps:` carries: the authored step, named so a step
+// consumer (sdk/workflowkit) has a stable type to build on without reaching for the
+// base def.
 #PipelineStep: #PipelineStepBase
 
 // #PipelineSchedule — the cron trigger. A 5-field cron, the SAME grammar
