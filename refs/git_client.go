@@ -511,22 +511,23 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	fmt.Fprintf(stderr, "charly: git metadata cached.\n")
 }
 
-// Download fetches repoPath@version into the repo cache and returns the cache path,
-// CACHED with a bounded freshness window (ResolveRefTTL) — the mutable-ref question ("has this
-// branch moved upstream?") is inherently a NETWORK question, so it carries an explicit, declared
-// bound rather than a content claim; everything else about the entry is content-addressed.
+// Download fetches repoPath@version into the repo cache and returns the cache path, deduped only
+// by the IN-PROCESS memo below. There is no freshness WINDOW and no persisted entry: the
+// mutable-ref question ("has this branch moved upstream?") is inherently a NETWORK question, and
+// the only honest answers are "ask upstream" or "guess" — so this asks, once per process, rather
+// than trading a measured staleness window for a saved round trip.
 //
 // A mutable ref (a branch or the default branch) can move, so the freshness contract requires
 // re-resolving it: the miss path below IS `downloadRepoFrom`, which resolves the ref's CURRENT
 // commit (`GitResolveRef`), refuses a stale export (`repoCacheFresh(cachePath, commit)`), re-clones
-// it and re-stamps the provenance. Within one process the memo below means a command run twice in
-// quick succession (e.g. the status fan-out resolving the envelope multiple times) pays that
-// resolution once — that is the batch-dedupe the layer exists for, and it needs no time validity
-// because a process is one moment in time. Across processes there is NO memo: a durable entry could
-// only ever answer "has this ref moved upstream?" by not asking, which is the defect this cutover
-// removes.
+// it and re-stamps the provenance. Within one process the memo means a command run twice in quick
+// succession (e.g. the status fan-out resolving the envelope multiple times) pays that resolution
+// once — the batch dedupe this layer exists for, which needs no time validity because a process is
+// one moment in time. Across processes there is NO memo: a durable entry could only ever answer
+// "has this ref moved upstream?" by not asking, which is the defect this cutover removes
+// (opencharly/charly#715, #530).
 //
-// The cached path is additionally validated against its CONTENT (IsCertifiedExport): an export that
+// The memoised path is further validated against its CONTENT (IsCertifiedExport): an export that
 // can no longer certify what it holds — a wiped, evicted, half-populated or provenance-less
 // repo-cache dir — is never served (the content-validity principle — the same class the
 // materialized-tree cache fixed with component drift detection, and the same predicate the

@@ -3433,19 +3433,25 @@ type CacheConfig struct {
 	Git GitCache `yaml:"git,omitempty" json:"git,omitempty"`
 }
 
-// #GitCache is the git metadata cache: latest tags, default branches, resolved
-// refs, and repo downloads. Each entry records the value and when it was
-// resolved (RFC3339), so the TTL policy can decide freshness.
+// #GitCache is the git metadata cache: latest tags and default branches. Each entry
+// records the value and when it was resolved (RFC3339), so the TTL policy can decide
+// freshness.
+//
+// `resolved_refs` and `downloads` were DELETED with the resolved-ref identity
+// cutover: both persisted an answer to "which commit does this ref name NOW" beside a
+// timestamp, so a MUTABLE pin that had moved upstream was served stale for the whole
+// window without ever asking (opencharly/charly#715, #530). A resolved ref's durable
+// record is its export's own v2 provenance sidecar (`refs.RepoCacheProvenance`), which
+// names the commit it was cloned from — its CONTENT identity — and `GitClient.Download`
+// re-takes the upstream answer once per process. Do not reintroduce a persisted
+// resolution key here: a cache whose validity is a clock, not a content digest, is the
+// defect that cutover removed.
 type GitCache struct {
 	Bypass bool `yaml:"bypass,omitempty" json:"bypass,omitempty"`
 
 	LatestTags map[string]GitCacheEntry `yaml:"latest_tags,omitempty" json:"latest_tags,omitempty"`
 
 	DefaultBranches map[string]GitCacheEntry `yaml:"default_branches,omitempty" json:"default_branches,omitempty"`
-
-	ResolvedRefs map[string]GitCacheEntry `yaml:"resolved_refs,omitempty" json:"resolved_refs,omitempty"`
-
-	Downloads map[string]GitCacheEntry `yaml:"downloads,omitempty" json:"downloads,omitempty"`
 }
 
 // #GitCacheEntry is one cached git answer: the value plus the resolution time.
