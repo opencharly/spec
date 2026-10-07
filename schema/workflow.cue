@@ -1,23 +1,26 @@
-// CUE schema for the normalized WORKFLOW IR and the workflow-ENGINE op envelopes.
+// CUE schema for the workflow-ENGINE WIRE: the op envelopes a pipeline engine is
+// invoked with, plus the approval / schedule / trigger value objects those envelopes
+// and an engine's own replies are built from.
 //
-// The authored form is #Pipeline (schema/pipeline.cue). A pipeline plugin resolves
-// it to #Workflow — the engine-agnostic IR every consumer lowers from:
+// The authored form is #Pipeline (schema/pipeline.cue), and #Pipeline.engine selects the
+// engine, which is dispatched over the normal InvokeProvider path as
+// `InvokeProvider("workflow", <engine>, <op>)` — the `workflow` PROVIDER CLASS added to
+// #ProviderClassNames by this same change, so an engine is addressable exactly the way
+// every other plugin is. Normalizing a pipeline into the form an engine runs (lobster's
+// `.opencharly/pipelines/<name>/workflow.lobster`, a future engine's
+// `.github/workflows/<name>.yml`) belongs to THAT engine, not to this contract, which
+// carries only the wire the dispatch crosses. `command:lobster` is a SEPARATE, additional
+// face of the same engine plugin (its CLI), never the dispatch that runs a workflow. The
+// op envelopes below are the `--request-json` payload shapes that path carries.
 //
-//   lobster engine        .opencharly/pipelines/<name>/{workflow.lobster, charly.yml}
-//   github-actions engine .github/workflows/<name>.yml            (future; same IR)
+// The former contract-level normalized-IR defs were RETIRED (opencharly/spec#192):
+// nothing in the org produced or consumed a lowered IR document — the engines consume the
+// envelopes below and carry these value objects themselves — so the defs and the
+// narrative that made them read as the live engine wire were deleted together.
+// #WorkflowApproval, #WorkflowStepResult, #WorkflowSchedule, #WorkflowTrigger and every
+// envelope an engine actually uses remain, unchanged.
 //
-// The IR is deliberately the SAME step shape as the authored form (it embeds
-// #PipelineFlow + #PipelineArms), so lowering never has to re-invent the grammar;
-// what the IR ADDS is the per-step result record and the engine op envelopes. The
-// engine is selected by #Pipeline.engine and dispatched over the normal
-// InvokeProvider path as `InvokeProvider("workflow", <engine>, <op>)` — the
-// `workflow` PROVIDER CLASS added to #ProviderClassNames by this same change, so an
-// engine is addressable exactly the way every other plugin is. `command:lobster` is a
-// SEPARATE, additional face of the same engine plugin (its CLI), never the dispatch
-// that runs a workflow. The op envelopes below are the `--request-json` payload
-// shapes that path carries.
-//
-// CLOSED. A consumer that cannot express an IR feature MUST fail hard rather than
+// CLOSED. A consumer that cannot express a field MUST fail hard rather than
 // silently drop it (an engine silently ignoring `approval` would run a workflow a
 // human never approved).
 
@@ -66,6 +69,9 @@
 // a schedule/approval record), never authored. `output` is the step's decoded
 // stdout: a charly step's `--output` body, or a shell step's auto-parsed JSON
 // (lobster's `$id.json`), so a later `when` can address it by dotted path.
+//
+// It SURVIVES the IR retirement below: `#WorkflowRunReply.steps` carries it, so it is
+// live wire an engine's reply is built from.
 #WorkflowStepResult: {
 	id!:         string & !=""
 	status!:     "ok" | "skipped" | "failed" | "cancelled" | "needs_approval" | "needs_input"
@@ -77,31 +83,6 @@
 	attempts?:   int & >=0
 }
 
-// #WorkflowStep — one IR step. Same grammar as the authored step, plus the
-// normalized approval object and the optional recorded result.
-#WorkflowStep: {
-	#PipelineFlow
-	#PipelineArms
-
-	approval?: #WorkflowApproval
-	result?:   #WorkflowStepResult
-}
-
-// #Workflow — the normalized, engine-agnostic IR. `entities:` is carried verbatim
-// from the authored form so a lowerer can emit the generated charly.yml.
-#Workflow: {
-	description!: string & !=""
-	engine!:      string & !=""
-	args?:        {[string]: #TaskParamSpec}
-	env?:         {PATH?: _|_, [string]: #StrVal} @go(Env,type=map[string]string)
-	cwd?:         string & !=""
-	cost_limit?:  number & >=0 @go(CostLimit)
-	triggers?:    [...#WorkflowTrigger]
-	config?:      {[string]: _} @go(Config,type=map[string]any)
-	entities?:    {[string]: {...}} @go(Entities,type=map[string]map[string]any)
-	steps!:       [...#WorkflowStep]
-}
-
 // NOTE — there is deliberately NO #WorkflowValue here.
 //
 // Every #<X>Value def in schema/ is the host-side value gate for an AUTHORABLE
@@ -111,8 +92,8 @@
 // plugin-served (#Node is an open struct and the arm-derived KindWords is empty), and
 // plugin-lobster serves the `workflow` PROVIDER CLASS, not a kind. A registered kind
 // no plugin serves would let the host gate a `kind: workflow` node against a def for
-// a kind that does not exist. The IR is the ENGINE WIRE, not a kind: it is produced by
-// lowering and consumed by an engine, never authored in a charly.yml.
+// a kind that does not exist. The engine wire below is not a kind: it is what an engine
+// is dispatched with and answers over, never authored in a charly.yml.
 //
 // `spec/spec/pipeline_test.go` pins this structurally (KindValueDefs and
 // ProviderClasses must stay DISJOINT — a word that is both is exactly this bug).
