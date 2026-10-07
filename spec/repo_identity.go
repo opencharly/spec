@@ -56,10 +56,15 @@ func NormalizeRepoSpec(spc string) (repoPath, version string) {
 	return repoPath, version
 }
 
-// RepoIdentity returns the canonical repo identity of an import ref, or "" when it can't be
-// determined (in which case the loader degrades to version-keyed behavior). A remote
-// `@host/org/repo[/sub]:ver` ref yields `host/org/repo` directly (no fetch, no git); a local path
-// yields the git `origin` identity of the target directory.
+// RepoIdentity returns the canonical identity of the PROJECT an import ref addresses, or "" when
+// it can't be determined (in which case the loader degrades to version/path-keyed behavior). A
+// remote `@host/org/repo[/sub]:ver` ref yields `host/org/repo` directly (no fetch, no git); a
+// local path yields ProjectRepoIdentity of the target directory.
+//
+// It must name the PROJECT, not merely the enclosing repo: `git remote get-url origin` walks UP
+// to the enclosing repository, so a subdirectory project inside one repo would otherwise inherit
+// the ROOT's identity, and walkNamespace's repo-identity cycle-break would resolve that distinct
+// project as a back-reference to the root — a degenerate self-cycle.
 func RepoIdentity(ref, baseDir string) string {
 	if strings.HasPrefix(ref, "@") {
 		if pr := ParseRemoteRef(ref); pr != nil {
@@ -79,14 +84,26 @@ func RepoIdentity(ref, baseDir string) string {
 	if info, statErr := os.Stat(abs); statErr == nil && !info.IsDir() {
 		dir = filepath.Dir(abs)
 	}
-	return GitRemoteIdentity(dir)
+	return ProjectRepoIdentity(dir)
 }
 
-// RootRepoIdentity determines the local root project's own repo identity for cycle-break
-// registration. An explicit `repo:` field in charly.yml is authoritative; otherwise it falls back
-// to the `git remote origin` identity of the working tree. Returns "" when neither is available
-// (the loader then behaves exactly as before — version-keyed, no self-identity short-circuit).
+// RootRepoIdentity determines the local root project's own identity for cycle-break registration
+// — the SAME ProjectRepoIdentity a namespaced import of that project resolves to, so a transitive
+// self-import matches the root seed exactly. Returns "" when it cannot be determined (the loader
+// then behaves as before — version/path-keyed, no self-identity short-circuit).
 func RootRepoIdentity(dir string) string {
+	return ProjectRepoIdentity(dir)
+}
+
+// ProjectRepoIdentity returns the canonical identity of the PROJECT rooted at dir.
+//
+// An explicit `repo:` field in dir's charly.yml is authoritative (the rule RootRepoIdentity has
+// always applied to the root, now applied uniformly). Otherwise it is the git `origin` identity
+// of dir, QUALIFIED by the project's path relative to the git toplevel whenever dir is not itself
+// the repo root — so a subdirectory project is distinct from its enclosing repo, while a
+// repo-root project (a local submodule) keeps the bare identity and still matches a remote ref to
+// the SAME repo.
+func ProjectRepoIdentity(dir string) string {
 	if data, err := os.ReadFile(filepath.Join(dir, UnifiedFileName)); err == nil {
 		var head struct {
 			Repo string `yaml:"repo" json:"repo"`
@@ -95,7 +112,41 @@ func RootRepoIdentity(dir string) string {
 			return NormalizeRepoIdentity(head.Repo)
 		}
 	}
-	return GitRemoteIdentity(dir)
+	origin := GitRemoteIdentity(dir)
+	if origin == "" {
+		return ""
+	}
+	if rel := gitTopLevelRel(dir); rel != "" {
+		return origin + "/" + rel
+	}
+	return origin
+}
+
+// gitTopLevelCache caches, per directory, dir's slash-separated path relative to its git TOPLEVEL
+// — "" when dir IS the toplevel (or is not inside a git repo). Same stability argument as
+// gitRemoteIdentityCache: a directory's toplevel does not change during a process run.
+var gitTopLevelCache sync.Map // dir -> rel ("" = repo root / not a git repo)
+
+// gitTopLevelRel reports dir's path relative to its git working-tree toplevel, or "" when dir is
+// the toplevel itself or is not inside a git repo.
+func gitTopLevelRel(dir string) string {
+	if v, ok := gitTopLevelCache.Load(dir); ok {
+		return v.(string)
+	}
+	rel := ""
+	if out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output(); err == nil {
+		if top := strings.TrimSpace(string(out)); top != "" {
+			topReal, terr := filepath.EvalSymlinks(top)
+			dirReal, derr := filepath.EvalSymlinks(dir)
+			if terr == nil && derr == nil {
+				if r, rerr := filepath.Rel(topReal, dirReal); rerr == nil && r != "." && r != "" && !strings.HasPrefix(r, "..") {
+					rel = filepath.ToSlash(r)
+				}
+			}
+		}
+	}
+	gitTopLevelCache.Store(dir, rel)
+	return rel
 }
 
 // gitRemoteIdentityCache caches the git `origin` identity per directory. The
