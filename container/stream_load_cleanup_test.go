@@ -113,10 +113,16 @@ func TestStreamLoad_SaveStartFailureDoesNotOrphanTheLoadChild(t *testing.T) {
 	// necessarily survives as Z until the binary exits. A zombie is not an immortal shell.
 	//
 	// Perturbing this test needs TRIALS, and enough of them. Measured positive control —
-	// reap removed in transfer.go AND the group kill removed below — leaks only ~1 run in 5,
-	// so a 3-run battery misses a real leak 51% of the time and a clean 0,0,0 means almost
-	// nothing. Use >=10 (0/12 clean here against that 1-in-5 control). The kill is
-	// load-bearing, not incidental: removing it alone reintroduces the leak.
+	// reap removed in transfer.go AND the group kill removed below — leaks INTERMITTENTLY.
+	// Measured across three trees: 5/5, 7/10 and 6/10, pooled 18/25 ~= 0.72 — so the rate
+	// spans roughly 0.6 to 1.0, and the "~1 run in 5" once recorded here is the one value it
+	// does NOT take (spec#41). A 3-run battery therefore misses a real leak ~6% of the time
+	// at that low end (0.4^3) and ~2% at the pooled rate (0.28^3): rare, but the low end is
+	// what governs how long a battery must be, which is why it is >=10 (0/12 clean in one
+	// such run against that control). The DRIVER of the 0.6-to-1.0 spread is not established
+	// — spec#212 owns measuring it (quiet vs loaded on one tree first, then core count and
+	// scheduler) — and no mechanism is claimed here. The kill is load-bearing, not
+	// incidental: removing it alone reintroduces the leak.
 	returned := false
 	t.Cleanup(func() {
 		cancelLoad()
