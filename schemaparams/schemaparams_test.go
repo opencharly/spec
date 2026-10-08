@@ -105,6 +105,35 @@ func TestGenerateWithCueHonoursThePackageName(t *testing.T) {
 	}
 }
 
+// TestGenerateWithCueAcceptsARelativeToolchainPath is the arm that would have caught
+// the bug this pipeline shipped for one run: the generator is exec'd with the TEMP dir
+// as its working directory, so a RELATIVE cueBin (spec's own task passes `bin`) must be
+// resolved against the caller's working directory first — otherwise it fails with
+// `fork/exec bin/cue: no such file or directory`.
+func TestGenerateWithCueAcceptsARelativeToolchainPath(t *testing.T) {
+	home, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(home) })
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := stubCue(t, dir, stubBody, "true")
+	if err := os.Rename(bin, filepath.Join(binDir, "cue")); err != nil {
+		t.Fatal(err)
+	}
+	schema := schemaDirWith(t, map[string]string{"a.cue": "#A: {\n\tname?: string\n}\n"})
+	if _, err := GenerateWithCue(schema, "params", filepath.Join("bin", "cue")); err != nil {
+		t.Fatalf("a relative toolchain path must resolve against the caller's working directory: %v", err)
+	}
+}
+
 // TestGenerateWithCueRejectsAnEmptySchemaDir: "no schema" must be an error naming the
 // directory, never an empty generated file.
 func TestGenerateWithCueRejectsAnEmptySchemaDir(t *testing.T) {

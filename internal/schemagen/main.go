@@ -48,11 +48,11 @@ import (
 	"cuelang.org/go/cue/errors"
 
 	"github.com/opencharly/spec/schemaconcat"
-	"github.com/opencharly/spec/schemaretag"
+	"github.com/opencharly/spec/schemaparams"
 )
 
 func main() {
-	mode := flag.String("mode", "", "concat | vocab | retag")
+	mode := flag.String("mode", "", "params | vocab")
 	schemaDir := flag.String("schema", "schema", "path to the schema/*.cue directory")
 	pkg := flag.String("pkg", "spec", "Go package for the concat header (spec | params)")
 	out := flag.String("out", "", "output file path")
@@ -62,20 +62,16 @@ func main() {
 		fatal("schemagen: -out is required")
 	}
 	switch *mode {
-	case "concat":
-		if err := writeConcat(*schemaDir, *out, *pkg); err != nil {
-			fatal("schemagen concat: %v", err)
+	case "params":
+		if err := writeParams(*schemaDir, *out, *pkg); err != nil {
+			fatal("schemagen params: %v", err)
 		}
 	case "vocab":
 		if err := writeVocab(*schemaDir, *out); err != nil {
 			fatal("schemagen vocab: %v", err)
 		}
-	case "retag":
-		if err := retagFile(*out); err != nil {
-			fatal("schemagen retag: %v", err)
-		}
 	default:
-		fatal("schemagen: -mode must be concat, vocab, or retag (got %q)", *mode)
+		fatal("schemagen: -mode must be params or vocab (got %q)", *mode)
 	}
 }
 
@@ -126,39 +122,20 @@ func specSource(dir, pkg string, exclude func(name string) bool) (string, error)
 // retag mode — the Go-native yaml-tag doubling (replaces the former cue:gen sed)
 // ----------------------------------------------------------------------------
 
-// retagFile rewrites the gengotypes-generated Go file in place: (1) double every
-// json-only struct tag with a matching yaml tag, then (2) append ,omitempty to
-// every bare yaml key. The transform itself lives in schemaretag — the ONE place
-// it is declared, shared with the `charly`-side generation verb (opencharly/charly#829)
-// — so a generated file can never depend on which caller produced it. This file
-// keeps only the read/write around it.
-//
-// yaml.v3 would otherwise lowercase the Go field name and silently drop every
-// snake_case key on charly's yaml round-trip (saveDeployState, the deploy-overlay
-// merge, charly.yml read/write), and a bare yaml key without ,omitempty would let
-// a zero value override the CUE default (e.g. an empty firmware:"" breaking the
-// `*"bios"|…` default). Idempotent, so a clean regeneration is a no-op.
-func retagFile(path string) error {
-	src, err := os.ReadFile(path)
+// writeParams emits the GENERATED Go params file by calling the ONE pipeline
+// (schemaparams): concatenate the param-gen schema subset under the `package <pkg>` +
+// `@go(<pkg>)` header, run the pinned cue gengotypes (provisioned through
+// cuetoolchain.Ensure into ./bin), normalize the struct tags. None of those steps is
+// implemented here any more — that is what makes the pipeline ONE thing rather than a
+// copy per caller. `excludeParamGen` (node.cue) is this caller's only difference, and
+// it is a parameter.
+func writeParams(dir, out, pkg string) error {
+	src, err := schemaparams.GenerateExcluding(dir, pkg, "bin", excludeParamGen)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, schemaretag.Normalize(src), 0o644)
+	return os.WriteFile(out, src, 0o644)
 }
-
-// writeConcat emits the gengotypes input — the PARAM-GEN-scoped concatenation
-// (node.cue excluded; see excludeParamGen) headed with `package pkg`.
-func writeConcat(dir, out, pkg string) error {
-	src, err := specSource(dir, pkg, excludeParamGen)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(out, []byte(src), 0o644)
-}
-
-// ----------------------------------------------------------------------------
-// vocab mode
-// ----------------------------------------------------------------------------
 
 func writeVocab(dir, out string) error {
 	// FULL schema (nil exclude): the vocab generator needs #Node's arms

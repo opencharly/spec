@@ -33,23 +33,35 @@ import (
 )
 
 // Generate provisions the pinned `cue` CLI into cueDir and returns the Go file the
-// schema directory produces. cueDir is the caller's choice (spec's task uses
-// `./bin`, the charly-side verb uses its own cache): the pin, the checksum, the
-// verification and the arch rules all come from cuetoolchain, so every caller runs
-// the SAME toolchain.
+// schema directory produces. cueDir is the caller's choice (spec's task uses `./bin`,
+// the charly-side verb its own cache): the pin, the checksum, the verification and the
+// arch rules all come from cuetoolchain, so every caller runs the SAME toolchain.
 func Generate(schemaDir, pkg, cueDir string) ([]byte, error) {
+	return GenerateExcluding(schemaDir, pkg, cueDir, nil)
+}
+
+// GenerateExcluding is Generate with a file filter: a schema whose disjunction
+// wrappers (spec's `node.cue`) gengotypes must not see passes an `exclude` that names
+// them. nil includes every `*.cue` file, which is what a plugin candy wants.
+func GenerateExcluding(schemaDir, pkg, cueDir string, exclude func(name string) bool) ([]byte, error) {
 	cueBin, err := cuetoolchain.Ensure(cueDir)
 	if err != nil {
 		return nil, err
 	}
-	return GenerateWithCue(schemaDir, pkg, cueBin)
+	return GenerateWithCueExcluding(schemaDir, pkg, cueBin, exclude)
 }
 
 // GenerateWithCue runs the pipeline with an explicit `cue` binary — the seam for a
 // caller that has already provisioned one, and for a test that stands in for the
 // toolchain rather than downloading it.
 func GenerateWithCue(schemaDir, pkg, cueBin string) ([]byte, error) {
-	body, files, err := schemaconcat.ConcatSchema(os.DirFS(schemaDir), ".", nil)
+	return GenerateWithCueExcluding(schemaDir, pkg, cueBin, nil)
+}
+
+// GenerateWithCueExcluding is GenerateWithCue with a file filter (see
+// GenerateExcluding).
+func GenerateWithCueExcluding(schemaDir, pkg, cueBin string, exclude func(name string) bool) ([]byte, error) {
+	body, files, err := schemaconcat.ConcatSchema(os.DirFS(schemaDir), ".", exclude)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", schemaDir, err)
 	}
@@ -67,7 +79,18 @@ func GenerateWithCue(schemaDir, pkg, cueBin string) ([]byte, error) {
 	if err := os.WriteFile(filepath.Join(tmp, pkg+".cue"), []byte(src), 0o644); err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(cueBin, "exp", "gengotypes", ".")
+	// The generator runs with the TEMP dir as its working directory, so the binary
+	// path must be absolute first: a caller that passes a relative one (spec's own
+	// task passes `bin`, i.e. ./bin/cue) would otherwise fail with
+	// `fork/exec bin/cue: no such file or directory`.
+	absCue := cueBin
+	if !filepath.IsAbs(absCue) {
+		var aerr error
+		if absCue, aerr = filepath.Abs(cueBin); aerr != nil {
+			return nil, fmt.Errorf("resolving the toolchain path %q: %w", cueBin, aerr)
+		}
+	}
+	cmd := exec.Command(absCue, "exp", "gengotypes", ".")
 	cmd.Dir = tmp
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("cue exp gengotypes failed in %s: %w\n%s", tmp, err, strings.TrimSpace(string(out)))
