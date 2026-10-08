@@ -7551,8 +7551,8 @@ type PipelineRetry struct {
 }
 
 // #PipelineApproval — the OBJECT form of lobster `approval`. The AUTHORED form is a
-// union (bool | string | this struct) so `approval: true` stays terse; the IR
-// (#WorkflowStep) always carries this object form.
+// union (bool | string | this struct) so `approval: true` stays terse; an engine
+// normalizes it to this object form before it evaluates the gate.
 type PipelineApproval struct {
 	Message string `yaml:"message,omitempty" json:"message,omitempty"`
 
@@ -7581,17 +7581,15 @@ type PipelineFlow struct {
 	Retry PipelineRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
 }
 
-// #PipelineArms — the EXEC arms, embedded by both the authored step and the IR
-// step. Declaring them once (R3) keeps the authored and normalized shapes from
-// drifting.
+// #PipelineArms — the EXEC arms the authored pipeline step carries. Declared ONCE here
+// (R3) and embedded by #PipelineStepBase, so the arms cannot drift from the step that
+// uses them; #PipelineSubStep deliberately re-declares its own NON-RECURSIVE subset
+// (lobster's rule: no nested parallel/for_each/input/workflow inside a branch).
 //
-// It does NOT distinguish the two steps, and neither do the flow keys: both
-// #PipelineStepBase and #WorkflowStep embed #PipelineFlow and #PipelineArms, so
-// everything declared here is COMMON to them. Exactly two fields separate the
-// authored step from the IR step — `approval` (the authored terse union
-// `bool | string | #PipelineApproval` vs the IR's normalized #WorkflowApproval
-// object) and `result`, which is IR-only. The exec-arm XOR is a Go rule in
-// BOTH, so it is not a CUE difference either.
+// It deliberately does NOT carry `approval`: that lives on #PipelineStepBase, because a
+// step INSIDE `parallel.branches[]` / `for_each.steps[]` must not open a gate. The
+// exec-arm XOR (exactly one of them) is a Go rule in plugin-pipeline's OpValidate, not a
+// CUE disjunction.
 type PipelineArms struct {
 	// --- lobster exec arms ---
 	Run string `yaml:"run,omitempty" json:"run,omitempty"`
@@ -7694,7 +7692,7 @@ type PipelineStepBase struct {
 
 	Retry PipelineRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
 
-	// approval — terse authored union; the IR normalizes it to #WorkflowApproval.
+	// approval — terse authored union; an engine normalizes it to #PipelineApproval.
 	Approval any `yaml:"approval,omitempty" json:"approval,omitempty"`
 
 	// --- lobster exec arms ---
@@ -7729,8 +7727,9 @@ type PipelineStepBase struct {
 	Charly []string `yaml:"charly,omitempty" json:"charly,omitempty"`
 }
 
-// #PipelineStep — the step type `steps:` carries. A distinct def so the IR can add
-// per-step result state without touching the authored shape.
+// #PipelineStep — the step type `steps:` carries: the authored step, named so a step
+// consumer (sdk/workflowkit) has a stable type to build on without reaching for the
+// base def.
 type PipelineStep PipelineStepBase
 
 // #PipelineSchedule — the cron trigger. A 5-field cron, the SAME grammar
@@ -11597,6 +11596,9 @@ type WorkflowTrigger struct {
 // a schedule/approval record), never authored. `output` is the step's decoded
 // stdout: a charly step's `--output` body, or a shell step's auto-parsed JSON
 // (lobster's `$id.json`), so a later `when` can address it by dotted path.
+//
+// It SURVIVES the IR retirement below: `#WorkflowRunReply.steps` carries it, so it is
+// live wire an engine's reply is built from.
 type WorkflowStepResult struct {
 	Id string `yaml:"id,omitempty" json:"id"`
 
@@ -11613,85 +11615,6 @@ type WorkflowStepResult struct {
 	DurationMs int64 `yaml:"duration_ms,omitempty" json:"duration_ms,omitempty"`
 
 	Attempts int64 `yaml:"attempts,omitempty" json:"attempts,omitempty"`
-}
-
-// #WorkflowStep — one IR step. Same grammar as the authored step, plus the
-// normalized approval object and the optional recorded result.
-type WorkflowStep struct {
-	Id string `yaml:"id,omitempty" json:"id"`
-
-	When string `yaml:"when,omitempty" json:"when,omitempty"`
-
-	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
-
-	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
-
-	Stdin string `yaml:"stdin,omitempty" json:"stdin,omitempty"`
-
-	TimeoutMs int64 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
-
-	OnError string `yaml:"on_error,omitempty" json:"on_error,omitempty"`
-
-	Retry PipelineRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
-
-	Approval WorkflowApproval `yaml:"approval,omitempty" json:"approval,omitempty"`
-
-	Result WorkflowStepResult `yaml:"result,omitempty" json:"result,omitempty"`
-
-	// --- lobster exec arms ---
-	Run string `yaml:"run,omitempty" json:"run,omitempty"`
-
-	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
-
-	Workflow string `yaml:"workflow,omitempty" json:"workflow,omitempty"`
-
-	WorkflowArgs map[string]string `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
-
-	Parallel PipelineParallel `yaml:"parallel,omitempty" json:"parallel,omitempty"`
-
-	ForEach string `yaml:"for_each,omitempty" json:"for_each,omitempty"`
-
-	Input PipelineInput `yaml:"input,omitempty" json:"input,omitempty"`
-
-	// --- for_each companions (meaningful only alongside for_each) ---
-	ItemVar string `yaml:"item_var,omitempty" json:"item_var,omitempty"`
-
-	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
-
-	BatchSize int64 `yaml:"batch_size,omitempty" json:"batch_size,omitempty"`
-
-	PauseMs int64 `yaml:"pause_ms,omitempty" json:"pause_ms,omitempty"`
-
-	Steps []PipelineSubStep `yaml:"steps,omitempty" json:"steps,omitempty"`
-
-	// --- charly arms: the FULL charly grammar, any plugin of any class ---
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-
-	Charly []string `yaml:"charly,omitempty" json:"charly,omitempty"`
-}
-
-// #Workflow — the normalized, engine-agnostic IR. `entities:` is carried verbatim
-// from the authored form so a lowerer can emit the generated charly.yml.
-type Workflow struct {
-	Description string `yaml:"description,omitempty" json:"description"`
-
-	Engine string `yaml:"engine,omitempty" json:"engine"`
-
-	Args map[string]TaskParamSpec `yaml:"args,omitempty" json:"args,omitempty"`
-
-	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
-
-	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty"`
-
-	CostLimit any/* CUE number; int64 or float64 */ `yaml:"cost_limit,omitempty" json:"cost_limit,omitempty"`
-
-	Triggers []WorkflowTrigger `yaml:"triggers,omitempty" json:"triggers,omitempty"`
-
-	Config map[string]any `yaml:"config,omitempty" json:"config,omitempty"`
-
-	Entities map[string]map[string]any `yaml:"entities,omitempty" json:"entities,omitempty"`
-
-	Steps []WorkflowStep `yaml:"steps,omitempty" json:"steps"`
 }
 
 // #WorkflowRunRequest — start a workflow.
