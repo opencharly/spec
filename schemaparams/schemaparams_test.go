@@ -25,6 +25,7 @@ func stubCue(t *testing.T, captureDir, body, exitLine string) string {
 	script := "#!/bin/sh\n" +
 		"f=$(ls *.cue | head -1); pkg=$(basename \"$f\" .cue)\n" +
 		"cp \"$f\" \"" + captureDir + "/captured.cue\" 2>/dev/null || true\n" +
+		"cp cue.mod/module.cue \"" + captureDir + "/captured_module.cue\" 2>/dev/null || true\n" +
 		exitLine + "\n" +
 		"cat > \"cue_types_${pkg}_gen.go\" <<'EOF'\n" + body + "\nEOF\n"
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
@@ -83,6 +84,29 @@ func TestGenerateWithCueRunsConcatHeaderAndRetag(t *testing.T) {
 	}
 	if strings.Index(src, "#A: {") > strings.Index(src, "#B: {") {
 		t.Fatalf("the concatenation is not in sorted file order:\n%s", src)
+	}
+}
+
+// TestGenerateWithCueEmitsTheCodegenModule pins the emitted ENVIRONMENT, not just the
+// output: the pipeline compiles the schema as a CUE module whose language version comes
+// from the pin, because the recipe it replaced wrote exactly that file and the version
+// it declares is what the generator resolves against. Without this arm the module could
+// silently disappear again while every output assertion still passed.
+func TestGenerateWithCueEmitsTheCodegenModule(t *testing.T) {
+	capture := t.TempDir()
+	schema := schemaDirWith(t, map[string]string{"a.cue": "#A: {\n\tname?: string\n}\n"})
+	if _, err := GenerateWithCue(schema, "params", stubCue(t, capture, stubBody, "true")); err != nil {
+		t.Fatalf("GenerateWithCue: %v", err)
+	}
+	mod, err := os.ReadFile(filepath.Join(capture, "captured_module.cue"))
+	if err != nil {
+		t.Fatalf("the pipeline compiled the schema with NO cue.mod/module.cue: %v", err)
+	}
+	if !strings.Contains(string(mod), "module: \""+codegenModule+"\"") {
+		t.Fatalf("module.cue does not declare the codegen module:\n%s", mod)
+	}
+	if !strings.Contains(string(mod), "language: version: \""+cuetoolchain.Version+"\"") {
+		t.Fatalf("module.cue does not declare the PINNED language version %s:\n%s", cuetoolchain.Version, mod)
 	}
 }
 

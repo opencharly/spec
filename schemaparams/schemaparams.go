@@ -32,6 +32,11 @@ import (
 	"github.com/opencharly/spec/schemaretag"
 )
 
+// codegenModule names the scratch CUE module the pipeline compiles a schema as. It is
+// not published anywhere; it exists so the instance HAS a module (and therefore a
+// language version) rather than resolving against an implicit default.
+const codegenModule = "github.com/opencharly/spec/schemaparams/codegen"
+
 // Generate provisions the pinned `cue` CLI into cueDir and returns the Go file the
 // schema directory produces. cueDir is the caller's choice (spec's task uses `./bin`,
 // the charly-side verb its own cache): the pin, the checksum, the verification and the
@@ -73,6 +78,19 @@ func GenerateWithCueExcluding(schemaDir, pkg, cueBin string, exclude func(name s
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
+	// The CUE module the instance is compiled as. The recipe this pipeline replaced
+	// wrote this file, and it is what fixes the LANGUAGE VERSION the generator resolves
+	// against — so it belongs to the pipeline, not to one caller's shell, and the version
+	// comes from the PIN (cuetoolchain) so the declaration cannot drift from the binary
+	// that reads it. `codegenModule` is a neutral path: the module is a scratch instance,
+	// not a published one.
+	if err := os.MkdirAll(filepath.Join(tmp, "cue.mod"), 0o755); err != nil {
+		return nil, err
+	}
+	mod := fmt.Sprintf("module: %q\nlanguage: version: %q\n", codegenModule, cuetoolchain.Version)
+	if err := os.WriteFile(filepath.Join(tmp, "cue.mod", "module.cue"), []byte(mod), 0o644); err != nil {
+		return nil, err
+	}
 	// The header is part of the contract: `package <pkg>` names the Go package and
 	// the file-level @go(<pkg>) attribute is what gengotypes reads to name it.
 	src := "package " + pkg + "\n\n@go(" + pkg + ")\n\n" + body
