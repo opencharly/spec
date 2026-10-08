@@ -123,26 +123,13 @@ cue-gen:
       - run: gengotypes + schemagen the generated Go
         command: |
           set -euo pipefail
-          cue_bin="$PWD/bin/cue"
-          gendir="$(mktemp -d)"
-          trap 'rm -rf "$gendir"' EXIT
-          mkdir -p "$gendir/cue.mod"
-          cat > "$gendir/cue.mod/module.cue" <<EOM
-          module: "github.com/opencharly/spec/schema/spec-codegen"
-          language: version: "v0.16.1"
-          EOM
-          # 1) Concatenate schema/*.cue the SAME way the runtime sharedCueSchema does,
-          #    headed `package spec` + `@go(spec)` (R3: one concatenation, in schemagen).
-          GOWORK=off go run ./internal/schemagen -mode=concat -schema=schema -out="$gendir/schema_spec.cue"
-          # 2) cue exp gengotypes -> the Go param structs.
-          ( cd "$gendir" && "$cue_bin" exp gengotypes ./schema_spec.cue )
-          gen="$(ls "$gendir"/cue_types*_gen.go 2>/dev/null | head -1)"
-          test -n "$gen" || { echo "cue-gen: gengotypes produced no cue_types*_gen.go" >&2; exit 1; }
-          cp "$gen" spec/cue_types_gen.go
-          # 2b) Double the generated json struct tags with yaml tags (principled Go
-          #     transform inside schemagen -mode=retag — never sed on generated Go).
-          GOWORK=off go run ./internal/schemagen -mode=retag -out=spec/cue_types_gen.go
-          # 3) Companion generator -> the vocab lists.
+          # 1) The params file comes from the ONE pipeline (schemaparams): concatenate
+          #    schema/*.cue under `package spec` + `@go(spec)`, run the pinned cue
+          #    gengotypes (provisioned checksum-verified into ./bin), normalize the
+          #    struct tags. No step of it is re-implemented here or in schemagen, and
+          #    the charly-side verb calls the same function.
+          GOWORK=off go run ./internal/schemagen -mode=params -schema=schema -pkg=spec -out=spec/cue_types_gen.go
+          # 2) Companion generator -> the vocab lists.
           GOWORK=off go run ./internal/schemagen -mode=vocab -schema=schema -out=spec/vocab_gen.go
           # 4) gofmt the committed generated files.
           gofmt -w spec/cue_types_gen.go spec/vocab_gen.go
