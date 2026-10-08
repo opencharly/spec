@@ -29,28 +29,10 @@ bootstrap-cue:
       - run: download and checksum-verify the pinned cue CLI
         command: |
           set -euo pipefail
-          mkdir -p bin
-          if test -x bin/cue && bin/cue version 2>/dev/null | grep -q 'v0.16.1'; then
-            echo "bootstrap-cue: bin/cue is $(bin/cue version | head -1) (already present)"
-            exit 0
-          fi
-          arch="$(uname -m)"
-          case "$arch" in
-            x86_64) goarch=amd64; sha='5d644c1305a2b86504c8dcd2ec829cf5b4999efc2cf51ee375624e0455f774ae' ;;
-            *) echo "bootstrap-cue: unsupported arch $arch (only linux/amd64 is checksum-pinned)" >&2; exit 1 ;;
-          esac
-          tarball="cue_v0.16.1_linux_${goarch}.tar.gz"
-          url="https://github.com/cue-lang/cue/releases/download/v0.16.1/${tarball}"
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-          echo "bootstrap-cue: downloading $url"
-          curl -fsSL -o "$tmp/$tarball" "$url"
-          echo "${sha}  $tmp/$tarball" | sha256sum -c - || { echo "bootstrap-cue: checksum mismatch — refusing to extract" >&2; exit 1; }
-          tar -xzf "$tmp/$tarball" -C "$tmp" cue
-          mv "$tmp/cue" bin/cue
-          chmod +x bin/cue
-          bin/cue version | grep -q 'v0.16.1' || { echo "bootstrap-cue: bin/cue is not v0.16.1" >&2; exit 1; }
-          echo "bootstrap-cue: bin/cue is $(bin/cue version | head -1)"
+          # The version, URL, checksum and arch rules live in ONE place —
+          # internal/cuesetup -> cuetoolchain — shared with the charly-side generation
+          # verb, so this task and that verb can never run different toolchains.
+          GOWORK=off go run ./internal/cuesetup bin
         context: [deploy]
 
 # -----------------------------------------------------------------------------
