@@ -50,6 +50,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/opencharly/spec/lock"
@@ -83,6 +84,14 @@ type GitClient struct {
 	bypass    bool   // the PERSISTED bypass flag (SetBypass) — honored by a fresh client at construction
 
 	mu sync.Mutex
+	// suppressSave coalesces the prefetch's writes: WarmUp's worker pool calls LatestTag and
+	// DefaultBranch once per repo, and each of those otherwise pays a FULL per-host YAML
+	// read-modify-write under an advisory file lock. For a 194-repo corpus that is ~388 whole-file
+	// rewrites to record 388 small answers; the pool now defers them to ONE save at the end.
+	//
+	// An ATOMIC, not a plain bool under mu: save() is itself called from LatestTag/DefaultBranch
+	// while they HOLD mu, so a lock inside save() would deadlock. save() must stay lock-free.
+	suppressSave atomic.Bool
 	// latestTags is the IN-PROCESS fresh-data cache: only entries this process
 	// fetched live here (the batch-dedupe layer). Persisted entries from disk
 	// NEVER land here — see persistedTags.
@@ -243,6 +252,11 @@ func (g *GitClient) ClearCache() error {
 }
 
 func (g *GitClient) save() {
+	if g.suppressSave.Load() {
+		return
+	}
+	// Counted only when the write actually happens, so the seam measures WRITES, not calls.
+	warmUpSaveFn()
 	unlock, err := lock.AcquireFileLock(g.cacheLockPath(), true)
 	if err != nil {
 		return
@@ -390,6 +404,22 @@ func (g *GitClient) mergedLatestTags() map[string]gitCacheEntry {
 // offline-fallback tests inject fetch outcomes without shelling git).
 var gitLatestTagFetch = GitLatestTag
 
+// gitDefaultBranchFn is DefaultBranch's network seam, the sibling of gitLatestTagFetch (a var so
+// the prefetch tests drive the whole WarmUp pool hermetically).
+var gitDefaultBranchFn = GitDefaultBranch
+
+// warmUpTotalTimeout bounds the WHOLE prefetch, not one fetch. Per-fetch bounds already exist
+// (gitOpMetadataTimeout / gitOpTransferTimeout in git.go), so a single stalled repo cannot hang
+// forever — but a pool that dispatches N repos with no total ceiling can still run for N/workers ×
+// bound, and the phase reports nothing while it does. That is the observed shape: the process was
+// seen parked at "fetching git metadata for 194 repo(s)" with no way to tell progress from a hang.
+// A var, not a const, so tests shorten it.
+var warmUpTotalTimeout = 2 * time.Minute
+
+// warmUpSaveFn is called once per save() so tests can prove the prefetch COALESCES its writes
+// (package var, like the other injectable seams here).
+var warmUpSaveFn = func() {}
+
 // LatestTag returns the highest semver tag of repoURL.
 //
 // Freshness contract (the offline-fallback cutover): the IN-PROCESS cache is the
@@ -439,7 +469,7 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 	}
 	g.mu.Unlock()
 
-	branch, err := GitDefaultBranch(repoURL)
+	branch, err := gitDefaultBranchFn(repoURL)
 	if err != nil {
 		return "", err
 	}
@@ -457,6 +487,25 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 // downloadRepoFrom already runs on every mutable-ref access; a persisted duplicate of it is
 // precisely the content-blind authority this cutover removes (R3/R5).)
 
+// WarmUp prefetches the git metadata (latest tag + default branch) for a batch of repos so the
+// first project load does not pay every `git ls-remote` on its critical path.
+//
+// FOUR BOUNDS, because "bounded per fetch" is not "bounded".
+//   - PER FETCH: `git ls-remote` carries its own deadline (gitOpMetadataTimeout in git.go), so one
+//     stalled repo cannot hang forever.
+//   - TOTAL: this phase carries its OWN ceiling (warmUpTotalTimeout). Without it the phase can run
+//     for (len(repos)/workers) x per-fetch-bound, which is unbounded in the corpus size — and the
+//     process was observed parked at "fetching git metadata for 194 repo(s)" with no way for a
+//     reader to tell progress from a hang.
+//   - PROGRESS: the phase reports how many repos it warmed and says how many it did not reach, so
+//     "still working" and "gave up" are distinguishable in the log.
+//   - WRITES: ONE cache write for the whole batch. Each LatestTag/DefaultBranch would otherwise pay
+//     a full per-host YAML read-modify-write under an advisory file lock — ~388 whole-file rewrites
+//     for a 194-repo corpus, to record 388 small answers. The pool defers them.
+//
+// A repo the TOTAL bound cuts off is NOT silently dropped: the on-demand path re-probes it (that is
+// the offline-fallback contract — a fresh process always re-probes a tag list), so the only cost is
+// that the first load pays it, which is exactly what is reported.
 func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	var cold []string
 	for _, u := range repoURLs {
@@ -471,7 +520,7 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		// tags never fires at all). Without this, a fresh process with a fully
 		// persisted cache reported EVERY repo cold and re-probed the entire corpus
 		// on every project load — the observed 194-repo warm-up hang under the
-		// multi-bed wave (the pre-#108 model served the persisted entry as fresh,
+		// multi-batch wave (the pre-#108 model served the persisted entry as fresh,
 		// so the prefetch found one cold repo and returned instantly).
 		have := (cached(g.latestTags, u, LatestTagTTL) != "" || g.persistedTags[u].Value != "") &&
 			cached(g.defaultBranches, u, DefaultBranchTTL) != ""
@@ -484,13 +533,27 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		return
 	}
 	fmt.Fprintf(stderr, "charly: fetching git metadata for %d repo(s) (first run — may take a moment)...\n", len(cold))
+
+	// The batch defers its writes: ONE cache write at the end, not one per answer.
+	g.suppressSave.Store(true)
+	defer func() {
+		g.suppressSave.Store(false)
+		g.mu.Lock()
+		g.save()
+		g.mu.Unlock()
+	}()
+
 	// Parallelize the fetch with a bounded worker pool: each repo is an
 	// independent `git ls-remote` (network-bound), so a sequential loop pays the
 	// round-trip latency once per repo — 200 repos × ~1.5s ≈ 5 minutes on a cold
 	// cache. 10 workers collapse that to ~30s. The GitClient methods are
-	// mutex-guarded, so concurrent warm-up is safe; the advisory file lock
-	// serializes the cache writes.
+	// mutex-guarded, so concurrent warm-up is safe.
 	const warmUpWorkers = 10
+
+	deadline := time.Now().Add(warmUpTotalTimeout)
+	var reached atomic.Int64
+	var timedOut atomic.Bool
+
 	jobs := make(chan string)
 	var wg sync.WaitGroup
 	for range warmUpWorkers {
@@ -498,17 +561,33 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		go func() {
 			defer wg.Done()
 			for u := range jobs {
+				if time.Now().After(deadline) {
+					timedOut.Store(true)
+					return
+				}
 				_, _ = g.LatestTag(u)
 				_, _ = g.DefaultBranch(u)
+				reached.Add(1)
 			}
 		}()
 	}
 	for _, u := range cold {
+		if time.Now().After(deadline) {
+			timedOut.Store(true)
+			break
+		}
 		jobs <- u
 	}
 	close(jobs)
 	wg.Wait()
-	fmt.Fprintf(stderr, "charly: git metadata cached.\n")
+
+	warmed := int(reached.Load())
+	if timedOut.Load() {
+		fmt.Fprintf(stderr, "charly: git metadata prefetch bound (%s) reached after %d of %d repo(s); the remaining %d will be fetched on demand\n",
+			warmUpTotalTimeout, warmed, len(cold), len(cold)-warmed)
+		return
+	}
+	fmt.Fprintf(stderr, "charly: git metadata cached (%d repo(s)).\n", warmed)
 }
 
 // Download fetches repoPath@version into the repo cache and returns the cache path, deduped only
