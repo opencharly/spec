@@ -68,12 +68,26 @@ type UnifiedFile struct {
 	// Namespaces holds child namespaces mounted by namespaced `import:` entries (alias →
 	// fully-resolved isolated UnifiedFile). NOT authored directly — populated by the
 	// materialize pass. Entries are referenced qualified, e.g. `base: cachyos.cachyos`.
-	Namespaces map[string]*UnifiedFile `yaml:"-"`
+	//
+	// json:"-" for the same reason PluginKinds carries it, and this one is load-bearing: the
+	// graph is CYCLIC and shared BY DESIGN — `walkNamespace` returns an in-progress node so
+	// the host materialize can preserve POINTER IDENTITY across a reference mount, which makes
+	// a namespace reachable from itself. The graph is host-internal and never serialized, but
+	// the load cache hashes the project with `json.Marshal`, and marshalling a cyclic graph
+	// fails outright: `json: unsupported value: encountered a cycle via *spec.UnifiedFile`
+	// (charly#847 — a git linked worktree could not be loaded at all). Every other traversal
+	// of this graph carries a cycle guard; the marshaller is the one that cannot, so the field
+	// leaves the marshal surface instead.
+	Namespaces map[string]*UnifiedFile `yaml:"-" json:"-"`
 
 	// RootDir is this UnifiedFile's OWN base directory — the dir its root document's SrcDir
 	// names. Set once per materialize, for both the top-level project and each mounted
 	// namespace. Empty for a project-less / synthetic UnifiedFile.
-	RootDir string `yaml:"-"`
+	//
+	// json:"-" because it is host-internal exactly as the two fields above are, and is NOT a
+	// crash source (a string cannot cycle) — included in this cutover because R3 is about the
+	// mechanism, not about which instance happens to be fatal today.
+	RootDir string `yaml:"-" json:"-"`
 }
 
 // InlineCandy is a candy declared inline in the unified file's `candy:` map. Mutually exclusive
