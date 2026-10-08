@@ -48,6 +48,7 @@ import (
 	"cuelang.org/go/cue/errors"
 
 	"github.com/opencharly/spec/schemaconcat"
+	"github.com/opencharly/spec/schemaretag"
 )
 
 func main() {
@@ -125,37 +126,24 @@ func specSource(dir, pkg string, exclude func(name string) bool) (string, error)
 // retag mode — the Go-native yaml-tag doubling (replaces the former cue:gen sed)
 // ----------------------------------------------------------------------------
 
-// reJSONOnlyTag matches a struct field tag literal carrying ONLY a json tag,
-// `json:"X"` (backtick-delimited — gengotypes emits json tags only). retag doubles
-// it with a matching yaml tag so charly's yaml.v3 round-trip (saveDeployState, the
-// deploy-overlay merge, charly.yml read/write) keys off the SAME wire key — yaml.v3
-// otherwise lowercases the Go field name and silently drops every snake_case key.
-var reJSONOnlyTag = regexp.MustCompile("`json:\"([^\"]*)\"`")
-
-// reBareYamlKey matches a yaml tag whose value is a bare key (alpha first char, no
-// comma/quote). retag appends ,omitempty so a zero value drops out and the CUE
-// default re-applies (parity with the former hand structs — e.g. an empty
-// firmware:"" would otherwise break the `*"bios"|…` default). A key that already
-// carries a comma (an existing ,omitempty) is left untouched.
-var reBareYamlKey = regexp.MustCompile(`yaml:"([a-zA-Z][^",]*)"`)
-
 // retagFile rewrites the gengotypes-generated Go file in place: (1) double every
 // json-only struct tag with a matching yaml tag, then (2) append ,omitempty to
-// every bare yaml key. This is the principled Go-native replacement for the former
-// cue:gen `sed -i` steps — a compiled, documented, idempotent transform that lives
-// INSIDE schemagen (never sed on generated Go). The two substitutions are exactly
-// the former sed expressions, so the committed cue_types_gen.go is byte-identical;
-// gofmt (the next cue:gen step) realigns the tag columns. Idempotent: a fresh
-// gengotypes file carries json-only tags, and a re-run finds no json-only tag to
-// double and every yaml key already carrying ,omitempty.
+// every bare yaml key. The transform itself lives in schemaretag — the ONE place
+// it is declared, shared with the `charly`-side generation verb (opencharly/charly#829)
+// — so a generated file can never depend on which caller produced it. This file
+// keeps only the read/write around it.
+//
+// yaml.v3 would otherwise lowercase the Go field name and silently drop every
+// snake_case key on charly's yaml round-trip (saveDeployState, the deploy-overlay
+// merge, charly.yml read/write), and a bare yaml key without ,omitempty would let
+// a zero value override the CUE default (e.g. an empty firmware:"" breaking the
+// `*"bios"|…` default). Idempotent, so a clean regeneration is a no-op.
 func retagFile(path string) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	out := reJSONOnlyTag.ReplaceAll(src, []byte("`yaml:\"${1}\" json:\"${1}\"`"))
-	out = reBareYamlKey.ReplaceAll(out, []byte(`yaml:"${1},omitempty"`))
-	return os.WriteFile(path, out, 0o644)
+	return os.WriteFile(path, schemaretag.Normalize(src), 0o644)
 }
 
 // writeConcat emits the gengotypes input — the PARAM-GEN-scoped concatenation
