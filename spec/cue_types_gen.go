@@ -2376,8 +2376,10 @@ type PluginRequirement struct {
 }
 
 // #PluginCapability — a capability identity: "<class>:<word>", or the command-only
-// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
-// parent are lowercase-hyphenated.
+// three-segment form "<class>:<word>:<parent>". The class must be WELL-FORMED here and
+// DECLARED in #ProviderClassNames per the Go rule (charly's providerClasses /
+// plugin-box's validPluginClasses), which is the side that NAMES an undeclared class;
+// word and parent are lowercase-hyphenated.
 type PluginCapability string
 
 // #RouteConfig — a resolved route declaration (host + port-as-string). Mirrors deploykit.RouteConfig.
