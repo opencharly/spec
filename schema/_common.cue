@@ -1,4 +1,3 @@
-import "strings"
 
 // Shared CUE definitions referenced by multiple kinds. R3: define each shared
 // shape ONCE here, not per-kind. All schema/*.cue files compile into one

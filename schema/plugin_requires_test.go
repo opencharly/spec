@@ -49,11 +49,18 @@ func TestCandyViewCarriesPluginRequires(t *testing.T) {
 	}
 }
 
-// A malformed capability identity is rejected by the reused #PluginRequirement /
+// A MALFORMED capability identity is rejected by the reused #PluginRequirement /
 // #PluginCapability vocabulary — the projection does not open a second, looser shape.
+//
+// A WELL-FORMED but UNDECLARED class (`bogus:x`) is deliberately NOT in this list any
+// more: the class segment of #ProviderClassPattern became structural (charly#853,
+// plugin-box#29) so that the vocabulary rule can NAME the class and the set instead of
+// the CUE calling a correct word "malformed". The vocabulary check for BOTH plugins'
+// `providers:` and `requires:` capabilities now lives in the consumer's Go rule
+// (plugin-box/candy/plugin-box/validate_rules.go), which is the side that can report
+// which class is unknown and which set was checked.
 func TestCandyViewRejectsMalformedPluginRequires(t *testing.T) {
 	for _, bad := range []string{
-		`plugin_requires: [{capability: "bogus:x"}]`,
 		`plugin_requires: [{capability: "verb:"}]`,
 		`plugin_requires: [{capability: "verb:enc", source: "not-a-github-ref"}]`,
 	} {
