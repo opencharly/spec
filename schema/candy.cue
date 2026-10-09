@@ -553,14 +553,21 @@
 // #ProviderClassNames — the CLOSED provider-class vocabulary (the classes a
 // `plugin.providers:` capability may name). THE single source: schemagen emits
 // spec.ProviderClasses from it (the Go closed set both charly's providerClasses and
-// plugin-box's validPluginClasses derive from — parser consolidation F4.2), and
-// #PluginCapability's regex derives from the same list, so the CUE-side capability
-// gate can never drift from the Go-side class set.
+// plugin-box's validPluginClasses derive from — parser consolidation F4.2).
+//
+// The CUE-side class PATTERN deliberately does NOT derive from this list any more
+// (opencharly/charly#853, plugin-box#29): a pattern built from the list REJECTS an
+// undeclared class as malformed, so the rule that is meant to NAME the class and this
+// set could never be reached for any undeclared class. The pattern owns SYNTAX; the
+// Go rule owns the VOCABULARY. This list stays the ONE source for the Go side, and it
+// is kept in step with that rule by the tests that cover it - not by a regex.
 #ProviderClassNames: ["kind", "deploy", "verb", "step", "build", "builder", "command", "engine", "workflow", "loader", "refs", "agent-runtime", "terminal"] @go(-)
 
-// #ProviderClassPattern — the class alternation derived from #ProviderClassNames
-// (the ONE hand-maintained list; the regex is computed, never authored).
-#ProviderClassPattern: "^(" + strings.Join(#ProviderClassNames, "|") + "):[a-z0-9][a-z0-9_-]*$" @go(-)
+// #ProviderClassPattern — the class segment is STRUCTURAL: any well-formed
+// lowercase-hyphenated class. It deliberately accepts a class #ProviderClassNames
+// omits, so the Go rule can report it as an UNKNOWN PROVIDER CLASS naming the class
+// and the set it was checked against (opencharly/charly#853, plugin-box#29).
+#ProviderClassPattern: "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9_-]*$" @go(-)
 
 // #CommandParentPattern — the THREE-segment form ONLY a class="command" capability
 // may carry: "command:<word>:<parent>". Kept as its own computed regex so the
@@ -575,6 +582,8 @@
 #PluginCapabilityPattern: #ProviderClassPattern + "|" + #CommandParentPattern @go(-)
 
 // #PluginCapability — a capability identity: "<class>:<word>", or the command-only
-// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
-// parent are lowercase-hyphenated.
+// three-segment form "<class>:<word>:<parent>". The class must be WELL-FORMED here and
+// DECLARED in #ProviderClassNames per the Go rule (charly's providerClasses /
+// plugin-box's validPluginClasses), which is the side that NAMES an undeclared class;
+// word and parent are lowercase-hyphenated.
 #PluginCapability: string & =~#PluginCapabilityPattern
