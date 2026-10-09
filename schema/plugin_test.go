@@ -80,7 +80,11 @@ func TestPluginRequiresDeclared(t *testing.T) {
 		{"a bare capability requirement", `{providers: ["verb:x"], ` + src + `, requires: [{capability: "verb:enc"}]}`, true},
 		{"a requirement with a source ref + optional", `{providers: ["verb:x"], ` + src + `, requires: [{capability: "verb:enc", source: "github.com/opencharly/plugin-enc/candy/plugin-enc", optional: true}]}`, true},
 		{"no requires is fine", `{providers: ["verb:x"], ` + src + `}`, true},
-		{"an unknown class is rejected", `{providers: ["verb:x"], ` + src + `, requires: [{capability: "bogus:enc"}]}`, false},
+		// A WELL-FORMED but UNDECLARED class is ACCEPTED here now: the class segment of
+		// #ProviderClassPattern is structural (charly#853, plugin-box#29) so the vocabulary
+		// rule can name the class and its set. The rejection is the GO rule's witness
+		// (plugin-box validate_rules.go), which checks providers: AND requires:.
+		{"a well-formed but undeclared class is accepted by the CUE (Go rule rejects it)", `{providers: ["verb:x"], ` + src + `, requires: [{capability: "bogus:enc"}]}`, true},
 		{"a missing capability is rejected", `{providers: ["verb:x"], ` + src + `, requires: [{optional: true}]}`, false},
 		{"an unknown requires field is rejected (CLOSED)", `{providers: ["verb:x"], ` + src + `, requires: [{capability: "verb:enc", typo: 1}]}`, false},
 	}
