@@ -90,3 +90,30 @@ func TestPollCloudInitSettled(t *testing.T) {
 		})
 	}
 }
+
+// The settled-state contract opencharly/spec#209 is about: `error` is TERMINAL (the wait must stop — a
+// guest that errored never becomes `done`) but it is NOT success, and before this change the two were
+// indistinguishable, so a failed provisioning phase was reported to every caller as a ready guest.
+// This test fails without cloudInitSettledError's error branch.
+func TestCloudInitSettledError(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		out     string
+		wantErr bool
+	}{
+		{"done is success", "status: done", false},
+		{"disabled is success (prebuilt containerDisk, cloud-init never ran)", "status: disabled", false},
+		{"error is terminal but FAILED", "status: error", true},
+		{"error carries the guest's own detail", "status: error\nfailed to run cmd: pacman -Sy", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := cloudInitSettledError(tc.out)
+			if tc.wantErr && err == nil {
+				t.Fatalf("cloudInitSettledError(%q) = nil, want ErrCloudInitFailed", tc.out)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("cloudInitSettledError(%q) = %v, want nil", tc.out, err)
+			}
+		})
+	}
+}

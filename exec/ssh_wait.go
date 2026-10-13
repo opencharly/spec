@@ -15,6 +15,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -173,7 +174,8 @@ func WaitForCloudInit(ctx context.Context, ssh SSHArgs, poll PollFunc) error {
 		}
 		out := buf.String()
 		if pollCloudInitSettled(out) {
-			return true, 0, nil // settled (sshd stable, package phase complete)
+			// Settled — and settled may still have FAILED. See cloudInitSettledError.
+			return true, 0, cloudInitSettledError(out)
 		}
 		return false, 0, nil // still running / blank / not-started — keep polling
 	}); err != nil {
@@ -182,11 +184,31 @@ func WaitForCloudInit(ctx context.Context, ssh SSHArgs, poll PollFunc) error {
 	return nil
 }
 
+// ErrCloudInitFailed reports that cloud-init SETTLED in its error state — provisioning ran and
+// FAILED. It is deliberately distinct from the poll's own failure and from a timeout: `error` is
+// terminal (so the wait must stop; a guest that errored never becomes `done`, and polling on would
+// reproduce the measured 30-minute hang this file's design exists to avoid), but terminal is not
+// SUCCESS. Callers that gate on readiness need to tell those apart; before this, a failed
+// provisioning phase was indistinguishable from a ready guest (opencharly/spec#209).
+var ErrCloudInitFailed = errors.New("cloud-init settled in its error state: guest provisioning failed")
+
 // pollCloudInitSettled reports whether a WaitForCloudInit poll's output is TERMINAL — the
 // condition that ends the wait. Extracted (from the poll closure) so the terminal-state
 // contract, including `disabled` on a guest whose cloud-init never ran, is directly
 // unit-testable. `running` and a blank/transient read are NOT terminal; `done`/`error`/
 // `disabled` are. PURE.
+// cloudInitSettledError returns ErrCloudInitFailed when a SETTLED poll output reports cloud-init's
+// error state, and nil for the settled states that mean success. Extracted from the poll closure for
+// the same reason pollCloudInitSettled was: so "terminal is not the same as successful" is directly
+// unit-testable. PURE. Callers pass output the predicate has already accepted as settled
+// (opencharly/spec#209).
+func cloudInitSettledError(out string) error {
+	if strings.Contains(out, "status: error") {
+		return fmt.Errorf("%w: %s", ErrCloudInitFailed, strings.TrimSpace(out))
+	}
+	return nil
+}
+
 func pollCloudInitSettled(out string) bool {
 	if strings.Contains(out, "status: running") {
 		return false
