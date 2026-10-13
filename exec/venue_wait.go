@@ -45,11 +45,21 @@ func WaitForVmSshReady(domainID string) {
 	// notice. Not fatal here (this function is best-effort by design and its callers live outside
 	// this repo), but never silent.
 	if err := gate.WaitForCloudInit(ctx); err != nil {
-		if errors.Is(err, ErrCloudInitFailed) {
-			slog.Warn("guest cloud-init provisioning FAILED; proceeding best-effort",
-				"domain", domainID, "err", err)
+		if warn, ok := cloudInitWarning(err); ok {
+			slog.Warn(warn, "domain", domainID, "err", err)
 		}
 	}
+}
+
+// cloudInitWarning decides what, if anything, to warn about when the readiness wait returned an error.
+// Extracted so the PR's headline behaviour — an OBSERVED cloud-init failure is no longer silent, while
+// timeouts stay silent — is unit-testable; the gate functions themselves drive ssh and cannot be
+// exercised without a guest. PURE.
+func cloudInitWarning(err error) (string, bool) {
+	if errors.Is(err, ErrCloudInitFailed) {
+		return "guest cloud-init provisioning FAILED; proceeding best-effort", true
+	}
+	return "", false
 }
 
 // readinessEngine returns the container engine to probe a deployment with.
