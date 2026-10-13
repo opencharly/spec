@@ -211,7 +211,6 @@ func pollCloudInitSettled(out string) bool {
 // the same reason pollCloudInitSettled was: so "terminal is not the same as successful" is directly
 // unit-testable. PURE. Callers pass output the predicate has already accepted as settled
 // (opencharly/spec#209).
-
 func cloudInitSettledError(out string) error {
 	if strings.Contains(out, "status: error") {
 		return fmt.Errorf("%w: %s", ErrCloudInitFailed, strings.TrimSpace(out))
