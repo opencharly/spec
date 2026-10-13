@@ -3,6 +3,8 @@ package exec
 import (
 	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 
@@ -36,7 +38,18 @@ func WaitForVmSshReady(domainID string) {
 	if err := gate.WaitForSSH(ctx); err != nil {
 		return
 	}
-	_ = gate.WaitForCloudInit(ctx)
+	// Timeouts stay silent (the downstream deploy-add surfaces those); an OBSERVED cloud-init error
+	// does not. cloud-init settling in its error state means guest provisioning FAILED, and the
+	// assumption this comment used to carry — that downstream would notice — is exactly what
+	// opencharly/spec#209 falsifies: the guest looks ready, so nothing downstream has anything to
+	// notice. Not fatal here (this function is best-effort by design and its callers live outside
+	// this repo), but never silent.
+	if err := gate.WaitForCloudInit(ctx); err != nil {
+		if errors.Is(err, ErrCloudInitFailed) {
+			slog.Warn("guest cloud-init provisioning FAILED; proceeding best-effort",
+				"domain", domainID, "err", err)
+		}
+	}
 }
 
 // readinessEngine returns the container engine to probe a deployment with.
