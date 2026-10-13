@@ -53,7 +53,6 @@ func TestVenueFromDescriptor_UnknownKind(t *testing.T) {
 // suite in the same diff) plus an explicit round-trip property test proving
 // VenueFromDescriptor(DescriptorFromExecutor(x)) reproduces x for both
 // recognized kinds.
-
 func TestDescriptorFromExecutor_Shell(t *testing.T) {
 	d := DescriptorFromExecutor(ShellExecutor{})
 	if d.Kind != "shell" {

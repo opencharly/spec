@@ -13,7 +13,6 @@ import (
 
 // deploy_executor_nested_test.go — tests for NestedExecutor
 // composition (jump generation, Venue() accumulation).
-
 func TestNestedExecutor_VenueChains(t *testing.T) {
 	local := ShellExecutor{}
 	if local.Venue() != VenueLocal {
