@@ -6517,6 +6517,15 @@ type Kubernetes struct {
 
 	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
 
+	// kubeconfig — the kubeconfig FILE this cluster is reached through. An
+	// externally-managed cluster (OVH / GKE / EKS / on-prem) is usually addressed
+	// by a per-cluster file rather than by the ambient `$KUBECONFIG` /
+	// `~/.kube/config`; without this field the only handle a deploy has is a
+	// context NAME, which cannot be resolved against a file charly was never
+	// told about. Empty keeps the ambient file that plain `kubectl` reads — what
+	// a charly-created k3s/kind cluster relies on.
+	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
+
 	AdmissionPolicy string `yaml:"admission_policy,omitempty" json:"admission_policy,omitempty"`
 
 	DefaultNamespace string `yaml:"default_namespace,omitempty" json:"default_namespace,omitempty"`
@@ -6773,6 +6782,23 @@ type KubeVirt struct {
 
 	// source — the boot medium. Exactly one arm (enforced in OpValidate).
 	Source KubevirtSource `yaml:"source,omitempty" json:"source"`
+
+	// distro / ssh_user — the GUEST identity of the boot medium: the same pair
+	// #VmBoxMetadata carries for a containerDisk's OCI label (same Go field names,
+	// one vocabulary). A `container_disk` source reads them from the VM box's
+	// labels (deploykit.VmCapabilitiesFromLabels); every OTHER arm (data_volume /
+	// pvc / clone) is a bare disk with no metadata to read, so it MUST declare them
+	// here. An explicit value always wins over box metadata.
+	//
+	// Both are plain `string`, deliberately, exactly as #VmBoxMetadata.distro is:
+	// the #DistroID vocabulary def is `@go(-)` (it generates no Go type), so a field
+	// that references it emits an undefined Go identifier. The id is validated
+	// against #DistroID — and required for every non-containerDisk arm — by
+	// candy/plugin-kubevirt's OpValidate, beside the exactly-one-boot-arm and
+	// GPU/instancetype XOR rules this file's header documents as its home.
+	Distro string `yaml:"distro,omitempty" json:"distro,omitempty"`
+
+	SSHUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
 
 	// --- domain shape ---
 	Memory VmSize `yaml:"memory,omitempty" json:"memory,omitempty"`
@@ -10221,11 +10247,18 @@ type PodResolveReply struct {
 }
 
 // #ResolvedKubernetes is the resolve-to-envelope form of a `kubernetes:` cluster
-// template. The kernel reads only KubeconfigContext (the deploy preresolver); the
-// full cluster model rides opaquely in Raw and is decoded by candy/plugin-k8sgen,
-// never the kernel.
+// template. The kernel reads only KubeconfigContext / Kubeconfig (the deploy
+// preresolver); the full cluster model rides opaquely in Raw and is decoded by
+// candy/plugin-k8sgen, never the kernel.
 type ResolvedKubernetes struct {
 	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
+
+	// kubeconfig is the kubeconfig FILE the cluster template named (empty → the
+	// ambient `$KUBECONFIG` / `~/.kube/config`). It rides the resolve envelope
+	// beside the context so a consumer that must reach the cluster WITHOUT the
+	// ambient file — an externally-managed cluster's per-cluster kubeconfig —
+	// honours the same file the template declared.
+	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
 
 	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
