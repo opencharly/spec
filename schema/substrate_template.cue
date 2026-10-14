@@ -65,11 +65,17 @@
 }
 
 // #ResolvedKubernetes is the resolve-to-envelope form of a `kubernetes:` cluster
-// template. The kernel reads only KubeconfigContext (the deploy preresolver); the
-// full cluster model rides opaquely in Raw and is decoded by candy/plugin-k8sgen,
-// never the kernel.
+// template. The kernel reads only KubeconfigContext / Kubeconfig (the deploy
+// preresolver); the full cluster model rides opaquely in Raw and is decoded by
+// candy/plugin-k8sgen, never the kernel.
 #ResolvedKubernetes: {
 	kubeconfig_context?: string @go(KubeconfigContext)
+	// kubeconfig is the kubeconfig FILE the cluster template named (empty → the
+	// ambient `$KUBECONFIG` / `~/.kube/config`). It rides the resolve envelope
+	// beside the context so a consumer that must reach the cluster WITHOUT the
+	// ambient file — an externally-managed cluster's per-cluster kubeconfig —
+	// honours the same file the template declared.
+	kubeconfig?: string @go(Kubeconfig)
 	raw?: bytes @go(Raw,type=RawBody)
 }
 

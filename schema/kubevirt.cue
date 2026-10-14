@@ -29,6 +29,22 @@
 	// source — the boot medium. Exactly one arm (enforced in OpValidate).
 	source: #KubevirtSource @go(Source,type=KubevirtSource)
 
+	// distro / ssh_user — the GUEST identity of the boot medium: the same pair
+	// #VmBoxMetadata carries for a containerDisk's OCI label (same Go field names,
+	// one vocabulary). A `container_disk` source reads them from the VM box's
+	// labels (deploykit.VmCapabilitiesFromLabels); every OTHER arm (data_volume /
+	// pvc / clone) is a bare disk with no metadata to read, so it MUST declare them
+	// here. An explicit value always wins over box metadata.
+	//
+	// Both are plain `string`, deliberately, exactly as #VmBoxMetadata.distro is:
+	// the #DistroID vocabulary def is `@go(-)` (it generates no Go type), so a field
+	// that references it emits an undefined Go identifier. The id is validated
+	// against #DistroID — and required for every non-containerDisk arm — by
+	// candy/plugin-kubevirt's OpValidate, beside the exactly-one-boot-arm and
+	// GPU/instancetype XOR rules this file's header documents as its home.
+	distro?:   string @go(Distro)
+	ssh_user?: string @go(SSHUser)
+
 	// --- domain shape ---
 	memory?: #VmSize @go(Memory)
 	cpu?:    #KubevirtCPU @go(CPU,optional=nillable)

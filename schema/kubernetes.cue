@@ -16,6 +16,14 @@
 	hostnames?: [...#KubernetesHostname]
 
 	kubeconfig_context?: string                                                      @go(KubeconfigContext)
+	// kubeconfig — the kubeconfig FILE this cluster is reached through. An
+	// externally-managed cluster (OVH / GKE / EKS / on-prem) is usually addressed
+	// by a per-cluster file rather than by the ambient `$KUBECONFIG` /
+	// `~/.kube/config`; without this field the only handle a deploy has is a
+	// context NAME, which cannot be resolved against a file charly was never
+	// told about. Empty keeps the ambient file that plain `kubectl` reads — what
+	// a charly-created k3s/kind cluster relies on.
+	kubeconfig?: string @go(Kubeconfig)
 	admission_policy?:   "restricted" | "baseline" | "privileged"                    @go(AdmissionPolicy)
 	default_namespace?:  *"default" | (string & =~"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$") @go(DefaultNamespace)
 
