@@ -6515,12 +6515,6 @@ type Kubernetes struct {
 	// May be empty (a cluster-policy-only template runs no workload itself).
 	Box string `yaml:"box,omitempty" json:"box"`
 
-	Replica *int `yaml:"replica,omitempty" json:"replica,omitempty"`
-
-	Resources *KubernetesResources `yaml:"resources,omitempty" json:"resources,omitempty"`
-
-	Hostnames []KubernetesHostname `yaml:"hostnames,omitempty" json:"hostnames,omitempty"`
-
 	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
 
 	// kubeconfig — the kubeconfig FILE this cluster is reached through. An
@@ -6540,47 +6534,17 @@ type Kubernetes struct {
 
 	Ingress KubernetesIngressDefaults `yaml:"ingress,omitempty" json:"ingress,omitempty"`
 
-	GatewayAPI KubernetesGatewayAPI `yaml:"gateway_api,omitempty" json:"gateway_api,omitempty"`
-
-	Secret KubernetesSecretsBackend `yaml:"secret,omitempty" json:"secret,omitempty"`
-
 	ImageDefault KubernetesImagesDefaults `yaml:"image_default,omitempty" json:"image_default,omitempty"`
 
 	PodDefault KubernetesPodDefaults `yaml:"pod_default,omitempty" json:"pod_default,omitempty"`
 
-	Observability KubernetesObservability `yaml:"observability,omitempty" json:"observability,omitempty"`
-
-	NetworkPolicy string `yaml:"network_policy,omitempty" json:"network_policy,omitempty"`
-
 	// kubevirt — cluster-specific KubeVirt knobs (the kind:kubevirt substrate's
-	// cluster side). Mirrors the storage/ingress/secret "one cluster template owns
-	// the cluster-specific policy" partition: a kind:kubevirt VM names its cluster
-	// by `cluster:` and these knobs apply.
+	// cluster side). Mirrors the storage/ingress "one cluster template owns the
+	// cluster-specific policy" partition: a kind:kubevirt VM names its cluster by
+	// `cluster:` and these knobs apply.
 	KubeVirt KubernetesKubeVirt `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
 
 	Defaults KubernetesResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-}
-
-type KubernetesResources struct {
-	Requests KubernetesResourceValues `yaml:"requests,omitempty" json:"requests,omitempty"`
-
-	Limits KubernetesResourceValues `yaml:"limits,omitempty" json:"limits,omitempty"`
-}
-
-type KubernetesResourceValues struct {
-	CPU string `yaml:"cpu,omitempty" json:"cpu,omitempty"`
-
-	Memory string `yaml:"memory,omitempty" json:"memory,omitempty"`
-}
-
-type KubernetesHostname struct {
-	Host string `yaml:"host,omitempty" json:"host"`
-
-	TLS bool `yaml:"tls,omitempty" json:"tls,omitempty"`
-
-	Path string `yaml:"path,omitempty" json:"path,omitempty"`
 }
 
 type KubernetesStorage struct {
@@ -6605,20 +6569,6 @@ type KubernetesIngressDefaults struct {
 	PathTypeDefault string `yaml:"path_type_default,omitempty" json:"path_type_default,omitempty"`
 }
 
-type KubernetesGatewayAPI struct {
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-
-	GatewayClass string `yaml:"gateway_class,omitempty" json:"gateway_class,omitempty"`
-}
-
-type KubernetesSecretsBackend struct {
-	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
-
-	Store string `yaml:"store,omitempty" json:"store,omitempty"`
-
-	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
-}
-
 type KubernetesImagesDefaults struct {
 	PullPolicy string `yaml:"pull_policy,omitempty" json:"pull_policy,omitempty"`
 
@@ -6633,12 +6583,6 @@ type KubernetesPodDefaults struct {
 	Tolerations []map[string]any/* CUE top */ `yaml:"tolerations,omitempty" json:"tolerations,omitempty"`
 
 	NodeSelector map[string]string `yaml:"node_selector,omitempty" json:"node_selector,omitempty"`
-}
-
-type KubernetesObservability struct {
-	ServiceMonitor bool `yaml:"service_monitor,omitempty" json:"service_monitor,omitempty"`
-
-	ServiceMonitorInterval string `yaml:"service_monitor_interval,omitempty" json:"service_monitor_interval,omitempty"`
 }
 
 // #KubernetesKubeVirt — the KubeVirt platform knobs a cluster template carries.

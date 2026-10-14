@@ -11,10 +11,6 @@
 	// May be empty (a cluster-policy-only template runs no workload itself).
 	box: string
 
-	replica?:   int & >=0 @go(,type=*int)
-	resources?: #KubernetesResources @go(Resources,optional=nillable)
-	hostnames?: [...#KubernetesHostname]
-
 	kubeconfig_context?: string                                                      @go(KubeconfigContext)
 	// kubeconfig — the kubeconfig FILE this cluster is reached through. An
 	// externally-managed cluster (OVH / GKE / EKS / on-prem) is usually addressed
@@ -29,20 +25,14 @@
 
 	storage?:        #KubernetesStorage
 	ingress?:        #KubernetesIngressDefaults
-	gateway_api?:    #KubernetesGatewayAPI @go(GatewayAPI)
-	secret?:         #KubernetesSecretsBackend
 	image_default?:  #KubernetesImagesDefaults @go(ImageDefault)
 	pod_default?:    #KubernetesPodDefaults    @go(PodDefault)
-	observability?:  #KubernetesObservability
-	network_policy?: "auto" | "strict" | "none" @go(NetworkPolicy)
 	// kubevirt — cluster-specific KubeVirt knobs (the kind:kubevirt substrate's
-	// cluster side). Mirrors the storage/ingress/secret "one cluster template owns
-	// the cluster-specific policy" partition: a kind:kubevirt VM names its cluster
-	// by `cluster:` and these knobs apply.
+	// cluster side). Mirrors the storage/ingress "one cluster template owns the
+	// cluster-specific policy" partition: a kind:kubevirt VM names its cluster by
+	// `cluster:` and these knobs apply.
 	kubevirt?: #KubernetesKubeVirt @go(KubeVirt)
 	defaults?: #KubernetesResourceDefaults
-
-	plan?: [...#Step]
 }
 
 // #KubernetesKubeVirt — the KubeVirt platform knobs a cluster template carries.
@@ -68,19 +58,6 @@
 	feature_gates?: [...string] @go(FeatureGates)
 }
 
-#KubernetesResources: {
-	requests?: #KubernetesResourceValues
-	limits?:   #KubernetesResourceValues
-}
-#KubernetesResourceValues: {
-	cpu?:    string & =~"^[0-9]+(\\.[0-9]+)?m?$" @go(CPU)
-	memory?: string & =~"^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k|m)?$"
-}
-#KubernetesHostname: {
-	host:  string & =~"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
-	tls?:  bool @go(TLS)
-	path?: string & =~"^/"
-}
 #KubernetesStorage: {
 	class_default?:       string @go(ClassDefault)
 	class_cheap?:         string @go(ClassCheap)
@@ -94,15 +71,6 @@
 	cert_issuer?:       string                                                 @go(CertIssuer)
 	path_type_default?: ("Prefix" | "Exact" | "ImplementationSpecific") @go(PathTypeDefault)
 }
-#KubernetesGatewayAPI: {
-	enabled?:       bool
-	gateway_class?: string @go(GatewayClass)
-}
-#KubernetesSecretsBackend: {
-	backend?: "external-secrets" | "sealed-secrets" | "raw"
-	store?:   string
-	prefix?:  string
-}
 #KubernetesImagesDefaults: {
 	pull_policy?: ("IfNotPresent" | "Always" | "Never") @go(PullPolicy)
 	pull_secrets?: [...string] @go(PullSecrets)
@@ -113,10 +81,6 @@
 	// passthrough, so each element stays OPEN.
 	tolerations?: [...{...}]
 	node_selector?: {[string]: string} @go(NodeSelector)
-}
-#KubernetesObservability: {
-	service_monitor?:          bool   @go(ServiceMonitor)
-	service_monitor_interval?: string @go(ServiceMonitorInterval)
 }
 #KubernetesResourceDefaults: {
 	labels?: [string]:      string
