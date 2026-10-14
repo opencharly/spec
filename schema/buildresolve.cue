@@ -80,7 +80,7 @@
 // consumes. Order is the filtered SEQUENTIAL build order (non-empty for a
 // `charly box build <name…>` selection); Levels is the level-PARALLEL order (the
 // full build) — exactly one is set, mirroring buildImages' two branches. Boxes
-// carries the per-image descriptors keyed by Name. Jobs/PodmanJobs/Cache are the
+// carries the per-image descriptors keyed by Name. Jobs/StageParallelism/Cache are the
 // resolved build tunables (from Config.Defaults + flags/env). KeepImages rides
 // back for the host-side retention post-step. Written is the generate-only
 // result (the emitted Containerfile paths). Error carries a build FAILURE (the
