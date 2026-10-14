@@ -806,7 +806,12 @@
 	overlay_path!: string @go(OverlayPath) // <root>/overlays/<inst> — the `kubectl apply -k` argument
 	tree_root?:    string @go(TreeRoot)    // <root> = .opencharly/k8s/<name> — removed at teardown
 	kube_context?: string @go(KubeContext) // kind:kubernetes template's kubeconfig_context → `kubectl --context` (empty → current-context)
-	deploy_name?:  string @go(DeployName)  // for plugin-side log messages
+	// kubeconfig is the kind:kubernetes template's kubeconfig FILE → `kubectl --kubeconfig`
+	// (empty → the ambient $KUBECONFIG / ~/.kube/config). A context name alone cannot address
+	// an externally-managed cluster's per-cluster kubeconfig, so the file rides the venue
+	// beside the context and the apply honours both.
+	kubeconfig?:  string @go(Kubeconfig)
+	deploy_name?: string @go(DeployName) // for plugin-side log messages
 }
 
 // #KindclusterDeployVenue is the preresolved deploy:kindcluster substrate payload the
