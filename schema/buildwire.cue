@@ -255,14 +255,20 @@
 }
 
 // #BuildEnsureRequest / #BuildEnsureReply — the build:ensure word's Invoke
-// envelope: ensure an image is present in local podman storage, falling back
-// to a local (or remote-cached) build when the identifier maps to a project
-// charly.yml entry.
+// envelope: ensure an image is present in the LOCAL RUN ENGINE's storage,
+// falling back to a local (or remote-cached) build when the identifier maps to
+// a project charly.yml entry.
+//
+// There is no build_engine here. Ensured presence is a property of the RUN
+// engine's store, and the builder is BuildKit — not an engine — so a
+// build_engine field could only ever have described a cross-engine transfer
+// (docker save | podman load) between two engines, a shape that cannot exist
+// once there is one builder. A stale build_engine on the wire is rejected by
+// the closed schema; the producing call site drops it in the same cutover.
 #BuildEnsureRequest: {
-	image!:        string @go(Image)
-	dir?:          string @go(Dir)
-	build_engine?: string @go(BuildEngine)
-	run_engine?:   string @go(RunEngine)
+	image!:      string @go(Image)
+	dir?:        string @go(Dir)
+	run_engine?: string @go(RunEngine)
 }
 
 #BuildEnsureReply: {
