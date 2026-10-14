@@ -4975,6 +4975,12 @@ type KubernetesDeployVenue struct {
 
 	KubeContext string `yaml:"kube_context,omitempty" json:"kube_context,omitempty"`
 
+	// kubeconfig is the kind:kubernetes template's kubeconfig FILE → `kubectl --kubeconfig`
+	// (empty → the ambient $KUBECONFIG / ~/.kube/config). A context name alone cannot address
+	// an externally-managed cluster's per-cluster kubeconfig, so the file rides the venue
+	// beside the context and the apply honours both.
+	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
+
 	DeployName string `yaml:"deploy_name,omitempty" json:"deploy_name,omitempty"`
 }
 
