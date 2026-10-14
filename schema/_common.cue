@@ -261,8 +261,15 @@
 // A lowercase-hyphenated entity name / cross-ref.
 #EntityRef: string & =~"^[a-z0-9]+(-[a-z0-9]+)*$" @go(-)
 
-// A candy ref: bare lowercase-hyphenated name OR a remote @github…:vTAG ref.
-#CandyRef: string & =~"^(@.+|[a-z0-9]+(-[a-z0-9]+)*)$" @go(-)
+// A candy ref: a bare lowercase-hyphenated name, an @github…  git ref, or an @oci://…
+// registry ref. Exactly THREE arms — the former `@.+` catch-all admitted every
+// scheme, so `@oci:/x` and `@s3://bucket/x` passed the schema and only failed much
+// later, as a nonsense git URL (`https://oci://x.git`) with nothing naming the real
+// mistake. The two remote arms are the @-prefixed REF-SITE spelling of the SOURCE
+// shapes `#GithubRef` / `#OciRef` (candy.cue); CUE's regex-only vocabulary cannot
+// interpolate one into the other, so `TestRefGrammarsAgreeWithTheirSourceShapes`
+// pins the two spellings to each other and they cannot drift.
+#CandyRef: string & =~"^(@github\\.com/[^/]+/[^/]+(/.+)?|@oci://[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?|[a-z0-9]+(-[a-z0-9]+)*)$" @go(-)
 
 // A host:container port pin (optionally IP-prefixed).
 #PortPin: string & =~"^(\\[[0-9a-fA-F:]+\\]:|[0-9]{1,3}(\\.[0-9]{1,3}){3}:)?[0-9]+:[0-9]+$" @go(-)

@@ -2367,7 +2367,8 @@ type PluginRequirement struct {
 	Capability PluginCapability `yaml:"capability,omitempty" json:"capability"`
 
 	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
-	// fetched declaratively instead of by a call-time ExtraRef.
+	// fetched declaratively instead of by a call-time ExtraRef. Same two arms as the
+	// plugin's own `source:` (#PluginSource): a git module or a registry artifact.
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
 
 	// optional: when true, an absent peer is recorded and skipped rather than
@@ -3641,15 +3642,39 @@ type Plugin struct {
 	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
 	Providers []PluginCapability `yaml:"providers,omitempty" json:"providers"`
 
-	// source: the plugin's Go module path — a git ref
-	// (github.com/org/repo[/sub]) fetched via the @github resolver + built into a
-	// provider binary when the candy is NOT compiled in. REQUIRED: every plugin
-	// candy names its module; whether the plugin runs compiled-in (in-proc) or
-	// out-of-process is the SEPARATE charly.yml `compiled_plugins:` selection, never
-	// a manifest sentinel. (The former `source: builtin` form was retired — it
-	// duplicated the compiled_plugins selection and had a dead in-repo-module
-	// fallback.)
+	// source: WHERE THIS PLUGIN'S PROVIDER COMES FROM — a git module
+	// (github.com/org/repo[/sub], #GithubRef) fetched via the @github resolver and
+	// built on the host into a provider binary, or a registry artifact
+	// (oci://…, #OciRef) fetched prebuilt for the consumer's platform and connected
+	// with no source checkout and no Go toolchain. REQUIRED: every plugin candy names
+	// its source; whether the plugin runs compiled-in (in-proc) or out-of-process is
+	// the SEPARATE charly.yml `compiled_plugins:` selection, never a manifest
+	// sentinel. (The former `source: builtin` form was retired — it duplicated the
+	// compiled_plugins selection and had a dead in-repo-module fallback.)
 	Source string `yaml:"source,omitempty" json:"source"`
+
+	// release: the plugin RELEASE this declaration pins (D-CORE-4's "an embedded plugin
+	// runs only when a project declares that exact module, release and digest"). It is the
+	// release identity a resolver reports and compares — a charly CalVer-style tag for a
+	// first-party plugin release, else the publisher's own version string. Optional: a
+	// bare local candy pins nothing, and an unpinned declaration is a legitimate
+	// development state — what is NOT legitimate is a pin that only PRETENDS to pin.
+	Release string `yaml:"release,omitempty" json:"release,omitempty"`
+
+	// digest: the artifact's INDEX digest — the only PLATFORM-INDEPENDENT digest in a
+	// multi-platform artifact. MEASURED: a plugin artifact carries one manifest per
+	// platform, so four per-platform manifest digests; an unqualified `digest:` would be
+	// ambiguous, while the index digest identifies the whole release. The consumer derives
+	// the selected platform's manifest digest by selection, from this.
+	//
+	// PRECEDENCE, when a plugin is both declared here and addressed by an `#OciRef` that
+	// carries its own `@sha256:` — the two must AGREE, and a disagreement is a hard load
+	// error (one pin, two spellings, never two competing answers). The ref's digest is what
+	// the transport FETCHES; this one is what the served bytes must BE.
+	//
+	// Declared and compared, never derived: the same source rebuilt elsewhere produces a
+	// different binary, so a digest can only be checked against what was published.
+	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
 
 	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
 	// capabilities; the host resolves each against the provider registry and
@@ -3768,12 +3793,34 @@ type ProvidesConfig struct {
 	MCP []MCPProvideEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 }
 
-// #GithubRef — the ONE canonical github module/candy ref shape
+// #GithubRef — the canonical github module/candy SOURCE shape
 // (github.com/org/repo[/sub-path]), shared by every field that names a remote
-// plugin/candy repo (the plugin `source:`, a requirement's `source:`) so the
+// plugin/candy module (the plugin `source:`, a requirement's `source:`) so the
 // pattern is defined once (R3). Each referencing field pins its Go type to string
 // (`@go(...,type=string)`), so `spec.PluginSource`/`Plugin.Source` stay plain strings.
 type GithubRef string
+
+// #OciRef — the registry-hosted SOURCE shape: the git-free sibling of #GithubRef,
+// `oci://<registry>[:<port>]/<repository>[:<tag>][@sha256:<digest>]`.
+//
+// A plugin release publishes its provider binary per platform as an OCI
+// image-spec v1.1.1 artifact, so a consumer that has neither the plugin's source
+// checkout nor a Go toolchain fetches the BINARY instead of building it — the
+// direction DESIGN.md D-CORE-4/D-PLUG-4 and TODO item 6.8 set, where an embedded
+// plugin runs only on an exact match and everything else is fetched prebuilt.
+//
+// A `@sha256:` digest, when present, is AUTHORITATIVE: it is what the consumer
+// verifies the fetched bytes against, and it is what keys the content-addressed
+// store (D-STORE-3/D-STORE-4). A tag without a digest resolves to a digest the
+// consumer records and reports; it is never silently re-resolved on a later run.
+type OciRef string
+
+// #PluginSource — where a plugin's provider comes from: a git MODULE (#GithubRef,
+// the legacy default, fetched and host-built) or a registry ARTIFACT (#OciRef,
+// fetched prebuilt for the consumer's platform). ONE def, used by BOTH the
+// plugin's own `source:` and a requirement's `source:` (R2/R3), so a peer plugin
+// is reachable by either route without a second declaration surface.
+type PluginSource string
 
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire/render struct, single-sourced
@@ -4482,7 +4529,12 @@ type Deploy struct {
 	// on VM venues need XDG_RUNTIME_DIR/WAYLAND_DISPLAY).
 	Record *Deploy_RecordWrap `yaml:"record,omitempty" json:"record,omitempty"`
 
-	AddCandy []string `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
+	// add_candy: the extra candies this deploy composes on top of its image. It uses
+	// the SAME ref vocabulary as every other candy ref site (#CandyRef): a bare name,
+	// an @github… git ref, or an @oci://… registry ref. It carried no pattern at all
+	// before, so a scheme typo (`@oci:/x`, `@s3://bucket/x`) was accepted here and
+	// only failed later — as a nonsense git URL — with nothing pointing at this line.
+	AddCandy []CandyRef `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
 
 	InstallOpts *InstallOpts `yaml:"install_opts,omitempty" json:"install_opts,omitempty"`
 
@@ -8096,41 +8148,164 @@ type CacheTransferReply struct {
 	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
 }
 
-// #ContainerDiskEmitRequest — the verb:oci container-disk-emit wire input: a
-// materialized guest disk, the in-layer path it is stored at, the OCI config
-// labels to carry, and the registry reference to push. Single-sourced here (R3)
-// so candy/plugin-oci's emit leg and its callers (`charly vm box publish`, the
-// Cua Fleet surface) share ONE decoded type instead of two hand-written copies.
-// disk_path is the host path of the disk; in_image_path defaults to the KubeVirt
-// containerDisk contract /disk/disk.img; layout_dir optionally also writes a
-// local OCI Image Layout (oci:<dir>).
-type ContainerDiskEmitRequest struct {
-	DiskPath string `yaml:"disk_path,omitempty" json:"disk_path"`
-
-	InImagePath string `yaml:"in_image_path,omitempty" json:"in_image_path,omitempty"`
-
-	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+// #PluginArtifactTransferRequest — the verb:oci plugin-push / plugin-pull wire
+// input: the OCI Image Layout directory the plugin artifact is emitted to or
+// materialized in, and the registry reference it moves to/from. ONE pair for both
+// legs, exactly the #CacheTransferRequest/#CacheTransferReply precedent (R3):
+// plugin-oci's transport legs and their consumers decode ONE type instead of two
+// hand-written copies that can drift.
+//
+// The transport is REF-AGNOSTIC: `ref` is any distribution-spec reference, so it
+// also addresses a registry charly itself serves — nothing here assumes who runs it.
+// `platform` selects which per-platform manifest to emit or consume; empty means the
+// runtime's own GOOS/GOARCH. A request naming a platform the artifact does not carry
+// is an ERROR naming what WAS available (#PluginArtifactTransferReply.platforms) —
+// never a fall-through to whichever platform happens to be there.
+type PluginArtifactTransferRequest struct {
+	Dir string `yaml:"dir,omitempty" json:"dir"`
 
 	Ref string `yaml:"ref,omitempty" json:"ref"`
 
 	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
 
-	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
+	Platform string `yaml:"platform,omitempty" json:"platform,omitempty"`
 }
 
-// #ContainerDiskEmitReply — the emit result: the pushed digest, the media type
-// actually written (the caller asserts the +gzip containerDisk contract), the
-// layer byte size, and the layout dir when one was requested.
-type ContainerDiskEmitReply struct {
-	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
-
+// #PluginArtifactTransferReply — the transport result: the resolved digest of what
+// was moved (the index for a push, the SELECTED per-platform manifest for a pull —
+// the digest the consumer verifies and keys its store by, D-STORE-3/4), the platform
+// actually selected, the canonicalised ref, and every platform the artifact
+// advertises, so a caller that could not be served can name the alternatives.
+type PluginArtifactTransferReply struct {
 	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
 
-	MediaType string `yaml:"media_type,omitempty" json:"media_type,omitempty"`
+	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
 
-	LayerSize int64 `yaml:"layer_size,omitempty" json:"layer_size,omitempty"`
+	Platform string `yaml:"platform,omitempty" json:"platform,omitempty"`
 
-	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
+	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty"`
+}
+
+// #PluginArtifactMetadata — the CONTENT of a plugin artifact's `config` blob (the
+// image-spec artifact decision-tree case 3: content blobs + JSON configuration), i.e.
+// everything a consumer must know to decide whether the pulled binary may run here.
+//
+// It is the D-STORE-4 key, spelled out: "a plugin binary's key covers its module source,
+// go.sum, the toolchain and the platform". The store keys on it, so two builds that differ
+// in ANY of those are two entries, never one entry that silently serves the wrong bytes.
+//
+// VERIFY HARD (a mismatch is a hard error before the binary is served):
+//   - platform — restated from the index descriptor the consumer SELECTED. The two must
+//     agree: a manifest whose config claims a different platform than the descriptor that
+//     pointed at it is an integrity failure, not a redundancy;
+//   - platform.libc — a glibc binary does not run on a musl host, and image-spec's
+//     `platform` object CANNOT express libc (its Platform Variants table maps variant to
+//     GOARM/GOARM64/GOPPC64/GORISCV64/GOAMD64 only). MEASURED: two `linux/amd64`
+//     descriptors with byte-identical platform objects but different libc, under the
+//     spec's "first matching entry SHOULD be used", make the second UNREACHABLE — so libc
+//     is a charly field beside the platform facts it qualifies, never a `variant` value;
+//   - protocol — the go-plugin transport family (spec/transport.Handshake.ProtocolVersion).
+//     Declared so a mismatch fails HERE, clearly, instead of as a handshake refusal; the
+//     value must come from the ONE constant, never a transcribed copy.
+//
+// RECORD AND REPORT (never hard-gated): calver, served_schema_digest, revision, toolchain.
+// The authoritative wireframe check is the CUE schema the binary serves over Describe —
+// spliced and gated by the host — so a stale calver whose schema still splices is harmless,
+// and gating on it would refuse working plugins. Reporting it is what makes the skew visible.
+//
+// ONE RULE OVER EVERY DECLARED IDENTITY FACT: it must be RECOMPUTABLE by the consumer from
+// the artifact or from the running binary. A digest that reproduces from nothing is worse
+// than no digest at all — it looks like a pin and checks nothing (measured: an earlier
+// candidate field reproduced from no file, no served body, no concat of the layer digests).
+type PluginArtifactMetadata struct {
+	// module: the provider's Go module path (e.g. github.com/opencharly/plugin-bpf/candy/plugin-bpf).
+	Module string `yaml:"module,omitempty" json:"module"`
+
+	// revision: the source-control revision the binary was built from. DECLARED, not
+	// verifiable: the same source built from a different path yields a different binary,
+	// so a consumer can only compare this against what it was told, never re-derive it.
+	// (Publish with `-trimpath` to at least make the build path-independent.)
+	Revision string `yaml:"revision,omitempty" json:"revision"`
+
+	// go_sum: the digest of the module's go.sum at build time (D-STORE-4's second component).
+	Go_sum string `yaml:"go_sum,omitempty" json:"go_sum"`
+
+	// toolchain: the Go toolchain that produced the binary (e.g. go1.26.0).
+	Toolchain string `yaml:"toolchain,omitempty" json:"toolchain"`
+
+	// platform: the build's own identity, in the image-spec `platform` vocabulary the
+	// index descriptor also uses — plus the one fact that vocabulary cannot carry.
+	Platform struct {
+		Os string `yaml:"os,omitempty" json:"os"`
+
+		Architecture string `yaml:"architecture,omitempty" json:"architecture"`
+
+		Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
+
+		// libc: the C library the binary links against. See the header: image-spec
+		// cannot express this, and a musl host must refuse a glibc binary by name.
+		Libc string `yaml:"libc,omitempty" json:"libc"`
+	} `yaml:"platform,omitempty" json:"platform"`
+
+	// protocol: the transport family the binary was built against. OPTIONAL DIAGNOSTIC, not
+	// a gate: DESIGN §8 says "There is no version negotiation. Compatibility is the
+	// validation of every message (D-PROTO-6)" — so this fact may be REPORTED by a consumer
+	// and is never the thing that keeps a wrong binary out. A required field here would
+	// over-constrain every artifact for no safety gain.
+	Protocol int64 `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+
+	// calver: the charly release the plugin was built against. OPTIONAL DIAGNOSTIC, same
+	// reason as protocol — reported, never gated.
+	Calver string `yaml:"calver,omitempty" json:"calver,omitempty"`
+
+	// served_schema_digest: TRANSITIONAL — a current-mechanism fact, not the design's answer.
+	// DESIGN §8.1 publishes a plugin release's CUE module as DATA, addressed by digest, and
+	// DESIGN §4 has core read schemas "without starting the plugin"; until that leg lands,
+	// the schema a binary SERVES over Describe is the only identity a consumer can verify, so
+	// this field declares it. It is kept — and labelled transitional rather than presented as
+	// the target — because removing it before the CUE-module leg exists would leave NOTHING
+	// checkable.
+	//
+	// sha256 of the CUE schema body the binary SERVES over Describe —
+	// the concatenated per-file body `registerPluginUnitSchema` actually splices, NOT a
+	// digest over a `schema/` directory listing. MEASURED: the two differ, and the file-set
+	// value is unrecomputable where only the binary exists (a deployed container has no
+	// schema dir), so the SERVED value is the one that can be checked at all. It lets a
+	// consumer say WHICH schema it is about to splice before it splices it.
+	Served_schema_digest string `yaml:"served_schema_digest,omitempty" json:"served_schema_digest"`
+
+	// runtime_requires: the OS packages / host tools this provider NEEDS AT RUNTIME,
+	// projected from the plugin candy's OWN `package:` / `distro:` declaration — the one
+	// declaration TODO 6.9 names ("each plugin candy declares the OS packages it needs to
+	// run"). This is NOT a second declaration surface: the candy is the source, and these
+	// are the same facts travelling with the artifact.
+	//
+	// REQUIRED, and an empty list is a CLAIM ("this provider shells out to nothing"), not a
+	// placeholder — because the harm is silence. MEASURED: a provider that runs
+	// `exec.Command("zcat", "/proc/config.gz")` whose report prints `N/A` for two kernel
+	// features when `zcat` is absent, and `y` when it is present, declared nothing — so an
+	// artifact could not say what was missing, and the consumer could not say it either.
+	// The consumer reports a MISSING listed tool; it never reads an absent list as "needs
+	// nothing".
+	//
+	// The PUBLISHER projects this set from the candy's declaration and HARD-ERRORS when the
+	// plugin candy declares no package set at all — an explicit empty declaration
+	// (`package: []`) is the only way to say "no runtime tools". A projection that cannot
+	// find a declaration must never quietly become an empty list; that is precisely the
+	// silent-N/A failure the field exists to prevent.
+	Runtime_requires []string `yaml:"runtime_requires,omitempty" json:"runtime_requires"`
+
+	// providers: the "<class>:<word>[:<parent>]" words this binary serves — the same set
+	// its `.providers` layer carries and its Describe advertises. Three copies of one fact
+	// on purpose: the layer is what makes a source-less PRESCAN possible, this is what the
+	// consumer can check before connecting, and Describe is the authority afterwards.
+	Providers []PluginCapability `yaml:"providers,omitempty" json:"providers"`
+
+	// layers: layer ROLE → the descriptor digest the manifest carries for it. Roles are
+	// "binary" | "manifest" | "providers" (the media types below identify the same three;
+	// the map lets a consumer assert "the binary blob I verified is the one this metadata
+	// names" without re-deriving which layer is which). Recomputed from the manifest.
+	Layers map[string]string `yaml:"layers,omitempty" json:"layers"`
 }
 
 // #PipelineRetry — lobster `retry`: retry the failed step up to `max` attempts.

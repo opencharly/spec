@@ -171,7 +171,12 @@
 	// on VM venues need XDG_RUNTIME_DIR/WAYLAND_DISPLAY).
 	record?: #RecordWrap @go(Record,optional=nillable)
 
-	add_candy?: [...(string & !="")] @go(AddCandy)
+	// add_candy: the extra candies this deploy composes on top of its image. It uses
+	// the SAME ref vocabulary as every other candy ref site (#CandyRef): a bare name,
+	// an @github… git ref, or an @oci://… registry ref. It carried no pattern at all
+	// before, so a scheme typo (`@oci:/x`, `@s3://bucket/x`) was accepted here and
+	// only failed later — as a nonsense git URL — with nothing pointing at this line.
+	add_candy?: [...#CandyRef] @go(AddCandy)
 	install_opts?: #InstallOpts @go(InstallOpts,optional=nillable)
 
 	host?: string & !=""

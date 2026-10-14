@@ -493,16 +493,38 @@
 	// providers: the "<class>:<word>" reserved-word capabilities this plugin
 	// serves (e.g. "verb:exampleprobe", "kind:my-thing"). Each is registered into
 	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
-	providers: [...#PluginCapability]
-	// source: the plugin's Go module path — a git ref
-	// (github.com/org/repo[/sub]) fetched via the @github resolver + built into a
-	// provider binary when the candy is NOT compiled in. REQUIRED: every plugin
-	// candy names its module; whether the plugin runs compiled-in (in-proc) or
-	// out-of-process is the SEPARATE charly.yml `compiled_plugins:` selection, never
-	// a manifest sentinel. (The former `source: builtin` form was retired — it
-	// duplicated the compiled_plugins selection and had a dead in-repo-module
-	// fallback.)
-	source: #GithubRef @go(Source,type=string)
+	providers!: [...#PluginCapability]
+	// source: WHERE THIS PLUGIN'S PROVIDER COMES FROM — a git module
+	// (github.com/org/repo[/sub], #GithubRef) fetched via the @github resolver and
+	// built on the host into a provider binary, or a registry artifact
+	// (oci://…, #OciRef) fetched prebuilt for the consumer's platform and connected
+	// with no source checkout and no Go toolchain. REQUIRED: every plugin candy names
+	// its source; whether the plugin runs compiled-in (in-proc) or out-of-process is
+	// the SEPARATE charly.yml `compiled_plugins:` selection, never a manifest
+	// sentinel. (The former `source: builtin` form was retired — it duplicated the
+	// compiled_plugins selection and had a dead in-repo-module fallback.)
+	source!: #PluginSource @go(Source,type=string)
+	// release: the plugin RELEASE this declaration pins (D-CORE-4's "an embedded plugin
+	// runs only when a project declares that exact module, release and digest"). It is the
+	// release identity a resolver reports and compares — a charly CalVer-style tag for a
+	// first-party plugin release, else the publisher's own version string. Optional: a
+	// bare local candy pins nothing, and an unpinned declaration is a legitimate
+	// development state — what is NOT legitimate is a pin that only PRETENDS to pin.
+	release?: string & !="" @go(Release)
+	// digest: the artifact's INDEX digest — the only PLATFORM-INDEPENDENT digest in a
+	// multi-platform artifact. MEASURED: a plugin artifact carries one manifest per
+	// platform, so four per-platform manifest digests; an unqualified `digest:` would be
+	// ambiguous, while the index digest identifies the whole release. The consumer derives
+	// the selected platform's manifest digest by selection, from this.
+	//
+	// PRECEDENCE, when a plugin is both declared here and addressed by an `#OciRef` that
+	// carries its own `@sha256:` — the two must AGREE, and a disagreement is a hard load
+	// error (one pin, two spellings, never two competing answers). The ref's digest is what
+	// the transport FETCHES; this one is what the served bytes must BE.
+	//
+	// Declared and compared, never derived: the same source rebuilt elsewhere produces a
+	// different binary, so a digest can only be checked against what was published.
+	digest?: string & =~"^sha256:[a-f0-9]{64}$" @go(Digest)
 	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
 	// capabilities; the host resolves each against the provider registry and
 	// connects it declaratively (the same lazy-connect chain a call-time
@@ -520,20 +542,43 @@
 	primary?: {[string]: string & !=""}
 })
 
-// #GithubRef — the ONE canonical github module/candy ref shape
+// #GithubRef — the canonical github module/candy SOURCE shape
 // (github.com/org/repo[/sub-path]), shared by every field that names a remote
-// plugin/candy repo (the plugin `source:`, a requirement's `source:`) so the
+// plugin/candy module (the plugin `source:`, a requirement's `source:`) so the
 // pattern is defined once (R3). Each referencing field pins its Go type to string
 // (`@go(...,type=string)`), so `spec.PluginSource`/`Plugin.Source` stay plain strings.
 #GithubRef: string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$"
+
+// #OciRef — the registry-hosted SOURCE shape: the git-free sibling of #GithubRef,
+// `oci://<registry>[:<port>]/<repository>[:<tag>][@sha256:<digest>]`.
+//
+// A plugin release publishes its provider binary per platform as an OCI
+// image-spec v1.1.1 artifact, so a consumer that has neither the plugin's source
+// checkout nor a Go toolchain fetches the BINARY instead of building it — the
+// direction DESIGN.md D-CORE-4/D-PLUG-4 and TODO item 6.8 set, where an embedded
+// plugin runs only on an exact match and everything else is fetched prebuilt.
+//
+// A `@sha256:` digest, when present, is AUTHORITATIVE: it is what the consumer
+// verifies the fetched bytes against, and it is what keys the content-addressed
+// store (D-STORE-3/D-STORE-4). A tag without a digest resolves to a digest the
+// consumer records and reports; it is never silently re-resolved on a later run.
+#OciRef: string & =~"^oci://[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?$"
+
+// #PluginSource — where a plugin's provider comes from: a git MODULE (#GithubRef,
+// the legacy default, fetched and host-built) or a registry ARTIFACT (#OciRef,
+// fetched prebuilt for the consumer's platform). ONE def, used by BOTH the
+// plugin's own `source:` and a requirement's `source:` (R2/R3), so a peer plugin
+// is reachable by either route without a second declaration surface.
+#PluginSource: #GithubRef | #OciRef
 
 // #PluginRequirement — one declared inter-plugin dependency. CLOSED.
 #PluginRequirement: close({
 	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
 	capability: #PluginCapability
 	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
-	// fetched declaratively instead of by a call-time ExtraRef.
-	source?: #GithubRef @go(Source,type=string)
+	// fetched declaratively instead of by a call-time ExtraRef. Same two arms as the
+	// plugin's own `source:` (#PluginSource): a git module or a registry artifact.
+	source?: #PluginSource @go(Source,type=string)
 	// optional: when true, an absent peer is recorded and skipped rather than
 	// failing the load. Default false — a declared dependency must resolve.
 	optional?: bool

@@ -65,30 +65,143 @@
 	ref?:     string @go(Ref)
 }
 
-// #ContainerDiskEmitRequest — the verb:oci container-disk-emit wire input: a
-// materialized guest disk, the in-layer path it is stored at, the OCI config
-// labels to carry, and the registry reference to push. Single-sourced here (R3)
-// so candy/plugin-oci's emit leg and its callers (`charly vm box publish`, the
-// Cua Fleet surface) share ONE decoded type instead of two hand-written copies.
-// disk_path is the host path of the disk; in_image_path defaults to the KubeVirt
-// containerDisk contract /disk/disk.img; layout_dir optionally also writes a
-// local OCI Image Layout (oci:<dir>).
-#ContainerDiskEmitRequest: {
-	disk_path:      string @go(DiskPath)
-	in_image_path?: string @go(InImagePath)
-	labels?:        {[string]: string} @go(Labels,type=map[string]string)
-	ref:            string @go(Ref)
-	insecure?:      bool   @go(Insecure)
-	layout_dir?:    string @go(LayoutDir)
+// #PluginArtifactTransferRequest — the verb:oci plugin-push / plugin-pull wire
+// input: the OCI Image Layout directory the plugin artifact is emitted to or
+// materialized in, and the registry reference it moves to/from. ONE pair for both
+// legs, exactly the #CacheTransferRequest/#CacheTransferReply precedent (R3):
+// plugin-oci's transport legs and their consumers decode ONE type instead of two
+// hand-written copies that can drift.
+//
+// The transport is REF-AGNOSTIC: `ref` is any distribution-spec reference, so it
+// also addresses a registry charly itself serves — nothing here assumes who runs it.
+// `platform` selects which per-platform manifest to emit or consume; empty means the
+// runtime's own GOOS/GOARCH. A request naming a platform the artifact does not carry
+// is an ERROR naming what WAS available (#PluginArtifactTransferReply.platforms) —
+// never a fall-through to whichever platform happens to be there.
+#PluginArtifactTransferRequest: {
+	dir:       string @go(Dir)
+	ref:       string @go(Ref)
+	insecure?: bool   @go(Insecure)
+	platform?: string @go(Platform)
 }
 
-// #ContainerDiskEmitReply — the emit result: the pushed digest, the media type
-// actually written (the caller asserts the +gzip containerDisk contract), the
-// layer byte size, and the layout dir when one was requested.
-#ContainerDiskEmitReply: {
-	ref?:        string @go(Ref)
-	digest?:     string @go(Digest)
-	media_type?: string @go(MediaType)
-	layer_size?: int    @go(LayerSize,type=int64)
-	layout_dir?: string @go(LayoutDir)
+// #PluginArtifactTransferReply — the transport result: the resolved digest of what
+// was moved (the index for a push, the SELECTED per-platform manifest for a pull —
+// the digest the consumer verifies and keys its store by, D-STORE-3/4), the platform
+// actually selected, the canonicalised ref, and every platform the artifact
+// advertises, so a caller that could not be served can name the alternatives.
+#PluginArtifactTransferReply: {
+	digest?:    string     @go(Digest)
+	ref?:       string     @go(Ref)
+	platform?:  string     @go(Platform)
+	platforms?: [...string] @go(Platforms)
 }
+
+// #PluginArtifactMetadata — the CONTENT of a plugin artifact's `config` blob (the
+// image-spec artifact decision-tree case 3: content blobs + JSON configuration), i.e.
+// everything a consumer must know to decide whether the pulled binary may run here.
+//
+// It is the D-STORE-4 key, spelled out: "a plugin binary's key covers its module source,
+// go.sum, the toolchain and the platform". The store keys on it, so two builds that differ
+// in ANY of those are two entries, never one entry that silently serves the wrong bytes.
+//
+// VERIFY HARD (a mismatch is a hard error before the binary is served):
+//   - platform — restated from the index descriptor the consumer SELECTED. The two must
+//     agree: a manifest whose config claims a different platform than the descriptor that
+//     pointed at it is an integrity failure, not a redundancy;
+//   - platform.libc — a glibc binary does not run on a musl host, and image-spec's
+//     `platform` object CANNOT express libc (its Platform Variants table maps variant to
+//     GOARM/GOARM64/GOPPC64/GORISCV64/GOAMD64 only). MEASURED: two `linux/amd64`
+//     descriptors with byte-identical platform objects but different libc, under the
+//     spec's "first matching entry SHOULD be used", make the second UNREACHABLE — so libc
+//     is a charly field beside the platform facts it qualifies, never a `variant` value;
+//   - protocol — the go-plugin transport family (spec/transport.Handshake.ProtocolVersion).
+//     Declared so a mismatch fails HERE, clearly, instead of as a handshake refusal; the
+//     value must come from the ONE constant, never a transcribed copy.
+//
+// RECORD AND REPORT (never hard-gated): calver, served_schema_digest, revision, toolchain.
+// The authoritative wireframe check is the CUE schema the binary serves over Describe —
+// spliced and gated by the host — so a stale calver whose schema still splices is harmless,
+// and gating on it would refuse working plugins. Reporting it is what makes the skew visible.
+//
+// ONE RULE OVER EVERY DECLARED IDENTITY FACT: it must be RECOMPUTABLE by the consumer from
+// the artifact or from the running binary. A digest that reproduces from nothing is worse
+// than no digest at all — it looks like a pin and checks nothing (measured: an earlier
+// candidate field reproduced from no file, no served body, no concat of the layer digests).
+#PluginArtifactMetadata: close({
+	// module: the provider's Go module path (e.g. github.com/opencharly/plugin-bpf/candy/plugin-bpf).
+	module!: string
+	// revision: the source-control revision the binary was built from. DECLARED, not
+	// verifiable: the same source built from a different path yields a different binary,
+	// so a consumer can only compare this against what it was told, never re-derive it.
+	// (Publish with `-trimpath` to at least make the build path-independent.)
+	revision!: string
+	// go_sum: the digest of the module's go.sum at build time (D-STORE-4's second component).
+	go_sum!: string
+	// toolchain: the Go toolchain that produced the binary (e.g. go1.26.0).
+	toolchain!: string
+	// platform: the build's own identity, in the image-spec `platform` vocabulary the
+	// index descriptor also uses — plus the one fact that vocabulary cannot carry.
+	platform!: {
+		os!:           string
+		architecture!: string
+		variant?:     string
+		// libc: the C library the binary links against. See the header: image-spec
+		// cannot express this, and a musl host must refuse a glibc binary by name.
+		libc!: "glibc" | "musl"
+	}
+	// protocol: the transport family the binary was built against. OPTIONAL DIAGNOSTIC, not
+	// a gate: DESIGN §8 says "There is no version negotiation. Compatibility is the
+	// validation of every message (D-PROTO-6)" — so this fact may be REPORTED by a consumer
+	// and is never the thing that keeps a wrong binary out. A required field here would
+	// over-constrain every artifact for no safety gain.
+	protocol?: int
+	// calver: the charly release the plugin was built against. OPTIONAL DIAGNOSTIC, same
+	// reason as protocol — reported, never gated.
+	calver?: string
+	// served_schema_digest: TRANSITIONAL — a current-mechanism fact, not the design's answer.
+	// DESIGN §8.1 publishes a plugin release's CUE module as DATA, addressed by digest, and
+	// DESIGN §4 has core read schemas "without starting the plugin"; until that leg lands,
+	// the schema a binary SERVES over Describe is the only identity a consumer can verify, so
+	// this field declares it. It is kept — and labelled transitional rather than presented as
+	// the target — because removing it before the CUE-module leg exists would leave NOTHING
+	// checkable.
+	//
+	// sha256 of the CUE schema body the binary SERVES over Describe —
+	// the concatenated per-file body `registerPluginUnitSchema` actually splices, NOT a
+	// digest over a `schema/` directory listing. MEASURED: the two differ, and the file-set
+	// value is unrecomputable where only the binary exists (a deployed container has no
+	// schema dir), so the SERVED value is the one that can be checked at all. It lets a
+	// consumer say WHICH schema it is about to splice before it splices it.
+	served_schema_digest!: string
+	// runtime_requires: the OS packages / host tools this provider NEEDS AT RUNTIME,
+	// projected from the plugin candy's OWN `package:` / `distro:` declaration — the one
+	// declaration TODO 6.9 names ("each plugin candy declares the OS packages it needs to
+	// run"). This is NOT a second declaration surface: the candy is the source, and these
+	// are the same facts travelling with the artifact.
+	//
+	// REQUIRED, and an empty list is a CLAIM ("this provider shells out to nothing"), not a
+	// placeholder — because the harm is silence. MEASURED: a provider that runs
+	// `exec.Command("zcat", "/proc/config.gz")` whose report prints `N/A` for two kernel
+	// features when `zcat` is absent, and `y` when it is present, declared nothing — so an
+	// artifact could not say what was missing, and the consumer could not say it either.
+	// The consumer reports a MISSING listed tool; it never reads an absent list as "needs
+	// nothing".
+	//
+	// The PUBLISHER projects this set from the candy's declaration and HARD-ERRORS when the
+	// plugin candy declares no package set at all — an explicit empty declaration
+	// (`package: []`) is the only way to say "no runtime tools". A projection that cannot
+	// find a declaration must never quietly become an empty list; that is precisely the
+	// silent-N/A failure the field exists to prevent.
+	runtime_requires!: [...string]
+	// providers: the "<class>:<word>[:<parent>]" words this binary serves — the same set
+	// its `.providers` layer carries and its Describe advertises. Three copies of one fact
+	// on purpose: the layer is what makes a source-less PRESCAN possible, this is what the
+	// consumer can check before connecting, and Describe is the authority afterwards.
+	providers!: [...#PluginCapability]
+	// layers: layer ROLE → the descriptor digest the manifest carries for it. Roles are
+	// "binary" | "manifest" | "providers" (the media types below identify the same three;
+	// the map lets a consumer assert "the binary blob I verified is the one this metadata
+	// names" without re-deriving which layer is which). Recomputed from the manifest.
+	layers!: {[string]: string}
+})
