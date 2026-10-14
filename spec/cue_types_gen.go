@@ -6015,7 +6015,12 @@ type Firecracker struct {
 	Fireactions *FirecrackerFireactions `yaml:"fireactions,omitempty" json:"fireactions,omitempty"`
 
 	// --- the microVM INSTANCE --------------------------------------------------
-	Image FirecrackerImage `yaml:"image,omitempty" json:"image"`
+	// image is required of a DEPLOY and optional here, because a host-only template is
+	// a legal authored shape: it names the kernel and the host's capabilities, and the
+	// instances it serves bring their OWN image (the `firecracker-host` profile plus a
+	// deploy that names it via `from:`). The plugin's OpValidate enforces "a deploy has
+	// an image"; the schema keeps the host form authorable.
+	Image *FirecrackerImage `yaml:"image,omitempty" json:"image,omitempty"`
 
 	Machine *FirecrackerMachine `yaml:"machine,omitempty" json:"machine,omitempty"`
 

@@ -18,15 +18,19 @@
 // kubevirt. A firecracker deploy adds NO new venue value.
 //
 // CLOSED: an unknown key is a typo (the same strictness every kind def carries).
-// Cross-rules CUE cannot express without degrading gengotypes are enforced by the
-// plugin's deep OpValidate, the split #KubeVirt and #Android document:
+// CUE closes the field set and the enums; what it cannot express without degrading
+// gengotypes is enforced by the plugin's deep OpValidate, the split #KubeVirt and
+// #Android document:
 //   * exactly one of kernel.from / kernel.path;
-//   * a deploy needs image + kernel (a host-only template may omit image);
+//   * a DEPLOY needs image as well as kernel — #Firecracker itself keeps image
+//     OPTIONAL, because a host-only template is a legal authored shape: it names the
+//     kernel and the host's capabilities, and the instances it serves bring their own
+//     image (see the image field below);
 //   * network.mode cni requires network.cni; mode tap requires network.tap;
 //   * containerd.snapshotter selects which of the snapshotter blocks is legal, and
 //     devmapper requires its device;
 //   * jailer.enabled requires jailer uid_base/gid_base;
-//   * a pool needs at least one label, and its runner image is required.
+//   * a pool needs at least one label (an empty list is schema-legal).
 
 #Firecracker: {
 	description?: string
@@ -42,7 +46,12 @@
 	fireactions?: #FirecrackerFireactions  @go(Fireactions,optional=nillable)
 
 	// --- the microVM INSTANCE --------------------------------------------------
-	image:    #FirecrackerImage    @go(Image)
+	// image is required of a DEPLOY and optional here, because a host-only template is
+	// a legal authored shape: it names the kernel and the host's capabilities, and the
+	// instances it serves bring their OWN image (the `firecracker-host` profile plus a
+	// deploy that names it via `from:`). The plugin's OpValidate enforces "a deploy has
+	// an image"; the schema keeps the host form authorable.
+	image?:   #FirecrackerImage    @go(Image,optional=nillable)
 	machine?: #FirecrackerMachine  @go(Machine,optional=nillable)
 	mmds?:    #FirecrackerMMDS     @go(MMDS,optional=nillable)
 	cloud_init?: #VmCloudInit      @go(CloudInit,optional=nillable)

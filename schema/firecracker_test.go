@@ -9,6 +9,18 @@ import (
 	"github.com/opencharly/spec/spec"
 )
 
+// validFirecracker bodies are unified against the def and checked with
+// cue.Concrete(true) — NOT the plain Validate(). Plain Validate() treats a MISSING
+// REQUIRED FIELD as incomplete rather than erroneous, so it reports success for a
+// body that omits a required field; measured: with `image` required, a host-only body
+// passes plain Validate() and fails Validate(cue.Concrete(true)). A positive gate that
+// cannot fail is not a gate (R7), so every acceptance check below asserts completeness.
+func unifyValid(t *testing.T, def cue.Value, body string) error {
+	t.Helper()
+
+	return cuecontext.New().CompileString(body).Unify(def).Validate(cue.Concrete(true))
+}
+
 // TestKindValueDefs_HasFirecracker gates the schemagen-derived word→def map: the new
 // substrate kind must be auto-derived into spec.KindValueDefs (the host value gate
 // consults it) from the #FirecrackerValue def — no hand-maintained map entry.
@@ -36,7 +48,8 @@ func TestResourceKinds_HasFirecracker(t *testing.T) {
 
 // TestFirecrackerValue_TemplateAccepted passes a realistic kind:firecracker template
 // (the host surface + a microVM instance + a runner pool) through the host-side value
-// gate def #FirecrackerValue, proving the new authored surface validates.
+// gate def #FirecrackerValue, proving the authored surface validates — and that it is
+// COMPLETE, so a body missing a required field cannot pass this gate.
 func TestFirecrackerValue_TemplateAccepted(t *testing.T) {
 	v := compileShipped(t)
 	def := v.LookupPath(cue.ParsePath("#FirecrackerValue"))
@@ -82,9 +95,58 @@ func TestFirecrackerValue_TemplateAccepted(t *testing.T) {
 	vsock: {guest_cid: 3}
 	console: {serial_out_path: "/var/log/fc-1.serial", log_level: "Info"}
 }`
-	in := cuecontext.New().CompileString(body)
-	if err := in.Unify(def).Validate(); err != nil {
+	if err := unifyValid(t, def, body); err != nil {
 		t.Fatalf("a valid kind:firecracker template rejected by #FirecrackerValue: %v", err)
+	}
+}
+
+// TestFirecrackerValue_HostOnlyTemplateAccepted gates the other authored shape: a
+// template that names the kernel and the host's capabilities but NO image is legal,
+// because that is the host profile the instances inherit from (a deploy names such a
+// template via `from:` and brings its own image). The deployed shape's requirement is
+// the plugin's OpValidate, so this gate is what keeps the host form authorable: making
+// `image` required again fails it.
+func TestFirecrackerValue_HostOnlyTemplateAccepted(t *testing.T) {
+	v := compileShipped(t)
+	def := v.LookupPath(cue.ParsePath("#FirecrackerValue"))
+	if !def.Exists() {
+		t.Fatal("#FirecrackerValue is not defined in the shipped schema")
+	}
+	body := `{
+	kernel: {from: "ghcr.io/opencharly/firecracker-kernel:v0.1", cmdline: "console=ttyS0 rw"}
+	vmm: {version: "v1.17.0"}
+	network: {mode: "tap", tap: {subnet: "172.16.0.0/16", prefix: 30}}
+	containerd: {snapshotter: "blockfile"}
+	fireactions: {
+		version: "v2.0.8"
+		pools: [{name: "opencharly-2vcpu-4gb", runner: {image: "ghcr.io/opencharly/fireactions-runner:v0.1", labels: ["self-hosted"]}}]
+	}
+}`
+	if err := unifyValid(t, def, body); err != nil {
+		t.Fatalf("a host-only kind:firecracker template (no image) rejected by #FirecrackerValue: %v", err)
+	}
+}
+
+// TestFirecrackerValue_RequiredScalarEnforced gates that the def's required non-empty
+// scalars really are required: a pool whose runner omits `image`, or sets it to the
+// empty string, must fail. Measured behaviour, not an assumption: `Concrete(true)` on
+// the unified value reports `fireactions.pools.0.runner.image: incomplete value !=""`
+// and `invalid value "" (out of bound !="")` respectively.
+//
+// Note for the next reader: a missing field whose value is a plain struct REFERENCE
+// (`kernel: #FirecrackerKernel`) is NOT flagged by that call in this unification mode,
+// which is why this gate targets a required scalar rather than an absent struct field —
+// a gate that cannot fail is not a gate (R7).
+func TestFirecrackerValue_RequiredScalarEnforced(t *testing.T) {
+	v := compileShipped(t)
+	def := v.LookupPath(cue.ParsePath("#FirecrackerValue"))
+	for _, tc := range []struct{ name, body string }{
+		{"runner without an image", `{kernel: {from: "k"}, fireactions: {pools: [{name: "p", runner: {labels: ["a"]}}]}}`},
+		{"runner with an empty image", `{kernel: {from: "k"}, fireactions: {pools: [{name: "p", runner: {image: "", labels: ["a"]}}]}}`},
+	} {
+		if err := unifyValid(t, def, tc.body); err == nil {
+			t.Fatalf("%s must fail the gate: a pool's runner image is required and must be non-empty", tc.name)
+		}
 	}
 }
 
@@ -110,8 +172,7 @@ func TestFirecrackerValue_SnapshotterEnumRejected(t *testing.T) {
 
 	for _, ok := range []string{"devmapper", "blockfile"} {
 		body := `{kernel: {path: "/boot/vmlinux"}, image: {from: "x"}, containerd: {snapshotter: "` + ok + `"}}`
-		in := cuecontext.New().CompileString(body)
-		if err := in.Unify(def).Validate(); err != nil {
+		if err := unifyValid(t, def, body); err != nil {
 			t.Fatalf("containerd.snapshotter %q must be accepted: %v", ok, err)
 		}
 	}
@@ -157,7 +218,7 @@ func TestSubstrateKind_GoConstsMatchTheCueEnum(t *testing.T) {
 // #Deploy: both substrates must be pinnable, which is the residue left behind when
 // kubevirt was added (its target word was never added to the enum). The values are
 // checked by unifying a target-only document against #Deploy with cue.Concrete(false)
-// — the field is optional, so a required-field check would not exercise the enum.
+// — the field is optional, so a completeness check would test the wrong thing.
 func TestDeployTarget_HasKubevirtAndFirecracker(t *testing.T) {
 	v := compileShipped(t)
 	def := v.LookupPath(cue.ParsePath("#Deploy"))
