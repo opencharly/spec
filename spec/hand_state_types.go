@@ -127,3 +127,48 @@ type KubeVirtDeploySnapshot struct {
 	Phase    string `yaml:"phase,omitempty" json:"phase,omitempty"`
 	Refcount int    `yaml:"refcount,omitempty" json:"refcount,omitempty"`
 }
+
+// FirecrackerDeployState mirrors the persisted runtime identity of a
+// kind:firecracker deploy (the microVM analog of VmDeployState /
+// KubeVirtDeployState). Written by candy/plugin-firecracker's lifecycle; the source
+// of truth for idempotent re-add and teardown.
+type FirecrackerDeployState struct {
+	// Host is the venue the microVM runs on (the local/ssh host the substrate was
+	// pointed at), so an idempotent re-add lands where the previous one did.
+	Host    string `yaml:"host,omitempty" json:"host,omitempty"`
+	SSHUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+	// Name is the per-lease microVM name (lease-scoped, not the shared entity).
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+	// The host-side artefacts of the lease: the Firecracker API socket, the vsock
+	// device path, the serial-console log, the TAP the guest NIC is attached to, and
+	// the CNI network namespace when the network mode is cni.
+	APISock   string `yaml:"api_sock,omitempty" json:"api_sock,omitempty"`
+	VsockPath string `yaml:"vsock_path,omitempty" json:"vsock_path,omitempty"`
+	SerialLog string `yaml:"serial_log,omitempty" json:"serial_log,omitempty"`
+	TAP       string `yaml:"tap,omitempty" json:"tap,omitempty"`
+	CNINetns  string `yaml:"cni_netns,omitempty" json:"cni_netns,omitempty"`
+	// The guest's identity for the plan walk and for teardown.
+	GuestIP  string `yaml:"guest_ip,omitempty" json:"guest_ip,omitempty"`
+	GuestMAC string `yaml:"guest_mac,omitempty" json:"guest_mac,omitempty"`
+	SSHPort  int    `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`
+	// The resolved artefacts — the source of truth for an idempotent re-add.
+	ImageRef    string `yaml:"image_ref,omitempty" json:"image_ref,omitempty"`
+	ImageDigest string `yaml:"image_digest,omitempty" json:"image_digest,omitempty"`
+	KernelRef   string `yaml:"kernel_ref,omitempty" json:"kernel_ref,omitempty"`
+	// Pool names the fireactions pool that owns this microVM, when one does.
+	Pool string `yaml:"pool,omitempty" json:"pool,omitempty"`
+	// Snapshots is the per-lease snapshot ledger (names + refcounts) for teardown
+	// refcounting — the key matches #FirecrackerDeployState.snapshot in the schema.
+	Snapshots []FirecrackerDeploySnapshot `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
+	Ephemeral *EphemeralRuntime           `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty"`
+}
+
+// FirecrackerDeploySnapshot mirrors one snapshot in the firecracker_state record.
+type FirecrackerDeploySnapshot struct {
+	Name         string `yaml:"name,omitempty" json:"name,omitempty"`
+	MemFilePath  string `yaml:"mem_file_path,omitempty" json:"mem_file_path,omitempty"`
+	SnapshotPath string `yaml:"snapshot_path,omitempty" json:"snapshot_path,omitempty"`
+	SnapshotType string `yaml:"snapshot_type,omitempty" json:"snapshot_type,omitempty"`
+	Created      string `yaml:"created,omitempty" json:"created,omitempty"`
+	Refcount     int    `yaml:"refcount,omitempty" json:"refcount,omitempty"`
+}

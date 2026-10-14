@@ -84,7 +84,7 @@
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
-	target?: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster") @go(Target,type=string) // loader-DERIVED (yaml:"-")
+	target?: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" | "kubevirt" | "firecracker") @go(Target,type=string) // loader-DERIVED (yaml:"-")
 
 	// member_of is a loader-DERIVED runtime field (never authored; rejected by
 	// #DeployValue): it marks a folded deploy-level member entry registered as a
@@ -214,6 +214,12 @@
 	// idempotent re-add + teardown. Validation-only (the Go type is hand-written,
 	// mirroring VmState's own treatment).
 	kubevirt_state?: #KubeVirtDeployState @go(KubeVirtState,type=*KubeVirtDeployState)
+	// firecracker_state — the persisted runtime identity of a kind:firecracker deploy
+	// (the microVM analog of vm_state/kubevirt_state): the host venue, the per-lease
+	// microVM name, the host-side artefacts (API socket, vsock path, serial log, TAP),
+	// the guest's address and the resolved artefacts — the source of truth for
+	// idempotent re-add and teardown. Written by candy/plugin-firecracker's lifecycle.
+	firecracker_state?: #FirecrackerDeployState @go(FirecrackerState,type=*FirecrackerDeployState)
 
 	// snapshot — the check-bed snapshot-anchoring policy (§5.3.1): capture at
 	// install finalize and reset before every check run, so a batch of PR runs
@@ -441,6 +447,56 @@
 	name?:  string
 	phase?: string
 	refcount?: int
+	...
+} @go(-)
+
+// #FirecrackerDeployState — the persisted runtime identity of a kind:firecracker
+// deploy (the microVM analog of #VmDeployState / #KubeVirtDeployState). Written by
+// candy/plugin-firecracker's lifecycle. Validation-only (the Go type is hand-written,
+// mirroring VmState's/KubeVirtState's own @go(-) treatment).
+#FirecrackerDeployState: {
+	// host is the venue the microVM runs on (the local/ssh host the substrate was
+	// pointed at), so an idempotent re-add lands where the previous one did.
+	host?:     string
+	ssh_user?: string
+	// name is the per-lease microVM name (lease-scoped, not the shared entity).
+	name?: string
+	// The host-side artefacts of the lease: the Firecracker API socket, the vsock
+	// device path, the serial-console log, and the TAP the guest NIC is attached to.
+	api_sock?:   string
+	vsock_path?: string
+	serial_log?: string
+	tap?:        string
+	cni_netns?:  string
+	// The guest's identity for the plan walk + teardown.
+	guest_ip?:  string
+	guest_mac?: string
+	ssh_port?:  int
+	// The resolved artefacts — the source of truth for an idempotent re-add.
+	image_ref?:    string
+	image_digest?: string
+	kernel_ref?:   string
+	// pool names the fireactions pool that owns this microVM, when one does.
+	pool?: string
+	// snapshot is the per-lease snapshot ledger (names + refcounts) for teardown
+	// refcounting — the key matches the Go yaml/json tag (hand_state_types.go)
+	// and the #VmDeployState.snapshot convention.
+	snapshot?: [...#FirecrackerDeploySnapshot]
+	// ephemeral persists the cross-substrate ephemeral-instance lifecycle state,
+	// mirroring #VmDeployState.ephemeral.
+	ephemeral?: {
+		...
+	}
+	...
+} @go(-)
+
+#FirecrackerDeploySnapshot: {
+	name?:          string
+	mem_file_path?: string
+	snapshot_path?: string
+	snapshot_type?: string
+	created?:       string
+	refcount?:      int
 	...
 } @go(-)
 
@@ -923,6 +979,12 @@
 	// plugin-kubevirt's PrepareVenue as the generic State patch — the kubevirt analogue of
 	// vm_state (deploykit.SaveDeployState writes it whenever non-nil).
 	kubevirt_state?: #KubeVirtDeployState @go(KubeVirtState,type=*KubeVirtDeployState)
+	// firecracker_state — the persisted runtime identity of a kind:firecracker deploy
+	// (the microVM analog of vm_state/kubevirt_state): the host venue, the per-lease
+	// microVM name, the host-side artefacts (API socket, vsock path, serial log, TAP),
+	// the guest's address and the resolved artefacts — the source of truth for
+	// idempotent re-add and teardown. Written by candy/plugin-firecracker's lifecycle.
+	firecracker_state?: #FirecrackerDeployState @go(FirecrackerState,type=*FirecrackerDeployState)
 
 	// Resource-arbitration axis: the holder-side Preemptible block + the claimant-side
 	// requires_exclusive / requires_shared token lists. Persisted so a deploy/bed MEMBER round-trips
