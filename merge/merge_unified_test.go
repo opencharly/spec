@@ -31,7 +31,7 @@ func TestMergeRawTemplateMap(t *testing.T) {
 // TestMergeBoxConfig_BuildTunables guards the regression where new
 // BoxConfig fields are silently dropped during the unified loader's
 // defaults: merge because mergeBoxConfig is a hand-maintained field-by-field
-// merger. The build-speed tunables (jobs / podman_jobs / podman_jobs_cap /
+// merger. The build-speed tunables (jobs / stage_parallelism / stage_parallelism_cap /
 // context_ignore / cache) MUST survive the merge, or defaults.context_ignore
 // authored in charly.yml never reaches the generator. Relocated with
 // MergeUnified from sdk/loaderkit/merge.go (#55 C3b).
@@ -39,13 +39,13 @@ func TestMergeBoxConfig_BuildTunables(t *testing.T) {
 	// dst empty → fills from src (the path that dropped these fields).
 	dst := &spec.BoxConfig{}
 	src := &spec.BoxConfig{
-		Jobs:          ptr(4),
-		PodmanJobs:    ptr(0),
-		PodmanJobsCap: ptr(8),
-		ContextIgnore: []string{"image", ".check"},
-		Cache:         "image",
-		KeepImages:    ptr(5),
-		KeepCheckRuns: ptr(10),
+		Jobs:                ptr(4),
+		StageParallelism:    ptr(0),
+		StageParallelismCap: ptr(8),
+		ContextIgnore:       []string{"image", ".check"},
+		Cache:               "image",
+		KeepImages:          ptr(5),
+		KeepCheckRuns:       ptr(10),
 	}
 	mergeBoxConfig(dst, src)
 	if dst.KeepImages == nil || *dst.KeepImages != 5 {
@@ -57,11 +57,11 @@ func TestMergeBoxConfig_BuildTunables(t *testing.T) {
 	if dst.Jobs == nil || *dst.Jobs != 4 {
 		t.Errorf("Jobs not merged from src: %v", dst.Jobs)
 	}
-	if dst.PodmanJobs == nil || *dst.PodmanJobs != 0 {
-		t.Errorf("PodmanJobs (explicit 0) not merged from src: %v", dst.PodmanJobs)
+	if dst.StageParallelism == nil || *dst.StageParallelism != 0 {
+		t.Errorf("StageParallelism (explicit 0) not merged from src: %v", dst.StageParallelism)
 	}
-	if dst.PodmanJobsCap == nil || *dst.PodmanJobsCap != 8 {
-		t.Errorf("PodmanJobsCap not merged from src: %v", dst.PodmanJobsCap)
+	if dst.StageParallelismCap == nil || *dst.StageParallelismCap != 8 {
+		t.Errorf("StageParallelismCap not merged from src: %v", dst.StageParallelismCap)
 	}
 	if len(dst.ContextIgnore) != 2 {
 		t.Errorf("ContextIgnore not merged from src: %v", dst.ContextIgnore)

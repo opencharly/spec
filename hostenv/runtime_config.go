@@ -63,16 +63,23 @@ type RuntimeVmConfig struct {
 	ImageDir string `yaml:"image_dir,omitempty" json:"image_dir,omitempty"`
 }
 
-// EngineConfig specifies which container engine to use
+// EngineConfig specifies which container engine to use AS A RUNTIME.
+//
+// There is no `build:` here. The image BUILDER is not an engine and is not selectable:
+// BuildKit is the one builder, so a `build:` key would be a selector with a single legal
+// value. The retired key is inert on load — RuntimeConfig is parsed with a plain
+// yaml.Unmarshal (no closed gate), so an existing `engine.build:` in
+// ~/.config/charly/config.yml is silently ignored rather than a load failure. See
+// opencharly/opencharly AGENTS.md "Hard Cutover by Default" and the BuildKit adoption
+// record for why no migration entry is owed for it (the migration table reshapes
+// charly.yml and the per-host overlay, never this runtime settings file).
 type EngineConfig struct {
-	Build   string `yaml:"build,omitempty" json:"build,omitempty"`
 	Run     string `yaml:"run,omitempty" json:"run,omitempty"`
 	Rootful string `yaml:"rootful,omitempty" json:"rootful,omitempty"` // "auto", "machine", "sudo", "native"
 }
 
 // ResolvedRuntime holds the fully resolved runtime configuration
 type ResolvedRuntime struct {
-	BuildEngine          string // a member of spec.EngineNames (podman/docker/nerdctl)
 	RunEngine            string // a member of spec.EngineNames (podman/docker/nerdctl)
 	Rootful              string // "auto", "machine", "sudo", "native"
 	RunMode              string // a member of spec.EngineRunModes (quadlet/systemd-unit/direct)
@@ -160,7 +167,6 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 	}
 
 	rt := &ResolvedRuntime{
-		BuildEngine:          ResolveValue(os.Getenv("CHARLY_BUILD_ENGINE"), cfg.Engine.Build, "auto"),
 		RunEngine:            ResolveValue(os.Getenv("CHARLY_RUN_ENGINE"), cfg.Engine.Run, "auto"),
 		Rootful:              ResolveValue(os.Getenv("CHARLY_ENGINE_ROOTFUL"), cfg.Engine.Rootful, "auto"),
 		RunMode:              ResolveValue(os.Getenv("CHARLY_RUN_MODE"), cfg.RunMode, "auto"),
@@ -173,14 +179,9 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		VmBackend:            ResolveValue(os.Getenv("CHARLY_VM_BACKEND"), cfg.Vm.Backend, "auto"),
 	}
 
-	// Auto-detect engines
+	// Auto-detect the RUN engine. The build engine is NOT resolved here: the builder is
+	// BuildKit and is not an engine word, so there is nothing to select or detect.
 	var detectErr error
-	if rt.BuildEngine == "auto" {
-		rt.BuildEngine, detectErr = container.DetectEngine()
-		if detectErr != nil {
-			return nil, fmt.Errorf("engine.build: %w", detectErr)
-		}
-	}
 	if rt.RunEngine == "auto" {
 		rt.RunEngine, detectErr = container.DetectEngine()
 		if detectErr != nil {
@@ -193,9 +194,6 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		rt.RunMode = DetectRunMode(rt.RunEngine)
 	}
 
-	if err := ValidateEngine(rt.BuildEngine, "engine.build"); err != nil {
-		return nil, err
-	}
 	if err := ValidateEngine(rt.RunEngine, "engine.run"); err != nil {
 		return nil, err
 	}

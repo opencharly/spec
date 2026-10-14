@@ -1078,9 +1078,9 @@ type Box struct {
 
 	Jobs *int `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs *int `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism *int `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
-	PodmanJobsCap *int `yaml:"podman_jobs_cap,omitempty" json:"podman_jobs_cap,omitempty"`
+	StageParallelismCap *int `yaml:"stage_parallelism_cap,omitempty" json:"stage_parallelism_cap,omitempty"`
 
 	ContextIgnore []string `yaml:"context_ignore,omitempty" json:"context_ignore,omitempty"`
 
@@ -1706,7 +1706,7 @@ type BuildResolveRequest struct {
 
 	Jobs int64 `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int64 `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int64 `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
 	GenerateOnly bool `yaml:"generate_only,omitempty" json:"generate_only,omitempty"`
 }
@@ -1981,7 +1981,7 @@ type BuildResolveReply struct {
 
 	Jobs int64 `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int64 `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int64 `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
 	Cache string `yaml:"cache,omitempty" json:"cache,omitempty"`
 
@@ -3006,7 +3006,7 @@ type BuildRequest struct {
 
 	Jobs int `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 }
 
 // #BuildReply is what a build:box / build:generate plugin echoes back from
@@ -3396,15 +3396,20 @@ type RemoteImageResolveReply struct {
 }
 
 // #BuildEnsureRequest / #BuildEnsureReply — the build:ensure word's Invoke
-// envelope: ensure an image is present in local podman storage, falling back
-// to a local (or remote-cached) build when the identifier maps to a project
-// charly.yml entry.
+// envelope: ensure an image is present in the LOCAL RUN ENGINE's storage,
+// falling back to a local (or remote-cached) build when the identifier maps to
+// a project charly.yml entry.
+//
+// There is no build_engine here. Ensured presence is a property of the RUN
+// engine's store, and the builder is BuildKit — not an engine — so a
+// build_engine field could only ever have described a cross-engine transfer
+// (docker save | podman load) between two engines, a shape that cannot exist
+// once there is one builder. A stale build_engine on the wire is rejected by
+// the closed schema; the producing call site drops it in the same cutover.
 type BuildEnsureRequest struct {
 	Image string `yaml:"image,omitempty" json:"image"`
 
 	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-
-	BuildEngine string `yaml:"build_engine,omitempty" json:"build_engine,omitempty"`
 
 	RunEngine string `yaml:"run_engine,omitempty" json:"run_engine,omitempty"`
 }
