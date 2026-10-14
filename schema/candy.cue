@@ -493,7 +493,7 @@
 	// providers: the "<class>:<word>" reserved-word capabilities this plugin
 	// serves (e.g. "verb:exampleprobe", "kind:my-thing"). Each is registered into
 	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
-	providers: [...#PluginCapability]
+	providers!: [...#PluginCapability]
 	// source: WHERE THIS PLUGIN'S PROVIDER COMES FROM — a git module
 	// (github.com/org/repo[/sub], #GithubRef) fetched via the @github resolver and
 	// built on the host into a provider binary, or a registry artifact
@@ -503,7 +503,28 @@
 	// the SEPARATE charly.yml `compiled_plugins:` selection, never a manifest
 	// sentinel. (The former `source: builtin` form was retired — it duplicated the
 	// compiled_plugins selection and had a dead in-repo-module fallback.)
-	source: #PluginSource @go(Source,type=string)
+	source!: #PluginSource @go(Source,type=string)
+	// release: the plugin RELEASE this declaration pins (D-CORE-4's "an embedded plugin
+	// runs only when a project declares that exact module, release and digest"). It is the
+	// release identity a resolver reports and compares — a charly CalVer-style tag for a
+	// first-party plugin release, else the publisher's own version string. Optional: a
+	// bare local candy pins nothing, and an unpinned declaration is a legitimate
+	// development state — what is NOT legitimate is a pin that only PRETENDS to pin.
+	release?: string & !="" @go(Release)
+	// digest: the artifact's INDEX digest — the only PLATFORM-INDEPENDENT digest in a
+	// multi-platform artifact. MEASURED: a plugin artifact carries one manifest per
+	// platform, so four per-platform manifest digests; an unqualified `digest:` would be
+	// ambiguous, while the index digest identifies the whole release. The consumer derives
+	// the selected platform's manifest digest by selection, from this.
+	//
+	// PRECEDENCE, when a plugin is both declared here and addressed by an `#OciRef` that
+	// carries its own `@sha256:` — the two must AGREE, and a disagreement is a hard load
+	// error (one pin, two spellings, never two competing answers). The ref's digest is what
+	// the transport FETCHES; this one is what the served bytes must BE.
+	//
+	// Declared and compared, never derived: the same source rebuilt elsewhere produces a
+	// different binary, so a digest can only be checked against what was published.
+	digest?: string & =~"^sha256:[a-f0-9]{64}$" @go(Digest)
 	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
 	// capabilities; the host resolves each against the provider registry and
 	// connects it declaratively (the same lazy-connect chain a call-time

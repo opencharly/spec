@@ -3653,6 +3653,29 @@ type Plugin struct {
 	// compiled_plugins selection and had a dead in-repo-module fallback.)
 	Source string `yaml:"source,omitempty" json:"source"`
 
+	// release: the plugin RELEASE this declaration pins (D-CORE-4's "an embedded plugin
+	// runs only when a project declares that exact module, release and digest"). It is the
+	// release identity a resolver reports and compares — a charly CalVer-style tag for a
+	// first-party plugin release, else the publisher's own version string. Optional: a
+	// bare local candy pins nothing, and an unpinned declaration is a legitimate
+	// development state — what is NOT legitimate is a pin that only PRETENDS to pin.
+	Release string `yaml:"release,omitempty" json:"release,omitempty"`
+
+	// digest: the artifact's INDEX digest — the only PLATFORM-INDEPENDENT digest in a
+	// multi-platform artifact. MEASURED: a plugin artifact carries one manifest per
+	// platform, so four per-platform manifest digests; an unqualified `digest:` would be
+	// ambiguous, while the index digest identifies the whole release. The consumer derives
+	// the selected platform's manifest digest by selection, from this.
+	//
+	// PRECEDENCE, when a plugin is both declared here and addressed by an `#OciRef` that
+	// carries its own `@sha256:` — the two must AGREE, and a disagreement is a hard load
+	// error (one pin, two spellings, never two competing answers). The ref's digest is what
+	// the transport FETCHES; this one is what the served bytes must BE.
+	//
+	// Declared and compared, never derived: the same source rebuilt elsewhere produces a
+	// different binary, so a digest can only be checked against what was published.
+	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
+
 	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
 	// capabilities; the host resolves each against the provider registry and
 	// connects it declaratively (the same lazy-connect chain a call-time
@@ -8172,24 +8195,36 @@ type PluginArtifactTransferReply struct {
 // in ANY of those are two entries, never one entry that silently serves the wrong bytes.
 //
 // VERIFY HARD (a mismatch is a hard error before the binary is served):
-//   - platform.os/architecture/variant — restated from the index descriptor the consumer
-//     SELECTED. The two must agree: a manifest whose config claims a different platform
-//     than the descriptor that pointed at it is an integrity failure, not a redundancy;
-//   - libc — a glibc binary does not run on a musl host, and image-spec's `platform`
-//     object CANNOT express libc. That gap is the whole reason this field exists here;
+//   - platform — restated from the index descriptor the consumer SELECTED. The two must
+//     agree: a manifest whose config claims a different platform than the descriptor that
+//     pointed at it is an integrity failure, not a redundancy;
+//   - platform.libc — a glibc binary does not run on a musl host, and image-spec's
+//     `platform` object CANNOT express libc (its Platform Variants table maps variant to
+//     GOARM/GOARM64/GOPPC64/GORISCV64/GOAMD64 only). MEASURED: two `linux/amd64`
+//     descriptors with byte-identical platform objects but different libc, under the
+//     spec's "first matching entry SHOULD be used", make the second UNREACHABLE — so libc
+//     is a charly field beside the platform facts it qualifies, never a `variant` value;
 //   - protocol — the go-plugin transport family (spec/transport.Handshake.ProtocolVersion).
 //     Declared so a mismatch fails HERE, clearly, instead of as a handshake refusal; the
 //     value must come from the ONE constant, never a transcribed copy.
 //
-// RECORD AND REPORT (never hard-gated): calver, schema_digest, revision, toolchain. The
-// authoritative wireframe check is the CUE schema the binary serves over Describe — spliced
-// and gated by the host — so a stale calver whose schema still splices is harmless, and
-// gating on it would refuse working plugins. Reporting it is what makes the skew visible.
+// RECORD AND REPORT (never hard-gated): calver, served_schema_digest, revision, toolchain.
+// The authoritative wireframe check is the CUE schema the binary serves over Describe —
+// spliced and gated by the host — so a stale calver whose schema still splices is harmless,
+// and gating on it would refuse working plugins. Reporting it is what makes the skew visible.
+//
+// ONE RULE OVER EVERY DECLARED IDENTITY FACT: it must be RECOMPUTABLE by the consumer from
+// the artifact or from the running binary. A digest that reproduces from nothing is worse
+// than no digest at all — it looks like a pin and checks nothing (measured: an earlier
+// candidate field reproduced from no file, no served body, no concat of the layer digests).
 type PluginArtifactMetadata struct {
 	// module: the provider's Go module path (e.g. github.com/opencharly/plugin-bpf/candy/plugin-bpf).
 	Module string `yaml:"module,omitempty" json:"module"`
 
-	// revision: the source-control revision the binary was built from.
+	// revision: the source-control revision the binary was built from. DECLARED, not
+	// verifiable: the same source built from a different path yields a different binary,
+	// so a consumer can only compare this against what it was told, never re-derive it.
+	// (Publish with `-trimpath` to at least make the build path-independent.)
 	Revision string `yaml:"revision,omitempty" json:"revision"`
 
 	// go_sum: the digest of the module's go.sum at build time (D-STORE-4's second component).
@@ -8198,16 +8233,19 @@ type PluginArtifactMetadata struct {
 	// toolchain: the Go toolchain that produced the binary (e.g. go1.26.0).
 	Toolchain string `yaml:"toolchain,omitempty" json:"toolchain"`
 
-	// os / architecture / variant: the build's own GOOS/GOARCH(/GOAMD64|GOARM64) identity,
-	// in the image-spec `platform` vocabulary the index descriptor also uses.
-	Os string `yaml:"os,omitempty" json:"os"`
+	// platform: the build's own identity, in the image-spec `platform` vocabulary the
+	// index descriptor also uses — plus the one fact that vocabulary cannot carry.
+	Platform struct {
+		Os string `yaml:"os,omitempty" json:"os"`
 
-	Architecture string `yaml:"architecture,omitempty" json:"architecture"`
+		Architecture string `yaml:"architecture,omitempty" json:"architecture"`
 
-	Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
+		Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
 
-	// libc: the C library the binary links against. image-spec cannot express it.
-	Libc string `yaml:"libc,omitempty" json:"libc"`
+		// libc: the C library the binary links against. See the header: image-spec
+		// cannot express this, and a musl host must refuse a glibc binary by name.
+		Libc string `yaml:"libc,omitempty" json:"libc"`
+	} `yaml:"platform,omitempty" json:"platform"`
 
 	// protocol: the go-plugin transport family the binary speaks.
 	Protocol int64 `yaml:"protocol,omitempty" json:"protocol"`
@@ -8215,9 +8253,28 @@ type PluginArtifactMetadata struct {
 	// calver: the charly release the plugin was built against (reported, not gated).
 	Calver string `yaml:"calver,omitempty" json:"calver"`
 
-	// schema_digest: sha256 of the CUE schema the binary serves over Describe — the
-	// wireframe identity, so a consumer can say WHICH schema it is about to splice.
-	Schema_digest string `yaml:"schema_digest,omitempty" json:"schema_digest"`
+	// served_schema_digest: sha256 of the CUE schema body the binary SERVES over Describe —
+	// the concatenated per-file body `registerPluginUnitSchema` actually splices, NOT a
+	// digest over a `schema/` directory listing. MEASURED: the two differ, and the file-set
+	// value is unrecomputable where only the binary exists (a deployed container has no
+	// schema dir), so the SERVED value is the one that can be checked at all. It lets a
+	// consumer say WHICH schema it is about to splice before it splices it.
+	Served_schema_digest string `yaml:"served_schema_digest,omitempty" json:"served_schema_digest"`
+
+	// runtime_requires: the OS packages / host tools this provider NEEDS AT RUNTIME,
+	// projected from the plugin candy's OWN `package:` / `distro:` declaration — the one
+	// declaration TODO 6.9 names ("each plugin candy declares the OS packages it needs to
+	// run"). This is NOT a second declaration surface: the candy is the source, and these
+	// are the same facts travelling with the artifact.
+	//
+	// REQUIRED, and an empty list is a CLAIM ("this provider shells out to nothing"), not a
+	// placeholder — because the harm is silence. MEASURED: a provider that runs
+	// `exec.Command("zcat", "/proc/config.gz")` whose report prints `N/A` for two kernel
+	// features when `zcat` is absent, and `y` when it is present, declared nothing — so an
+	// artifact could not say what was missing, and the consumer could not say it either.
+	// The consumer reports a MISSING listed tool; it never reads an absent list as "needs
+	// nothing".
+	Runtime_requires []string `yaml:"runtime_requires,omitempty" json:"runtime_requires"`
 
 	// providers: the "<class>:<word>[:<parent>]" words this binary serves — the same set
 	// its `.providers` layer carries and its Describe advertises. Three copies of one fact
@@ -8228,7 +8285,7 @@ type PluginArtifactMetadata struct {
 	// layers: layer ROLE → the descriptor digest the manifest carries for it. Roles are
 	// "binary" | "manifest" | "providers" (the media types below identify the same three;
 	// the map lets a consumer assert "the binary blob I verified is the one this metadata
-	// names" without re-deriving which layer is which).
+	// names" without re-deriving which layer is which). Recomputed from the manifest.
 	Layers map[string]string `yaml:"layers,omitempty" json:"layers"`
 }
 

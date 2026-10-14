@@ -26,20 +26,26 @@ import (
 // contract the runtime and `charly task cue-gen` use), via the helper the sibling CUE test
 // already provides — one loader, not a second hand-written excerpt of the schema.
 
-// refAccepts reports whether the compiled schema's `def` accepts the concrete string `s`.
-// `concrete` distinguishes "no error" from "no value at all": a pattern mismatch is an
-// error, while a def that silently failed to resolve would unify against nothing.
-func refAccepts(t *testing.T, schema cue.Value, def, s string) error {
+// defAccepts reports whether the compiled schema's `def` accepts the CUE expression
+// `expr` — the one unifier every accept/reject case below goes through, so a scalar case
+// and a struct case differ only by how the value is spelled.
+func defAccepts(t *testing.T, schema cue.Value, def, expr string) error {
 	t.Helper()
 	d := schema.LookupPath(cue.ParsePath(def))
 	if err := d.Err(); err != nil {
 		t.Fatalf("lookup %s: %v", def, err)
 	}
-	val := schema.Context().CompileString(quoteCUE(s))
+	val := schema.Context().CompileString(expr)
 	if err := val.Err(); err != nil {
-		t.Fatalf("compile value %q: %v", s, err)
+		t.Fatalf("compile value %s: %v", expr, err)
 	}
 	return d.Unify(val).Validate(cue.Concrete(false), cue.Final())
+}
+
+// refAccepts is defAccepts for a concrete STRING (the ref arms are all string shapes).
+func refAccepts(t *testing.T, schema cue.Value, def, s string) error {
+	t.Helper()
+	return defAccepts(t, schema, def, quoteCUE(s))
 }
 
 // quoteCUE renders s as a CUE string literal for CompileString.
@@ -172,4 +178,85 @@ func TestRefGrammarsAgreeWithTheirSourceShapes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPluginArtifactIdentityShape pins the identity facts the DECLARATION and the artifact
+// CONFIG carry — the fields whose absence was measured to make a wrong binary run silently
+// (`#Plugin` had neither a release nor a digest), and the one platform fact image-spec
+// cannot express (libc). Every reject case fails if the field goes back to an unconstrained
+// string or disappears.
+// testPluginDigest is the sha256 of `{}` — the image-spec empty-descriptor digest, used
+// here purely as a well-formed 64-hex digest. One value, one home: a second copy would
+// make metadataCUE's own parameter "always the same argument" (unparam) and drift silently.
+const testPluginDigest = "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+
+func TestPluginArtifactIdentityShape(t *testing.T) {
+	schema := loadVmSchema(t)
+	digest := testPluginDigest
+
+	for _, tc := range []struct {
+		name   string
+		def    string
+		value  string
+		reject bool
+	}{
+		// #Plugin.digest is the INDEX digest: a well-formed sha256, nothing else.
+		{"plugin digest accepted", "#Plugin", `{providers: ["command:bpf"], source: "github.com/opencharly/plugin-bpf/candy/plugin-bpf", digest: "` + digest + `"}`, false},
+		{"plugin digest short hex rejected", "#Plugin", `{providers: ["command:bpf"], source: "github.com/opencharly/plugin-bpf/candy/plugin-bpf", digest: "sha256:deadbeef"}`, true},
+		{"plugin digest tag rejected", "#Plugin", `{providers: ["command:bpf"], source: "github.com/opencharly/plugin-bpf/candy/plugin-bpf", digest: "v1.2.3"}`, true},
+
+		// #Plugin.release names the release; an empty pin is not a pin.
+		{"plugin release accepted", "#Plugin", `{providers: ["command:bpf"], source: "github.com/opencharly/plugin-bpf/candy/plugin-bpf", release: "2026.286.0739"}`, false},
+		{"plugin release empty rejected", "#Plugin", `{providers: ["command:bpf"], source: "github.com/opencharly/plugin-bpf/candy/plugin-bpf", release: ""}`, true},
+
+		// #PluginArtifactMetadata.platform.libc — a closed two-value set, because
+		// image-spec's platform object cannot carry it and a free string would let a
+		// publisher invent a value no consumer can honour.
+		{"metadata libc glibc accepted", "#PluginArtifactMetadata", metadataCUE(`"glibc"`), false},
+		{"metadata libc musl accepted", "#PluginArtifactMetadata", metadataCUE(`"musl"`), false},
+		{"metadata libc invented rejected", "#PluginArtifactMetadata", metadataCUE(`"uclibc"`), true},
+		{"metadata libc empty rejected", "#PluginArtifactMetadata", metadataCUE(`""`), true},
+
+		// served_schema_digest is REQUIRED: an artifact whose schema identity is absent
+		// cannot be checked before splicing, which is the whole reason the field exists.
+		{"metadata without served_schema_digest rejected", "#PluginArtifactMetadata",
+			`{module: "m", revision: "r", go_sum: "g", toolchain: "go1.26.0", platform: {os: "linux", architecture: "amd64", libc: "glibc"}, protocol: 2, calver: "c", runtime_requires: [], providers: ["command:bpf"], layers: {}}`, true},
+
+		// runtime_requires is REQUIRED and an empty list is a CLAIM, not a placeholder: the
+		// measured harm was a provider whose tool dependency nobody declared, so its report
+		// silently degraded to N/A. An artifact that omits the field is unfinished, and a
+		// consumer must never read its absence as "needs nothing".
+		{"metadata without runtime_requires rejected", "#PluginArtifactMetadata", metadataCUENoRuntime(digest), true},
+		{"metadata empty runtime_requires accepted as a claim", "#PluginArtifactMetadata", metadataCUE(`"glibc"`), false},
+		{"metadata runtime_requires with a tool accepted", "#PluginArtifactMetadata",
+			`{module: "m", revision: "r", go_sum: "g", toolchain: "go1.26.0", platform: {os: "linux", architecture: "amd64", libc: "glibc"}, protocol: 2, calver: "c", served_schema_digest: "` + digest + `", runtime_requires: ["zcat"], providers: ["command:bpf"], layers: {binary: "sha256:00"}}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := defAccepts(t, schema, tc.def, tc.value)
+			if tc.reject && got == nil {
+				t.Errorf("%s ACCEPTED %s — the field is not constrained", tc.def, tc.value)
+			}
+			if !tc.reject && got != nil {
+				t.Errorf("%s rejected a valid value %s: %v", tc.def, tc.value, got)
+			}
+		})
+	}
+}
+
+// metadataCUE renders a complete, well-formed #PluginArtifactMetadata body with the given
+// libc value — the accept cases vary ONLY libc, so the rest is fixed here.
+func metadataCUE(libc string) string {
+	return `{module: "m", revision: "r", go_sum: "g", toolchain: "go1.26.0", ` +
+		`platform: {os: "linux", architecture: "amd64", libc: ` + libc + `}, ` +
+		`protocol: 2, calver: "c", served_schema_digest: "` + testPluginDigest + `", ` +
+		`runtime_requires: [], providers: ["command:bpf"], layers: {binary: "sha256:00"}}`
+}
+
+// metadataCUENoRuntime is metadataCUE minus runtime_requires — the field the measured harm
+// says must not be omissible.
+func metadataCUENoRuntime(servedDigest string) string {
+	return `{module: "m", revision: "r", go_sum: "g", toolchain: "go1.26.0", ` +
+		`platform: {os: "linux", architecture: "amd64", libc: "glibc"}, ` +
+		`protocol: 2, calver: "c", served_schema_digest: "` + servedDigest + `", ` +
+		`providers: ["command:bpf"], layers: {binary: "sha256:00"}}`
 }
