@@ -222,6 +222,15 @@ func TestPluginArtifactIdentityShape(t *testing.T) {
 		{"metadata without served_schema_digest rejected", "#PluginArtifactMetadata",
 			`{module: "m", revision: "r", go_sum: "g", toolchain: "go1.26.0", platform: {os: "linux", architecture: "amd64", libc: "glibc"}, protocol: 2, calver: "c", runtime_requires: [], providers: ["command:bpf"], layers: {}}`, true},
 
+		// protocol / calver are OPTIONAL ADVISORY DIAGNOSTICS (DESIGN §8: no version
+		// negotiation — compatibility is per-message validation, D-PROTO-6). A metadata that
+		// omits them is a VALID artifact, and one that carries them is not thereby gated:
+		// requiring them would over-constrain publishers for no safety gain, and would invite
+		// the false impression that they decide anything (a `9999.999.9999` binary was measured
+		// running fine).
+		{"metadata without protocol/calver accepted as diagnostics", "#PluginArtifactMetadata",
+			`{module: "m", revision: "r", go_sum: "g", toolchain: "go1.26.0", platform: {os: "linux", architecture: "amd64", libc: "glibc"}, served_schema_digest: "` + testPluginDigest + `", runtime_requires: [], providers: ["command:bpf"], layers: {binary: "sha256:00"}}`, false},
+
 		// runtime_requires is REQUIRED and an empty list is a CLAIM, not a placeholder: the
 		// measured harm was a provider whose tool dependency nobody declared, so its report
 		// silently degraded to N/A. An artifact that omits the field is unfinished, and a

@@ -8247,13 +8247,26 @@ type PluginArtifactMetadata struct {
 		Libc string `yaml:"libc,omitempty" json:"libc"`
 	} `yaml:"platform,omitempty" json:"platform"`
 
-	// protocol: the go-plugin transport family the binary speaks.
-	Protocol int64 `yaml:"protocol,omitempty" json:"protocol"`
+	// protocol: the transport family the binary was built against. OPTIONAL DIAGNOSTIC, not
+	// a gate: DESIGN §8 says "There is no version negotiation. Compatibility is the
+	// validation of every message (D-PROTO-6)" — so this fact may be REPORTED by a consumer
+	// and is never the thing that keeps a wrong binary out. A required field here would
+	// over-constrain every artifact for no safety gain.
+	Protocol int64 `yaml:"protocol,omitempty" json:"protocol,omitempty"`
 
-	// calver: the charly release the plugin was built against (reported, not gated).
-	Calver string `yaml:"calver,omitempty" json:"calver"`
+	// calver: the charly release the plugin was built against. OPTIONAL DIAGNOSTIC, same
+	// reason as protocol — reported, never gated.
+	Calver string `yaml:"calver,omitempty" json:"calver,omitempty"`
 
-	// served_schema_digest: sha256 of the CUE schema body the binary SERVES over Describe —
+	// served_schema_digest: TRANSITIONAL — a current-mechanism fact, not the design's answer.
+	// DESIGN §8.1 publishes a plugin release's CUE module as DATA, addressed by digest, and
+	// DESIGN §4 has core read schemas "without starting the plugin"; until that leg lands,
+	// the schema a binary SERVES over Describe is the only identity a consumer can verify, so
+	// this field declares it. It is kept — and labelled transitional rather than presented as
+	// the target — because removing it before the CUE-module leg exists would leave NOTHING
+	// checkable.
+	//
+	// sha256 of the CUE schema body the binary SERVES over Describe —
 	// the concatenated per-file body `registerPluginUnitSchema` actually splices, NOT a
 	// digest over a `schema/` directory listing. MEASURED: the two differ, and the file-set
 	// value is unrecomputable where only the binary exists (a deployed container has no
@@ -8274,6 +8287,12 @@ type PluginArtifactMetadata struct {
 	// artifact could not say what was missing, and the consumer could not say it either.
 	// The consumer reports a MISSING listed tool; it never reads an absent list as "needs
 	// nothing".
+	//
+	// The PUBLISHER projects this set from the candy's declaration and HARD-ERRORS when the
+	// plugin candy declares no package set at all — an explicit empty declaration
+	// (`package: []`) is the only way to say "no runtime tools". A projection that cannot
+	// find a declaration must never quietly become an empty list; that is precisely the
+	// silent-N/A failure the field exists to prevent.
 	Runtime_requires []string `yaml:"runtime_requires,omitempty" json:"runtime_requires"`
 
 	// providers: the "<class>:<word>[:<parent>]" words this binary serves — the same set
@@ -8287,49 +8306,6 @@ type PluginArtifactMetadata struct {
 	// the map lets a consumer assert "the binary blob I verified is the one this metadata
 	// names" without re-deriving which layer is which). Recomputed from the manifest.
 	Layers map[string]string `yaml:"layers,omitempty" json:"layers"`
-}
-
-// #ContainerDiskEmitRequest — the containerDisk emit wire input this pair was
-// authored for: a materialized guest disk, the in-layer path it is stored at, the
-// OCI config labels to carry, and the registry reference to push.
-//
-// STATUS (corrected 2026-10-14): this pair has NO consumer on `main` — it is
-// ORPHANED. The emit engine that actually shipped is sdk/deploykit/vm_box_emit.go
-// (EmitVmBox / EmitVmBoxAt), driven from plugin-vm/candy/plugin-vm/vm_box_emit.go by
-// the merged opencharly/plugin-vm#50. The verb:oci `container-disk-emit` leg these
-// types name was authored in opencharly/plugin-oci#5, which is CLOSED, not merged,
-// and no `charly vm box publish` command exists. Nothing decodes these types; their
-// removal is opencharly/spec#231 (deliberately NOT part of this PR).
-// disk_path is the host path of the disk; in_image_path defaults to the KubeVirt
-// containerDisk contract /disk/disk.img; layout_dir optionally also writes a
-// local OCI Image Layout (oci:<dir>).
-type ContainerDiskEmitRequest struct {
-	DiskPath string `yaml:"disk_path,omitempty" json:"disk_path"`
-
-	InImagePath string `yaml:"in_image_path,omitempty" json:"in_image_path,omitempty"`
-
-	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
-
-	Ref string `yaml:"ref,omitempty" json:"ref"`
-
-	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
-
-	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
-}
-
-// #ContainerDiskEmitReply — the emit result: the pushed digest, the media type
-// actually written (the caller asserts the +gzip containerDisk contract), the
-// layer byte size, and the layout dir when one was requested.
-type ContainerDiskEmitReply struct {
-	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
-
-	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
-
-	MediaType string `yaml:"media_type,omitempty" json:"media_type,omitempty"`
-
-	LayerSize int64 `yaml:"layer_size,omitempty" json:"layer_size,omitempty"`
-
-	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
 }
 
 // #PipelineRetry — lobster `retry`: retry the failed step up to `max` attempts.
