@@ -1078,9 +1078,9 @@ type Box struct {
 
 	Jobs *int `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs *int `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism *int `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
-	PodmanJobsCap *int `yaml:"podman_jobs_cap,omitempty" json:"podman_jobs_cap,omitempty"`
+	StageParallelismCap *int `yaml:"stage_parallelism_cap,omitempty" json:"stage_parallelism_cap,omitempty"`
 
 	ContextIgnore []string `yaml:"context_ignore,omitempty" json:"context_ignore,omitempty"`
 
@@ -1706,7 +1706,7 @@ type BuildResolveRequest struct {
 
 	Jobs int64 `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int64 `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int64 `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
 	GenerateOnly bool `yaml:"generate_only,omitempty" json:"generate_only,omitempty"`
 }
@@ -1981,7 +1981,7 @@ type BuildResolveReply struct {
 
 	Jobs int64 `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int64 `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int64 `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
 	Cache string `yaml:"cache,omitempty" json:"cache,omitempty"`
 
@@ -3006,7 +3006,7 @@ type BuildRequest struct {
 
 	Jobs int `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 }
 
 // #BuildReply is what a build:box / build:generate plugin echoes back from

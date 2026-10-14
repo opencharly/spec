@@ -109,8 +109,8 @@
 	platform?:         string @go(Platform)         // --platform (build only)
 	cache?:            string @go(Cache)            // --cache mode (build only)
 	no_cache?:         bool   @go(NoCache)           // --no-cache (build only)
-	jobs?:             int    @go(Jobs,type=int)        // --jobs outer concurrency (build only)
-	podman_jobs?:      int    @go(PodmanJobs,type=int)  // --podman-jobs inner concurrency (build only)
+	jobs?:              int    @go(Jobs,type=int)             // --jobs outer concurrency: images per DAG level (build only)
+	stage_parallelism?: int    @go(StageParallelism,type=int) // --stage-parallelism inner concurrency: stages of ONE build (build only)
 }
 
 // #BuildReply is what a build:box / build:generate plugin echoes back from

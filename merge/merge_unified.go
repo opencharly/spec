@@ -152,11 +152,11 @@ func mergeBoxConfig(dst, src *spec.BoxConfig) {
 	if dst.Jobs == nil {
 		dst.Jobs = src.Jobs
 	}
-	if dst.PodmanJobs == nil {
-		dst.PodmanJobs = src.PodmanJobs
+	if dst.StageParallelism == nil {
+		dst.StageParallelism = src.StageParallelism
 	}
-	if dst.PodmanJobsCap == nil {
-		dst.PodmanJobsCap = src.PodmanJobsCap
+	if dst.StageParallelismCap == nil {
+		dst.StageParallelismCap = src.StageParallelismCap
 	}
 	if len(dst.ContextIgnore) == 0 {
 		dst.ContextIgnore = src.ContextIgnore

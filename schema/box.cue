@@ -116,12 +116,12 @@
 	entrypoint?: [...(string & !="")] @go(Entrypoint, type=[]string)
 	cmd?:        [...(string & !="")] @go(Cmd, type=[]string)
 
-	jobs?:            int & >=1 @go(,type=*int)
-	podman_jobs?:     int & >=0 @go(PodmanJobs,type=*int) // 0 = auto (min(NCPU, cap))
-	podman_jobs_cap?: int & >=1 @go(PodmanJobsCap,type=*int)
-	context_ignore?: [...(string & !="")] @go(ContextIgnore)
-	cache?:           "image" | "registry" | "gha" | "none"
-	keep_images?:     int & >=0 @go(KeepImages,type=*int)
+	jobs?:                  int & >=1 @go(,type=*int)
+	stage_parallelism?:     int & >=0 @go(StageParallelism,type=*int)     // 0 = auto (min(NCPU, cap)) — stages of ONE build
+	stage_parallelism_cap?: int & >=1 @go(StageParallelismCap,type=*int)  // ceiling for the auto calc
+	context_ignore?:        [...(string & !="")] @go(ContextIgnore)
+	cache?:                 "image" | "registry" | "gha" | "none"
+	keep_images?:           int & >=0 @go(KeepImages,type=*int)
 	keep_check_runs?: int & >=0 @go(KeepCheckRuns,type=*int)
 
 	merge?: #BoxMerge @go(Merge,optional=nillable)

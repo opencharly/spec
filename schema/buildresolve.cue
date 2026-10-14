@@ -45,7 +45,7 @@
 	cache?:            string @go(Cache)
 	no_cache?:         bool   @go(NoCache)
 	jobs?:             int    @go(Jobs)
-	podman_jobs?:      int    @go(PodmanJobs)
+	stage_parallelism?: int   @go(StageParallelism)
 	generate_only?:    bool   @go(GenerateOnly)
 }
 
@@ -97,9 +97,9 @@
 	order?: [...string] @go(Order)
 	levels?: [...[...string]] @go(Levels)
 	boxes?: [...#BuildResolveBox] @go(Boxes)
-	jobs?:        int @go(Jobs)
-	podman_jobs?: int @go(PodmanJobs)
-	cache?:       string @go(Cache)
+	jobs?:              int @go(Jobs)
+	stage_parallelism?: int @go(StageParallelism)
+	cache?:             string @go(Cache)
 	keep_images?: int @go(KeepImages)
 	written?: [...string] @go(Written)
 	// resolved_project — the full resolved-project envelope with build-render
