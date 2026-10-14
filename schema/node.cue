@@ -49,7 +49,7 @@
 // the ProjectLoader seam) and threaded to the plugin via
 // op.Env (F5); the parser gate admits them because resourceKindSet has them. candy is NOT a
 // resource kind (it nests no deploy members — it is the box⊻layer factory).
-#ResourceKind: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" | "kubevirt") @go(-)
+#ResourceKind: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" | "kubevirt" | "firecracker") @go(-)
 
 // ---------------------------------------------------------------------------
 // Per-kind node VALUES — the COMPLETE per-kind def, authored INLINE: the kind
@@ -99,6 +99,12 @@
 // served by the external plugin-kubevirt; the value gate below is derived by schemagen
 // (kindValueDefs) from this def, so no hand map entry is needed.
 #KubevirtValue: (#KubeVirt | #DeployValue) @go(-)
+// firecracker is the 8th substrate kind (a microVM the substrate boots directly under
+// KVM: a rootfs artefact + a kernel, no libvirt, no domain, no host arbiter lease).
+// Its kind/deploy/verb/command surface is served by the external plugin-firecracker;
+// the value gate below is derived by schemagen (kindValueDefs) from this def, so no
+// hand map entry is needed.
+#FirecrackerValue: (#Firecracker | #DeployValue) @go(-)
 // EVERY authoring kind is externalized to a plugin unit — the build-vocabulary kinds
 // (`distro:`/`builder:`/`init:`/`resource:`), the AI-CLI grader `agent:`, the sidecar
 // `sidecar:`, the substrate kinds

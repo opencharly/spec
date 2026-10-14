@@ -18,6 +18,7 @@ var ResourceKinds = []string{
 	"android",
 	"kindcluster",
 	"kubevirt",
+	"firecracker",
 }
 
 // PipelineClassRoutes is the class→route table (#PipelineClassRoutes) — how EVERY provider class is reached from inside a workflow. spec's own TestPipelineClassCoverage (spec/pipeline_test.go) iterates ProviderClasses and fails when a class has no row here — and when a row names a class that is not in the vocabulary — so adding a provider class forces the workflow route to be decided (R2). DERIVED from the CUE def, never a hand-maintained copy.
@@ -281,6 +282,7 @@ var AuthoringVerbs = []string{
 var KindValueDefs = map[string]string{
 	"android":     "#AndroidValue",
 	"candy":       "#CandyValue",
+	"firecracker": "#FirecrackerValue",
 	"kindcluster": "#KindclusterValue",
 	"kubernetes":  "#KubernetesValue",
 	"kubevirt":    "#KubevirtValue",

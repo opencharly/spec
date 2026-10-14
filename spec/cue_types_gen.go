@@ -2844,6 +2844,8 @@ type ProjectTemplates struct {
 
 	KubeVirt map[string]RawBody `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
 
+	Firecracker map[string]RawBody `yaml:"firecracker,omitempty" json:"firecracker,omitempty"`
+
 	Pod map[string]RawBody `yaml:"pod,omitempty" json:"pod,omitempty"`
 
 	VM map[string]RawBody `yaml:"vm,omitempty" json:"vm,omitempty"`
@@ -4534,6 +4536,13 @@ type Deploy struct {
 	// mirroring VmState's own treatment).
 	KubeVirtState *KubeVirtDeployState `yaml:"kubevirt_state,omitempty" json:"kubevirt_state,omitempty"`
 
+	// firecracker_state — the persisted runtime identity of a kind:firecracker deploy
+	// (the microVM analog of vm_state/kubevirt_state): the host venue, the per-lease
+	// microVM name, the host-side artefacts (API socket, vsock path, serial log, TAP),
+	// the guest's address and the resolved artefacts — the source of truth for
+	// idempotent re-add and teardown. Written by candy/plugin-firecracker's lifecycle.
+	FirecrackerState *FirecrackerDeployState `yaml:"firecracker_state,omitempty" json:"firecracker_state,omitempty"`
+
 	// snapshot — the check-bed snapshot-anchoring policy (§5.3.1): capture at
 	// install finalize and reset before every check run, so a batch of PR runs
 	// shares ONE golden disk (revert ≈ seconds vs fresh install ≈ 20-30 min).
@@ -5109,6 +5118,13 @@ type SaveDeployStateInput struct {
 	// plugin-kubevirt's PrepareVenue as the generic State patch — the kubevirt analogue of
 	// vm_state (deploykit.SaveDeployState writes it whenever non-nil).
 	KubeVirtState *KubeVirtDeployState `yaml:"kubevirt_state,omitempty" json:"kubevirt_state,omitempty"`
+
+	// firecracker_state — the persisted runtime identity of a kind:firecracker deploy
+	// (the microVM analog of vm_state/kubevirt_state): the host venue, the per-lease
+	// microVM name, the host-side artefacts (API socket, vsock path, serial log, TAP),
+	// the guest's address and the resolved artefacts — the source of truth for
+	// idempotent re-add and teardown. Written by candy/plugin-firecracker's lifecycle.
+	FirecrackerState *FirecrackerDeployState `yaml:"firecracker_state,omitempty" json:"firecracker_state,omitempty"`
 
 	// Resource-arbitration axis: the holder-side Preemptible block + the claimant-side
 	// requires_exclusive / requires_shared token lists. Persisted so a deploy/bed MEMBER round-trips
@@ -5980,6 +5996,687 @@ type FeatureEntity struct {
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 }
 
+type Firecracker struct {
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	// --- the HOST side: how this KVM host runs microVMs -------------------------
+	// vmm pins the Firecracker release installed on the host; absent → the host's
+	// own `firecracker` from PATH (the upstream default).
+	VMM *FirecrackerVMM `yaml:"vmm,omitempty" json:"vmm,omitempty"`
+
+	Kernel FirecrackerKernel `yaml:"kernel,omitempty" json:"kernel"`
+
+	Network *FirecrackerNetwork `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Containerd *FirecrackerContainerd `yaml:"containerd,omitempty" json:"containerd,omitempty"`
+
+	Fireactions *FirecrackerFireactions `yaml:"fireactions,omitempty" json:"fireactions,omitempty"`
+
+	// --- the microVM INSTANCE --------------------------------------------------
+	// image is required of a DEPLOY and optional here, because a host-only template is
+	// a legal authored shape: it names the kernel and the host's capabilities, and the
+	// instances it serves bring their OWN image (the `firecracker-host` profile plus a
+	// deploy that names it via `from:`). The plugin's OpValidate enforces "a deploy has
+	// an image"; the schema keeps the host form authorable.
+	Image *FirecrackerImage `yaml:"image,omitempty" json:"image,omitempty"`
+
+	Machine *FirecrackerMachine `yaml:"machine,omitempty" json:"machine,omitempty"`
+
+	MMDS *FirecrackerMMDS `yaml:"mmds,omitempty" json:"mmds,omitempty"`
+
+	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
+
+	Vsock *FirecrackerVsock `yaml:"vsock,omitempty" json:"vsock,omitempty"`
+
+	Console *FirecrackerConsole `yaml:"console,omitempty" json:"console,omitempty"`
+
+	Snapshot *FirecrackerSnapshot `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
+}
+
+// #FirecrackerVMM pins the VMM release and its integrity, and selects the jailer
+// posture. The jailer is OFF by default: it is Firecracker's production hardening
+// posture (a privileged jailer drops privileges and execs the VMM), and the
+// integration's upstream orchestrator runs the VMM as a plain process.
+type FirecrackerVMM struct {
+	Version string `yaml:"version,omitempty" json:"version"`
+
+	Sha256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
+
+	Binary_path string `yaml:"binary_path,omitempty" json:"binary_path,omitempty"`
+
+	Jailer *FirecrackerJailer `yaml:"jailer,omitempty" json:"jailer,omitempty"`
+}
+
+type FirecrackerJailer struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled"`
+
+	// One jail per microVM needs its OWN uid and gid; uid_base/gid_base are the
+	// allocation floor the substrate increments per VM (required when enabled).
+	UIDBase int `yaml:"uid_base,omitempty" json:"uid_base,omitempty"`
+
+	GIDBase int `yaml:"gid_base,omitempty" json:"gid_base,omitempty"`
+
+	Chroot_base string `yaml:"chroot_base,omitempty" json:"chroot_base,omitempty"`
+
+	CgroupVersion string `yaml:"cgroup_version,omitempty" json:"cgroup_version,omitempty"`
+
+	// resource_limits are the jailer's own rlimits, `<resource>=<value>` verbatim
+	// (fsize, no-file).
+	ResourceLimits []string `yaml:"resource_limits,omitempty" json:"resource_limits,omitempty"`
+}
+
+// #FirecrackerKernel is the guest kernel the microVMs boot. `from` is an artefact
+// reference (an OCI artefact whose layer carries the kernel, or a pinned URL);
+// `path` is a file already present on the host. Exactly one is required.
+type FirecrackerKernel struct {
+	From string `yaml:"from,omitempty" json:"from,omitempty"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+
+	Sha256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
+
+	// cmdline — the kernel command line. The guest's IP, when the network is a
+	// TAP, arrives HERE (`ip=<guest>::<host>:<mask>::<iface>:off`), the same
+	// channel the CNI path uses; the substrate defaults it when absent.
+	Cmdline string `yaml:"cmdline,omitempty" json:"cmdline,omitempty"`
+
+	Initrd string `yaml:"initrd,omitempty" json:"initrd,omitempty"`
+}
+
+// #FirecrackerNetwork is how guests reach the network. `tap` (the default) is one
+// TAP device per microVM with the guest's address delivered on the kernel command
+// line; `cni` is the netns+bridge+tc-redirect-tap path the upstream orchestrator
+// uses, which needs CAP_SYS_ADMIN.
+type FirecrackerNetwork struct {
+	Mode string `yaml:"mode,omitempty" json:"mode"`
+
+	Tap *FirecrackerTAP `yaml:"tap,omitempty" json:"tap,omitempty"`
+
+	CNI *FirecrackerCNI `yaml:"cni,omitempty" json:"cni,omitempty"`
+
+	// egress_iface is the host uplink to masquerade through; "auto" = the
+	// default-route interface.
+	EgressIface string `yaml:"egress_iface,omitempty" json:"egress_iface,omitempty"`
+
+	Forwarding *FirecrackerForwarding `yaml:"forwarding,omitempty" json:"forwarding,omitempty"`
+
+	// resolver — the guest's /etc/resolv.conf servers. A stock Firecracker guest
+	// image ships none, so IP egress can work while DNS does not; naming them here
+	// is what makes the difference checkable.
+	Resolver []string `yaml:"resolver,omitempty" json:"resolver,omitempty"`
+
+	MTU int `yaml:"mtu,omitempty" json:"mtu,omitempty"`
+}
+
+type FirecrackerTAP struct {
+	// name is a template; `{n}` is replaced by the per-lease index.
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	// subnet + prefix allocate one /prefix per microVM (host_offset is the host's
+	// own address inside it).
+	Subnet string `yaml:"subnet,omitempty" json:"subnet,omitempty"`
+
+	Prefix int `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+
+	HostOffset int `yaml:"host_offset,omitempty" json:"host_offset,omitempty"`
+}
+
+type FirecrackerCNI struct {
+	Network_name string `yaml:"network_name,omitempty" json:"network_name,omitempty"`
+
+	Conf_dir string `yaml:"conf_dir,omitempty" json:"conf_dir,omitempty"`
+
+	Bin_dir string `yaml:"bin_dir,omitempty" json:"bin_dir,omitempty"`
+
+	Cache_dir string `yaml:"cache_dir,omitempty" json:"cache_dir,omitempty"`
+
+	Subnet string `yaml:"subnet,omitempty" json:"subnet,omitempty"`
+}
+
+// #FirecrackerForwarding is the host forwarding posture. `append-accept` inserts an
+// ordered FORWARD accept (the host's own policy may be DROP, which a separate nft
+// table cannot override); `netns` puts guest traffic in a namespace whose
+// forwarding the substrate controls.
+type FirecrackerForwarding struct {
+	IPForward bool `yaml:"ip_forward,omitempty" json:"ip_forward"`
+
+	Policy string `yaml:"policy,omitempty" json:"policy,omitempty"`
+}
+
+// #FirecrackerContainerd is the containerd this host runs for image storage: the
+// connection, and the SNAPSHOTTER that backs a microVM root drive. Firecracker
+// attaches a block device or a FILE, so only the two file/device-backed
+// snapshotters can serve a root drive: `devmapper` (an LVM thin pool on a dedicated
+// block device — the upstream default) and `blockfile` (a file per snapshot, which
+// needs neither LVM nor a spare device). A snapshotter whose mount is a directory
+// (overlayfs, native) can never work.
+type FirecrackerContainerd struct {
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	Snapshotter string `yaml:"snapshotter,omitempty" json:"snapshotter"`
+
+	// manage says how charly treats an existing /etc/containerd/config.toml:
+	// `merge` (default) keeps every setting it does not model, `full` takes the
+	// file over, `adopt` changes nothing and only reports.
+	Manage string `yaml:"manage,omitempty" json:"manage,omitempty"`
+
+	Version int `yaml:"version,omitempty" json:"version,omitempty"`
+
+	Root string `yaml:"root,omitempty" json:"root,omitempty"`
+
+	State string `yaml:"state,omitempty" json:"state,omitempty"`
+
+	OOMScore int `yaml:"oom_score,omitempty" json:"oom_score,omitempty"`
+
+	GRPC *FirecrackerContainerdGRPC `yaml:"grpc,omitempty" json:"grpc,omitempty"`
+
+	Devmapper *FirecrackerDevmapper `yaml:"devmapper,omitempty" json:"devmapper,omitempty"`
+
+	// plugins is a typed-open passthrough for any containerd plugin table charly
+	// does not model yet.
+	Plugins map[string]any/* CUE top */ `yaml:"plugins,omitempty" json:"plugins,omitempty"`
+
+	RegistryMirrors []FirecrackerRegistryMirror `yaml:"registry_mirrors,omitempty" json:"registry_mirrors,omitempty"`
+
+	Service *FirecrackerContainerdService `yaml:"service,omitempty" json:"service,omitempty"`
+}
+
+type FirecrackerContainerdGRPC struct {
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+
+	UID int `yaml:"uid,omitempty" json:"uid,omitempty"`
+
+	GID int `yaml:"gid,omitempty" json:"gid,omitempty"`
+}
+
+// #FirecrackerDevmapper is the devmapper snapshotter's pool. `device` is the block
+// device the thin pool is created on — charly provisions it (pvcreate/vgcreate/
+// lvcreate + the autoextend profile) rather than leaving it to a hand-typed
+// command, and refuses with a visible skip when the host cannot satisfy it.
+type FirecrackerDevmapper struct {
+	Pool string `yaml:"pool,omitempty" json:"pool,omitempty"`
+
+	RootPath string `yaml:"root_path,omitempty" json:"root_path,omitempty"`
+
+	BaseImageSize string `yaml:"base_image_size,omitempty" json:"base_image_size,omitempty"`
+
+	DiscardBlocks bool `yaml:"discard_blocks,omitempty" json:"discard_blocks,omitempty"`
+
+	FSType string `yaml:"fs_type,omitempty" json:"fs_type,omitempty"`
+
+	Device string `yaml:"device,omitempty" json:"device,omitempty"`
+
+	Profile *FirecrackerThinPoolProfile `yaml:"profile,omitempty" json:"profile,omitempty"`
+}
+
+type FirecrackerThinPoolProfile struct {
+	ThinPoolAutoextendThreshold int `yaml:"thin_pool_autoextend_threshold,omitempty" json:"thin_pool_autoextend_threshold,omitempty"`
+
+	ThinPoolAutoextendPercent int `yaml:"thin_pool_autoextend_percent,omitempty" json:"thin_pool_autoextend_percent,omitempty"`
+}
+
+type FirecrackerRegistryMirror struct {
+	Host string `yaml:"host,omitempty" json:"host"`
+
+	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
+}
+
+type FirecrackerContainerdService struct {
+	// unit distro → keep the distribution's own containerd unit; charly → render
+	// one (the mixed-entry service polymorphism, per distro).
+	Unit string `yaml:"unit,omitempty" json:"unit,omitempty"`
+
+	Limits map[string]any/* CUE top */ `yaml:"limits,omitempty" json:"limits,omitempty"`
+}
+
+// #FirecrackerFireactions is the OPTIONAL runner-pool orchestrator on this host. Its
+// pools are a policy for how microVMs are created and registered as GitHub Actions
+// runners; the substrate RENDERS this into the orchestrator's own configuration
+// (validated before it is written) and supervises it — it does not reimplement the
+// scheduler.
+type FirecrackerFireactions struct {
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+
+	Install *FirecrackerFireactionsInstall `yaml:"install,omitempty" json:"install,omitempty"`
+
+	// bind_address defaults to LOOPBACK: the orchestrator's API is plaintext and
+	// unauthenticated upstream, so naming a wider address is a deliberate act.
+	BindAddress string `yaml:"bind_address,omitempty" json:"bind_address,omitempty"`
+
+	Metrics *FirecrackerFireactionsMetrics `yaml:"metrics,omitempty" json:"metrics,omitempty"`
+
+	LogLevel string `yaml:"log_level,omitempty" json:"log_level,omitempty"`
+
+	GitHub *FirecrackerFireactionsGitHub `yaml:"github,omitempty" json:"github,omitempty"`
+
+	Pools []FirecrackerPool `yaml:"pools,omitempty" json:"pools"`
+}
+
+type FirecrackerFireactionsInstall struct {
+	// from_source builds the pinned tag (the upstream release binaries carry no
+	// version stamp without the release toolchain's ldflags).
+	FromSource bool `yaml:"from_source,omitempty" json:"from_source,omitempty"`
+
+	Go string `yaml:"go,omitempty" json:"go,omitempty"`
+}
+
+type FirecrackerFireactionsMetrics struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled"`
+
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+}
+
+// #FirecrackerFireactionsGitHub names the GitHub App credential. The private key is
+// NEVER authored here: it is a secret reference resolved from the credential store
+// at deploy time.
+type FirecrackerFireactionsGitHub struct {
+	AppID int `yaml:"app_id,omitempty" json:"app_id,omitempty"`
+
+	AppPrivateKeySecret string `yaml:"app_private_key_secret,omitempty" json:"app_private_key_secret,omitempty"`
+}
+
+// #FirecrackerPool is one runner pool: a label set + a runner image + a machine
+// shape, kept at a replica count.
+type FirecrackerPool struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"`
+
+	ShutdownOnExit bool `yaml:"shutdown_on_exit,omitempty" json:"shutdown_on_exit,omitempty"`
+
+	Runner FirecrackerRunner `yaml:"runner,omitempty" json:"runner"`
+
+	Firecracker *FirecrackerPoolMachine `yaml:"firecracker,omitempty" json:"firecracker,omitempty"`
+}
+
+type FirecrackerRunner struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	// image is a runner guest image: charly's own (a box built into a rootfs
+	// artefact) or an upstream-compatible one.
+	Image string `yaml:"image,omitempty" json:"image"`
+
+	ImagePullPolicy string `yaml:"image_pull_policy,omitempty" json:"image_pull_policy,omitempty"`
+
+	// organization is ORGANISATION-scoped: the orchestrator's GitHub calls are
+	// org-level only (a repository-scoped runner is not expressible).
+	Organization string `yaml:"organization,omitempty" json:"organization,omitempty"`
+
+	GroupID int `yaml:"group_id,omitempty" json:"group_id,omitempty"`
+
+	Labels []string `yaml:"labels,omitempty" json:"labels"`
+}
+
+type FirecrackerPoolMachine struct {
+	MachineConfig *FirecrackerMachine `yaml:"machine_config,omitempty" json:"machine_config,omitempty"`
+
+	Metadata map[string]any/* CUE top */ `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+
+	RateLimits *FirecrackerRateLimits `yaml:"rate_limits,omitempty" json:"rate_limits,omitempty"`
+}
+
+// #FirecrackerMachine is the microVM shape. vcpu_count and mem_size_mib mirror
+// Firecracker's own machine-config (vcpu_count is 1–32, and either 1 or even; smt is
+// x86-only).
+type FirecrackerMachine struct {
+	VCPUCount int `yaml:"vcpu_count,omitempty" json:"vcpu_count,omitempty"`
+
+	MemSizeMiB int `yaml:"mem_size_mib,omitempty" json:"mem_size_mib,omitempty"`
+
+	Smt bool `yaml:"smt,omitempty" json:"smt,omitempty"`
+
+	HugePages string `yaml:"huge_pages,omitempty" json:"huge_pages,omitempty"`
+
+	// cpu_template mirrors Firecracker's (deprecated) CpuTemplate enum; it exists
+	// for snapshot/clone portability across hosts.
+	CPUTemplate string `yaml:"cpu_template,omitempty" json:"cpu_template,omitempty"`
+
+	Drives []FirecrackerDrive `yaml:"drives,omitempty" json:"drives,omitempty"`
+
+	// rate_limits bound the interfaces and the root drive; an omitted bucket is
+	// unlimited (Firecracker's own semantics).
+	RateLimits *FirecrackerRateLimits `yaml:"rate_limits,omitempty" json:"rate_limits,omitempty"`
+}
+
+// #FirecrackerDrive is one virtio-block device. The root drive is built from the
+// image; extra drives are named here.
+type FirecrackerDrive struct {
+	DriveID string `yaml:"drive_id,omitempty" json:"drive_id"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+
+	IsRootDevice bool `yaml:"is_root_device,omitempty" json:"is_root_device,omitempty"`
+
+	IsReadOnly bool `yaml:"is_read_only,omitempty" json:"is_read_only,omitempty"`
+
+	CacheType string `yaml:"cache_type,omitempty" json:"cache_type,omitempty"`
+
+	// io_engine Async needs a host kernel newer than 5.10.51.
+	IOEngine string `yaml:"io_engine,omitempty" json:"io_engine,omitempty"`
+
+	BlkSize int `yaml:"blk_size,omitempty" json:"blk_size,omitempty"`
+
+	// discard is only honoured by a writable virtio-block device on the Sync engine.
+	Discard bool `yaml:"discard,omitempty" json:"discard,omitempty"`
+
+	RateLimiter *FirecrackerRateLimiter `yaml:"rate_limiter,omitempty" json:"rate_limiter,omitempty"`
+}
+
+// #FirecrackerRateLimiter is Firecracker's token bucket: the rate is
+// size/refill_time, consumption below the refill rate is unbounded (bursts).
+type FirecrackerRateLimiter struct {
+	Bandwidth *FirecrackerTokenBucket `yaml:"bandwidth,omitempty" json:"bandwidth,omitempty"`
+
+	Ops *FirecrackerTokenBucket `yaml:"ops,omitempty" json:"ops,omitempty"`
+}
+
+type FirecrackerTokenBucket struct {
+	Size int `yaml:"size,omitempty" json:"size"`
+
+	RefillTime int `yaml:"refill_time,omitempty" json:"refill_time"`
+
+	OneTimeBurst int `yaml:"one_time_burst,omitempty" json:"one_time_burst,omitempty"`
+}
+
+type FirecrackerRateLimits struct {
+	NetworkIn *FirecrackerRateLimiter `yaml:"network_in,omitempty" json:"network_in,omitempty"`
+
+	NetworkOut *FirecrackerRateLimiter `yaml:"network_out,omitempty" json:"network_out,omitempty"`
+
+	Rootfs *FirecrackerRateLimiter `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`
+
+	Serial *FirecrackerRateLimiter `yaml:"serial,omitempty" json:"serial,omitempty"`
+}
+
+// #FirecrackerImage is the microVM root drive: the artefact charly BUILT (a
+// kind:firecracker deploy's image is a charly-produced rootfs, not somebody else's
+// container export). `format` is what the artefact's labels declare; a raw ext4
+// rootfs is the file-backed form, and `resize` grows the inner filesystem to
+// disk_mib on first boot (Firecracker attaches FILES — a truncated file alone does
+// not grow the filesystem inside it).
+type FirecrackerImage struct {
+	From string `yaml:"from,omitempty" json:"from"`
+
+	Format string `yaml:"format,omitempty" json:"format,omitempty"`
+
+	DiskMiB int `yaml:"disk_mib,omitempty" json:"disk_mib,omitempty"`
+
+	Resize bool `yaml:"resize,omitempty" json:"resize,omitempty"`
+}
+
+// #FirecrackerMMDS is the metadata service inside the guest. V2 is a session-token
+// IMDSv2 shape; the upstream orchestrator reads exactly
+// latest/meta-data/fireactions/{runner_jit_config,hostname,shutdown_on_exit} from
+// it, which is why the tree is authored under `latest/meta-data` here.
+type FirecrackerMMDS struct {
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+
+	IPv4Address string `yaml:"ipv4_address,omitempty" json:"ipv4_address,omitempty"`
+
+	// metadata is the tree under latest/meta-data (typed-open: its shape is the
+	// consumer's business — the orchestrator's, the candy's, the operator's).
+	Metadata map[string]any/* CUE top */ `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// cloud_init: VmCloudInit. CLOSED. Genuine passthroughs:
+// extra (raw cloud-config string) and network.ethernets (network-config v2,
+// map[string]map[string]any → {[string]: {[string]: _}}).
+// ---------------------------------------------------------------------------
+type VmCloudInit struct {
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
+
+	Users []VmCloudInitUser `yaml:"users,omitempty" json:"users,omitempty"`
+
+	Package []string `yaml:"package,omitempty" json:"package,omitempty"`
+
+	RunCmd []string `yaml:"runcmd,omitempty" json:"runcmd,omitempty"`
+
+	BootCmd []string `yaml:"bootcmd,omitempty" json:"bootcmd,omitempty"`
+
+	WriteFiles []VmCloudInitFile `yaml:"write_files,omitempty" json:"write_files,omitempty"`
+
+	Network *VmCloudInitNetwork `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Mirrors *VmCloudInitMirrors `yaml:"mirrors,omitempty" json:"mirrors,omitempty"`
+
+	CharlyInstall *VmCharlyInstall `yaml:"charly_install,omitempty" json:"charly_install,omitempty"`
+
+	Extra string `yaml:"extra,omitempty" json:"extra,omitempty"`
+}
+
+type VmCloudInitUser struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Sudo bool `yaml:"sudo,omitempty" json:"sudo,omitempty"`
+
+	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
+
+	Shell string `yaml:"shell,omitempty" json:"shell,omitempty"`
+
+	LockPasswd *bool `yaml:"lock_passwd,omitempty" json:"lock_passwd,omitempty"`
+}
+
+type VmCloudInitFile struct {
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	Content string `yaml:"content,omitempty" json:"content,omitempty"`
+
+	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
+
+	Perms string `yaml:"perms,omitempty" json:"perms,omitempty"`
+
+	Encoding string `yaml:"encoding,omitempty" json:"encoding,omitempty"`
+}
+
+type VmCloudInitNetwork struct {
+	Version int `yaml:"version,omitempty" json:"version,omitempty"`
+
+	// network-config v2 map[string]map[string]any — typed-open passthrough.
+	Ethernets map[string]map[string]any/* CUE top */ `yaml:"ethernets,omitempty" json:"ethernets,omitempty"`
+}
+
+type VmCloudInitMirrors struct {
+	APT []string `yaml:"apt,omitempty" json:"apt,omitempty"`
+
+	DNF []string `yaml:"dnf,omitempty" json:"dnf,omitempty"`
+
+	Pacman []string `yaml:"pacman,omitempty" json:"pacman,omitempty"`
+}
+
+type VmCharlyInstall struct {
+	// VmCharlyInstall has ONLY `strategy` (the vm-spec skill's url/checksum are
+	// STALE — the Go struct dropped them). auto: scp host binary post-boot;
+	// scp: explicit form; skip: user-managed.
+	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+}
+
+type FirecrackerVsock struct {
+	// guest_cid must be >= 3 (2 is the host); the substrate allocates one per
+	// microVM when absent, since one device serves all guests.
+	GuestCID int `yaml:"guest_cid,omitempty" json:"guest_cid,omitempty"`
+
+	UDS_Path string `yaml:"uds_path,omitempty" json:"uds_path,omitempty"`
+}
+
+type FirecrackerConsole struct {
+	SerialOutPath string `yaml:"serial_out_path,omitempty" json:"serial_out_path,omitempty"`
+
+	RateLimiter *FirecrackerRateLimiter `yaml:"rate_limiter,omitempty" json:"rate_limiter,omitempty"`
+
+	LogPath string `yaml:"log_path,omitempty" json:"log_path,omitempty"`
+
+	LogLevel string `yaml:"log_level,omitempty" json:"log_level,omitempty"`
+
+	MetricsPath string `yaml:"metrics_path,omitempty" json:"metrics_path,omitempty"`
+}
+
+type FirecrackerSnapshot struct {
+	Create bool `yaml:"create,omitempty" json:"create,omitempty"`
+
+	MemFilePath string `yaml:"mem_file_path,omitempty" json:"mem_file_path,omitempty"`
+
+	SnapshotPath string `yaml:"snapshot_path,omitempty" json:"snapshot_path,omitempty"`
+
+	SnapshotType string `yaml:"snapshot_type,omitempty" json:"snapshot_type,omitempty"`
+
+	Resume bool `yaml:"resume,omitempty" json:"resume,omitempty"`
+}
+
+// #FirecrackerPluginEnv is the host→plugin env for an internal Firecracker-resolution
+// RPC. machine_op selects the operation: list / machine-state / resolve-console /
+// mmds-internal / snapshot-internal / pool-state / doctor.
+type FirecrackerPluginEnv struct {
+	MachineOp string `yaml:"machine_op,omitempty" json:"machine_op"`
+
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	SSHUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+
+	Force bool `yaml:"force,omitempty" json:"force,omitempty"`
+
+	DeleteDisks bool `yaml:"delete_disks,omitempty" json:"delete_disks,omitempty"`
+
+	MMDS *FirecrackerMMDSReq `yaml:"mmds,omitempty" json:"mmds,omitempty"`
+
+	Snap *FirecrackerSnapInternalReq `yaml:"snap,omitempty" json:"snap,omitempty"`
+}
+
+// #FirecrackerMMDSReq is an MMDS read/write payload (put replaces the tree, patch is
+// a JSON merge patch).
+type FirecrackerMMDSReq struct {
+	MMDSOp string `yaml:"mmds_op,omitempty" json:"mmds_op"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+
+	Document RawBody `yaml:"document,omitempty" json:"document,omitempty"`
+}
+
+// #FirecrackerSnapInternalReq is the snapshot-internal op payload.
+type FirecrackerSnapInternalReq struct {
+	SnapOp string `yaml:"snap_op,omitempty" json:"snap_op"`
+
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	MemFilePath string `yaml:"mem_file_path,omitempty" json:"mem_file_path,omitempty"`
+
+	SnapshotPath string `yaml:"snapshot_path,omitempty" json:"snapshot_path,omitempty"`
+
+	SnapshotType string `yaml:"snapshot_type,omitempty" json:"snapshot_type,omitempty"`
+
+	Resume bool `yaml:"resume,omitempty" json:"resume,omitempty"`
+
+	Entry *FirecrackerSnapshotEntry `yaml:"entry,omitempty" json:"entry,omitempty"`
+}
+
+// #FirecrackerSnapshotEntry is one snapshot record (the on-disk registry shape) —
+// carried on delete/revert ops so the plugin has the full record.
+type FirecrackerSnapshotEntry struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	MemFilePath string `yaml:"mem_file_path,omitempty" json:"mem_file_path,omitempty"`
+
+	SnapshotPath string `yaml:"snapshot_path,omitempty" json:"snapshot_path,omitempty"`
+
+	SnapshotType string `yaml:"snapshot_type,omitempty" json:"snapshot_type,omitempty"`
+
+	Created string `yaml:"created,omitempty" json:"created,omitempty"`
+
+	Refcount int `yaml:"refcount,omitempty" json:"refcount"`
+}
+
+// #FirecrackerMachineInfo mirrors a live microVM row for status collection.
+type FirecrackerMachineInfo struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	State string `yaml:"state,omitempty" json:"state"`
+
+	GuestIP string `yaml:"guest_ip,omitempty" json:"guest_ip,omitempty"`
+
+	VCPUCount int `yaml:"vcpu_count,omitempty" json:"vcpu_count,omitempty"`
+
+	MemSizeMiB int `yaml:"mem_size_mib,omitempty" json:"mem_size_mib,omitempty"`
+
+	Pool string `yaml:"pool,omitempty" json:"pool,omitempty"`
+}
+
+// #FirecrackerPoolInfo mirrors one orchestrator pool row.
+type FirecrackerPoolInfo struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Organization string `yaml:"organization,omitempty" json:"organization,omitempty"`
+
+	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"`
+
+	CurrentReplicas int `yaml:"current_replicas,omitempty" json:"current_replicas,omitempty"`
+
+	State string `yaml:"state,omitempty" json:"state,omitempty"`
+
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+}
+
+// #FirecrackerConsoleEndpoint describes how to reach a running microVM's console.
+type FirecrackerConsoleEndpoint struct {
+	// kind selects the channel: "serial" (the Firecracker console log), "ssh" (the
+	// guest over the TAP/CNI address) or "vsock" (the guest agent socket).
+	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	Port int `yaml:"port,omitempty" json:"port,omitempty"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+
+	User string `yaml:"user,omitempty" json:"user,omitempty"`
+}
+
+// #FirecrackerDoctorReport is the host-precondition probe result. Read-only: it
+// reports what the host can do (KVM, the binary, the kernel, the rootfs, whether the
+// configured snapshotter is actually served, and the forwarding posture) so a
+// precondition failure is a report, never a guess.
+type FirecrackerDoctorReport struct {
+	KVM bool `yaml:"kvm,omitempty" json:"kvm,omitempty"`
+
+	KVMPath string `yaml:"kvm_path,omitempty" json:"kvm_path,omitempty"`
+
+	Binary string `yaml:"binary,omitempty" json:"binary,omitempty"`
+
+	BinaryVersion string `yaml:"binary_version,omitempty" json:"binary_version,omitempty"`
+
+	Kernel string `yaml:"kernel,omitempty" json:"kernel,omitempty"`
+
+	Rootfs string `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`
+
+	Snapshotter string `yaml:"snapshotter,omitempty" json:"snapshotter,omitempty"`
+
+	SnapshotterServed bool `yaml:"snapshotter_served,omitempty" json:"snapshotter_served,omitempty"`
+
+	NetworkMode string `yaml:"network_mode,omitempty" json:"network_mode,omitempty"`
+
+	ForwardPolicy string `yaml:"forward_policy,omitempty" json:"forward_policy,omitempty"`
+
+	Problems []string `yaml:"problems,omitempty" json:"problems,omitempty"`
+}
+
+// #FirecrackerResolveResult decodes a resolve-console reply.
+type FirecrackerResolveResult struct {
+	Endpoint FirecrackerConsoleEndpoint `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
+}
+
 // #VFIOPCIDevice is a single PCI function discovered under sysfs.
 type VFIOPCIDevice struct {
 	Addr string `yaml:"addr,omitempty" json:"addr"`
@@ -6847,83 +7544,6 @@ type KubevirtGPU struct {
 	ResourceName string `yaml:"resource_name,omitempty" json:"resource_name,omitempty"`
 
 	DeviceName string `yaml:"device_name,omitempty" json:"device_name,omitempty"`
-}
-
-// ---------------------------------------------------------------------------
-// cloud_init: VmCloudInit. CLOSED. Genuine passthroughs:
-// extra (raw cloud-config string) and network.ethernets (network-config v2,
-// map[string]map[string]any → {[string]: {[string]: _}}).
-// ---------------------------------------------------------------------------
-type VmCloudInit struct {
-	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-
-	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
-
-	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
-
-	Users []VmCloudInitUser `yaml:"users,omitempty" json:"users,omitempty"`
-
-	Package []string `yaml:"package,omitempty" json:"package,omitempty"`
-
-	RunCmd []string `yaml:"runcmd,omitempty" json:"runcmd,omitempty"`
-
-	BootCmd []string `yaml:"bootcmd,omitempty" json:"bootcmd,omitempty"`
-
-	WriteFiles []VmCloudInitFile `yaml:"write_files,omitempty" json:"write_files,omitempty"`
-
-	Network *VmCloudInitNetwork `yaml:"network,omitempty" json:"network,omitempty"`
-
-	Mirrors *VmCloudInitMirrors `yaml:"mirrors,omitempty" json:"mirrors,omitempty"`
-
-	CharlyInstall *VmCharlyInstall `yaml:"charly_install,omitempty" json:"charly_install,omitempty"`
-
-	Extra string `yaml:"extra,omitempty" json:"extra,omitempty"`
-}
-
-type VmCloudInitUser struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Sudo bool `yaml:"sudo,omitempty" json:"sudo,omitempty"`
-
-	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
-
-	Shell string `yaml:"shell,omitempty" json:"shell,omitempty"`
-
-	LockPasswd *bool `yaml:"lock_passwd,omitempty" json:"lock_passwd,omitempty"`
-}
-
-type VmCloudInitFile struct {
-	Path string `yaml:"path,omitempty" json:"path"`
-
-	Content string `yaml:"content,omitempty" json:"content,omitempty"`
-
-	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
-
-	Perms string `yaml:"perms,omitempty" json:"perms,omitempty"`
-
-	Encoding string `yaml:"encoding,omitempty" json:"encoding,omitempty"`
-}
-
-type VmCloudInitNetwork struct {
-	Version int `yaml:"version,omitempty" json:"version,omitempty"`
-
-	// network-config v2 map[string]map[string]any — typed-open passthrough.
-	Ethernets map[string]map[string]any/* CUE top */ `yaml:"ethernets,omitempty" json:"ethernets,omitempty"`
-}
-
-type VmCloudInitMirrors struct {
-	APT []string `yaml:"apt,omitempty" json:"apt,omitempty"`
-
-	DNF []string `yaml:"dnf,omitempty" json:"dnf,omitempty"`
-
-	Pacman []string `yaml:"pacman,omitempty" json:"pacman,omitempty"`
-}
-
-type VmCharlyInstall struct {
-	// VmCharlyInstall has ONLY `strategy` (the vm-spec skill's url/checksum are
-	// STALE — the Go struct dropped them). auto: scp host binary post-boot;
-	// scp: explicit form; skip: user-managed.
-	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
 }
 
 type KubevirtNetwork struct {
@@ -10006,7 +10626,8 @@ type ToolStatus struct {
 }
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
-// deployment substrate (pod / vm / kubernetes / local / android / kindcluster). kind discriminates the
+// deployment substrate (pod / vm / kubernetes / local / android / kindcluster /
+// kubevirt / firecracker). kind discriminates the
 // substrate; nested carries multi-hop children (RECURSIVE self-reference, populated
 // by the nested overlay); source records provenance (libvirt|ledger|adb|tree|podman).
 type DeploymentStatus struct {
@@ -10267,6 +10888,29 @@ type KubeVirtResolveReply struct {
 	Resolved *ResolvedKubeVirt `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
+// #ResolvedFirecracker is the resolve-to-envelope form of a `firecracker:` template
+// (a microVM: a rootfs artefact + a kernel booted directly under KVM). The kernel
+// reads only the venue hint — the host the microVMs run on, which the deploy
+// preresolver resolves like the vm/kubevirt substrates do; the full microVM model
+// rides opaquely in Raw and is decoded by candy/plugin-firecracker, never the kernel.
+type ResolvedFirecracker struct {
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	SSHUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+
+	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
+}
+
+// #FirecrackerResolveInput carries one opaque kind:firecracker template body to project.
+type FirecrackerResolveInput struct {
+	Firecracker RawBody `yaml:"firecracker,omitempty" json:"firecracker"`
+}
+
+// #FirecrackerResolveReply wraps the resolved firecracker template.
+type FirecrackerResolveReply struct {
+	Resolved *ResolvedFirecracker `yaml:"resolved,omitempty" json:"resolved,omitempty"`
+}
+
 // #LocalResolveInput / #AndroidResolveInput carry one opaque template body to
 // project.
 type LocalResolveInput struct {
@@ -10302,6 +10946,8 @@ type SubstrateTemplateResolveRequest struct {
 	Vm *VmResolveInput `yaml:"vm,omitempty" json:"vm,omitempty"`
 
 	KubeVirt *KubeVirtResolveInput `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+
+	Firecracker *FirecrackerResolveInput `yaml:"firecracker,omitempty" json:"firecracker,omitempty"`
 }
 
 // #VmResolveInput carries one opaque vm template body to project (Cutover L).
