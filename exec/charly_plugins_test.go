@@ -119,14 +119,14 @@ func TestTarPluginTreeRoundTripsWithModes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(archive)
+	defer func() { _ = os.Remove(archive) }()
 
 	dest := t.TempDir()
 	f, err := os.Open(archive)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	zr, err := gzip.NewReader(f)
 	if err != nil {
 		t.Fatal(err)

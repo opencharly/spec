@@ -232,61 +232,23 @@ check-spec-delivery:
         disposable: true
         lifecycle: dev
         description: >-
-            R10 gate for exec/'s plugin-tree delivery: the venue must carry a served plugin word,
-            and the delivery path must run live against that venue rather than against a stub.
+            R10 gate for exec/'s plugin-tree delivery, on the venue above: a BUILT plugin tree is
+            delivered INTO this venue through the changed path, and the venue's own charly must then
+            SERVE a word that tree supplies. The venue's candy composition only DECLARES that word -
+            it serves nothing by itself - so the delivery is the only thing that can put a served
+            plugin word here, and the first step proves it by failing when there is none.
         plan:
-            - check: the venue carries a plugin word that is actually served
-              id: spec-delivery-venue-serves-a-word
+            - check: with no delivered tree this venue serves no plugin word at all
+              id: spec-delivery-nothing-served-before-the-delivery
               context:
                 - runtime
               timeout: 900s
               command:
                   command: |
                       set -euo pipefail
-                      # MEASURED (this bed's first run): a plan step on a host:local venue does NOT
-                      # run with the repo root as cwd, so a bare `charly box validate` validated
-                      # whatever project the venue's cwd happened to be - and failed. Locate the
-                      # project by walking up, exactly as the sibling step does.
-                      n=0
-                      while [ ! -f charly.yml ]; do
-                        cd ..
-                        n=$((n + 1))
-                        if [ "$n" -gt 8 ] || [ "$PWD" = / ]; then
-                          echo "cannot locate the project from this venue's cwd" >&2
-                          exit 1
-                        fi
-                      done
-                      # The venue must be a place where a word resolves. If the candy above did not
-                      # land, this fails: the probe differs with the venue.
-                      # charly TRUNCATES a step's stderr in its own summary, which hid the rest of
-                      # the schema error on this bed's first runs. Write the untruncated output to a
-                      # file AND to stderr, so the cause is readable either way.
-                      # MEASURED: the venue's PATH `charly` is NOT the binary this project gates
-                      # with - it rejects spec's charly.yml with "schema 2026.261.1747 is required
-                      # (found \"\")" while the worktree binary validates the same tree clean. The
-                      # runtime check-var resolver stamps CHARLY_BIN with the ACTIVE binary, which is
-                      # the one the change class is gated by. Using the venue's PATH binary instead
-                      # was the bug.
-                      if ! out=$("${CHARLY_BIN}" box validate 2>&1); then
-                        echo "$out" > /tmp/spec-venue-validate.txt
-                        echo "validate failed: $out" >&2
-                        exit 1
-                      fi
-                      case "$out" in
-                        *"deploy"*) echo "the venue serves a deploy word: $out" ;;
-                        *) echo "no deploy word is served at this venue:" >&2; echo "$out" >&2; exit 1 ;;
-                      esac
-                  in_container: false
-            - check: the delivery path runs LIVE against this venue, not against a stub
-              id: spec-delivery-runs-live
-              context:
-                - runtime
-              timeout: 900s
-              command:
-                  command: |
-                      set -euo pipefail
-                      # No plan-grammar variable: this manifest records that an unresolvable
-                      # uppercase token makes a step SKIP rather than run.
+                      # A host:local plan step does NOT run with the repo root as cwd, so every step
+                      # below walks up to the project - the same walk the sibling bed uses - and fails
+                      # loudly rather than gating whatever project the venue's cwd happens to hold.
                       n=0
                       while [ ! -f exec/charly_plugins.go ]; do
                         cd ..
@@ -297,5 +259,159 @@ check-spec-delivery:
                         fi
                       done
                       echo "gating in $(pwd)"
-                      GOWORK=off go test ./exec/ -run TestDeliverPluginsToARealExecutor -count=1 -v
+
+                      # Every step leaves its DECIDING line in one file under the gitignored `.check`
+                      # tree, which this first step clears. The runner does NOT retain a `command:`
+                      # step's stdout, so without this a green row carries no readable reason - and a
+                      # green row whose reason nobody can read is the vacuous gate this bed replaces.
+                      # `tee` makes recording part of the step: one that cannot say what it measured
+                      # FAILS instead of passing silently.
+                      ev=.check/spec-delivery-evidence.log
+                      rm -f "$ev"
+
+                      # Start from an UNDELIVERED venue, so the arm below is a real before-state and
+                      # every run measures ITS OWN delivery rather than a leftover of an earlier one.
+                      # Both names are the delivery's own contract - the stable path a plan emits, and
+                      # the content-addressed replicas it republishes from - not paths this bed invented.
+                      rm -rf /tmp/charly-plugins
+                      rm -rf /tmp/charly-plugins-*
+
+                      # THE FALSIFIER. The word the next steps assert is DECLARED by the venue's own
+                      # candy composition but is not a charly command until a `.providers` manifest
+                      # names it, so with nothing delivered the invocation must fail with charly's own
+                      # unknown-command message. Requiring that MESSAGE rather than a bare non-zero
+                      # exit is what stops a broken venue from reading as a missing delivery - and a
+                      # falsifier that cannot tell those apart proves nothing.
+                      if out="$(CHARLY_PLUGIN_DIR=/tmp/charly-plugins "${CHARLY_BIN}" firecracker doctor 2>&1)"; then
+                        echo "this venue serves firecracker with NO delivered tree, so the word does not come from the delivery" >&2
+                        exit 1
+                      fi
+                      case "$out" in
+                        *"unexpected argument firecracker"*) ;;
+                        *)
+                          printf '%s\n' "$out" >&2
+                          echo "firecracker failed for a reason other than 'not a command at all', so this falsifier cannot tell a missing delivery from a broken venue" >&2
+                          exit 1
+                          ;;
+                      esac
+                      printf '%s\n' "undelivered venue: firecracker is not a charly command here" | tee -a "$ev"
+                  in_container: false
+            - check: build the plugin tree this venue declares, and deliver it INTO the venue
+              id: spec-delivery-delivers-the-built-tree
+              context:
+                - runtime
+              timeout: 900s
+              command:
+                  command: |
+                      set -euo pipefail
+                      n=0
+                      while [ ! -f exec/charly_plugins.go ]; do
+                        cd ..
+                        n=$((n + 1))
+                        if [ "$n" -gt 8 ] || [ "$PWD" = / ]; then
+                          echo "cannot locate the spec module from this venue's cwd" >&2
+                          exit 1
+                        fi
+                      done
+                      echo "gating in $(pwd)"
+
+                      # THE BUILT PLUGIN TREE. A deploy gets this tree from its build's `.plugins`
+                      # staging directory; spec owns no box to bake one, so this bed builds the tree
+                      # for the plugin candy THIS VENUE'S OWN composition declares, from the source
+                      # charly's resolver already fetched, with the Go invocation charly's own plugin
+                      # build uses: the ./cmd/serve shim inside the candy's own module, GOWORK=off (a
+                      # plugin module is never a workspace member) and -buildvcs=false. The manifest
+                      # written beside the binary is the one that candy's `plugin:` block declares,
+                      # verb:firecracker beside command:firecracker.
+                      candysrc=""
+                      for d in "$HOME"/.cache/charly/repos/github.com/opencharly/plugin-firecracker@main \
+                               "$HOME"/.cache/charly/repos/github.com/opencharly/plugin-firecracker@*; do
+                        if [ -f "$d/candy/plugin-firecracker/go.mod" ]; then
+                          candysrc="$d/candy/plugin-firecracker"
+                          break
+                        fi
+                      done
+                      if [ -z "$candysrc" ]; then
+                        echo "cannot locate the plugin-firecracker candy source this venue's composition resolves, so there is no built plugin tree to deliver" >&2
+                        exit 1
+                      fi
+                      tree=/tmp/spec-delivery-tree
+                      rm -rf "$tree"
+                      mkdir -p "$tree"
+                      echo "building the venue's plugin tree from $candysrc"
+                      ( cd "$candysrc" && GOWORK=off go build -buildvcs=false -o "$tree/plugin-firecracker" ./cmd/serve )
+                      printf 'verb:firecracker\ncommand:firecracker\n' > "$tree/plugin-firecracker.providers"
+
+                      # THE DELIVERY, through the changed path. exec.EnsurePluginsInDeployVenue has no
+                      # CLI surface yet - nothing in charly calls it, which is exactly why this bed
+                      # drives it from the Go package that owns it, over the executor a host:local
+                      # venue actually runs through. The replica key is the ACTIVE binary's own
+                      # CalVer, the token a deploy passes on the ssh leg of the same contract.
+                      hostver="$("${CHARLY_BIN}" version 2>/dev/null | grep -m1 -oE '[0-9]{4}\.[0-9]{3}\.[0-9]{4}')"
+                      if [ -z "$hostver" ]; then
+                        echo "cannot read the active binary's CalVer version, so the delivery's replica key is unknown" >&2
+                        exit 1
+                      fi
+                      if ! out="$(SPEC_DELIVERY_TREE="$tree" SPEC_DELIVERY_HOSTVER="$hostver" GOWORK=off go test ./exec/ -run TestDeliverTheBuiltTreeIntoTheDeployVenue -count=1 -v 2>&1)"; then
+                        printf '%s\n' "$out" >&2
+                        echo "the live delivery of the built plugin tree into this venue failed" >&2
+                        exit 1
+                      fi
+                      # A leg that SKIPPED also exits 0, and a bed reporting a delivery it never made
+                      # is the defect this whole bed exists to catch - so require the PASS line.
+                      case "$out" in
+                        *"--- PASS: TestDeliverTheBuiltTreeIntoTheDeployVenue"*) ;;
+                        *)
+                          printf '%s\n' "$out" >&2
+                          echo "the delivery leg did not RUN (skipped or not selected), so nothing was delivered" >&2
+                          exit 1
+                          ;;
+                      esac
+                      if [ ! -L /tmp/charly-plugins ]; then
+                        echo "the delivery did not publish the stable plugin path the plan emits, so the venue still points at nothing" >&2
+                        exit 1
+                      fi
+                      printf '%s\n' "delivered the built plugin tree; the plan's plugin path now serves $(readlink -f /tmp/charly-plugins)" | tee -a .check/spec-delivery-evidence.log
+                  in_container: false
+            - check: this venue's own charly SERVES the word only the delivered tree supplies
+              id: spec-delivery-venue-serves-the-delivered-word
+              context:
+                - runtime
+              timeout: 900s
+              command:
+                  command: |
+                      set -euo pipefail
+                      n=0
+                      while [ ! -f exec/charly_plugins.go ]; do
+                        cd ..
+                        n=$((n + 1))
+                        if [ "$n" -gt 8 ] || [ "$PWD" = / ]; then
+                          echo "cannot locate the spec module from this venue's cwd" >&2
+                          exit 1
+                        fi
+                      done
+                      echo "gating in $(pwd)"
+
+                      # THE ASSERTION, AT THE BOUNDARY A DEPLOY CONSUMES. Not a file that exists, and
+                      # not a word a manifest declares: a real charly process, pointed at the plugin
+                      # path the plan emits - the sdk's plan compiler emits that same literal as the
+                      # plugin variable and the delivery publishes it, sdk#399 - must EXECUTE the
+                      # DELIVERED provider and print that provider's own verdict. Nothing else at this
+                      # venue can answer the word: the step before this one measured that the venue
+                      # serves nothing without a delivered tree, and a dev/worktree charly deliberately
+                      # does not load the installed package's plugin directory (issue #328).
+                      out="$(CHARLY_PLUGIN_DIR=/tmp/charly-plugins "${CHARLY_BIN}" firecracker doctor 2>&1 || true)"
+                      case "$out" in
+                        *"firecracker doctor:"*)
+                          # The run's own record of what it measured, appended to the file the first
+                          # step cleared: `tee` fails the step if it cannot be written, so the PASS
+                          # cannot outlive the evidence for it.
+                          printf '%s\n' "the venue serves the delivered word: $(printf '%s\n' "$out" | grep -m1 -o 'firecracker doctor: kvm=[a-z]*')" | tee -a .check/spec-delivery-evidence.log
+                          ;;
+                        *)
+                          echo "the venue does NOT serve a word from the delivered tree; the invocation said:" >&2
+                          printf '%s\n' "$out" >&2
+                          exit 1
+                          ;;
+                      esac
                   in_container: false

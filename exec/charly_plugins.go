@@ -112,7 +112,7 @@ func dirDigest(dir string) ([]byte, error) {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		if _, err := io.Copy(h, f); err != nil {
 			return err
 		}
@@ -265,7 +265,7 @@ func EnsurePluginsInGuest(ctx context.Context, ssh SSHArgs, pluginDir, hostVer, 
 		if err != nil {
 			return "", err
 		}
-		defer os.Remove(archive)
+		defer func() { _ = os.Remove(archive) }()
 
 		if err := scpInto(ctx, ssh, archive, remote+".tgz"); err != nil {
 			return "", fmt.Errorf("copying plugin tree into guest %s: %w", remote, err)
@@ -310,7 +310,7 @@ func tarPluginTree(dir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("creating a plugin archive: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// A deterministic writer keeps the archive free of host-specific ordering, so an unchanged tree
 	// produces an unchanged archive.
@@ -324,7 +324,7 @@ func tarPluginTree(dir string) (string, error) {
 		}
 		return nil
 	}); err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 	sort.Strings(names)
@@ -334,42 +334,42 @@ func tarPluginTree(dir string) (string, error) {
 	for _, path := range names {
 		info, err := os.Lstat(path)
 		if err != nil {
-			os.Remove(f.Name())
+			_ = os.Remove(f.Name())
 			return "", err
 		}
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
-			os.Remove(f.Name())
+			_ = os.Remove(f.Name())
 			return "", err
 		}
 		hdr, err := tar.FileInfoHeader(info, "")
 		if err != nil {
-			os.Remove(f.Name())
+			_ = os.Remove(f.Name())
 			return "", err
 		}
 		hdr.Name = rel
 		if err := tw.WriteHeader(hdr); err != nil {
-			os.Remove(f.Name())
+			_ = os.Remove(f.Name())
 			return "", err
 		}
 		in, err := os.Open(path)
 		if err != nil {
-			os.Remove(f.Name())
+			_ = os.Remove(f.Name())
 			return "", err
 		}
 		if _, err := io.Copy(tw, in); err != nil {
-			in.Close()
-			os.Remove(f.Name())
+			_ = in.Close()
+			_ = os.Remove(f.Name())
 			return "", err
 		}
-		in.Close()
+		_ = in.Close()
 	}
 	if err := tw.Close(); err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 	if err := zw.Close(); err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 	return f.Name(), nil
