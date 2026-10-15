@@ -89,12 +89,12 @@ func deliverAndReadBack(t *testing.T, tree, hostVer, stablePath string) string {
 	// the two halves of the contract meet at: a plan is compiled host-side BEFORE any
 	// delivery, so it cannot name a digest, and the delivery cannot know a plan will be
 	// applied — so the published name is the only thing that can join them.
-	target, err := os.Readlink(StablePluginsPath)
+	target, err := os.Readlink(stablePluginsPath(stablePath))
 	if err != nil {
-		t.Fatalf("the stable path %s is not a symlink after a live delivery: %v", StablePluginsPath, err)
+		t.Fatalf("the stable path %s is not a symlink after a live delivery: %v", stablePluginsPath(stablePath), err)
 	}
 	if target != remote {
-		t.Fatalf("%s -> %s, want the delivered replica %s", StablePluginsPath, target, remote)
+		t.Fatalf("%s -> %s, want the delivered replica %s", stablePluginsPath(stablePath), target, remote)
 	}
 	return remote
 }
@@ -151,7 +151,7 @@ func TestDeliverPluginsToARealExecutor(t *testing.T) {
 		}
 	}
 
-	remote := deliverAndReadBack(t, src, "2026.288.0001", "")
+	remote := deliverAndReadBack(t, src, "2026.288.0001", filepath.Join(t.TempDir(), "charly-plugins"))
 
 	// The idempotence contract, measured live: a second delivery of the same tree reuses
 	// the replica instead of re-streaming it.
@@ -194,6 +194,6 @@ func TestDeliverTheBuiltTreeIntoTheDeployVenue(t *testing.T) {
 		t.Skip("SPEC_DELIVERY_TREE and SPEC_DELIVERY_HOSTVER are set only by the check-spec-delivery bed's step, which is where a provisioned venue exists to deliver into")
 	}
 
-	remote := deliverAndReadBack(t, tree, hostVer, filepath.Join(t.TempDir(), "charly-plugins"))
+	remote := deliverAndReadBack(t, tree, hostVer, "")
 	t.Logf("the built plugin tree from %s is on the venue at %s, published at %s", tree, remote, StablePluginsPath)
 }

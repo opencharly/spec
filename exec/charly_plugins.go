@@ -65,6 +65,14 @@ const StablePluginsPath = "/tmp/charly-plugins"
 
 // stablePluginsPath resolves the injected override, falling back to the package-wide default.
 // A caller that passes a path of its own never touches the shared, non-disposable one.
+// stableNameLink is the ONE spelling of the command that points the stable name at the replica.
+// `-n` replaces the link atomically rather than moving INTO an existing target, and the command is
+// idempotent, so a caller may run it on every path - including a warm replica that needed no transport.
+func stableNameLink(remote, stablePath string) string {
+	return fmt.Sprintf("ln -sfn %s %s",
+		shellquote.ShellQuote(remote), shellquote.ShellQuote(stablePluginsPath(stablePath)))
+}
+
 func stablePluginsPath(injected string) string {
 	if injected != "" {
 		return injected
@@ -203,6 +211,11 @@ func EnsurePluginsInDeployVenueAt(ctx context.Context, ve spec.DeployExecutor, p
 	// probe: the venue already carries a non-empty tree at the replica path.
 	_, _, exit, err := ve.RunCapture(ctx, fmt.Sprintf("test -n \"$(ls -A %s 2>/dev/null)\"", shellquote.ShellQuote(remote)))
 	if err == nil && exit == 0 {
+		// A warm replica still republishes: the probe governs whether the tree must be TRANSPORTED,
+		// never whether the name must be REPUBLISHED.
+		if perr := runOK(ctx, ve, stableNameLink(remote, stablePath)); perr != nil {
+			return "", fmt.Errorf("publishing %s -> %s in deploy venue: %w", stablePluginsPath(stablePath), remote, perr)
+		}
 		return remote, nil
 	}
 
@@ -246,7 +259,7 @@ func EnsurePluginsInDeployVenueAt(ctx context.Context, ve spec.DeployExecutor, p
 	// Publish the stable name the PLAN emitted, so the two halves meet at one path. `-n` is
 	// deliberate: the link is replaced atomically rather than moved INTO the target when the target
 	// already exists, which is the one way this line can silently publish the wrong tree.
-	if err := runOK(ctx, ve, fmt.Sprintf("ln -sfn %s %s", shellquote.ShellQuote(remote), shellquote.ShellQuote(stablePluginsPath(stablePath)))); err != nil {
+	if err := runOK(ctx, ve, stableNameLink(remote, stablePath)); err != nil {
 		return "", fmt.Errorf("publishing %s -> %s in deploy venue: %w", stablePluginsPath(stablePath), remote, err)
 	}
 	return remote, nil
@@ -280,6 +293,9 @@ func EnsurePluginsInGuestAt(ctx context.Context, ssh SSHArgs, pluginDir, hostVer
 
 		// probe: the guest already carries a non-empty tree at the replica path.
 		if sshOK(ctx, ssh, fmt.Sprintf("test -n \"$(ls -A %s 2>/dev/null)\"", shellquote.ShellQuote(remote))) {
+			if !sshOK(ctx, ssh, stableNameLink(remote, stablePath)) {
+				return "", fmt.Errorf("publishing %s -> %s in guest", stablePluginsPath(stablePath), remote)
+			}
 			return fmt.Sprintf("guest already carries the plugin tree at %s (no re-delivery)", remote), nil
 		}
 
@@ -314,7 +330,7 @@ func EnsurePluginsInGuestAt(ctx context.Context, ssh SSHArgs, pluginDir, hostVer
 		// Publish the stable name the PLAN emitted. `-n` replaces the link rather than moving into an
 		// existing target, so re-running against a changed tree repoints it instead of nesting a link
 		// inside the old directory.
-		if !sshOK(ctx, ssh, fmt.Sprintf("ln -sfn %s %s", shellquote.ShellQuote(remote), shellquote.ShellQuote(stablePluginsPath(stablePath)))) {
+		if !sshOK(ctx, ssh, stableNameLink(remote, stablePath)) {
 			return "", fmt.Errorf("publishing %s -> %s in guest", stablePluginsPath(stablePath), remote)
 		}
 		return fmt.Sprintf("host plugin tree provided at %s, published at %s for deploy use (%s)", remote, stablePluginsPath(stablePath), PluginsEnvVar), nil
