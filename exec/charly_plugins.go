@@ -112,11 +112,13 @@ func dirDigest(dir string) ([]byte, error) {
 		if err != nil {
 			return err
 		}
-		defer func() { _ = f.Close() }()
+		// Closed explicitly rather than deferred: a defer here would not run until the whole
+		// Walk returned, leaving one open file per tree entry.
 		if _, err := io.Copy(h, f); err != nil {
+			_ = f.Close()
 			return err
 		}
-		return nil
+		return f.Close()
 	})
 	if err != nil {
 		return nil, fmt.Errorf("hashing plugin tree %s: %w", dir, err)

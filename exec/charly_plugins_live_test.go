@@ -97,7 +97,6 @@ func deliverAndReadBack(t *testing.T, tree, hostVer string) string {
 	}
 	bins := pluginBinaries(t, tree)
 
-	preserveStablePluginsPath(t)
 	remote, err := EnsurePluginsInDeployVenue(context.Background(), venueExecutor(), tree, hostVer)
 	if err != nil {
 		t.Fatalf("live delivery of %s into the venue: %v", tree, err)
@@ -178,6 +177,7 @@ func pluginBinaries(t *testing.T, tree string) []string {
 // tree, so it makes its own. It proves the delivery MECHANICS end to end; it does not
 // prove that a venue serves a word afterwards — the bed does that, and says so.
 func TestDeliverPluginsToARealExecutor(t *testing.T) {
+	preserveStablePluginsPath(t)
 	if _, err := os.Stat("/bin/bash"); err != nil {
 		t.Skip("no bash available for ShellExecutor")
 	}
