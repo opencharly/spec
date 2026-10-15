@@ -279,8 +279,31 @@ check-spec-delivery:
                       # every run measures ITS OWN delivery rather than a leftover of an earlier one.
                       # Both names are the delivery's own contract - the stable path a plan emits, and
                       # the content-addressed replicas it republishes from - not paths this bed invented.
+                      # DISP: this bed must not destroy a tree it does NOT own. The stable path is the
+                      # PLAN's published plugin path, shared with every other deploy on this host, and an
+                      # earlier version of this step removed it unconditionally - a destroy of a
+                      # non-disposable shared resource with no guard.
+                      #
+                      # Ownership is proved by a marker THIS bed writes below. An ABSENT path is free; a
+                      # path whose marker names this bed is ours to replace; ANYTHING ELSE belongs to
+                      # somebody else, and we REFUSE rather than destroy it. Renaming the namespace is not
+                      # an option: it is the path the plan emits, and pointing this bed elsewhere made the
+                      # delivery step fail with "the delivery did not publish the stable plugin path the
+                      # plan emits" - the bed would stop testing the contract it exists to test.
+                      owns=/tmp/charly-plugins-spec-delivery-owner
+                      set -- /tmp/charly-plugins-*
+                      if [ -e /tmp/charly-plugins ] || [ -e "$1" ]; then
+                        if [ ! -f "$owns" ] || [ "$(cat "$owns" 2>/dev/null)" != "check-spec-delivery" ]; then
+                          echo "this venue already carries a published plugin tree that this bed did not publish:" >&2
+                          ls -ld /tmp/charly-plugins /tmp/charly-plugins-* 2>/dev/null >&2 || true
+                          echo "refusing to destroy it (DISP). Run this bed on a host whose plugin path it owns," >&2
+                          echo "or remove that tree yourself if you are certain nothing depends on it." >&2
+                          exit 1
+                        fi
+                      fi
                       rm -rf /tmp/charly-plugins
                       rm -rf /tmp/charly-plugins-*
+                      printf '%s\n' "check-spec-delivery" > "$owns"
 
                       # THE FALSIFIER. The word the next steps assert is DECLARED by the venue's own
                       # candy composition but is not a charly command until a `.providers` manifest
