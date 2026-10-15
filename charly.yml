@@ -443,4 +443,31 @@ check-spec-delivery:
                           exit 1
                           ;;
                       esac
+
+            - check: the bed releases the shared plugin path and its own claim on it (DISP)
+              id: spec-delivery-releases-what-it-claimed
+              context:
+                - runtime
+              timeout: 900s
+              command:
+                  command: |
+                      set -euo pipefail
+                      # DISP, applied to RELEASE rather than to take. Step 1 takes the shared path under a marker;
+                      # nothing ever released that claim, so after the first run the marker was always present and
+                      # step 1's guard passed every time, leaving this bed free to destroy a LATER deploy's tree at
+                      # the same path on its next run. This step gives the claim back: it removes the tree THIS bed
+                      # published and the marker that claimed it, and touches NOTHING it does not own.
+                      owns=/tmp/charly-plugins-spec-delivery-owner
+                      if [ ! -f "$owns" ] || [ "$(cat "$owns" 2>/dev/null)" != "check-spec-delivery" ]; then
+                        echo "no marker naming this bed, so the shared plugin path is NOT this bed's to clean:" >&2
+                        ls -ld /tmp/charly-plugins /tmp/charly-plugins-* 2>/dev/null >&2 || true
+                        echo "leaving it untouched (DISP); a tree we did not publish is not ours to remove." >&2
+                        printf '%s\n' "released nothing: the shared plugin path was not this bed's claim" | tee -a .check/spec-delivery-evidence.log
+                        exit 0
+                      fi
+                      rm -rf /tmp/charly-plugins
+                      rm -rf /tmp/charly-plugins-*
+                      rm -f "$owns"
+                      rm -rf /tmp/spec-delivery-tree
+                      printf '%s\n' "released the published tree and the marker; the shared plugin path is as this bed found it" | tee -a .check/spec-delivery-evidence.log
                   in_container: false
