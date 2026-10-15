@@ -58,6 +58,22 @@
 	// files, NOT this field. See generate.go emitExternalBuilderStages.
 	external_builder?: string & !="" @go(ExternalBuilder)
 
+	// --- harness skill trees (authored content) ---
+	// skills — the repo-relative skill/agent TREES this candy DECLARES, each holding one entry per
+	// name: <tree>/<name>/SKILL.md plus references/<stem>.md for a skill, and <tree>/<name>.md for
+	// an agent (type: "agent"). DEFAULT [".agents/skills"] — the Agent-Skills standard location, so
+	// a repo whose skills live there declares nothing. It is the ONE place the marketplace
+	// generator (candy/plugin-marketplace) and the docs projection (candy/plugin-docs) look for a
+	// skill's body, and it is what makes a sibling `skill:` node's description:/content:/
+	// references: omittable: the node keeps the ROUTING metadata (family/owner/triggers/category),
+	// the file keeps the prose. See schema/skill.cue.
+	//
+	// The version of record is NOT in this file: it is the github ref that fetched this repo — the
+	// marketplace refs list's pin, or a consumer's `candy:` list. Nothing is fetched at authoring
+	// time; the generator reads the tree from the checkout it already has. See
+	// /charly-internals:marketplace.
+	skills?: [...(string & !="")] @go(Skills)
+
 	// --- runtime env / local vars / PATH ---
 	// env forbids PATH (validate.go: use path_append instead). Values are
 	// Go-coerced scalars (#StrVal) — an unquoted `PORT: 8080` is a string. The Go

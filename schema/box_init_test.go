@@ -100,8 +100,12 @@ func unifyDef(t *testing.T, def, value string) error {
 	return u.Validate(cue.Concrete(false))
 }
 
-// unifyDefFinal is unifyDef under FINAL validation, which is what surfaces
-// required-field and list-arity violations; the structural form does not.
+// unifyDefFinal is unifyDef under FINAL validation, which is what surfaces list-arity
+// violations and a missing field inside a NESTED literal ("field is required but not
+// present"); the structural form does not. It does NOT report a missing field at the TOP
+// LEVEL of the unified struct: measured on the pinned cue (v0.16.1), that shape reads as an
+// "incomplete value" that Validate(cue.Final()) accepts and only cue.Concrete(true) reports
+// (see skill_source_test.go's unifyDefComplete, written for exactly that case).
 func unifyDefFinal(t *testing.T, def, value string) error {
 	t.Helper()
 	src, _, err := schemaconcat.ConcatSchema(schema.FS, ".", nil)

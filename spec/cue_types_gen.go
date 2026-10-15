@@ -3533,6 +3533,22 @@ type Candy struct {
 	// files, NOT this field. See generate.go emitExternalBuilderStages.
 	ExternalBuilder string `yaml:"external_builder,omitempty" json:"external_builder,omitempty"`
 
+	// --- harness skill trees (authored content) ---
+	// skills — the repo-relative skill/agent TREES this candy DECLARES, each holding one entry per
+	// name: <tree>/<name>/SKILL.md plus references/<stem>.md for a skill, and <tree>/<name>.md for
+	// an agent (type: "agent"). DEFAULT [".agents/skills"] — the Agent-Skills standard location, so
+	// a repo whose skills live there declares nothing. It is the ONE place the marketplace
+	// generator (candy/plugin-marketplace) and the docs projection (candy/plugin-docs) look for a
+	// skill's body, and it is what makes a sibling `skill:` node's description:/content:/
+	// references: omittable: the node keeps the ROUTING metadata (family/owner/triggers/category),
+	// the file keeps the prose. See schema/skill.cue.
+	//
+	// The version of record is NOT in this file: it is the github ref that fetched this repo — the
+	// marketplace refs list's pin, or a consumer's `candy:` list. Nothing is fetched at authoring
+	// time; the generator reads the tree from the checkout it already has. See
+	// /charly-internals:marketplace.
+	Skills []string `yaml:"skills,omitempty" json:"skills,omitempty"`
+
 	// --- runtime env / local vars / PATH ---
 	// env forbids PATH (validate.go: use path_append instead). Values are
 	// Go-coerced scalars (#StrVal) — an unquoted `PORT: 8080` is a string. The Go
@@ -10748,29 +10764,40 @@ type ResolvedSidecarVolume struct {
 // candy's charly.yml (ParseDoc iterates every top-level node, each with its own single kind
 // discriminator), so a candy file stacks its `candy:` node plus the `skill:` nodes it owns.
 //
-// The FULL skill definition is INLINE: every metadata field plus the markdown content as a block
-// scalar — nothing is fetched from elsewhere. The marketplace generator (candy/plugin-marketplace,
-// command:marketplace) synthesizes plugins/<family>/skills/<name>/SKILL.md + references/*.md from
-// these entities; CollectSkills (sdk/deploykit) projects the composed candies' skills into the
-// `ai.opencharly.skill` OCI label so a built image is self-describing (readable via
-// `charly box labels` / `charly deploy from-box`, no external fetch).
+// The skill's BODY lives in a FILE (the `.agents/skills` relocation). A skill is authored at
+// <tree>/<name>/SKILL.md plus references/<stem>.md, where <tree> is the owning candy's `skills:`
+// list (default `.agents/skills`) and <name> is this node's `name:` — or the NODE NAME when
+// `name:` is omitted. An `agent`-type node authors <tree>/<name>.md instead.
+//
+// This node therefore carries the ROUTING the consumers need — family (which corpus family the
+// skill lands in), owner (the OCI-label association), triggers (the R0 dispatcher rows), category —
+// while `description:`/`content:`/`references:` are the TRANSITIONAL in-line form: an entity still
+// carrying them is read from here; once its body has moved to the file they are OMITTED and the
+// file is the source of record. A repo mid-move may carry both, and the read order while both
+// exist is the generator's contract (`/charly-internals:marketplace`), not this schema's. The
+// in-line form is deleted outright by the relocation's final leg.
+//
+// The marketplace generator (candy/plugin-marketplace, command:marketplace) synthesizes
+// <family>/skills/<name>/SKILL.md + references/*.md; CollectSkills (sdk/deploykit) projects the
+// composed candies' skills into the `ai.opencharly.skills` OCI label so a built image is
+// self-describing (readable via `charly box labels` / `charly deploy from-box`, no external fetch).
 //
 // owner is the candy/concept-candy entity name that owns this skill — the build-time association
 // that decides which images carry it (CollectSkills filters by owner ∈ composed candy chain).
-// family is the marketplace family (the plugins/ directory name) the generator groups by.
+// family is the marketplace family (the corpus directory name) the generator groups by.
 //
-// type: "agent" marks a sub-agent definition (the former plugins/<family>/agents/*.md) — one
+// type: "agent" marks a sub-agent definition (the former <family>/agents/*.md) — one
 // unified doc kind, same lifecycle; model/tools carry the agent frontmatter fields.
 type Skill struct {
-	Name string `yaml:"name,omitempty" json:"name"`
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
 	Family string `yaml:"family,omitempty" json:"family"`
 
 	Owner string `yaml:"owner,omitempty" json:"owner"`
 
-	Description string `yaml:"description,omitempty" json:"description"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
-	Content string `yaml:"content,omitempty" json:"content"`
+	Content string `yaml:"content,omitempty" json:"content,omitempty"`
 
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 
