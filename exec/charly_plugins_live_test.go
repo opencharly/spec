@@ -151,16 +151,26 @@ func TestDeliverPluginsToARealExecutor(t *testing.T) {
 		}
 	}
 
-	remote := deliverAndReadBack(t, src, "2026.288.0001", filepath.Join(t.TempDir(), "charly-plugins"))
+	// One private stable path for BOTH deliveries: the shared /tmp/charly-plugins is never touched, and
+	// sharing the path is what lets the warm re-delivery's republish be asserted below.
+	stable := filepath.Join(t.TempDir(), "charly-plugins")
+	remote := deliverAndReadBack(t, src, "2026.288.0001", stable)
 
-	// Take this leg's replica away again, and remove the link ONLY if it is still this leg's. Both
-	// are registered right after the first delivery, so a failure later in the test still cleans up:
-	// this leg publishes to its own t.TempDir() paths and must never touch the shared StablePluginsPath.
+	// Take this leg's replica away again. Registered right after the FIRST delivery, so a failure
+	// later in the test still cleans up. No link cleanup is needed anywhere: both deliveries publish
+	// to a t.TempDir() path, so the shared StablePluginsPath is never touched and never has to be restored.
 	defer func() { _ = os.RemoveAll(remote) }()
 
 	// The idempotence contract, measured live: a second delivery of the same tree reuses
 	// the replica instead of re-streaming it.
-	again, err := EnsurePluginsInDeployVenueAt(context.Background(), venueExecutor(), src, "2026.288.0001", filepath.Join(t.TempDir(), "charly-plugins"))
+	// Remove the link the FIRST delivery published, so the warm re-delivery below has to republish it.
+	// Sharing one path is not enough: without this, the first delivery's link would satisfy the readback
+	// whether or not the warm branch publishes, and the assertion could not fail.
+	if err := os.Remove(stable); err != nil {
+		t.Fatalf("removing the link the first delivery published at %s: %v", stable, err)
+	}
+
+	again, err := EnsurePluginsInDeployVenueAt(context.Background(), venueExecutor(), src, "2026.288.0001", stable)
 	if err != nil {
 		t.Fatalf("second live delivery failed: %v", err)
 	}
@@ -168,10 +178,14 @@ func TestDeliverPluginsToARealExecutor(t *testing.T) {
 		t.Fatalf("an unchanged tree must reuse its replica: %s then %s", remote, again)
 	}
 
-	// Take this leg's replica away again — this tree lives under t.TempDir() and nothing
-	// else can be serving it. The published link goes only if it is still THIS leg's:
-	// removing a link another leg published would be this test cleaning up work it does
-	// not own.
+	// And the warm re-delivery must have REPUBLISHED the stable name. Without this readback the
+	// assertion above passes whether or not the warm branch publishes, because the replica path is
+	// content-derived either way — so removing the republish would go unnoticed.
+
+	if target, lerr := os.Readlink(stable); lerr != nil || target != remote {
+		t.Fatalf("the warm re-delivery must republish %s -> %s, got %q (%v)", stable, remote, target, lerr)
+	}
+
 }
 
 // TestDeliverTheBuiltTreeIntoTheDeployVenue is the check-spec-delivery BED's delivery
