@@ -457,6 +457,15 @@ check-spec-delivery:
                       # step 1's guard passed every time, leaving this bed free to destroy a LATER deploy's tree at
                       # the same path on its next run. This step gives the claim back: it removes the tree THIS bed
                       # published and the marker that claimed it, and touches NOTHING it does not own.
+                      # THE CONCURRENCY HAZARD, RESTORED HERE BECAUSE THIS IS WHERE THE DANGER IS. A host: local venue is not a
+                      # disposable target for SHARED host state: while this bed runs it HOLDS /tmp/charly-plugins, the host's
+                      # published plugin path, and a concurrent deploy on this host that republishes there races this bed's
+                      # release. The serial case is cured (the claim is given back below); the concurrent case is NOT, and the
+                      # fix is a genuinely disposable (VM) venue or a run-scoped namespace, not a wider guard. Filed as
+                      # opencharly/charly issue 941. Do not run this bed concurrently with a deploy that depends on that path.
+                      # Deliberately no shell metacharacters above: charly scans the whole step text for its own variable
+                      # substitution, comments included, and SKIPS the step when one does not resolve - a skipped step is a
+                      # vacuous pass, which is the defect this bed exists to prevent.
                       owns=/tmp/charly-plugins-spec-delivery-owner
                       if [ ! -f "$owns" ] || [ "$(cat "$owns" 2>/dev/null)" != "check-spec-delivery" ]; then
                         echo "no marker naming this bed, so the shared plugin path is NOT this bed's to clean:" >&2
