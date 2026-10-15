@@ -38,54 +38,12 @@ import (
 // `ShellExecutor{}` does not.
 func venueExecutor() spec.DeployExecutor { return ShellExecutor{MachineVenue: true} }
 
-// preserveStablePluginsPath records the CURRENT target of StablePluginsPath and restores it
-// when the test ends — the invariant on the SURVIVOR, not on the change.
-//
-// EnsurePluginsInDeployVenue publishes StablePluginsPath unconditionally, and on the venue a
-// `host: local` deploy actually uses (ShellExecutor{MachineVenue: true}, what venueExecutor
-// returns) that path is the developer's own shared /tmp/charly-plugins. The delivery's own
-// deferred cleanup removes the link only when it still points at this leg's replica; it never
-// restores what it replaced. So without this, `go test ./exec/` repoints a shared path on the
-// machine it runs on, and a second run cannot tell that from a fresh machine.
-// Call it from the leg that must leave the operator's machine as it found it - the repo's own
-// leg, TestDeliverPluginsToARealExecutor. Do NOT call it from the BED leg
-// (TestDeliverTheBuiltTreeIntoTheDeployVenue): that leg documents that the replica and the
-// published link are deliberately LEFT IN PLACE, because the bed's next step serves the word
-// out of the published path. Restoring there would clean up the very artefact the bed exists
-// to produce. The two legs want opposite things from one path, so this is called from one.
-func preserveStablePluginsPath(t *testing.T) {
-	t.Helper()
-	prior, err := os.Readlink(StablePluginsPath)
-	had := err == nil
-	t.Cleanup(func() {
-		t.Helper()
-		if err := os.Remove(StablePluginsPath); err != nil && !os.IsNotExist(err) {
-			t.Errorf("clearing %s during restore: %v", StablePluginsPath, err)
-			return
-		}
-		if had {
-			if err := os.Symlink(prior, StablePluginsPath); err != nil {
-				t.Errorf("restoring %s -> %s: %v", StablePluginsPath, prior, err)
-				return
-			}
-		}
-		// The invariant: whatever the delivery did, the survivor is what it was.
-		now, err := os.Readlink(StablePluginsPath)
-		if had && (err != nil || now != prior) {
-			t.Errorf("%s survived as (%q, %v), want %q", StablePluginsPath, now, err, prior)
-		}
-		if !had && err == nil {
-			t.Errorf("%s survived as %q, want it absent", StablePluginsPath, now)
-		}
-	})
-}
-
 // deliverAndReadBack is THE one implementation of the delivery's boundary contract:
 // hand a built plugin tree to the function under test, run it over the venue's own
 // executor, then read the result back OFF THE VENUE — never from the function's return
 // value, which is a claim about the venue and not the venue itself. It returns the
 // content-addressed replica path the delivery chose.
-func deliverAndReadBack(t *testing.T, tree, hostVer string) string {
+func deliverAndReadBack(t *testing.T, tree, hostVer, stablePath string) string {
 	t.Helper()
 
 	want, err := CountManifests(tree)
@@ -97,7 +55,7 @@ func deliverAndReadBack(t *testing.T, tree, hostVer string) string {
 	}
 	bins := pluginBinaries(t, tree)
 
-	remote, err := EnsurePluginsInDeployVenue(context.Background(), venueExecutor(), tree, hostVer)
+	remote, err := EnsurePluginsInDeployVenueAt(context.Background(), venueExecutor(), tree, hostVer, stablePath)
 	if err != nil {
 		t.Fatalf("live delivery of %s into the venue: %v", tree, err)
 	}
@@ -177,7 +135,6 @@ func pluginBinaries(t *testing.T, tree string) []string {
 // tree, so it makes its own. It proves the delivery MECHANICS end to end; it does not
 // prove that a venue serves a word afterwards — the bed does that, and says so.
 func TestDeliverPluginsToARealExecutor(t *testing.T) {
-	preserveStablePluginsPath(t)
 	if _, err := os.Stat("/bin/bash"); err != nil {
 		t.Skip("no bash available for ShellExecutor")
 	}
@@ -194,7 +151,7 @@ func TestDeliverPluginsToARealExecutor(t *testing.T) {
 		}
 	}
 
-	remote := deliverAndReadBack(t, src, "2026.288.0001")
+	remote := deliverAndReadBack(t, src, "2026.288.0001", "")
 
 	// The idempotence contract, measured live: a second delivery of the same tree reuses
 	// the replica instead of re-streaming it.
@@ -237,6 +194,6 @@ func TestDeliverTheBuiltTreeIntoTheDeployVenue(t *testing.T) {
 		t.Skip("SPEC_DELIVERY_TREE and SPEC_DELIVERY_HOSTVER are set only by the check-spec-delivery bed's step, which is where a provisioned venue exists to deliver into")
 	}
 
-	remote := deliverAndReadBack(t, tree, hostVer)
+	remote := deliverAndReadBack(t, tree, hostVer, filepath.Join(t.TempDir(), "charly-plugins"))
 	t.Logf("the built plugin tree from %s is on the venue at %s, published at %s", tree, remote, StablePluginsPath)
 }

@@ -63,6 +63,15 @@ const PluginsEnvVar = "CHARLY_PLUGIN_DIR"
 // silent: the tree is delivered, published at a name no plan looks for, and nothing is served.
 const StablePluginsPath = "/tmp/charly-plugins"
 
+// stablePluginsPath resolves the injected override, falling back to the package-wide default.
+// A caller that passes a path of its own never touches the shared, non-disposable one.
+func stablePluginsPath(injected string) string {
+	if injected != "" {
+		return injected
+	}
+	return StablePluginsPath
+}
+
 // ManifestSuffix is the per-provider manifest the loader reads to learn which words a binary
 // answers. A directory without at least one of these is not a plugin tree, and delivering it would
 // be the same as delivering nothing while looking like progress.
@@ -170,7 +179,15 @@ func ValidatePluginTree(dir string) error {
 // A source tree with NO manifests is refused rather than delivered: shipping an empty tree would
 // reproduce #916's symptom while looking like a fix, which is the failure mode this whole file
 // exists to remove.
+// EnsurePluginsInDeployVenue delivers the plugin tree to the venue and publishes it under the
+// package-wide StablePluginsPath. Callers that must NOT touch that shared, non-disposable path -
+// a host-side test on a developer machine, for instance - use EnsurePluginsInDeployVenueAt with a
+// path of their own instead, and then never touch the shared one at all.
 func EnsurePluginsInDeployVenue(ctx context.Context, ve spec.DeployExecutor, pluginDir, hostVer string) (string, error) {
+	return EnsurePluginsInDeployVenueAt(ctx, ve, pluginDir, hostVer, "")
+}
+
+func EnsurePluginsInDeployVenueAt(ctx context.Context, ve spec.DeployExecutor, pluginDir, hostVer, stablePath string) (string, error) {
 	if ve == nil {
 		return "", fmt.Errorf("ensure plugins in deploy venue: nil executor")
 	}
@@ -229,8 +246,8 @@ func EnsurePluginsInDeployVenue(ctx context.Context, ve spec.DeployExecutor, plu
 	// Publish the stable name the PLAN emitted, so the two halves meet at one path. `-n` is
 	// deliberate: the link is replaced atomically rather than moved INTO the target when the target
 	// already exists, which is the one way this line can silently publish the wrong tree.
-	if err := runOK(ctx, ve, fmt.Sprintf("ln -sfn %s %s", shellquote.ShellQuote(remote), shellquote.ShellQuote(StablePluginsPath))); err != nil {
-		return "", fmt.Errorf("publishing %s -> %s in deploy venue: %w", StablePluginsPath, remote, err)
+	if err := runOK(ctx, ve, fmt.Sprintf("ln -sfn %s %s", shellquote.ShellQuote(remote), shellquote.ShellQuote(stablePluginsPath(stablePath)))); err != nil {
+		return "", fmt.Errorf("publishing %s -> %s in deploy venue: %w", stablePluginsPath(stablePath), remote, err)
 	}
 	return remote, nil
 }
@@ -243,7 +260,14 @@ func EnsurePluginsInDeployVenue(ctx context.Context, ve spec.DeployExecutor, plu
 // The tree travels as a tar stream because scpInto moves a FILE and a plugin tree is a directory;
 // the guest extracts it in place, so the delivered layout is byte-identical to the source's, modes
 // included (a provider binary that arrives non-executable is a plugin the loader cannot serve).
+// EnsurePluginsInGuest is the guest-side twin of EnsurePluginsInDeployVenue: it publishes under the
+// package-wide StablePluginsPath unless the caller injects a path of its own, which is how a leg that
+// must not touch that shared, non-disposable location stays away from it entirely.
 func EnsurePluginsInGuest(ctx context.Context, ssh SSHArgs, pluginDir, hostVer, strategyRaw string) (string, error) {
+	return EnsurePluginsInGuestAt(ctx, ssh, pluginDir, hostVer, strategyRaw, "")
+}
+
+func EnsurePluginsInGuestAt(ctx context.Context, ssh SSHArgs, pluginDir, hostVer, strategyRaw, stablePath string) (string, error) {
 	switch ResolveCharlyInstallStrategy(strategyRaw) {
 	case CharlyInstallAuto, CharlyInstallScp:
 		if err := ValidatePluginTree(pluginDir); err != nil {
@@ -290,10 +314,10 @@ func EnsurePluginsInGuest(ctx context.Context, ssh SSHArgs, pluginDir, hostVer, 
 		// Publish the stable name the PLAN emitted. `-n` replaces the link rather than moving into an
 		// existing target, so re-running against a changed tree repoints it instead of nesting a link
 		// inside the old directory.
-		if !sshOK(ctx, ssh, fmt.Sprintf("ln -sfn %s %s", shellquote.ShellQuote(remote), shellquote.ShellQuote(StablePluginsPath))) {
-			return "", fmt.Errorf("publishing %s -> %s in guest", StablePluginsPath, remote)
+		if !sshOK(ctx, ssh, fmt.Sprintf("ln -sfn %s %s", shellquote.ShellQuote(remote), shellquote.ShellQuote(stablePluginsPath(stablePath)))) {
+			return "", fmt.Errorf("publishing %s -> %s in guest", stablePluginsPath(stablePath), remote)
 		}
-		return fmt.Sprintf("host plugin tree provided at %s, published at %s for deploy use (%s)", remote, StablePluginsPath, PluginsEnvVar), nil
+		return fmt.Sprintf("host plugin tree provided at %s, published at %s for deploy use (%s)", remote, stablePluginsPath(stablePath), PluginsEnvVar), nil
 	case CharlyInstallSkip:
 		if !sshOK(ctx, ssh, "test -n \"$(ls -A /usr/lib/charly/plugins 2>/dev/null)\"") {
 			return "", fmt.Errorf("no plugin tree present in guest (charly_install.strategy: skip)")
