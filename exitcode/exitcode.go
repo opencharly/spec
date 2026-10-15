@@ -37,7 +37,12 @@ func (e *ExitCodeError) Unwrap() error { return e.Err }
 //	0  all checks passed
 //	1  infra / usage error — no pass/fail verdict was produced (the host default)
 //	2  the check RAN and one or more checks FAILED
-//	3  the bed was SKIPPED (a required host prerequisite — e.g. a GPU — is absent)
+//	3  the phase RAN NOTHING, so there was no verdict to bank — either a bed whose required
+//	   HOST prerequisite is absent (a GPU whose vendor has no matching card), or any check mode
+//	   whose plan resolution came back EMPTY (an image that baked no `plan:`, a deployment whose
+//	   source declares none, a bed child whose own plan and `add_candies` contribute no steps —
+//	   opencharly/plugin-check#110). "Nothing ran" is neither a pass nor a failure, so a caller
+//	   that reads only 0/non-0 must read 3 as "ask why", not as "green".
 const (
 	CheckFailExitCode    = 2
 	CheckSkippedExitCode = 3
