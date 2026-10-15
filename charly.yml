@@ -204,3 +204,98 @@ check-spec-schema:
                       echo "gating in $(pwd)"
                       GOWORK=off go test ./spec/ -run TestGenReproducible -count=1
                   in_container: false
+
+# -----------------------------------------------------------------------------
+# The DEPLOY-CLASS bed this change class actually requires.
+#
+# spec#242's verdict blocks on A2/R10 with a precise demand: "a deploy-class bed
+# that provisions a venue and confirms the delivered tree arrives and is served".
+# `check-spec-schema` above is NOT that bed - it provisions a venue and asserts
+# nothing arrives there. It is a check, and calling it the gate would be the
+# bare-`go test` substitute the same verdict names as fraud.
+#
+# This repo owns no candy and no box, but a kind:local template's `candy:` field
+# accepts an @github ref, so the venue can carry a candy this repo does not own.
+# The plugin below is what makes the venue a place where a delivered plugin tree
+# can be SERVED, which is the thing the delivery path is for.
+spec-delivery-venue:
+    local:
+        description: |-
+            A kind:local venue that carries a real plugin, so the delivery path has something to
+            serve. Referenced by @github ref precisely because spec owns no candy of its own.
+        candy:
+            - '@github.com/opencharly/plugin-firecracker/candy/plugin-firecracker'
+check-spec-delivery:
+    local:
+        from: spec-delivery-venue
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            R10 gate for exec/'s plugin-tree delivery: the venue must carry a served plugin word,
+            and the delivery path must run live against that venue rather than against a stub.
+        plan:
+            - check: the venue carries a plugin word that is actually served
+              id: spec-delivery-venue-serves-a-word
+              context:
+                - runtime
+              timeout: 900s
+              command:
+                  command: |
+                      set -euo pipefail
+                      # MEASURED (this bed's first run): a plan step on a host:local venue does NOT
+                      # run with the repo root as cwd, so a bare `charly box validate` validated
+                      # whatever project the venue's cwd happened to be - and failed. Locate the
+                      # project by walking up, exactly as the sibling step does.
+                      n=0
+                      while [ ! -f charly.yml ]; do
+                        cd ..
+                        n=$((n + 1))
+                        if [ "$n" -gt 8 ] || [ "$PWD" = / ]; then
+                          echo "cannot locate the project from this venue's cwd" >&2
+                          exit 1
+                        fi
+                      done
+                      # The venue must be a place where a word resolves. If the candy above did not
+                      # land, this fails: the probe differs with the venue.
+                      # charly TRUNCATES a step's stderr in its own summary, which hid the rest of
+                      # the schema error on this bed's first runs. Write the untruncated output to a
+                      # file AND to stderr, so the cause is readable either way.
+                      # MEASURED: the venue's PATH `charly` is NOT the binary this project gates
+                      # with - it rejects spec's charly.yml with "schema 2026.261.1747 is required
+                      # (found \"\")" while the worktree binary validates the same tree clean. The
+                      # runtime check-var resolver stamps CHARLY_BIN with the ACTIVE binary, which is
+                      # the one the change class is gated by. Using the venue's PATH binary instead
+                      # was the bug.
+                      if ! out=$("${CHARLY_BIN}" box validate 2>&1); then
+                        echo "$out" > /tmp/spec-venue-validate.txt
+                        echo "validate failed: $out" >&2
+                        exit 1
+                      fi
+                      case "$out" in
+                        *"deploy"*) echo "the venue serves a deploy word: $out" ;;
+                        *) echo "no deploy word is served at this venue:" >&2; echo "$out" >&2; exit 1 ;;
+                      esac
+                  in_container: false
+            - check: the delivery path runs LIVE against this venue, not against a stub
+              id: spec-delivery-runs-live
+              context:
+                - runtime
+              timeout: 900s
+              command:
+                  command: |
+                      set -euo pipefail
+                      # No plan-grammar variable: this manifest records that an unresolvable
+                      # uppercase token makes a step SKIP rather than run.
+                      n=0
+                      while [ ! -f exec/charly_plugins.go ]; do
+                        cd ..
+                        n=$((n + 1))
+                        if [ "$n" -gt 8 ] || [ "$PWD" = / ]; then
+                          echo "cannot locate the spec module from this venue's cwd" >&2
+                          exit 1
+                        fi
+                      done
+                      echo "gating in $(pwd)"
+                      GOWORK=off go test ./exec/ -run TestDeliverPluginsToARealExecutor -count=1 -v
+                  in_container: false
