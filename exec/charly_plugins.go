@@ -43,13 +43,24 @@ import (
 const PluginsEnvVar = "CHARLY_PLUGIN_DIR"
 
 // StablePluginsPath is the version- and digest-independent name a venue's plugin tree is reachable
-// at, and the ONE home for that constant: the sdk's plan compiler (deploykit.CompileShellHookStep)
-// emits it as CHARLY_PLUGIN_DIR on every venue shell, and this file publishes it here as a symlink
-// to whatever content-addressed replica the delivery landed.
+// at. The sdk's plan compiler (deploykit.CompileShellHookStep) emits it as CHARLY_PLUGIN_DIR on
+// every venue shell, and this file publishes it here as a symlink to whatever content-addressed
+// replica the delivery landed.
 //
 // The two halves need a shared NAME rather than a shared value: a plan is compiled host-side BEFORE
 // any delivery, so it cannot know a digest; the delivery cannot know that a plan will be applied to
-// this venue. The stable name is where those two facts meet, and R2 says it is declared once.
+// this venue. The stable name is where those two facts meet.
+//
+// NOT "the one home" - and the earlier comment here claimed it was, which was false. The sdk's plan
+// compiler carries its OWN `const StablePluginsPath` for the same pin cycle, so for exactly one pin
+// cycle this literal is declared twice: once host-side in the sdk and once here, because the two
+// modules have no import edge between them and the name must exist on both sides of the wire. That
+// is a deliberate, bounded duplication rather than a second implementation of one behaviour:
+// neither declaration derives the other, and neither can be deleted while the other stands.
+// Removing it is tracked as opencharly/sdk#399 (sweep the local literal when the pin advances to a
+// sdk that exports the constant). Until then, a change to this value must move BOTH declarations in
+// the same cutover, or the plan and the delivery stop meeting at one path - and the failure mode is
+// silent: the tree is delivered, published at a name no plan looks for, and nothing is served.
 const StablePluginsPath = "/tmp/charly-plugins"
 
 // ManifestSuffix is the per-provider manifest the loader reads to learn which words a binary
