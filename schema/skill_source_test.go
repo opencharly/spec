@@ -11,14 +11,17 @@ package schema_test
 // rejection) and TestCandy_AcceptsSkillsTrees (#Candy is closed, so the new key was a
 // `field not allowed`). The rest are guards: the in-line form the live entities still carry must
 // keep working, and "optional" must not become "unconstrained".
+//
+// The routing-only case is the ONE case here that needs COMPLETE unification rather than FINAL: a
+// field missing at the TOP LEVEL of the unified struct is an "incomplete value" which Final()
+// accepts, while a field missing inside a NESTED literal is a "field is required but not present"
+// which it does report. The three modes and their measured difference are documented once, on
+// unifyDefMode in box_init_test.go.
 
 import (
 	"testing"
 
 	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/cuecontext"
-	"github.com/opencharly/spec/schema"
-	"github.com/opencharly/spec/schemaconcat"
 	"github.com/opencharly/spec/spec"
 )
 
@@ -29,37 +32,6 @@ import (
 // given field exists).
 var _ = spec.Candy{Skills: []string{".agents/skills"}}
 
-// unifyDefComplete validates a value against a named definition under CONCRETE validation — the arm
-// that reports a MISSING TOP-LEVEL FIELD, which is exactly the post-move `skill:` node's shape.
-//
-// Measured on the pinned cue (v0.16.1), which is why this helper exists beside unifyDefFinal:
-//
-//	#Skill {family: "internals", owner: "x"}          final=<nil>  concrete=incomplete value =~"^[a-z]…"
-//	#CandyService {… wait_for: {timeout: "30s"}}      final=field is required but not present  concrete=same
-//
-// A missing field inside a NESTED literal is a "field is required but not present" that Final()
-// reports; a missing field at the TOP level of the unified struct is instead an "incomplete value"
-// that only Concrete(true) reports. The routing-only node is the top-level case, so the final
-// validator above cannot fail on it.
-func unifyDefComplete(t *testing.T, def, value string) error {
-	t.Helper()
-	src, _, err := schemaconcat.ConcatSchema(schema.FS, ".", nil)
-	if err != nil {
-		t.Fatalf("concatenating the shipped schema: %v", err)
-	}
-	ctx := cuecontext.New()
-	v := ctx.CompileString(src)
-	d := v.LookupPath(cue.ParsePath(def))
-	if !d.Exists() {
-		t.Fatalf("%s is not defined in the shipped schema", def)
-	}
-	u := d.Unify(ctx.CompileString(value))
-	if u.Err() != nil {
-		return u.Err()
-	}
-	return u.Validate(cue.Concrete(true))
-}
-
 // TestSkill_AcceptsRoutingMetadataOnly — the post-move shape: family + owner + triggers, with the
 // markdown body AND its frontmatter description living at .agents/skills/<name>/SKILL.md.
 func TestSkill_AcceptsRoutingMetadataOnly(t *testing.T) {
@@ -68,7 +40,7 @@ func TestSkill_AcceptsRoutingMetadataOnly(t *testing.T) {
 	owner:    "charly-internals"
 	triggers: ["editing a skill entity", "the marketplace corpus"]
 }`
-	if err := unifyDefComplete(t, "#Skill", routingOnly); err != nil {
+	if err := unifyDefMode(t, "#Skill", routingOnly, cue.Concrete(true)); err != nil {
 		t.Errorf("#Skill rejects a routing-only node whose body lives in .agents/skills:\n%v", err)
 	}
 }
@@ -86,7 +58,7 @@ func TestSkill_StillAcceptsTheInlineBody(t *testing.T) {
 	triggers:    ["commit / push / open a PR"]
 	references: [{name: "validator-and-calver", content: "…"}]
 }`
-	if err := unifyDefComplete(t, "#Skill", inline); err != nil {
+	if err := unifyDefMode(t, "#Skill", inline, cue.Concrete(true)); err != nil {
 		t.Errorf("#Skill rejects the in-line body form every live entity still uses:\n%v", err)
 	}
 }
@@ -100,7 +72,7 @@ func TestSkill_DescriptionStaysNonEmpty(t *testing.T) {
 	owner:       "charly-internals"
 	description: ""
 }`
-	if err := unifyDefComplete(t, "#Skill", empty); err == nil {
+	if err := unifyDefMode(t, "#Skill", empty, cue.Concrete(true)); err == nil {
 		t.Error(`#Skill accepted an empty description — the !="" refinement is gone`)
 	}
 }
