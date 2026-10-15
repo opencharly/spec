@@ -77,8 +77,20 @@ func TestBoxInitDocumentsItsInvariant(t *testing.T) {
 	}
 }
 
-// unifyDef validates a concrete value against a named definition in the shipped schema.
-func unifyDef(t *testing.T, def, value string) error {
+// unifyDefMode validates a concrete value against a named definition in the shipped schema and
+// returns the verdict. THE ONE implementation — the wrappers below differ only in the option they
+// pass, because the mode IS the test's meaning.
+//
+// How strictly INCOMPLETENESS is judged is the point of the modes, and it was measured on the pinned
+// cue (v0.16.1):
+//
+//   - cue.Concrete(false) — STRUCTURAL (unifyDef): the corpus check. It ACCEPTS an incomplete value,
+//     so it proves a shape is authorable without asserting that anything is required.
+//   - cue.Final() — FINAL (unifyDefFinal): also surfaces list-arity violations and a missing field
+//     inside a NESTED literal ("field is required but not present").
+//   - cue.Concrete(true) — COMPLETE (call this directly): the only mode that reports a missing field
+//     at the TOP LEVEL of the unified struct, which Final() accepts as an "incomplete value".
+func unifyDefMode(t *testing.T, def, value string, mode ...cue.Option) error {
 	t.Helper()
 	src, _, err := schemaconcat.ConcatSchema(schema.FS, ".", nil)
 	if err != nil {
@@ -97,25 +109,23 @@ func unifyDef(t *testing.T, def, value string) error {
 	if u.Err() != nil {
 		return u.Err()
 	}
-	return u.Validate(cue.Concrete(false))
+	return u.Validate(mode...)
 }
 
-// unifyDefFinal is unifyDef under FINAL validation, which is what surfaces
-// required-field and list-arity violations; the structural form does not.
+// unifyDef validates a concrete value STRUCTURALLY: it proves a shape is authorable, never that a
+// field is required.
+func unifyDef(t *testing.T, def, value string) error {
+	t.Helper()
+	return unifyDefMode(t, def, value, cue.Concrete(false))
+}
+
+// unifyDefFinal is the FINAL mode — the teeth: it surfaces list-arity violations and a missing field
+// inside a NESTED literal. It does NOT report a missing field at the TOP LEVEL of the unified struct;
+// that shape reads as an "incomplete value" which Final() accepts and only cue.Concrete(true)
+// reports, so a top-level-requiredness case calls unifyDefMode with cue.Concrete(true).
 func unifyDefFinal(t *testing.T, def, value string) error {
 	t.Helper()
-	src, _, err := schemaconcat.ConcatSchema(schema.FS, ".", nil)
-	if err != nil {
-		t.Fatalf("concatenating the shipped schema: %v", err)
-	}
-	ctx := cuecontext.New()
-	v := ctx.CompileString(src)
-	d := v.LookupPath(cue.ParsePath(def))
-	u := d.Unify(ctx.CompileString(value))
-	if u.Err() != nil {
-		return u.Err()
-	}
-	return u.Validate(cue.Final())
+	return unifyDefMode(t, def, value, cue.Final())
 }
 
 // The portable lifecycle fields must be authorable on a service. Each is honoured by
