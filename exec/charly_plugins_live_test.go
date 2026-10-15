@@ -47,6 +47,12 @@ func venueExecutor() spec.DeployExecutor { return ShellExecutor{MachineVenue: tr
 // deferred cleanup removes the link only when it still points at this leg's replica; it never
 // restores what it replaced. So without this, `go test ./exec/` repoints a shared path on the
 // machine it runs on, and a second run cannot tell that from a fresh machine.
+// Call it from the leg that must leave the operator's machine as it found it - the repo's own
+// leg, TestDeliverPluginsToARealExecutor. Do NOT call it from the BED leg
+// (TestDeliverTheBuiltTreeIntoTheDeployVenue): that leg documents that the replica and the
+// published link are deliberately LEFT IN PLACE, because the bed's next step serves the word
+// out of the published path. Restoring there would clean up the very artefact the bed exists
+// to produce. The two legs want opposite things from one path, so this is called from one.
 func preserveStablePluginsPath(t *testing.T) {
 	t.Helper()
 	prior, err := os.Readlink(StablePluginsPath)
@@ -192,7 +198,6 @@ func TestDeliverPluginsToARealExecutor(t *testing.T) {
 
 	// The idempotence contract, measured live: a second delivery of the same tree reuses
 	// the replica instead of re-streaming it.
-	preserveStablePluginsPath(t)
 	again, err := EnsurePluginsInDeployVenue(context.Background(), venueExecutor(), src, "2026.288.0001")
 	if err != nil {
 		t.Fatalf("second live delivery failed: %v", err)
