@@ -140,3 +140,67 @@ cue-gen:
         stdout:
           - contains: ok
         context: [runtime]
+
+# -----------------------------------------------------------------------------
+# The R10 bed for this repo's change class.
+#
+# spec's change class is a SCHEMA/generated-artifact change: it owns no candies
+# and no boxes, and declares no `discover:`, so the ordinary deploy -> check-live
+# bed shape has nothing to deploy here. What it CAN do is exactly what this
+# manifest already declares: run the deterministic checks that own each
+# generated artifact, on a `disposable: true` host:local venue, through the
+# ACTIVE binary.
+#
+# The bed wraps checks that ALREADY EXIST as `task:` plan steps above - it adds
+# no second mechanism (R2). `cue-gen` owns the CUE-generated Go
+# (TestGenReproducible); the wire contract is owned by wire-gen.
+#
+# NOTE, from this file's own authoring rules: shell locals in these steps are
+# LOWERCASE, because an uppercase plan-grammar variable that cannot be resolved
+# makes the step SKIP rather than fail. That rule cost a sibling repo two rounds;
+# it is obeyed here from the start.
+spec-schema-venue:
+    local:
+        description: |-
+            A no-op kind:local venue: this repo ships no candy and no box, so the
+            venue carries nothing but the checkout under test and the active binary.
+            `candy: []` is the explicit placeholder the schema requires - an empty list
+            says "deliberately nothing", which is exactly this repo's situation.
+        candy: []
+check-spec-schema:
+    local:
+        from: spec-schema-venue
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            R10 gate for spec's change class on a disposable host:local venue: the CUE-generated Go
+            must be reproducible from the committed schema (TestGenReproducible), and the generated
+            protobuf wire contract must be absent from the diff after a clean regeneration. Both are
+            checks this manifest already declares; the bed gives them the R10 wrapper.
+        plan:
+            - check: the CUE-generated Go is reproducible from the committed schema
+              id: spec-cue-gen-reproducible
+              context:
+                - runtime
+              timeout: 900s
+              command:
+                  command: |
+                      set -euo pipefail
+                      # No plan-grammar variable is used here: this repo's own manifest records
+                      # that an unresolvable uppercase token makes the step SKIP rather than run,
+                      # and a sibling repo lost two rounds to exactly that. The module is located
+                      # by walking up from wherever the venue put us - no variable, no hardcoded
+                      # path, and a loud failure if it is not found.
+                      n=0
+                      while [ ! -f spec/cue_types_gen.go ]; do
+                        cd ..
+                        n=$((n + 1))
+                        if [ "$n" -gt 8 ] || [ "$PWD" = / ]; then
+                          echo "cannot locate the spec module from this venue's cwd" >&2
+                          exit 1
+                        fi
+                      done
+                      echo "gating in $(pwd)"
+                      GOWORK=off go test ./spec/ -run TestGenReproducible -count=1
+                  in_container: false
