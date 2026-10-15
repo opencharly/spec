@@ -153,9 +153,14 @@ func TestDeliverPluginsToARealExecutor(t *testing.T) {
 
 	remote := deliverAndReadBack(t, src, "2026.288.0001", filepath.Join(t.TempDir(), "charly-plugins"))
 
+	// Take this leg's replica away again, and remove the link ONLY if it is still this leg's. Both
+	// are registered right after the first delivery, so a failure later in the test still cleans up:
+	// this leg publishes to its own t.TempDir() paths and must never touch the shared StablePluginsPath.
+	defer func() { _ = os.RemoveAll(remote) }()
+
 	// The idempotence contract, measured live: a second delivery of the same tree reuses
 	// the replica instead of re-streaming it.
-	again, err := EnsurePluginsInDeployVenue(context.Background(), venueExecutor(), src, "2026.288.0001")
+	again, err := EnsurePluginsInDeployVenueAt(context.Background(), venueExecutor(), src, "2026.288.0001", filepath.Join(t.TempDir(), "charly-plugins"))
 	if err != nil {
 		t.Fatalf("second live delivery failed: %v", err)
 	}
@@ -167,10 +172,6 @@ func TestDeliverPluginsToARealExecutor(t *testing.T) {
 	// else can be serving it. The published link goes only if it is still THIS leg's:
 	// removing a link another leg published would be this test cleaning up work it does
 	// not own.
-	defer func() { _ = os.RemoveAll(remote) }()
-	if target, lerr := os.Readlink(StablePluginsPath); lerr == nil && target == remote {
-		defer func() { _ = os.Remove(StablePluginsPath) }()
-	}
 }
 
 // TestDeliverTheBuiltTreeIntoTheDeployVenue is the check-spec-delivery BED's delivery
