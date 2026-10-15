@@ -175,9 +175,15 @@ check-spec-schema:
         lifecycle: dev
         description: >-
             R10 gate for spec's change class on a disposable host:local venue: the CUE-generated Go
-            must be reproducible from the committed schema (TestGenReproducible), and the generated
-            protobuf wire contract must be absent from the diff after a clean regeneration. Both are
-            checks this manifest already declares; the bed gives them the R10 wrapper.
+            must be reproducible from the committed schema (TestGenReproducible). That is the ONE
+            check this bed wraps.
+            The generated protobuf wire contract's reproducibility is declared elsewhere in this
+            manifest as a recipe, not as a plan step: `wire-gen` (and its `proto-gen` alias), whose
+            own comment records the check - `rm -f bin/protoc*; charly task proto-gen && git diff
+            --exit-code proto`. This bed does NOT run it, and an earlier version of this description
+            said it did; a description that diverges from what the bed runs is an R1 incident, so it
+            is corrected here rather than left claiming a step that is not in the plan. Wrapping the
+            wire-contract check as a second step of this bed is a follow-up, not a claim.
         plan:
             - check: the CUE-generated Go is reproducible from the committed schema
               id: spec-cue-gen-reproducible
