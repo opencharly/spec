@@ -38,6 +38,42 @@ import (
 // `ShellExecutor{}` does not.
 func venueExecutor() spec.DeployExecutor { return ShellExecutor{MachineVenue: true} }
 
+// preserveStablePluginsPath records the CURRENT target of StablePluginsPath and restores it
+// when the test ends — the invariant on the SURVIVOR, not on the change.
+//
+// EnsurePluginsInDeployVenue publishes StablePluginsPath unconditionally, and on the venue a
+// `host: local` deploy actually uses (ShellExecutor{MachineVenue: true}, what venueExecutor
+// returns) that path is the developer's own shared /tmp/charly-plugins. The delivery's own
+// deferred cleanup removes the link only when it still points at this leg's replica; it never
+// restores what it replaced. So without this, `go test ./exec/` repoints a shared path on the
+// machine it runs on, and a second run cannot tell that from a fresh machine.
+func preserveStablePluginsPath(t *testing.T) {
+	t.Helper()
+	prior, err := os.Readlink(StablePluginsPath)
+	had := err == nil
+	t.Cleanup(func() {
+		t.Helper()
+		if err := os.Remove(StablePluginsPath); err != nil && !os.IsNotExist(err) {
+			t.Errorf("clearing %s during restore: %v", StablePluginsPath, err)
+			return
+		}
+		if had {
+			if err := os.Symlink(prior, StablePluginsPath); err != nil {
+				t.Errorf("restoring %s -> %s: %v", StablePluginsPath, prior, err)
+				return
+			}
+		}
+		// The invariant: whatever the delivery did, the survivor is what it was.
+		now, err := os.Readlink(StablePluginsPath)
+		if had && (err != nil || now != prior) {
+			t.Errorf("%s survived as (%q, %v), want %q", StablePluginsPath, now, err, prior)
+		}
+		if !had && err == nil {
+			t.Errorf("%s survived as %q, want it absent", StablePluginsPath, now)
+		}
+	})
+}
+
 // deliverAndReadBack is THE one implementation of the delivery's boundary contract:
 // hand a built plugin tree to the function under test, run it over the venue's own
 // executor, then read the result back OFF THE VENUE — never from the function's return
@@ -55,6 +91,7 @@ func deliverAndReadBack(t *testing.T, tree, hostVer string) string {
 	}
 	bins := pluginBinaries(t, tree)
 
+	preserveStablePluginsPath(t)
 	remote, err := EnsurePluginsInDeployVenue(context.Background(), venueExecutor(), tree, hostVer)
 	if err != nil {
 		t.Fatalf("live delivery of %s into the venue: %v", tree, err)
@@ -155,6 +192,7 @@ func TestDeliverPluginsToARealExecutor(t *testing.T) {
 
 	// The idempotence contract, measured live: a second delivery of the same tree reuses
 	// the replica instead of re-streaming it.
+	preserveStablePluginsPath(t)
 	again, err := EnsurePluginsInDeployVenue(context.Background(), venueExecutor(), src, "2026.288.0001")
 	if err != nil {
 		t.Fatalf("second live delivery failed: %v", err)
