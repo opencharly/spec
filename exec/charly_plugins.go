@@ -22,12 +22,15 @@
 package exec
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/opencharly/spec/shellquote"
@@ -200,4 +203,139 @@ func EnsurePluginsInDeployVenue(ctx context.Context, ve spec.DeployExecutor, plu
 		return "", fmt.Errorf("plugin tree at %s does not carry the %d manifest(s) delivered from %s", remote, n, pluginDir)
 	}
 	return remote, nil
+}
+
+// EnsurePluginsInGuest is the vm-deploy sibling of EnsurePluginsInDeployVenue: at PrepareVenue time
+// the reverse channel has NOT yet served a guest executor, so the delivery runs over the
+// HOST-SURFACE ssh/scp helpers charly_install.go already uses (sshCapture / sshOK / scpInto), with
+// the same strategy vocabulary layered on top — auto/scp deliver, skip verifies presence only.
+//
+// The tree travels as a tar stream because scpInto moves a FILE and a plugin tree is a directory;
+// the guest extracts it in place, so the delivered layout is byte-identical to the source's, modes
+// included (a provider binary that arrives non-executable is a plugin the loader cannot serve).
+func EnsurePluginsInGuest(ctx context.Context, ssh SSHArgs, pluginDir, hostVer, strategyRaw string) (string, error) {
+	switch ResolveCharlyInstallStrategy(strategyRaw) {
+	case CharlyInstallAuto, CharlyInstallScp:
+		if err := ValidatePluginTree(pluginDir); err != nil {
+			return "", fmt.Errorf("ensure plugins in guest: %w", err)
+		}
+		remote, err := replicatedPluginsPath(pluginDir, hostVer)
+		if err != nil {
+			return "", err
+		}
+
+		// probe: the guest already carries a non-empty tree at the replica path.
+		if sshOK(ctx, ssh, fmt.Sprintf("test -n \"$(ls -A %s 2>/dev/null)\"", shellquote.ShellQuote(remote))) {
+			return fmt.Sprintf("guest already carries the plugin tree at %s (no re-delivery)", remote), nil
+		}
+
+		if !sshOK(ctx, ssh, "mkdir -p "+shellquote.ShellQuote(remote)) {
+			return "", fmt.Errorf("creating plugin dir %s in guest", remote)
+		}
+
+		archive, err := tarPluginTree(pluginDir)
+		if err != nil {
+			return "", err
+		}
+		defer os.Remove(archive)
+
+		if err := scpInto(ctx, ssh, archive, remote+".tgz"); err != nil {
+			return "", fmt.Errorf("copying plugin tree into guest %s: %w", remote, err)
+		}
+		if !sshOK(ctx, ssh, fmt.Sprintf("tar -xzf %s -C %s && rm -f %s",
+			shellquote.ShellQuote(remote+".tgz"), shellquote.ShellQuote(remote), shellquote.ShellQuote(remote+".tgz"))) {
+			return "", fmt.Errorf("extracting plugin tree into %s in guest", remote)
+		}
+
+		// Verify at the boundary: the same manifest count must be present in the guest.
+		want, err := CountManifests(pluginDir)
+		if err != nil {
+			return "", err
+		}
+		if !sshOK(ctx, ssh, fmt.Sprintf("test \"$(find %s -name '*%s' | wc -l)\" -eq %d",
+			shellquote.ShellQuote(remote), ManifestSuffix, want)) {
+			return "", fmt.Errorf("guest plugin tree at %s does not carry the %d delivered manifest(s)", remote, want)
+		}
+		return fmt.Sprintf("host plugin tree provided at %s for deploy use (export %s)", remote, PluginsEnvVar), nil
+	case CharlyInstallSkip:
+		if !sshOK(ctx, ssh, "test -n \"$(ls -A /usr/lib/charly/plugins 2>/dev/null)\"") {
+			return "", fmt.Errorf("no plugin tree present in guest (charly_install.strategy: skip)")
+		}
+		return "verified a plugin tree present in guest (strategy=skip)", nil
+	default:
+		return "", fmt.Errorf("unknown charly_install.strategy: %q", strategyRaw)
+	}
+}
+
+// tarPluginTree writes the tree to a temporary archive with modes preserved. The guest /tmp tmpfs
+// is small on the VMs this runs against, which is why the tree is streamed rather than expanded
+// into a second copy on the host — the same reasoning as the image transfer path.
+func tarPluginTree(dir string) (string, error) {
+	f, err := os.CreateTemp("", "charly-plugins-*.tgz")
+	if err != nil {
+		return "", fmt.Errorf("creating a plugin archive: %w", err)
+	}
+	defer f.Close()
+
+	// A deterministic writer keeps the archive free of host-specific ordering, so an unchanged tree
+	// produces an unchanged archive.
+	var names []string
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			names = append(names, path)
+		}
+		return nil
+	}); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	sort.Strings(names)
+
+	zw := gzip.NewWriter(f)
+	tw := tar.NewWriter(zw)
+	for _, path := range names {
+		info, err := os.Lstat(path)
+		if err != nil {
+			os.Remove(f.Name())
+			return "", err
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			os.Remove(f.Name())
+			return "", err
+		}
+		hdr, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			os.Remove(f.Name())
+			return "", err
+		}
+		hdr.Name = rel
+		if err := tw.WriteHeader(hdr); err != nil {
+			os.Remove(f.Name())
+			return "", err
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			os.Remove(f.Name())
+			return "", err
+		}
+		if _, err := io.Copy(tw, in); err != nil {
+			in.Close()
+			os.Remove(f.Name())
+			return "", err
+		}
+		in.Close()
+	}
+	if err := tw.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := zw.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }

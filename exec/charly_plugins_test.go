@@ -5,7 +5,10 @@ package exec
 // digest is what makes the delivery idempotent instead of re-streaming a tree every deploy.
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -103,5 +106,65 @@ func TestReplicatedPluginsPathIsContentAddressed(t *testing.T) {
 	}
 	if changed == first {
 		t.Fatalf("a changed manifest must change the replica path, both were %s", first)
+	}
+}
+
+// TestTarPluginTreeRoundTripsWithModes pins the guest delivery's transport: the tree must survive
+// tar/gzip with its MODES, because a provider binary that arrives non-executable is a plugin the
+// loader cannot serve — the delivery would land and be useless.
+func TestTarPluginTreeRoundTripsWithModes(t *testing.T) {
+	tree := writeTree(t, "plugin-deploy-firecracker")
+
+	archive, err := tarPluginTree(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(archive)
+
+	dest := t.TempDir()
+	f, err := os.Open(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(zr)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := filepath.Join(dest, hdr.Name)
+		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(out, nil, os.FileMode(hdr.Mode)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, name := range []string{"plugin-deploy-firecracker", "plugin-deploy-firecracker" + ManifestSuffix} {
+		info, err := os.Stat(filepath.Join(dest, name))
+		if err != nil {
+			t.Fatalf("%s did not survive the archive: %v", name, err)
+		}
+		src, err := os.Stat(filepath.Join(tree, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != src.Mode().Perm() {
+			t.Fatalf("%s arrived with mode %v, want %v", name, info.Mode().Perm(), src.Mode().Perm())
+		}
+	}
+
+	// The round-tripped tree is still a plugin tree by the same predicate the delivery enforces.
+	if err := ValidatePluginTree(dest); err != nil {
+		t.Fatalf("the extracted tree must validate: %v", err)
 	}
 }
