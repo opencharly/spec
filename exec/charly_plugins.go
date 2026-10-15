@@ -42,6 +42,16 @@ import (
 // delivered tree into a served one.
 const PluginsEnvVar = "CHARLY_PLUGIN_DIR"
 
+// StablePluginsPath is the version- and digest-independent name a venue's plugin tree is reachable
+// at, and the ONE home for that constant: the sdk's plan compiler (deploykit.CompileShellHookStep)
+// emits it as CHARLY_PLUGIN_DIR on every venue shell, and this file publishes it here as a symlink
+// to whatever content-addressed replica the delivery landed.
+//
+// The two halves need a shared NAME rather than a shared value: a plan is compiled host-side BEFORE
+// any delivery, so it cannot know a digest; the delivery cannot know that a plan will be applied to
+// this venue. The stable name is where those two facts meet, and R2 says it is declared once.
+const StablePluginsPath = "/tmp/charly-plugins"
+
 // ManifestSuffix is the per-provider manifest the loader reads to learn which words a binary
 // answers. A directory without at least one of these is not a plugin tree, and delivering it would
 // be the same as delivering nothing while looking like progress.
@@ -202,6 +212,13 @@ func EnsurePluginsInDeployVenue(ctx context.Context, ve spec.DeployExecutor, plu
 	if err != nil || exit != 0 {
 		return "", fmt.Errorf("plugin tree at %s does not carry the %d manifest(s) delivered from %s", remote, n, pluginDir)
 	}
+
+	// Publish the stable name the PLAN emitted, so the two halves meet at one path. `-n` is
+	// deliberate: the link is replaced atomically rather than moved INTO the target when the target
+	// already exists, which is the one way this line can silently publish the wrong tree.
+	if err := runOK(ctx, ve, fmt.Sprintf("ln -sfn %s %s", shellquote.ShellQuote(remote), shellquote.ShellQuote(StablePluginsPath))); err != nil {
+		return "", fmt.Errorf("publishing %s -> %s in deploy venue: %w", StablePluginsPath, remote, err)
+	}
 	return remote, nil
 }
 
@@ -256,7 +273,14 @@ func EnsurePluginsInGuest(ctx context.Context, ssh SSHArgs, pluginDir, hostVer, 
 			shellquote.ShellQuote(remote), ManifestSuffix, want)) {
 			return "", fmt.Errorf("guest plugin tree at %s does not carry the %d delivered manifest(s)", remote, want)
 		}
-		return fmt.Sprintf("host plugin tree provided at %s for deploy use (export %s)", remote, PluginsEnvVar), nil
+
+		// Publish the stable name the PLAN emitted. `-n` replaces the link rather than moving into an
+		// existing target, so re-running against a changed tree repoints it instead of nesting a link
+		// inside the old directory.
+		if !sshOK(ctx, ssh, fmt.Sprintf("ln -sfn %s %s", shellquote.ShellQuote(remote), shellquote.ShellQuote(StablePluginsPath))) {
+			return "", fmt.Errorf("publishing %s -> %s in guest", StablePluginsPath, remote)
+		}
+		return fmt.Sprintf("host plugin tree provided at %s, published at %s for deploy use (%s)", remote, StablePluginsPath, PluginsEnvVar), nil
 	case CharlyInstallSkip:
 		if !sshOK(ctx, ssh, "test -n \"$(ls -A /usr/lib/charly/plugins 2>/dev/null)\"") {
 			return "", fmt.Errorf("no plugin tree present in guest (charly_install.strategy: skip)")
