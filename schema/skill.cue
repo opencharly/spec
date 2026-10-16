@@ -6,7 +6,12 @@
 // The skill's BODY lives in a FILE (the `.agents/skills` relocation). A skill is authored at
 // <tree>/<name>/SKILL.md plus references/<stem>.md, where <tree> is the owning candy's `skills:`
 // list (default `.agents/skills`) and <name> is this node's `name:` — or the NODE NAME when
-// `name:` is omitted. An `agent`-type node authors <tree>/<name>.md instead.
+// `name:` is omitted.
+//
+// An `agent`-type node is a SUB-AGENT DEFINITION, not a skill: it does NOT live under the skills
+// tree, and `skills:` does not move it. Its body is authored at `.agents/agents/<name>.md` — the
+// Agent-Skills location for agent definitions. An `agent` node with neither an in-line `content:`
+// nor that file is a hard error in the generator, never an empty projection.
 //
 // This node therefore carries the ROUTING the consumers need — family (which corpus family the
 // skill lands in), owner (the OCI-label association), triggers (the R0 dispatcher rows), category —
@@ -17,7 +22,8 @@
 // in-line form is deleted outright by the relocation's final leg.
 //
 // The marketplace generator (candy/plugin-marketplace, command:marketplace) synthesizes
-// <family>/skills/<name>/SKILL.md + references/*.md; CollectSkills (sdk/deploykit) projects the
+// <family>/skills/<name>/SKILL.md + references/*.md — or <family>/agents/<name>.md for an
+// `agent`-type node, from the same file shapes; CollectSkills (sdk/deploykit) projects the
 // composed candies' skills into the `ai.opencharly.skill` OCI label so a built image is
 // self-describing (readable via `charly box labels` / `charly deploy from-box`, no external fetch).
 //
@@ -26,13 +32,14 @@
 // family is the marketplace family (the corpus directory name) the generator groups by.
 //
 // type: "agent" marks a sub-agent definition (the former <family>/agents/*.md) — one
-// unified doc kind, same lifecycle; model/tools carry the agent frontmatter fields.
+// unified doc kind, same lifecycle; model/tools carry the agent frontmatter fields. It is the one
+// type whose body is NOT under a `skills:` tree: see `.agents/agents/<name>.md` above.
 #Skill: close({
-	name?:       string & =~"^[a-z][a-z0-9-]*$" // skill id = the SKILL.md directory name; DEFAULTS to the node name
+	name?:       string & =~"^[a-z][a-z0-9-]*$" // skill id = the SKILL.md directory name, or the `.md` stem for an agent; DEFAULTS to the node name
 	family:      string & =~"^[a-z][a-z0-9-]*$" // marketplace family → <family>/skills/
 	owner:       string & =~"^[a-z][a-z0-9-]*$" // owning candy/concept-candy entity name
 	description?: string & !=""                  // SKILL.md frontmatter description — authored in the FILE once the body moved
-	content?:    string & !=""                   // SKILL.md markdown body — authored in the FILE once the body moved
+	content?:    string & !=""                   // SKILL.md (or `.agents/agents/<name>.md`) markdown body — authored in the FILE once the body moved
 	type?:       *"skill" | "agent"              // "agent" ⇒ a sub-agent definition (frontmatter adds model/tools)
 	model?:      string & !=""                   // agent type: frontmatter model (default "inherit")
 	tools?:      [...(string & !="")]            // agent type: allowed tool set
