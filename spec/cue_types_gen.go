@@ -3551,14 +3551,17 @@ type Candy struct {
 	ExternalBuilder string `yaml:"external_builder,omitempty" json:"external_builder,omitempty"`
 
 	// --- harness skill trees (authored content) ---
-	// skills — the repo-relative skill/agent TREES this candy DECLARES, each holding one entry per
-	// name: <tree>/<name>/SKILL.md plus references/<stem>.md for a skill, and <tree>/<name>.md for
-	// an agent (type: "agent"). DEFAULT [".agents/skills"] — the Agent-Skills standard location, so
-	// a repo whose skills live there declares nothing. It is the ONE place the marketplace
-	// generator (candy/plugin-marketplace) and the docs projection (candy/plugin-docs) look for a
-	// skill's body, and it is what makes a sibling `skill:` node's description:/content:/
-	// references: omittable: the node keeps the ROUTING metadata (family/owner/triggers/category),
-	// the file keeps the prose. See schema/skill.cue.
+	// skills — the repo-relative SKILL TREES this candy DECLARES, each holding one entry per name:
+	// <tree>/<name>/SKILL.md plus references/<stem>.md. DEFAULT [".agents/skills"] — the
+	// Agent-Skills standard location, so a repo whose skills live there declares nothing. It is the
+	// ONE place the marketplace generator (candy/plugin-marketplace) and the docs projection
+	// (candy/plugin-docs) look for a skill's body, and it is what makes a sibling `skill:` node's
+	// description:/content:/references: omittable: the node keeps the ROUTING metadata
+	// (family/owner/triggers/category), the file keeps the prose. See schema/skill.cue.
+	//
+	// An `agent`-type node is a SUB-AGENT DEFINITION, not a skill, and this list does NOT govern it:
+	// its body is always authored at `.agents/agents/<name>.md`. So a mixed repo — skills under a
+	// declared tree, agents under `.agents/agents` — is the legal shape, not a half-move.
 	//
 	// The version of record is NOT in this file: it is the github ref that fetched this repo — the
 	// marketplace refs list's pin, or a consumer's `candy:` list. Nothing is fetched at authoring
@@ -10784,7 +10787,12 @@ type ResolvedSidecarVolume struct {
 // The skill's BODY lives in a FILE (the `.agents/skills` relocation). A skill is authored at
 // <tree>/<name>/SKILL.md plus references/<stem>.md, where <tree> is the owning candy's `skills:`
 // list (default `.agents/skills`) and <name> is this node's `name:` — or the NODE NAME when
-// `name:` is omitted. An `agent`-type node authors <tree>/<name>.md instead.
+// `name:` is omitted.
+//
+// An `agent`-type node is a SUB-AGENT DEFINITION, not a skill: it does NOT live under the skills
+// tree, and `skills:` does not move it. Its body is authored at `.agents/agents/<name>.md` — the
+// Agent-Skills location for agent definitions. An `agent` node with neither an in-line `content:`
+// nor that file is a hard error in the generator, never an empty projection.
 //
 // This node therefore carries the ROUTING the consumers need — family (which corpus family the
 // skill lands in), owner (the OCI-label association), triggers (the R0 dispatcher rows), category —
@@ -10795,7 +10803,8 @@ type ResolvedSidecarVolume struct {
 // in-line form is deleted outright by the relocation's final leg.
 //
 // The marketplace generator (candy/plugin-marketplace, command:marketplace) synthesizes
-// <family>/skills/<name>/SKILL.md + references/*.md; CollectSkills (sdk/deploykit) projects the
+// <family>/skills/<name>/SKILL.md + references/*.md — or <family>/agents/<name>.md for an
+// `agent`-type node, from the same file shapes; CollectSkills (sdk/deploykit) projects the
 // composed candies' skills into the `ai.opencharly.skill` OCI label so a built image is
 // self-describing (readable via `charly box labels` / `charly deploy from-box`, no external fetch).
 //
@@ -10804,7 +10813,8 @@ type ResolvedSidecarVolume struct {
 // family is the marketplace family (the corpus directory name) the generator groups by.
 //
 // type: "agent" marks a sub-agent definition (the former <family>/agents/*.md) — one
-// unified doc kind, same lifecycle; model/tools carry the agent frontmatter fields.
+// unified doc kind, same lifecycle; model/tools carry the agent frontmatter fields. It is the one
+// type whose body is NOT under a `skills:` tree: see `.agents/agents/<name>.md` above.
 type Skill struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
