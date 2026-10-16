@@ -99,10 +99,26 @@
 	volumes?: [...#CandyVolume] @go(Volumes)
 	aliases?: [...#CandyAlias] @go(Aliases)
 
-	// --- security / hooks (the OCI-label-collector surface: CollectSecurity/CollectHooks
+	// --- security / hooks / skills (the OCI-label-collector surface: CollectSecurity/CollectHooks
 	// read this per-candy field then apply the box-level #ResolvedBoxView.security override) ---
 	security?: #Security  @go(Security,optional=nillable)
 	hook?:     #CandyHook @go(Hook,optional=nillable)
+	// skills: the NAMES of the `skill:` nodes this candy OWNS — the build-time association
+	// `skill.cue`'s `owner:` records, projected onto the wire model so a consumer holding only
+	// the model can answer "which skills does this candy carry?" without reaching
+	// spec.Config.Skills (a separate map keyed by skill name with opaque bodies).
+	//
+	// WHY IT BELONGS HERE. CollectSkills (sdk/deploykit) is the reader, and it projects the
+	// composed candies' owned skills into the `ai.opencharly.skill` OCI label so a built image
+	// is self-describing. It already takes `layers map[string]CandyModel` — but it reads the
+	// association from cfg.Skills and filters by `s.Owner`, so the wire model carried the
+	// candy's IDENTITY and not its skills. That asymmetry is the gap
+	// (opencharly/spec#254): the model exists so a plugin can read a candy's build contract
+	// WITHOUT holding the live *Candy, and "which images carry this skill" is decided by the
+	// build. Owner-qualified NAMES, not opaque bodies: the bodies travel through
+	// Config.Skills and the marketplace generator, and duplicating them here would create a
+	// second source for content this model does not resolve.
+	skills?: [...string] @go(Skills)
 
 	// --- validate read-surface (candy-local config the validate ENGINE checks) ---
 	// external_builder: the reserved word of an EXTERNAL builder plugin this candy selects
