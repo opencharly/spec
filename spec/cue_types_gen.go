@@ -8417,7 +8417,13 @@ type PipelineArms struct {
 
 	Workflow string `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 
-	WorkflowArgs map[string]string `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
+	// workflow_args — the sub-workflow invocation's RUNTIME arg values, so the SAME
+	// admission as `#WorkflowRunRequest.args` (`#WorkflowArgVal`). The lowered step's
+	// `workflow_args` is the engine's own `{[string]: _}` (lobster.cue) and lands in the
+	// same `resolveWorkflowArgs(map[string]any)` the run request does, so a scalar-only
+	// spelling here would be a SECOND rule for one question — "what may a workflow arg
+	// value be" — and a lane that works at the top level would fail one step down.
+	WorkflowArgs map[string]any `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
 
 	Parallel PipelineParallel `yaml:"parallel,omitempty" json:"parallel,omitempty"`
 
@@ -8521,7 +8527,13 @@ type PipelineStepBase struct {
 
 	Workflow string `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 
-	WorkflowArgs map[string]string `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
+	// workflow_args — the sub-workflow invocation's RUNTIME arg values, so the SAME
+	// admission as `#WorkflowRunRequest.args` (`#WorkflowArgVal`). The lowered step's
+	// `workflow_args` is the engine's own `{[string]: _}` (lobster.cue) and lands in the
+	// same `resolveWorkflowArgs(map[string]any)` the run request does, so a scalar-only
+	// spelling here would be a SECOND rule for one question — "what may a workflow arg
+	// value be" — and a lane that works at the top level would fail one step down.
+	WorkflowArgs map[string]any `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
 
 	Parallel PipelineParallel `yaml:"parallel,omitempty" json:"parallel,omitempty"`
 
@@ -8555,12 +8567,18 @@ type PipelineStep PipelineStepBase
 // deploy.schedule, a k8s CronJob and GitHub Actions `on.schedule` use, so one
 // authored schedule lowers to every consumer; the lobster engine converts it to a
 // systemd `OnCalendar` (validated with `systemd-analyze calendar`).
+//
+// `args` is the scheduled run's RUNTIME arg values — the same field, and therefore
+// the same `#WorkflowArgVal` admission, as `#WorkflowRunRequest.args`. It is
+// normalized into `#WorkflowSchedule.args` verbatim, so a lane that works on a
+// manual run works on a scheduled one; a scalar-only schedule would be the silent
+// half-fix that this def and its engine twin are one mechanism to prevent.
 type PipelineSchedule struct {
 	Cron string `yaml:"cron,omitempty" json:"cron"`
 
 	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
 
-	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+	Args map[string]any `yaml:"args,omitempty" json:"args,omitempty"`
 
 	Persistent bool `yaml:"persistent,omitempty" json:"persistent,omitempty"`
 }
@@ -12509,7 +12527,7 @@ type WorkflowSchedule struct {
 
 	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
 
-	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+	Args map[string]any `yaml:"args,omitempty" json:"args,omitempty"`
 
 	Persistent bool `yaml:"persistent,omitempty" json:"persistent,omitempty"`
 }
@@ -12547,10 +12565,20 @@ type WorkflowStepResult struct {
 }
 
 // #WorkflowRunRequest — start a workflow.
+//
+// `args` carries the run's RUNTIME arg values, so it admits `#WorkflowArgVal` (a
+// scalar, or a flat sequence of scalars) rather than the scalar-only `#StrVal`: a
+// workflow that operates on a list — the retired lane model's `--prs a b c` — has
+// no other channel to receive one. The WIRE is unchanged: still one JSON object
+// mapping arg name to value, and every payload that validated before still
+// validates, because the admitted value set only GREW. What changes is the
+// generated Go field, `map[string]string` → `map[string]any`, which is a
+// compile-time change for a Go caller that BUILDS the request and no change at all
+// for anything that only reads the JSON.
 type WorkflowRunRequest struct {
 	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline"`
 
-	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+	Args map[string]any `yaml:"args,omitempty" json:"args,omitempty"`
 
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
 
