@@ -8429,9 +8429,11 @@ type PipelineArms struct {
 
 	ForEach string `yaml:"for_each,omitempty" json:"for_each,omitempty"`
 
+	Lanes string `yaml:"lanes,omitempty" json:"lanes,omitempty"`
+
 	Input PipelineInput `yaml:"input,omitempty" json:"input,omitempty"`
 
-	// --- for_each companions (meaningful only alongside for_each) ---
+	// --- for_each / lanes companions (meaningful only alongside for_each or lanes) ---
 	ItemVar string `yaml:"item_var,omitempty" json:"item_var,omitempty"`
 
 	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
@@ -8539,9 +8541,11 @@ type PipelineStepBase struct {
 
 	ForEach string `yaml:"for_each,omitempty" json:"for_each,omitempty"`
 
+	Lanes string `yaml:"lanes,omitempty" json:"lanes,omitempty"`
+
 	Input PipelineInput `yaml:"input,omitempty" json:"input,omitempty"`
 
-	// --- for_each companions (meaningful only alongside for_each) ---
+	// --- for_each / lanes companions (meaningful only alongside for_each or lanes) ---
 	ItemVar string `yaml:"item_var,omitempty" json:"item_var,omitempty"`
 
 	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
