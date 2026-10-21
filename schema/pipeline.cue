@@ -28,8 +28,8 @@
 // carries the wire that engine is dispatched with.
 //
 // Exec-arm exclusivity (exactly one of run/pipeline/workflow/parallel/for_each/
-// input/plan/charly) is a GO rule in plugin-pipeline's OpValidate, NOT a CUE
-// disjunction: an entity-level nested disjunction breaks the closedness of the
+// lanes/input/plan/charly) is a GO rule in sdk/workflowkit.ValidatePipeline, NOT a
+// CUE disjunction: an entity-level nested disjunction breaks the closedness of the
 // surrounding def and collapses the generated Go type (the box.cue base⊻from
 // precedent, which has the same shape).
 
@@ -86,9 +86,10 @@
 	workflow_args?: {[string]: #WorkflowArgVal} @go(WorkflowArgs,type=map[string]any)
 	parallel?:      #PipelineParallel
 	for_each?:      string & !="" @go(ForEach)
+	lanes?:         string & !="" @go(Lanes)
 	input?:         #PipelineInput
 
-	// --- for_each companions (meaningful only alongside for_each) ---
+	// --- for_each / lanes companions (meaningful only alongside for_each or lanes) ---
 	item_var?:   string & !="" @go(ItemVar)
 	index_var?:  string & !="" @go(IndexVar)
 	batch_size?: int & >0 @go(BatchSize)
