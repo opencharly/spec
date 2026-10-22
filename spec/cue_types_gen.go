@@ -3508,7 +3508,7 @@ type Candy struct {
 	// candy chain (engine.go ResolveBoxEngine) and cross-candy conflicts are a
 	// validate error. RETAINED by the schema-compaction consumer audit.
 	// The engine vocabulary is #EngineName (schema/engine.cue) — one source shared
-	// by every authored engine field, so a new engine (nerdctl) lands once.
+	// by every authored engine field, so a new engine (containerd) lands once.
 	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
 
 	// `from:` is NOT a candy field — EDGE-INHERIT cutover D: a candy: node carrying
@@ -3683,6 +3683,10 @@ type Candy struct {
 // provider word — no engine:auto provider exists. It is resolved by
 // ResolveRuntime before any engine provider is consulted, so it is a runtime
 // value, not an authored union member here.
+//
+// The word `containerd` means "containerd, driven through the nerdctl CLI",
+// rootful OR rootless. `nerdctl` is the CLI binary, never an engine word: the
+// former `engine: nerdctl` spelling is deleted (R5, no alias, no dual path).
 type EngineName string
 
 // #Plugin — the candy's plugin declaration. Its presence makes the candy a
@@ -4027,7 +4031,7 @@ type VerifyChecksRequest struct {
 // OpPrepareVenue / OpTeardownExecutor returns (F6). K1-unblock W3 Unit B added the
 // "container" kind (engine/container_name) so a plugin-constructed
 // deploykit.ContainerChain venue — a single-hop *NestedExecutor{Parent:ShellExecutor{},
-// Jump:{Kind:JumpContainerExec,Engine:podman|docker|nerdctl}}, the MOST COMMON check-runner venue — round-trips
+// Jump:{Kind:JumpContainerExec,Engine:podman|docker|containerd}}, the MOST COMMON check-runner venue — round-trips
 // through kit.DescriptorFromExecutor/VenueFromDescriptor exactly like "shell"/"ssh" already do.
 // This does NOT generalize to arbitrary N-hop composition (a genuinely multi-hop NestedExecutor
 // still degrades to the zero descriptor, unchanged) — it closes the one enumerable, well-known
@@ -4046,7 +4050,7 @@ type VenueDescriptor struct {
 	ConnectTimeout int `yaml:"connect_timeout,omitempty" json:"connect_timeout,omitempty"`
 
 	// engine/container_name are set ONLY for kind "container": the container engine
-	// ("podman"/"docker"/"nerdctl", carried as DATA on the jump) and the target container
+	// ("podman"/"docker"/"containerd", carried as DATA on the jump) and the target container
 	// name ContainerChain jumps into.
 	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
 
@@ -4339,8 +4343,9 @@ type CLIModel struct {
 // stamps it onto every node's #DescentDescriptor. It is the SINGLE plugin-declared source for
 // "how does this substrate behave in the deploy chain", so the kernel consults the traits off
 // node.Descent BY TRAIT — never by switching on the substrate kind word (the boundary law).
-// Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+// Canonical table: pod=container+image_backed+image_context+selectors[engine];
+// vm=ssh+machine_venue+exclusive_venue+selectors[backend]; local=shell+machine_venue;
+// kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 // external-in-place. Not authored — charly-written state stamped at load.
 type DeployTraits struct {
 	// venue: how commands physically execute in this substrate's venue:
@@ -4390,6 +4395,17 @@ type DeployTraits struct {
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
 	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	SupportsFromSnapshot bool `yaml:"supports_from_snapshot,omitempty" json:"supports_from_snapshot,omitempty"`
+
+	// selectors: the authored DEPLOY SELECTOR fields this substrate accepts.
+	//
+	//	"engine"  — a container-engine selector (pod).
+	//	"backend" — a VM-backend selector (vm).
+	//
+	// A loader reads this (together with the engine capability's `substrates`)
+	// instead of switching on the substrate kind word: `engine:` on a substrate
+	// without "engine" is an error, and likewise `backend:`. This is the DATA
+	// half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	Selectors []string `yaml:"selectors,omitempty" json:"selectors,omitempty"`
 }
 
 // #DescentDescriptor is the loader-DERIVED venue-hop descriptor (Cutover H + P9).
@@ -4459,6 +4475,17 @@ type DescentDescriptor struct {
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
 	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	SupportsFromSnapshot bool `yaml:"supports_from_snapshot,omitempty" json:"supports_from_snapshot,omitempty"`
+
+	// selectors: the authored DEPLOY SELECTOR fields this substrate accepts.
+	//
+	//	"engine"  — a container-engine selector (pod).
+	//	"backend" — a VM-backend selector (vm).
+	//
+	// A loader reads this (together with the engine capability's `substrates`)
+	// instead of switching on the substrate kind word: `engine:` on a substrate
+	// without "engine" is an error, and likewise `backend:`. This is the DATA
+	// half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	Selectors []string `yaml:"selectors,omitempty" json:"selectors,omitempty"`
 }
 
 type Deploy struct {
@@ -4542,6 +4569,16 @@ type Deploy struct {
 	Network string `yaml:"network,omitempty" json:"network,omitempty"`
 
 	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
+
+	// backend is the per-deploy VM-backend override (kind:vm only). It is valid
+	// only on a substrate whose declared #DeployTraits.selectors includes
+	// "backend"; the loader rejects it elsewhere from that data, never by a
+	// substrate-name switch.
+	Backend VmBackend `yaml:"backend,omitempty" json:"backend,omitempty"`
+
+	// namespace is the per-deploy containerd namespace override (kind:pod). The
+	// default resolution stays in code: deploy > config > "default".
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 
 	Security *Security `yaml:"security,omitempty" json:"security,omitempty"`
 
@@ -4730,6 +4767,13 @@ type Deploy struct {
 	// authored); the fold stamps the position from the authored depth alone.
 	Member []Member `yaml:"member,omitempty" json:"member,omitempty"`
 }
+
+// #VmBackend — the CLOSED VM-backend vocabulary. "auto" is a RESOLUTION
+// selector (today: libvirt, then qemu), never a backend provider word; krun is
+// selected explicitly. The word list lives HERE so the template (#Vm), the
+// persisted deploy state (#VmDeployState) and the VM-backend class all read ONE
+// source.
+type VmBackend string
 
 type DeploySecret struct {
 	Name string `yaml:"name,omitempty" json:"name"`
@@ -5849,8 +5893,8 @@ type EncExecReply struct {
 //
 //	quadlet      — podman's systemd generator: a .container/.pod unit under
 //	               ~/.config/containers/systemd/ (podman only).
-//	systemd-unit — a generated .service wrapping the engine CLI (nerdctl; no
-//	               quadlet equivalent exists).
+//	systemd-unit — a generated .service wrapping the engine CLI (containerd's
+//	               nerdctl CLI; no quadlet equivalent exists).
 //	direct       — an ephemeral argv launch with no unit (docker today).
 //
 // `charly task cue-gen` emits this as spec.EngineRunModes; ValidateRunMode derives
@@ -5863,8 +5907,8 @@ type EngineRunMode string
 //
 // AUTHORITY (the one home): `container.engineCapabilities` is the authoritative
 // table for the COMPILED-IN podman/docker engines and the built-in consumers
-// (EngineBinary/GPURunArgs/EngineRunModeFor/ImageExistsArgv/WorkloadUser). This
-// def is the shape an out-of-tree engine provider (plugin-nerdctl) answers over
+// (EngineBinary/GPURunArgs/EngineRunModeFor/ImageExistsArgv/WorkloadUserFor). This
+// def is the shape an out-of-tree engine provider (plugin-containerd) answers over
 // Describe; the runtime compares/consumes that answer through the same struct,
 // so the table and the wire answer are one type, not two divergent copies. The
 // op envelopes below (#EngineBinaryRequest …) are for a provider that chooses to
@@ -5873,17 +5917,25 @@ type EngineRunMode string
 // In this change the capability table + EngineBinary/GPURunArgs/EngineRunModeFor/
 // ImageExistsArgv consumers land; the class name (#ProviderClassNames) and the op
 // envelopes below are the STABLE wire contract the compiled-in podman/docker
-// providers and the out-of-tree plugin-nerdctl bind to. `#EngineCapability` is
+// providers and the out-of-tree plugin-containerd bind to. `#EngineCapability` is
 // the one type shared by the table and the wire answer. The pod/secret/keep-id
 // fields (SupportsPods / SupportsSecrets / SupportsUsernsKeepID /
-// UsernsKeepIDArg / WorkloadUser) are declared so that contract is complete; the
-// compiled-in EngineBinary consumer reads `binary`, and the remaining fields'
-// readers are the engine providers themselves.
+// UsernsKeepIDArg / WorkloadUserRootless / WorkloadUserRootful) are declared so
+// that contract is complete; the compiled-in EngineBinary consumer reads
+// `binary`, and the remaining fields' readers are the engine providers
+// themselves.
+//
+// The containerd row is the reason several of these fields exist as DATA: one
+// engine word covers a rootful daemon, a rootless daemon, a socket address, a
+// namespace, a privilege prefix and a set of runtime handlers (crun/krun/runc/
+// nvidia). A run plan reads them instead of spelling `--runtime <literal>` or
+// assuming rootless.
 type EngineCapability struct {
 	// The engine's own name (mirrors the provider word).
 	Name EngineName `yaml:"name,omitempty" json:"name"`
 
 	// The CLI binary the engine is driven through (podman / docker / nerdctl).
+	// containerd is driven through nerdctl; the ENGINE word remains containerd.
 	Binary string `yaml:"binary,omitempty" json:"binary"`
 
 	// A shell probe that exits 0 when the engine is installed on a host.
@@ -5895,17 +5947,22 @@ type EngineCapability struct {
 	SupportsPods bool `yaml:"supports_pods,omitempty" json:"supports_pods"`
 
 	// supports_secrets — the engine has a native secret store (podman secret).
-	// false means credentials are delivered as env/file (docker/nerdctl).
+	// false means credentials are delivered as env/file (docker/containerd).
 	SupportsSecrets bool `yaml:"supports_secrets,omitempty" json:"supports_secrets"`
 
 	// supports_userns_keepid — per-container uid mapping exists (podman
 	// --userns=keep-id). false means the workload must be launched as
 	// container-uid-0 under a rootless single-userns engine to share host files
-	// with the invoking user (nerdctl rootless).
+	// with the invoking user (containerd rootless).
 	SupportsUsernsKeepID bool `yaml:"supports_userns_keepid,omitempty" json:"supports_userns_keepid"`
 
 	// supports_rootless — the engine runs without host root.
 	SupportsRootless bool `yaml:"supports_rootless,omitempty" json:"supports_rootless"`
+
+	// supports_rootful — the engine can also be driven against a host-root daemon
+	// (directly or through privilege_prefix). containerd supports BOTH; a
+	// capability consumer must not assume the rootless mode.
+	SupportsRootful bool `yaml:"supports_rootful,omitempty" json:"supports_rootful"`
 
 	// run_mode — the persistence/supervision mode this engine uses on a host.
 	RunMode EngineRunMode `yaml:"run_mode,omitempty" json:"run_mode"`
@@ -5913,31 +5970,62 @@ type EngineCapability struct {
 	// gpu_arg_style — the vendor-GPU passthrough flag family.
 	//
 	//	cdi  — podman's `--device nvidia.com/gpu=all`
-	//	gpus — docker/nerdctl's `--gpus all`
+	//	gpus — docker/containerd's `--gpus all`
 	GPUArgStyle string `yaml:"gpu_arg_style,omitempty" json:"gpu_arg_style"`
 
 	// userns_keepid_arg — the per-container keep-id argv when supported (podman
 	// `--userns=keep-id`); empty otherwise.
 	UsernsKeepIDArg string `yaml:"userns_keepid_arg,omitempty" json:"userns_keepid_arg,omitempty"`
 
-	// workload_user — the in-container user a workload must run as for
-	// host-identical file sharing. For podman keep-id this is the invoking user;
-	// for rootless single-userns engines (nerdctl) it is "0" because container-uid
-	// 0 IS the invoking host user in the rootless userns.
-	WorkloadUser string `yaml:"workload_user,omitempty" json:"workload_user,omitempty"`
+	// workload_user_rootless — the in-container user a workload must run as in the
+	// ROOTLESS mode for host-identical file sharing. For rootless single-userns
+	// engines (containerd via nerdctl) it is "0" because container-uid 0 IS the
+	// invoking host user in the rootless userns. Empty means "do not force a user".
+	WorkloadUserRootless string `yaml:"workload_user_rootless,omitempty" json:"workload_user_rootless,omitempty"`
+
+	// workload_user_rootful — the in-container user for the ROOTFUL mode. Empty
+	// means "do not force a user": the workload runs as the image's declared user
+	// instead of inheriting the rootless uid-0 mapping. Splitting the field is what
+	// stops the capability from assuming every engine is rootless.
+	WorkloadUserRootful string `yaml:"workload_user_rootful,omitempty" json:"workload_user_rootful,omitempty"`
+
+	// address — the engine daemon endpoint (containerd's socket). Empty for an
+	// engine with no separate daemon endpoint (podman/docker's default context).
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+
+	// namespace — the engine's default namespace. containerd's uniform default is
+	// "default"; a per-deploy/config override is resolved in code (deploy > config
+	// > this default), never re-spelled here.
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// privilege_prefix — the argv prefix a ROOTFUL target uses to reach the daemon
+	// (e.g. `sudo -n`). Empty when the invoking user already has access. The
+	// prefix is data so a consumer never hard-codes an escalation command.
+	PrivilegePrefix string `yaml:"privilege_prefix,omitempty" json:"privilege_prefix,omitempty"`
+
+	// substrates — the deploy substrate kinds this engine may host, as DATA. The
+	// loader reads this instead of a word literal: containerd hosts ["pod"]; a
+	// kind:vm through the krun backend is reached by the VM-backend class, not by
+	// widening this list. An engine may host only these kinds and nothing else.
+	Substrates []string `yaml:"substrates,omitempty" json:"substrates"`
+
+	// runtime_handlers — the OCI runtime handlers this engine knows (containerd:
+	// crun/krun/runc/nvidia). A run plan selects `--runtime` from this set; the
+	// handler word is DATA, never a literal in the plan builder.
+	RuntimeHandlers []string `yaml:"runtime_handlers,omitempty" json:"runtime_handlers"`
 
 	// image_exists_argv — the subcommand pair that answers "is this image in the
-	// local store?" (podman `image exists`, docker/nerdctl `image inspect`, since
+	// local store?" (podman `image exists`, docker/containerd `image inspect`, since
 	// docker has no `image exists`). A capability fact so local-image probes do
 	// not switch on the engine name.
 	ImageExistsArgv []string `yaml:"image_exists_argv,omitempty" json:"image_exists_argv"`
 
 	// no_remove_with_detach — the engine REJECTS `-d` (detach) together with `--rm`
-	// (auto-remove). nerdctl does ("flags -d and --rm cannot be specified
-	// together", measured live on nerdctl 2.3.5); podman/docker accept both. A
-	// capability fact so a detached-argv builder drops `--rm` where it is illegal
-	// (the container is then cleaned by the unit's ExecStop / an explicit rm)
-	// instead of switching on the engine name.
+	// (auto-remove). containerd's nerdctl CLI does ("flags -d and --rm cannot be
+	// specified together", measured live on nerdctl 2.3.5); podman/docker accept
+	// both. A capability fact so a detached-argv builder drops `--rm` where it is
+	// illegal (the container is then cleaned by the unit's ExecStop / an explicit
+	// rm) instead of switching on the engine name.
 	NoRemoveWithDetach bool `yaml:"no_remove_with_detach,omitempty" json:"no_remove_with_detach"`
 }
 
@@ -5979,6 +6067,16 @@ type EngineStartPlanRequest struct {
 
 	WorkloadUser string `yaml:"workload_user,omitempty" json:"workload_user,omitempty"`
 
+	// rootful selects which workload-user fact applies (rootless vs rootful) and
+	// whether the engine target needs a privilege prefix. It is an explicit knob so
+	// the plan builder never assumes the rootless mode.
+	Rootful bool `yaml:"rootful,omitempty" json:"rootful,omitempty"`
+
+	// runtime is the OCI runtime handler word (crun/krun/runc/nvidia), validated by
+	// the caller against the engine capability's runtime_handlers. When set, the
+	// plan passes it as `--runtime`; never a hard-coded handler literal.
+	Runtime string `yaml:"runtime,omitempty" json:"runtime,omitempty"`
+
 	KeepID bool `yaml:"keep_id,omitempty" json:"keep_id,omitempty"`
 
 	UsernsHost bool `yaml:"userns_host,omitempty" json:"userns_host,omitempty"`
@@ -6008,7 +6106,7 @@ type EngineStartPlanReply struct {
 
 // #EngineUnitRequest / #EngineUnitReply — the `unit_emit` op: render the
 // non-quadlet persistent supervision unit for a deployment — a systemd .service
-// wrapping the engine CLI (nerdctl's mode). Names/paths are host-resolved; the
+// wrapping the engine CLI (containerd's mode). Names/paths are host-resolved; the
 // provider returns file contents keyed by absolute path.
 //
 // QUADLET IS NOT RENDERED HERE: podman's run mode is `quadlet`, and its
@@ -6057,7 +6155,7 @@ type EngineUnitReply struct {
 
 // #EngineNetworkEnsureRequest / #EngineNetworkEnsureReply — the `network_ensure`
 // op: make the engine's shared container network exist (podman netavark+aardvark
-// `charly`; nerdctl CNI network).
+// `charly`; containerd's nerdctl CNI network).
 type EngineNetworkEnsureRequest struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
@@ -7452,9 +7550,10 @@ type Kindcluster struct {
 	Box string `yaml:"box,omitempty" json:"box"`
 
 	// engine selects the container engine kind provisions its node containers with.
-	// It maps 1:1 to kind's KIND_EXPERIMENTAL_PROVIDER (podman/docker/nerdctl), so
-	// the authored #EngineName vocabulary is used directly — no separate selector.
-	// Absent → the resolved runtime engine (engine.run).
+	// The authored field is the charly #EngineName vocabulary (podman/docker/
+	// containerd); the plugin maps `containerd` to kind's own provider word
+	// (KIND_EXPERIMENTAL_PROVIDER=nerdctl) at the edge. Absent → the resolved
+	// runtime engine (engine.run).
 	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
 
 	// node_image is the digest-pinned kind node image (kindest/node:vX@sha256:…).
@@ -10609,6 +10708,8 @@ type ResolvedVm struct {
 
 	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 
+	Krun *VmKrun `yaml:"krun,omitempty" json:"krun,omitempty"`
+
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
 	Snapshots []VmSnapshot `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
@@ -10630,6 +10731,33 @@ type VmNetwork struct {
 	// auto-allocates a free host port at vm-create (persisted in vm_state,
 	// reused across the create→deploy-add sequence), the sibling of ssh.port_auto.
 	PortForwards []string `yaml:"port_forwards,omitempty" json:"port_forwards,omitempty"`
+}
+
+// #VmKrun — the krun backend's knobs. Optional, and meaningful only when the
+// resolved backend is krun. A krun guest's root is a containerd snapshot, so
+// the libvirt/qemu-only fields are rejected by the cross-rule on #Vm below.
+type VmKrun struct {
+	// network: tsi (the default) or passt. passt is required for in-guest CRIU
+	// and for an image whose krun.network label asks for it; tsi collapses the
+	// pod netns.
+	Network string `yaml:"network,omitempty" json:"network,omitempty"`
+
+	// kernel: stock (libkrunfw) or image (a custom kernel baked for the guest).
+	Kernel string `yaml:"kernel,omitempty" json:"kernel,omitempty"`
+
+	NestedVirt bool `yaml:"nested_virt,omitempty" json:"nested_virt,omitempty"`
+
+	GPU string `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+
+	// gpu_flags is libkrun's virtio-gpu feature bitmask. 962 is the measured
+	// default (venus + the working feature set), 1410 is the GL-only override,
+	// and 1283 is known-broken — the data default is the working one.
+	GPUFlags int `yaml:"gpu_flags,omitempty" json:"gpu_flags,omitempty"`
+
+	// ram_headroom_mib is subtracted from the guest RAM for the krun host
+	// overhead. 256 is the measured default; a GPU guest needs the caller to
+	// raise RAM, not lower this.
+	RAMHeadroomMiB int `yaml:"ram_headroom_mib,omitempty" json:"ram_headroom_mib,omitempty"`
 }
 
 type VmSnapshot struct {
@@ -11393,10 +11521,18 @@ type Vm struct {
 
 	Autostart bool `yaml:"autostart,omitempty" json:"autostart"`
 
+	// krun carries the krun backend's knobs. Optional and ignored by the other
+	// backends; the consumer applies its defaults when the resolved backend is
+	// krun and the block is absent.
+	Krun *VmKrun `yaml:"krun,omitempty" json:"krun,omitempty"`
+
 	Network *VmNetwork `yaml:"network,omitempty" json:"network,omitempty"`
 
 	SSH *VmSsh `yaml:"ssh,omitempty" json:"ssh,omitempty"`
 
+	// The explicit pointer type keeps the generated Go field as *VmCloudInit even
+	// though the krun guard above adds the `null` arm (a bare `optional=nillable`
+	// degrades to an anonymous struct in that case).
 	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
 
 	// mcp_provide: a kind:vm entity declares its MCP servers (e.g. the

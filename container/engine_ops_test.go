@@ -131,8 +131,9 @@ func TestEngineBinaryAndGPUOps(t *testing.T) {
 }
 
 // TestEngineStartPlanOp pins the spike-proven sharing rule: a keep-id engine
-// (podman) uses its keep-id argv when asked; an engine WITHOUT keep-id (nerdctl)
-// launches the workload as its declared WorkloadUser (uid 0 == the host user).
+// (podman) uses its keep-id argv when asked; an engine WITHOUT keep-id
+// (containerd) launches the workload as its mode-specific workload user (uid 0
+// in rootless == the invoking host user; no forced user in rootful).
 func TestEngineStartPlanOp(t *testing.T) {
 	// podman keep_id → the keep-id argv.
 	out, err := InvokeEngineOp("podman", ops.OpEngineStartPlan,
@@ -151,9 +152,10 @@ func TestEngineStartPlanOp(t *testing.T) {
 		t.Errorf("start_plan(podman,keep_id) argv = %v, want the keep-id argv", rep.Argv)
 	}
 
-	// nerdctl has no keep-id → the workload runs as the declared user (0).
-	out, err = InvokeEngineOp("nerdctl", ops.OpEngineStartPlan,
-		json.RawMessage(`{"engine":"nerdctl","image":"alpine","name":"svc","keep_id":true}`))
+	// containerd has no keep-id → ROOTLESS runs the workload as uid 0 (the host
+	// user), and the engine word resolves to the nerdctl binary.
+	out, err = InvokeEngineOp("containerd", ops.OpEngineStartPlan,
+		json.RawMessage(`{"engine":"containerd","image":"alpine","name":"svc","keep_id":true}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,20 +163,49 @@ func TestEngineStartPlanOp(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rep.RunMode != "systemd-unit" {
-		t.Errorf("start_plan(nerdctl) run_mode = %q, want systemd-unit", rep.RunMode)
+		t.Errorf("start_plan(containerd) run_mode = %q, want systemd-unit", rep.RunMode)
+	}
+	if len(rep.Argv) == 0 || rep.Argv[0] != "nerdctl" {
+		t.Errorf("start_plan(containerd) argv = %v, want it to start with the nerdctl binary", rep.Argv)
 	}
 	if !containsArgPair(rep.Argv, "--user", "0") {
-		t.Errorf("start_plan(nerdctl) argv = %v, want --user 0 (uid 0 == host user rootless)", rep.Argv)
+		t.Errorf("start_plan(containerd, rootless) argv = %v, want --user 0 (uid 0 == host user rootless)", rep.Argv)
 	}
 	if containsArg(rep.Argv, "--userns=keep-id") {
-		t.Errorf("start_plan(nerdctl) argv = %v must NOT carry keep-id (unsupported)", rep.Argv)
+		t.Errorf("start_plan(containerd) argv = %v must NOT carry keep-id (unsupported)", rep.Argv)
+	}
+
+	// ROOTFUL must not inherit the rootless uid-0 mapping: no forced --user.
+	out, err = InvokeEngineOp("containerd", ops.OpEngineStartPlan,
+		json.RawMessage(`{"engine":"containerd","image":"alpine","name":"svc","rootful":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if containsArg(rep.Argv, "--user") {
+		t.Errorf("start_plan(containerd, rootful) argv = %v must NOT force --user (the rootless fact does not apply)", rep.Argv)
+	}
+
+	// The runtime handler rides from DATA as `--runtime`, never a literal.
+	out, err = InvokeEngineOp("containerd", ops.OpEngineStartPlan,
+		json.RawMessage(`{"engine":"containerd","image":"alpine","name":"svc","runtime":"krun"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if !containsArgPair(rep.Argv, "--runtime", "krun") {
+		t.Errorf("start_plan(containerd, runtime=krun) argv = %v, want --runtime krun", rep.Argv)
 	}
 }
 
 // TestEngineUnitEmitEmitsExecStartPre pins that exec_start_pre (a declared
 // envelope field) reaches the rendered unit as ExecStartPre= directives.
 func TestEngineUnitEmitEmitsExecStartPre(t *testing.T) {
-	out, err := InvokeEngineOp("nerdctl", ops.OpEngineUnitEmit,
+	out, err := InvokeEngineOp("containerd", ops.OpEngineUnitEmit,
 		json.RawMessage(`{"name":"svc","run_mode":"systemd-unit","start_argv":["/usr/bin/nerdctl","run","svc"],"exec_start_pre":["/usr/bin/nerdctl rm -f svc","/bin/true"]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +225,7 @@ func TestEngineUnitEmitEmitsExecStartPre(t *testing.T) {
 
 // TestEngineUnitEmitHonorsRequestRunMode pins that the op's decision input is the
 // REQUEST's run_mode (the envelope field), not the provider's capability: a
-// quadlet request to ANY provider — even nerdctl, whose capability mode is
+// quadlet request to ANY provider — even containerd, whose capability mode is
 // systemd-unit — returns no files. This is the doc/servant agreement gate.
 func TestEngineUnitEmitHonorsRequestRunMode(t *testing.T) {
 	for _, engine := range spec.EngineNames {
@@ -213,10 +244,10 @@ func TestEngineUnitEmitHonorsRequestRunMode(t *testing.T) {
 	}
 }
 
-// TestEngineUnitEmitOp pins the persistence unit: nerdctl's systemd-unit form is
+// TestEngineUnitEmitOp pins the persistence unit: containerd's systemd-unit form is
 // rendered; podman's quadlet returns no files (podman's own generator emits it).
 func TestEngineUnitEmitOp(t *testing.T) {
-	out, err := InvokeEngineOp("nerdctl", ops.OpEngineUnitEmit,
+	out, err := InvokeEngineOp("containerd", ops.OpEngineUnitEmit,
 		json.RawMessage(`{"name":"svc","run_mode":"systemd-unit","start_argv":["/usr/bin/nerdctl","run","-d","--name","svc","alpine"],"stop_argv":["/usr/bin/nerdctl","stop","svc"]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +258,7 @@ func TestEngineUnitEmitOp(t *testing.T) {
 	}
 	text, ok := rep.Files["charly-svc.service"]
 	if !ok {
-		t.Fatalf("unit_emit(nerdctl) files = %v, want charly-svc.service", rep.Files)
+		t.Fatalf("unit_emit(containerd) files = %v, want charly-svc.service", rep.Files)
 	}
 	if !containsSub(text, "ExecStart=/usr/bin/nerdctl run -d --name svc alpine") {
 		t.Errorf("unit text missing ExecStart:\n%s", text)
@@ -248,7 +279,7 @@ func TestEngineUnitEmitOp(t *testing.T) {
 	}
 
 	// A missing name is an error field, not a panic.
-	out, err = InvokeEngineOp("nerdctl", ops.OpEngineUnitEmit, json.RawMessage(`{"run_mode":"systemd-unit","start_argv":["x"]}`))
+	out, err = InvokeEngineOp("containerd", ops.OpEngineUnitEmit, json.RawMessage(`{"run_mode":"systemd-unit","start_argv":["x"]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +294,7 @@ func TestEngineUnitEmitOp(t *testing.T) {
 
 // TestEngineNetworkEnsureOp pins the network argv.
 func TestEngineNetworkEnsureOp(t *testing.T) {
-	out, err := InvokeEngineOp("nerdctl", ops.OpEngineNetworkEnsure, json.RawMessage(`{"name":"charly"}`))
+	out, err := InvokeEngineOp("containerd", ops.OpEngineNetworkEnsure, json.RawMessage(`{"name":"charly"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +303,7 @@ func TestEngineNetworkEnsureOp(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rep.Network != "charly" || len(rep.Argv) < 4 || rep.Argv[0] != "nerdctl" {
-		t.Errorf("network_ensure(nerdctl) = %+v, want network=charly argv starting nerdctl network create", rep)
+		t.Errorf("network_ensure(containerd) = %+v, want network=charly argv starting nerdctl network create", rep)
 	}
 }
 

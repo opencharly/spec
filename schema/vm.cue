@@ -11,6 +11,35 @@
 // ssh.port ⊕ ssh.port_auto, cpu.mode:custom ⇒ model required, hostdev pci ⇒ hex
 // source domain/bus/slot/function. Shared #Step from _common.cue (R3).
 
+// #VmBackend — the CLOSED VM-backend vocabulary. "auto" is a RESOLUTION
+// selector (today: libvirt, then qemu), never a backend provider word; krun is
+// selected explicitly. The word list lives HERE so the template (#Vm), the
+// persisted deploy state (#VmDeployState) and the VM-backend class all read ONE
+// source.
+#VmBackend: *"auto" | "libvirt" | "qemu" | "krun"
+
+// #VmKrun — the krun backend's knobs. Optional, and meaningful only when the
+// resolved backend is krun. A krun guest's root is a containerd snapshot, so
+// the libvirt/qemu-only fields are rejected by the cross-rule on #Vm below.
+#VmKrun: {
+	// network: tsi (the default) or passt. passt is required for in-guest CRIU
+	// and for an image whose krun.network label asks for it; tsi collapses the
+	// pod netns.
+	network?: *"tsi" | "passt"
+	// kernel: stock (libkrunfw) or image (a custom kernel baked for the guest).
+	kernel?: *"stock" | "image"
+	nested_virt?: *false | true @go(NestedVirt)
+	gpu?:         *"off" | "virtio" @go(GPU)
+	// gpu_flags is libkrun's virtio-gpu feature bitmask. 962 is the measured
+	// default (venus + the working feature set), 1410 is the GL-only override,
+	// and 1283 is known-broken — the data default is the working one.
+	gpu_flags?: *962 | int @go(GPUFlags,type=int)
+	// ram_headroom_mib is subtracted from the guest RAM for the krun host
+	// overhead. 256 is the measured default; a GPU guest needs the caller to
+	// raise RAM, not lower this.
+	ram_headroom_mib?: *256 | int @go(RAMHeadroomMiB,type=int)
+}
+
 #Vm: {
 	source: #VmSource @go(Source,type=VmSource)
 
@@ -26,11 +55,33 @@
 	// referenceable by the uefi-secure cross-rule below.
 	firmware: *"bios" | "uefi-insecure" | "uefi-secure"
 
-	backend:   *"auto" | "libvirt" | "qemu"
+	backend:   #VmBackend
 	autostart: *false | true
 	// autostart:true requires the libvirt backend (qemu has no persistent daemon).
 	if autostart {
 		backend: "auto" | "libvirt"
+	}
+
+	// krun carries the krun backend's knobs. Optional and ignored by the other
+	// backends; the consumer applies its defaults when the resolved backend is
+	// krun and the block is absent.
+	krun?: #VmKrun @go(Krun,optional=nillable)
+
+	// A krun guest's root is a containerd snapshot, not a libvirt domain: its
+	// source must be an OCI-image arm (`container_disk` / `bootc`), and the
+	// libvirt/qemu-only fields are rejected. `firmware` and `autostart` are
+	// required-with-default in this def, so they are VALUE-pinned to their
+	// defaults here: an authored uefi-* firmware or autostart:true conflicts,
+	// while the materialized defaults pass. Each rejection is deliberately a
+	// FIELD-named conflict (null for the struct-valued fields, a negated enum for
+	// machine) rather than a bare `_|_`, whose error names only #Vm.
+	if backend == "krun" {
+		source: #VmSource & {kind: "container_disk" | "bootc"}
+		libvirt?:   null
+		autostart:  false
+		firmware:   "bios"
+		machine?:   !~"^(q35|virt|i440fx|pc)$"
+		cloud_init?: null
 	}
 
 	// Secure Boot needs Q35 SMM — i440fx can't supply it.
@@ -49,7 +100,10 @@
 
 	network?:    #VmNetwork    @go(Network,optional=nillable)
 	ssh?:        #VmSsh        @go(SSH,type=*VmSsh)
-	cloud_init?: #VmCloudInit  @go(CloudInit,optional=nillable)
+	// The explicit pointer type keeps the generated Go field as *VmCloudInit even
+	// though the krun guard above adds the `null` arm (a bare `optional=nillable`
+	// degrades to an anonymous struct in that case).
+	cloud_init?: #VmCloudInit  @go(CloudInit,type=*VmCloudInit)
 	// mcp_provide: a kind:vm entity declares its MCP servers (e.g. the
 	// systemd-started charly mcp server) exactly like a box does — the P4
 	// substrate-neutral surface.
@@ -971,6 +1025,7 @@
 	ssh?:        #VmSsh        @go(SSH,type=*VmSsh)
 	cloud_init?: #VmCloudInit   @go(CloudInit,optional=nillable)
 	libvirt?:    #LibvirtDomain @go(Libvirt,type=*LibvirtDomain)
+	krun?:       #VmKrun        @go(Krun,optional=nillable)
 	plan?: [...#Step]
 	snapshot?: [...#VmSnapshot] @go(Snapshots)
 	raw?: bytes @go(Raw,type=RawBody)

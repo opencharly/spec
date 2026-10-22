@@ -91,7 +91,7 @@ func readinessEngine(envValue string) string {
 func WaitForContainerReady(bed string) {
 	containerName := "charly-" + bed
 	// Probe with the engine the deployment actually runs under
-	// (CHARLY_RUN_ENGINE), not a literal: a docker/nerdctl host must use its
+	// (CHARLY_RUN_ENGINE), not a literal: a docker/containerd host must use its
 	// own binary. See readinessEngine for the contract + fallback.
 	engine := readinessEngine(os.Getenv("CHARLY_RUN_ENGINE"))
 	// supervisorStatus reports __NOSUP__ when the image has no supervisorctl, so

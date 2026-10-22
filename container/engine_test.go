@@ -9,12 +9,13 @@ import (
 
 func TestEngineBinary(t *testing.T) {
 	cases := map[string]string{
-		"podman":  "podman",
-		"docker":  "docker",
-		"nerdctl": "nerdctl",
+		"podman":     "podman",
+		"docker":     "docker",
+		"containerd": "nerdctl", // the ENGINE word is containerd; nerdctl is its CLI
 		// unknown/empty falls back to the ONE default engine (spec.DefaultContainerEngine)
-		"":      spec.DefaultContainerEngine,
-		"bogus": spec.DefaultContainerEngine,
+		"":        spec.DefaultContainerEngine,
+		"bogus":   spec.DefaultContainerEngine,
+		"nerdctl": spec.DefaultContainerEngine, // the deleted ENGINE word is unknown
 	}
 	for engine, want := range cases {
 		if got := EngineBinary(engine); got != want {
@@ -27,7 +28,7 @@ func TestGPURunArgs(t *testing.T) {
 	if got := GPURunArgs("podman"); len(got) != 2 || got[0] != "--device" || got[1] != "nvidia.com/gpu=all" {
 		t.Errorf("GPURunArgs(podman) = %v, want CDI device form", got)
 	}
-	for _, engine := range []string{"docker", "nerdctl"} {
+	for _, engine := range []string{"docker", "containerd"} {
 		got := GPURunArgs(engine)
 		if len(got) != 2 || got[0] != "--gpus" || got[1] != "all" {
 			t.Errorf("GPURunArgs(%q) = %v, want --gpus all", engine, got)
@@ -57,11 +58,11 @@ func TestGPURunArgs(t *testing.T) {
 // not split one input across two engines either: for every consumer,
 // f(word) == f(EngineBinary(word)). Before the fix, EngineBinary("bogus") was
 // the default (podman) while GPURunArgs("bogus")/imageExistsProbeArgv("bogus")
-// took the docker/nerdctl fallback — podman's binary with docker's args/probe.
+// took the docker/containerd fallback — podman's binary with docker's args/probe.
 // IsEngineName is the typo gate; the capability resolution treats any non-member
 // as the default engine so the consumers agree.
 func TestUnknownEngineResolutionIsSingleHome(t *testing.T) {
-	for _, word := range []string{"bogus", "containerd", "Podman", "docker-23"} {
+	for _, word := range []string{"bogus", "nerdctl", "Podman", "docker-23"} {
 		resolved := EngineBinary(word)
 		if got := GPURunArgs(word); !reflect.DeepEqual(got, GPURunArgs(resolved)) {
 			t.Errorf("GPURunArgs(%q)=%v != GPURunArgs(EngineBinary(%q))=%v", word, got, word, GPURunArgs(resolved))
@@ -84,7 +85,7 @@ func TestUnknownEngineResolutionIsSingleHome(t *testing.T) {
 // ALL resolve to the SAME engine — the ONE default (spec.DefaultContainerEngine).
 // Before the fix, EngineBinary("") was the default (podman) while GPURunArgs("")
 // and imageExistsProbeArgv("") — reading the capability table and getting
-// not-found for "" — fell back to docker/nerdctl's forms, so one input split
+// not-found for "" — fell back to docker/containerd's forms, so one input split
 // across two engines. This is the regression gate for that split.
 func TestEmptyEngineResolutionIsSingleHome(t *testing.T) {
 	def := spec.DefaultContainerEngine
@@ -129,11 +130,27 @@ func TestEngineVocabularyIsSingleSource(t *testing.T) {
 		if !IsEngineName(name) {
 			t.Errorf("IsEngineName(%q) = false for a CUE-declared engine", name)
 		}
-		if EngineBinary(name) != name {
-			t.Errorf("EngineBinary(%q) = %q, want the engine's own name", name, EngineBinary(name))
-		}
-		if _, ok := EngineCapabilityFor(name); !ok {
+		c, ok := EngineCapabilityFor(name)
+		if !ok {
 			t.Errorf("engine %q has no capability row", name)
+			continue
+		}
+		if got := EngineBinary(name); got != c.Binary {
+			t.Errorf("EngineBinary(%q) = %q, want the capability row's binary %q", name, got, c.Binary)
+		}
+		// The word→binary mapping is CUE-owned (#EngineBinaries): every engine
+		// word has exactly one binary, and the row agrees with it.
+		wantBinary, ok := spec.EngineBinaries[name]
+		if !ok {
+			t.Errorf("engine %q has no spec.EngineBinaries entry", name)
+		} else if c.Binary != wantBinary {
+			t.Errorf("engine %q Binary = %q, want spec.EngineBinaries %q", name, c.Binary, wantBinary)
+		}
+	}
+	// And the map declares no word outside the closed engine vocabulary.
+	for name := range spec.EngineBinaries {
+		if !IsEngineName(name) {
+			t.Errorf("spec.EngineBinaries has the non-engine key %q", name)
 		}
 	}
 	// "auto" and typos are not engine WORDS.
@@ -142,6 +159,11 @@ func TestEngineVocabularyIsSingleSource(t *testing.T) {
 	}
 	if IsEngineName("bogus") {
 		t.Error(`IsEngineName("bogus") must be false`)
+	}
+	// R5 negative arm: the deleted engine word must be gone from the vocabulary.
+	// `nerdctl` survives only as containerd's CLI binary, never as an engine word.
+	if IsEngineName("nerdctl") {
+		t.Error(`IsEngineName("nerdctl") must be false — the engine word is containerd`)
 	}
 }
 
@@ -163,37 +185,67 @@ func TestEngineCapabilityFor(t *testing.T) {
 		t.Errorf("podman Name = %q, want podman", podman.Name)
 	}
 
-	nerdctl, ok := EngineCapabilityFor("nerdctl")
+	containerd, ok := EngineCapabilityFor("containerd")
 	if !ok {
-		t.Fatal("EngineCapabilityFor(nerdctl) not found")
+		t.Fatal("EngineCapabilityFor(containerd) not found")
 	}
-	if nerdctl.Binary != "nerdctl" {
-		t.Errorf("nerdctl Binary = %q, want nerdctl", nerdctl.Binary)
+	if containerd.Binary != "nerdctl" {
+		t.Errorf("containerd Binary = %q, want nerdctl (the CLI it is driven through)", containerd.Binary)
 	}
-	if nerdctl.SupportsPods || nerdctl.SupportsSecrets || nerdctl.SupportsUsernsKeepID {
-		t.Errorf("nerdctl must not claim a podman-only native feature: %+v", nerdctl)
+	if containerd.SupportsPods || containerd.SupportsSecrets || containerd.SupportsUsernsKeepID {
+		t.Errorf("containerd must not claim a podman-only native feature: %+v", containerd)
 	}
-	if !nerdctl.SupportsRootless {
-		t.Error("nerdctl must be rootless-capable")
+	// BOTH modes are declared: the row must not assume rootless.
+	if !containerd.SupportsRootless {
+		t.Error("containerd must be rootless-capable")
 	}
-	if nerdctl.RunMode != "systemd-unit" {
-		t.Errorf("nerdctl RunMode = %q, want systemd-unit", nerdctl.RunMode)
+	if !containerd.SupportsRootful {
+		t.Error("containerd must be rootful-capable")
 	}
-	if nerdctl.GPUArgStyle != "gpus" {
-		t.Errorf("nerdctl GPUArgStyle = %q, want gpus", nerdctl.GPUArgStyle)
+	if containerd.RunMode != "systemd-unit" {
+		t.Errorf("containerd RunMode = %q, want systemd-unit", containerd.RunMode)
 	}
-	// The spike-proven sharing invariant: no keep-id means the workload must run
-	// as container-uid 0, which IS the invoking host user in the rootless userns.
-	if nerdctl.WorkloadUser != "0" {
-		t.Errorf("nerdctl WorkloadUser = %q, want 0 (uid 0 == host user rootless)", nerdctl.WorkloadUser)
+	if containerd.GPUArgStyle != "gpus" {
+		t.Errorf("containerd GPUArgStyle = %q, want gpus", containerd.GPUArgStyle)
 	}
-	if nerdctl.DetectProbe == "" {
-		t.Error("nerdctl must declare a detect_probe")
+	// The spike-proven sharing invariant is MODE-SPLIT: rootless runs as
+	// container-uid 0 (== the invoking host user); rootful forces no user.
+	if containerd.WorkloadUserRootless != "0" {
+		t.Errorf("containerd WorkloadUserRootless = %q, want 0 (uid 0 == host user rootless)", containerd.WorkloadUserRootless)
 	}
-	// nerdctl rejects `-d` with `--rm` (measured live on 2.3.5); podman/docker
-	// accept both. The fact lets a detached-argv builder drop --rm where illegal.
-	if !nerdctl.NoRemoveWithDetach {
-		t.Error("nerdctl must set NoRemoveWithDetach (flags -d and --rm cannot be combined)")
+	if containerd.WorkloadUserRootful != "" {
+		t.Errorf("containerd WorkloadUserRootful = %q, want empty (do not force a user rootful)", containerd.WorkloadUserRootful)
+	}
+	if got := WorkloadUserFor(containerd, true); got != "" {
+		t.Errorf("WorkloadUserFor(containerd, rootful) = %q, want empty", got)
+	}
+	if got := WorkloadUserFor(containerd, false); got != "0" {
+		t.Errorf("WorkloadUserFor(containerd, rootless) = %q, want 0", got)
+	}
+	if containerd.Address != "/run/containerd/containerd.sock" {
+		t.Errorf("containerd Address = %q, want /run/containerd/containerd.sock", containerd.Address)
+	}
+	if containerd.Namespace != "default" {
+		t.Errorf("containerd Namespace = %q, want default", containerd.Namespace)
+	}
+	if containerd.PrivilegePrefix != "sudo -n" {
+		t.Errorf("containerd PrivilegePrefix = %q, want sudo -n", containerd.PrivilegePrefix)
+	}
+	if !reflect.DeepEqual(containerd.Substrates, []string{"pod"}) {
+		t.Errorf("containerd Substrates = %v, want [pod]", containerd.Substrates)
+	}
+	wantHandlers := []string{"crun", "krun", "runc", "nvidia"}
+	if !reflect.DeepEqual(containerd.RuntimeHandlers, wantHandlers) {
+		t.Errorf("containerd RuntimeHandlers = %v, want %v", containerd.RuntimeHandlers, wantHandlers)
+	}
+	if containerd.DetectProbe == "" {
+		t.Error("containerd must declare a detect_probe")
+	}
+	// The nerdctl CLI rejects `-d` with `--rm` (measured live on 2.3.5);
+	// podman/docker accept both. The fact lets a detached-argv builder drop --rm
+	// where illegal.
+	if !containerd.NoRemoveWithDetach {
+		t.Error("containerd must set NoRemoveWithDetach (flags -d and --rm cannot be combined)")
 	}
 
 	docker, ok := EngineCapabilityFor("docker")
@@ -230,8 +282,8 @@ func TestEngineRunModeFor(t *testing.T) {
 	if got := EngineRunModeFor("podman"); got != "quadlet" {
 		t.Errorf("EngineRunModeFor(podman) = %q, want quadlet", got)
 	}
-	if got := EngineRunModeFor("nerdctl"); got != "systemd-unit" {
-		t.Errorf("EngineRunModeFor(nerdctl) = %q, want systemd-unit", got)
+	if got := EngineRunModeFor("containerd"); got != "systemd-unit" {
+		t.Errorf("EngineRunModeFor(containerd) = %q, want systemd-unit", got)
 	}
 	// An unknown non-empty word == the default engine (podman → quadlet), the
 	// same single-home resolution as the empty word — never a third engine's mode.
@@ -278,6 +330,14 @@ func TestEngineCapabilityShapeMatchesSchema(t *testing.T) {
 		}
 		if c.RunMode != "" && !IsRunMode(string(c.RunMode)) {
 			t.Errorf("capability row %q RunMode %q is not in spec.EngineRunModes", name, c.RunMode)
+		}
+		if want := spec.EngineBinaries[name]; c.Binary != want {
+			t.Errorf("capability row %q Binary %q != spec.EngineBinaries %q", name, c.Binary, want)
+		}
+		for _, substrate := range c.Substrates {
+			if substrate != "pod" && substrate != "vm" {
+				t.Errorf("capability row %q has substrate %q, want pod|vm", name, substrate)
+			}
 		}
 	}
 }

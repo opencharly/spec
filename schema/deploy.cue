@@ -10,8 +10,9 @@
 // stamps it onto every node's #DescentDescriptor. It is the SINGLE plugin-declared source for
 // "how does this substrate behave in the deploy chain", so the kernel consults the traits off
 // node.Descent BY TRAIT — never by switching on the substrate kind word (the boundary law).
-// Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+// Canonical table: pod=container+image_backed+image_context+selectors[engine];
+// vm=ssh+machine_venue+exclusive_venue+selectors[backend]; local=shell+machine_venue;
+// kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 // external-in-place. Not authored — charly-written state stamped at load.
 #DeployTraits: {
 	// venue: how commands physically execute in this substrate's venue:
@@ -51,6 +52,14 @@
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
 	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	supports_from_snapshot?: bool @go(SupportsFromSnapshot)
+	// selectors: the authored DEPLOY SELECTOR fields this substrate accepts.
+	//   "engine"  — a container-engine selector (pod).
+	//   "backend" — a VM-backend selector (vm).
+	// A loader reads this (together with the engine capability's `substrates`)
+	// instead of switching on the substrate kind word: `engine:` on a substrate
+	// without "engine" is an error, and likewise `backend:`. This is the DATA
+	// half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	selectors?: [...("engine" | "backend")] @go(Selectors)
 }
 
 // #DescentDescriptor is the loader-DERIVED venue-hop descriptor (Cutover H + P9).
@@ -141,6 +150,14 @@
 	env_file?: string & !="" @go(EnvFile)
 	network?:  string & !=""
 	engine?:   #EngineName
+	// backend is the per-deploy VM-backend override (kind:vm only). It is valid
+	// only on a substrate whose declared #DeployTraits.selectors includes
+	// "backend"; the loader rejects it elsewhere from that data, never by a
+	// substrate-name switch.
+	backend?: #VmBackend @go(Backend)
+	// namespace is the per-deploy containerd namespace override (kind:pod). The
+	// default resolution stays in code: deploy > config > "default".
+	namespace?: string @go(Namespace)
 	security?: #Security @go(Security,optional=nillable)
 	secret?: [...#DeploySecret]
 	volume?: [...#DeployVolume]
@@ -379,7 +396,7 @@
 	seed_iso?:                   string
 	ssh_port?:                   int
 	ssh_user?:                   string
-	backend?:                    "auto" | "qemu" | "libvirt" // "auto" persisted pre-resolution (the vm deploy lifecycle hook)
+	backend?:                    #VmBackend // "auto" persisted pre-resolution (the vm deploy lifecycle hook); krun is a resolved/selected backend
 	cloud_init_rendered_digest?: string
 	charly_install_strategy?:    "auto" | "scp" | "url" | "skip"
 	// port_forwards persists the auto-allocated host ports for `auto:<guest>`
@@ -791,7 +808,7 @@
 // OpPrepareVenue / OpTeardownExecutor returns (F6). K1-unblock W3 Unit B added the
 // "container" kind (engine/container_name) so a plugin-constructed
 // deploykit.ContainerChain venue — a single-hop *NestedExecutor{Parent:ShellExecutor{},
-// Jump:{Kind:JumpContainerExec,Engine:podman|docker|nerdctl}}, the MOST COMMON check-runner venue — round-trips
+// Jump:{Kind:JumpContainerExec,Engine:podman|docker|containerd}}, the MOST COMMON check-runner venue — round-trips
 // through kit.DescriptorFromExecutor/VenueFromDescriptor exactly like "shell"/"ssh" already do.
 // This does NOT generalize to arbitrary N-hop composition (a genuinely multi-hop NestedExecutor
 // still degrades to the zero descriptor, unchanged) — it closes the one enumerable, well-known
@@ -804,7 +821,7 @@
 	args?: [...string] @go(Args)
 	connect_timeout?: int @go(ConnectTimeout,type=int)
 	// engine/container_name are set ONLY for kind "container": the container engine
-	// ("podman"/"docker"/"nerdctl", carried as DATA on the jump) and the target container
+	// ("podman"/"docker"/"containerd", carried as DATA on the jump) and the target container
 	// name ContainerChain jumps into.
 	engine?:         string @go(Engine)
 	container_name?: string @go(ContainerName)
@@ -882,7 +899,7 @@
 // the node-image digest pin) the create leg needs.
 #KindclusterDeployVenue: {
 	cluster_name!: string @go(ClusterName) // kind cluster name (also the node-container name prefix)
-	provider!:     string @go(Provider)    // KIND_EXPERIMENTAL_PROVIDER (docker|podman|nerdctl)
+	provider!:     string @go(Provider)    // KIND_EXPERIMENTAL_PROVIDER (kind's own words docker|podman|nerdctl; charly maps containerd → nerdctl at the edge)
 	node_image!:   string @go(NodeImage)   // digest-pinned kindest/node image
 	// cluster_config is the egress-validated rendered kind Cluster config YAML (the
 	// `kind create cluster --config` argument). Rendered + validated plugin-side.

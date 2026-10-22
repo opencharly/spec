@@ -43,7 +43,7 @@ func VenueFromDescriptor(d spec.VenueDescriptor) (spec.DeployExecutor, error) {
 // deploykit.ContainerChain(engine, containerName) produces — the SAME shape, without sdk/kit
 // importing sdk/deploykit (deploykit already imports kit; importing back would cycle).
 // deploykit.ContainerChain itself calls this (R3 — one construction, not two). engine is the
-// container-engine CLI (podman / docker / nerdctl); empty defaults to podman (matching the
+// container-engine CLI (podman / docker / containerd); empty defaults to podman (matching the
 // historical default).
 func ContainerChainFromDescriptor(engine, containerName string) spec.DeployExecutor {
 	jump := NestedJump{Kind: JumpContainerExec, Engine: engine, Target: containerName}

@@ -80,7 +80,7 @@ type EngineConfig struct {
 
 // ResolvedRuntime holds the fully resolved runtime configuration
 type ResolvedRuntime struct {
-	RunEngine            string // a member of spec.EngineNames (podman/docker/nerdctl)
+	RunEngine            string // a member of spec.EngineNames (podman/docker/containerd)
 	Rootful              string // "auto", "machine", "sudo", "native"
 	RunMode              string // a member of spec.EngineRunModes (quadlet/systemd-unit/direct)
 	AutoEnable           bool   // auto-enable quadlet on first start
@@ -277,8 +277,8 @@ func ValidateRunMode(value string) error {
 //
 //   - podman  → "quadlet" when a functional systemd-user session is reachable,
 //     otherwise "direct".
-//   - nerdctl → "systemd-unit" when a functional systemd-user session is
-//     reachable (nerdctl has no quadlet generator; charly emits a .service that
+//   - containerd → "systemd-unit" when a functional systemd-user session is
+//     reachable (containerd has no quadlet generator; charly emits a .service that
 //     wraps the nerdctl CLI), otherwise "direct".
 //   - anything else (docker) → "direct".
 //
