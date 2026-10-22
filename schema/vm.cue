@@ -18,26 +18,31 @@
 // source.
 #VmBackend: *"auto" | "libvirt" | "qemu" | "krun"
 
-// #VmKrun — the krun backend's knobs. Optional, and meaningful only when the
-// resolved backend is krun. A krun guest's root is a containerd snapshot, so
-// the libvirt/qemu-only fields are rejected by the cross-rule on #Vm below.
+// #VmKrun — the krun backend's knobs. The BLOCK is optional, and meaningful
+// only when the resolved backend is krun. A krun guest's root is a containerd
+// snapshot, so the libvirt/qemu-only fields are rejected by the cross-rule on
+// #Vm below.
+//
+// The fields are required-WITH-DEFAULT, not optional: `krun: {}` must yield the
+// measured defaults (that is what makes them DATA rather than a consumer-side
+// literal). A consumer applies the same defaults when the whole block is absent.
 #VmKrun: {
 	// network: tsi (the default) or passt. passt is required for in-guest CRIU
 	// and for an image whose krun.network label asks for it; tsi collapses the
 	// pod netns.
-	network?: *"tsi" | "passt"
+	network: *"tsi" | "passt"
 	// kernel: stock (libkrunfw) or image (a custom kernel baked for the guest).
-	kernel?: *"stock" | "image"
-	nested_virt?: *false | true @go(NestedVirt)
-	gpu?:         *"off" | "virtio" @go(GPU)
+	kernel: *"stock" | "image"
+	nested_virt: *false | true @go(NestedVirt)
+	gpu:         *"off" | "virtio" @go(GPU)
 	// gpu_flags is libkrun's virtio-gpu feature bitmask. 962 is the measured
 	// default (venus + the working feature set), 1410 is the GL-only override,
 	// and 1283 is known-broken — the data default is the working one.
-	gpu_flags?: *962 | int @go(GPUFlags,type=int)
+	gpu_flags: *962 | int @go(GPUFlags,type=int)
 	// ram_headroom_mib is subtracted from the guest RAM for the krun host
 	// overhead. 256 is the measured default; a GPU guest needs the caller to
 	// raise RAM, not lower this.
-	ram_headroom_mib?: *256 | int @go(RAMHeadroomMiB,type=int)
+	ram_headroom_mib: *256 | int @go(RAMHeadroomMiB,type=int)
 }
 
 #Vm: {

@@ -168,7 +168,7 @@ type DeployExecutor interface {
 // implementation (host-engine builder exec) lives in sdk/kit; this options struct
 // is spec-homed because DeployExecutor.RunBuilder carries it across the IR.
 type BuilderRunOpts struct {
-	Engine       string // container engine CLI (podman/docker/containerd); empty → podman
+	Engine       string // container engine WORD (podman/docker/containerd), never the binary; empty → podman. BuilderRun resolves it via spec.EngineBinaries (containerd → nerdctl).
 	BuilderImage string // full image ref, e.g. "ghcr.io/opencharly/fedora-builder:latest"
 	CandyDir     string // absolute path to candy source (bind-mounted as /work)
 	ScriptBody   string // shell script contents to pass to bash -c

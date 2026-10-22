@@ -10733,31 +10733,36 @@ type VmNetwork struct {
 	PortForwards []string `yaml:"port_forwards,omitempty" json:"port_forwards,omitempty"`
 }
 
-// #VmKrun — the krun backend's knobs. Optional, and meaningful only when the
-// resolved backend is krun. A krun guest's root is a containerd snapshot, so
-// the libvirt/qemu-only fields are rejected by the cross-rule on #Vm below.
+// #VmKrun — the krun backend's knobs. The BLOCK is optional, and meaningful
+// only when the resolved backend is krun. A krun guest's root is a containerd
+// snapshot, so the libvirt/qemu-only fields are rejected by the cross-rule on
+// #Vm below.
+//
+// The fields are required-WITH-DEFAULT, not optional: `krun: {}` must yield the
+// measured defaults (that is what makes them DATA rather than a consumer-side
+// literal). A consumer applies the same defaults when the whole block is absent.
 type VmKrun struct {
 	// network: tsi (the default) or passt. passt is required for in-guest CRIU
 	// and for an image whose krun.network label asks for it; tsi collapses the
 	// pod netns.
-	Network string `yaml:"network,omitempty" json:"network,omitempty"`
+	Network string `yaml:"network,omitempty" json:"network"`
 
 	// kernel: stock (libkrunfw) or image (a custom kernel baked for the guest).
-	Kernel string `yaml:"kernel,omitempty" json:"kernel,omitempty"`
+	Kernel string `yaml:"kernel,omitempty" json:"kernel"`
 
-	NestedVirt bool `yaml:"nested_virt,omitempty" json:"nested_virt,omitempty"`
+	NestedVirt bool `yaml:"nested_virt,omitempty" json:"nested_virt"`
 
-	GPU string `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+	GPU string `yaml:"gpu,omitempty" json:"gpu"`
 
 	// gpu_flags is libkrun's virtio-gpu feature bitmask. 962 is the measured
 	// default (venus + the working feature set), 1410 is the GL-only override,
 	// and 1283 is known-broken — the data default is the working one.
-	GPUFlags int `yaml:"gpu_flags,omitempty" json:"gpu_flags,omitempty"`
+	GPUFlags int `yaml:"gpu_flags,omitempty" json:"gpu_flags"`
 
 	// ram_headroom_mib is subtracted from the guest RAM for the krun host
 	// overhead. 256 is the measured default; a GPU guest needs the caller to
 	// raise RAM, not lower this.
-	RAMHeadroomMiB int `yaml:"ram_headroom_mib,omitempty" json:"ram_headroom_mib,omitempty"`
+	RAMHeadroomMiB int `yaml:"ram_headroom_mib,omitempty" json:"ram_headroom_mib"`
 }
 
 type VmSnapshot struct {

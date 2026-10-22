@@ -200,6 +200,23 @@ func TestEngineStartPlanOp(t *testing.T) {
 	if !containsArgPair(rep.Argv, "--runtime", "krun") {
 		t.Errorf("start_plan(containerd, runtime=krun) argv = %v, want --runtime krun", rep.Argv)
 	}
+
+	// A handler the engine does NOT declare is refused from the same data, not
+	// passed through as an unvalidated word.
+	out, err = InvokeEngineOp("containerd", ops.OpEngineStartPlan,
+		json.RawMessage(`{"engine":"containerd","image":"alpine","name":"svc","runtime":"bogus"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Error == "" {
+		t.Error("start_plan(containerd, runtime=bogus) must set the error field (the handler is not in runtime_handlers)")
+	}
+	if containsArgPair(rep.Argv, "--runtime", "bogus") {
+		t.Errorf("start_plan(containerd, runtime=bogus) argv = %v must not carry the unsupported handler", rep.Argv)
+	}
 }
 
 // TestEngineUnitEmitEmitsExecStartPre pins that exec_start_pre (a declared

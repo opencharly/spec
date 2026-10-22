@@ -749,13 +749,16 @@ func buildContainerEnvFlags() string {
 // `--env HOME=` values an exec hop should pass. Returns ("", "") when the
 // container is not found or carries neither.
 //
+// binary is the CLI BINARY, not the engine word: every caller passes
+// NestedJump.engineBinary(), which resolves containerd → nerdctl.
+//
 // The values come from the container's own runtime config (.Config.User /
 // .Config.Env), which is authoritative: the exec-resolution race (issue #149)
 // breaks the DERIVED session env (uid=1000 gid=0, empty HOME) for containers
 // created during a concurrent bed window, NOT the spec. Reading the spec and
 // passing it back explicitly makes the session env deterministic.
-func containerExecUserHome(engine, containerName string) (user, home string) {
-	out, _, _, err := RunCaptureCmd(exec.Command(engine, "inspect", "--format", "{{.Config.User}}|{{range .Config.Env}}{{.}}\n{{end}}", containerName))
+func containerExecUserHome(binary, containerName string) (user, home string) {
+	out, _, _, err := RunCaptureCmd(exec.Command(binary, "inspect", "--format", "{{.Config.User}}|{{range .Config.Env}}{{.}}\n{{end}}", containerName))
 	if err != nil {
 		return "", ""
 	}

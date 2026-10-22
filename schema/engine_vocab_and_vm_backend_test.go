@@ -179,6 +179,56 @@ func TestDeployBackendAndNamespace(t *testing.T) {
 	}
 }
 
+// TestVmKrunDefaultsMaterialize proves the krun defaults are the authoritative
+// CUE data, not a consumer-side literal: with the block's fields omitted, CUE
+// materializes 962/256 and tsi/stock/off/false. The fields are
+// required-with-default inside the optional block, so `krun: {}` is a complete
+// set of measured values; a consumer applies the same defaults when the block
+// itself is absent.
+func TestVmKrunDefaultsMaterialize(t *testing.T) {
+	def, ctx := defValue(t, "#Vm")
+	const body = `{backend: "krun", source: {kind: "container_disk", image: "registry.example/disk@sha256:0000000000000000000000000000000000000000000000000000000000000000"}, krun: {}}`
+	v := def.Unify(ctx.CompileString(body))
+	if err := v.Validate(cue.Concrete(true)); err != nil {
+		t.Fatalf("the krun defaults do not materialize under a concrete validation: %v", err)
+	}
+	// The fields are required-with-default, so an empty krun block carries the
+	// measured values in the value itself — not a consumer-side literal.
+	for _, tc := range []struct {
+		path string
+		want int64
+	}{
+		{"krun.gpu_flags", 962},
+		{"krun.ram_headroom_mib", 256},
+	} {
+		got, err := v.LookupPath(cue.ParsePath(tc.path)).Int64()
+		if err != nil {
+			t.Fatalf("%s: %v", tc.path, err)
+		}
+		if got != tc.want {
+			t.Errorf("%s = %d, want %d", tc.path, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		path, want string
+	}{
+		{"krun.network", "tsi"},
+		{"krun.kernel", "stock"},
+		{"krun.gpu", "off"},
+	} {
+		got, err := v.LookupPath(cue.ParsePath(tc.path)).String()
+		if err != nil {
+			t.Fatalf("%s: %v", tc.path, err)
+		}
+		if got != tc.want {
+			t.Errorf("%s = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+	if got, err := v.LookupPath(cue.ParsePath("krun.nested_virt")).Bool(); err != nil || got {
+		t.Errorf("krun.nested_virt = %v, %v; want false", got, err)
+	}
+}
+
 // TestDeployTraitsSelectorData pins the DATA half of the hosting rule: a
 // substrate declares which deploy selectors it accepts, so a loader can reject
 // `engine:` on a vm and `backend:` on a pod without switching on a substrate word.

@@ -196,8 +196,14 @@ func engineStartPlan(engine string, req spec.EngineStartPlanRequest) (json.RawMe
 		argv = append(argv, "--user", req.WorkloadUser)
 	}
 	// The runtime handler is DATA (the capability's runtime_handlers) — the plan
-	// never spells a handler literal.
+	// never spells a handler literal, and it refuses a handler the engine does
+	// not declare rather than passing an unvalidated word to the CLI.
 	if req.Runtime != "" {
+		if !contains(c.RuntimeHandlers, req.Runtime) {
+			return marshalReply(spec.EngineStartPlanReply{Error: fmt.Sprintf(
+				"runtime %q is not a handler of engine %q; supported: %s",
+				req.Runtime, c.Name, strings.Join(c.RuntimeHandlers, ", "))})
+		}
 		argv = append(argv, "--runtime", req.Runtime)
 	}
 	if req.UsernsHost {
