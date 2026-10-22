@@ -1210,6 +1210,16 @@ type CapabilityInitDef struct {
 
 	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty" json:"fallback_entrypoint,omitempty"`
 
+	// The container-venue runtime contract, carried to the deploy so the runtime
+	// argv and the deploy overlay read it from the IMAGE, never from a name
+	// switch. RequiresRoot keeps the image and its overlays at USER root;
+	// SystemdMode asks the engine for systemd mode; StopSignal is the clean stop.
+	RequiresRoot bool `yaml:"requires_root,omitempty" json:"requires_root,omitempty"`
+
+	SystemdMode bool `yaml:"systemd_mode,omitempty" json:"systemd_mode,omitempty"`
+
+	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
+
 	ManagementTool string `yaml:"management_tool,omitempty" json:"management_tool,omitempty"`
 
 	ManagementCommands map[string]string `yaml:"management_commands,omitempty" json:"management_commands,omitempty"`
@@ -6027,6 +6037,13 @@ type EngineCapability struct {
 	// illegal (the container is then cleaned by the unit's ExecStop / an explicit
 	// rm) instead of switching on the engine name.
 	NoRemoveWithDetach bool `yaml:"no_remove_with_detach,omitempty" json:"no_remove_with_detach"`
+
+	// systemd_mode_arg — the argv token that turns the engine's systemd mode ON
+	// for a container whose init declares `systemd_mode: true` (podman
+	// `--systemd=always`, nerdctl `--systemd=true`). EMPTY when the engine has
+	// no such mode (docker): the deploy then omits it rather than inventing a
+	// flag, and only the stop signal is emitted.
+	SystemdModeArg string `yaml:"systemd_mode_arg,omitempty" json:"systemd_mode_arg,omitempty"`
 }
 
 // #EngineBinaryRequest / #EngineBinaryReply — the `binary` op: resolve the CLI
@@ -7041,7 +7058,19 @@ type Init struct {
 
 	DependsCandy string `yaml:"depends_candy,omitempty" json:"depends_candy,omitempty"`
 
+	// requires_capability names the aggregated candy-capability keys this init
+	// needs before it is a candidate. The `init_system:<name>` form is the
+	// init-system HINT key candy_capabilities.go already provides for
+	// `capability: {init_system_hint: <name>}` — the colon is part of that key's
+	// grammar, which is why it is admitted here.
 	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
+
+	// extends — inherit another init-system entry of the SAME vocabulary, then
+	// override. It exists so a variant that is genuinely the same init in a
+	// different venue (systemd-container vs systemd) shares ONE authored
+	// service_template instead of copy-pasting a YAML stanza (R2). The child's
+	// own non-empty fields win; the merged body is what the render leg sees.
+	Extends string `yaml:"extends,omitempty" json:"extends,omitempty"`
 
 	// The one mandatory field: the build model.
 	Model string `yaml:"model,omitempty" json:"model"`
@@ -7067,6 +7096,20 @@ type Init struct {
 	Entrypoint []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
 
 	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty" json:"fallback_entrypoint,omitempty"`
+
+	// requires_root — the image must end at USER root and a deploy overlay must
+	// not restore a non-root USER over it. systemd refuses to run in system mode
+	// as a non-root PID 1 (measured: exit 255 / start-limit-hit).
+	RequiresRoot bool `yaml:"requires_root,omitempty" json:"requires_root,omitempty"`
+
+	// systemd_mode — the container runtime must be told to enable its systemd
+	// mode (podman `--systemd=always` / quadlet `Systemd=always`): a systemd
+	// cgroup subtree, the /run tmpfs, and SIGRTMIN+3 as the stop signal.
+	SystemdMode bool `yaml:"systemd_mode,omitempty" json:"systemd_mode,omitempty"`
+
+	// stop_signal — the signal the runtime sends to stop the container. For
+	// systemd SIGRTMIN+3 is `systemctl halt`, the clean shutdown.
+	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
 
 	ManagementTool string `yaml:"management_tool,omitempty" json:"management_tool,omitempty"`
 
@@ -7242,6 +7285,10 @@ type ResolvedInit struct {
 
 	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
 
+	// extends — resolved by ProjectInitConfig before this envelope is consumed;
+	// empty on a fully-merged entry.
+	Extends string `yaml:"extends,omitempty" json:"extends,omitempty"`
+
 	Model string `yaml:"model,omitempty" json:"model,omitempty"`
 
 	HeaderFile string `yaml:"header_file,omitempty" json:"header_file,omitempty"`
@@ -7265,6 +7312,15 @@ type ResolvedInit struct {
 	Entrypoint []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
 
 	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty" json:"fallback_entrypoint,omitempty"`
+
+	// The container-venue runtime contract (#Init). RequiresRoot gates the
+	// build's final USER and the deploy overlay's USER restore; SystemdMode and
+	// StopSignal are the runtime argv/quadlet facts.
+	RequiresRoot bool `yaml:"requires_root,omitempty" json:"requires_root,omitempty"`
+
+	SystemdMode bool `yaml:"systemd_mode,omitempty" json:"systemd_mode,omitempty"`
+
+	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
 
 	ManagementTool string `yaml:"management_tool,omitempty" json:"management_tool,omitempty"`
 

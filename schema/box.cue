@@ -99,7 +99,7 @@
 	// omits is unselectable, which is what kept `openrc` out of reach despite being
 	// a first-class init with its own service_template, management commands and
 	// unit_path_template.
-	init?:       "supervisord" | "systemd" | "openrc"
+	init?:       "supervisord" | "systemd" | "systemd-container" | "openrc"
 	data_image?: bool @go(DataImage)
 	bootc?:      bool // image is bootc-bootable (for `charly vm build` → qcow2)
 	readiness?:  #Readiness @go(Readiness,optional=nillable)
