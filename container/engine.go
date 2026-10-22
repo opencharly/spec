@@ -53,7 +53,7 @@ func EngineBinary(engine string) string {
 }
 
 // GPURunArgs returns the engine-specific run flags that expose all host GPUs to a container.
-// podman uses the CDI device form; docker and nerdctl use the Docker-compatible `--gpus`.
+// podman uses the CDI device form; docker and containerd use the Docker-compatible `--gpus`.
 // The style rides on the capability table so it is a fact, not a switch. The `"auto"`
 // selector resolves to the installed engine via DetectEngine (the same resolution
 // EngineBinary performs), so GPURunArgs("auto") matches GPURunArgs(<detected>).
@@ -80,7 +80,7 @@ func GPURunArgs(engine string) []string {
 }
 
 // DetectEngine auto-detects the container engine: prefers podman, falls back to docker.
-// nerdctl is deliberately NOT auto-detected — it is opt-in per deploy/box via the
+// containerd is deliberately NOT auto-detected — it is opt-in per deploy/box via the
 // `engine:` field, so an existing podman/docker install is never silently switched.
 func DetectEngine() (string, error) {
 	if _, err := exec.LookPath("podman"); err == nil {
@@ -92,7 +92,7 @@ func DetectEngine() (string, error) {
 	return "", fmt.Errorf("no container engine found (install podman or docker)")
 }
 
-// EngineNames returns the closed engine word vocabulary (podman/docker/nerdctl),
+// EngineNames returns the closed engine word vocabulary (podman/docker/containerd),
 // sourced from the CUE-owned schema (schema/engine.cue #EngineName →
 // spec.EngineNames) so no consumer holds a hand-written literal list.
 func EngineNames() []string { return spec.EngineNames }
@@ -141,44 +141,71 @@ func contains(list []string, s string) bool {
 // engineCapabilities is the DATA table the kernel consults: one row per engine
 // word, using the generated spec.EngineCapability shape (never a hand mirror).
 // The values are facts about each engine CLI, not policy — they replace every
-// "does this engine support X" branch in core. nerdctl's row is the spike-proven
-// posture: rootless, no pods primitive (shared-netns emulation), no native
-// secret store (env/file fallback), no keep-id (workload runs as uid 0 == the
-// invoking host user), systemd-unit persistence, Docker `--gpus` passthrough.
+// "does this engine support X" branch in core. containerd's row is the
+// spike-proven posture: driven through nerdctl, rootless AND rootful, a daemon
+// address, the uniform `default` namespace, a rootful privilege prefix, no pods
+// primitive (shared-netns emulation), no native secret store (env/file
+// fallback), no keep-id (the ROOTLESS workload runs as uid 0 == the invoking
+// host user; the rootful workload is not forced to a user), systemd-unit
+// persistence, Docker `--gpus` passthrough, and the crun/krun/runc/nvidia
+// runtime handlers.
 var engineCapabilities = map[string]spec.EngineCapability{
 	"podman": {
 		Name:                 "podman",
-		Binary:               "podman",
+		Binary:               spec.EngineBinaries["podman"],
 		DetectProbe:          "podman --version",
 		SupportsPods:         true,
 		SupportsSecrets:      true,
 		SupportsUsernsKeepID: true,
 		SupportsRootless:     true,
+		SupportsRootful:      true,
 		RunMode:              "quadlet",
 		GPUArgStyle:          "cdi",
 		UsernsKeepIDArg:      "--userns=keep-id",
+		Substrates:           []string{"pod"},
+		RuntimeHandlers:      []string{},
 		ImageExistsArgv:      []string{"image", "exists"},
 	},
 	"docker": {
 		Name:             "docker",
-		Binary:           "docker",
+		Binary:           spec.EngineBinaries["docker"],
 		DetectProbe:      "docker --version",
 		SupportsRootless: true,
+		SupportsRootful:  true,
 		RunMode:          "direct",
 		GPUArgStyle:      "gpus",
+		Substrates:       []string{"pod"},
+		RuntimeHandlers:  []string{},
 		ImageExistsArgv:  []string{"image", "inspect"},
 	},
-	"nerdctl": {
-		Name:               "nerdctl",
-		Binary:             "nerdctl",
-		DetectProbe:        "nerdctl --version",
-		SupportsRootless:   true,
-		RunMode:            "systemd-unit",
-		GPUArgStyle:        "gpus",
-		WorkloadUser:       "0",
-		ImageExistsArgv:    []string{"image", "inspect"},
-		NoRemoveWithDetach: true,
+	"containerd": {
+		Name:                 "containerd",
+		Binary:               spec.EngineBinaries["containerd"],
+		DetectProbe:          "nerdctl --version",
+		SupportsRootless:     true,
+		SupportsRootful:      true,
+		RunMode:              "systemd-unit",
+		GPUArgStyle:          "gpus",
+		WorkloadUserRootless: "0",
+		Address:              "/run/containerd/containerd.sock",
+		Namespace:            "default",
+		PrivilegePrefix:      "sudo -n",
+		Substrates:           []string{"pod"},
+		RuntimeHandlers:      []string{"crun", "krun", "runc", "nvidia"},
+		ImageExistsArgv:      []string{"image", "inspect"},
+		NoRemoveWithDetach:   true,
 	},
+}
+
+// WorkloadUserFor returns the in-container user a workload must run as for
+// host-identical file sharing in the given mode. The rootless and rootful facts
+// are separate capability fields, so the answer never assumes rootless; an
+// empty result means "do not force a user".
+func WorkloadUserFor(c spec.EngineCapability, rootful bool) string {
+	if rootful {
+		return c.WorkloadUserRootful
+	}
+	return c.WorkloadUserRootless
 }
 
 // EngineCapabilityFor returns the capability facts for an engine. There is NO

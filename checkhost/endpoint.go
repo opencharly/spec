@@ -66,10 +66,13 @@ func EndpointForVenue(desc spec.VenueDescriptor, port int) (*CheckEndpoint, erro
 }
 
 // containerPublishedAddr returns the host "ip:port" that maps to <port> inside a running container
-// via `<engine> port`, normalizing 0.0.0.0 / [::] to 127.0.0.1. Host-networked containers (no
+// via `<binary> port`, normalizing 0.0.0.0 / [::] to 127.0.0.1. Host-networked containers (no
 // mappings) fall back to 127.0.0.1:port. Shared by cdp / vnc / mcp (replaces their per-verb copies — R3).
+//
+// engine is the engine WORD (#EngineName, as carried on the venue descriptor), not a binary:
+// containerd is driven through nerdctl, so both probes resolve it via container.EngineBinary.
 func containerPublishedAddr(engine, containerName string, port int) (string, error) {
-	out, err := exec.Command(engine, "port", containerName, strconv.Itoa(port)).Output()
+	out, err := exec.Command(container.EngineBinary(engine), "port", containerName, strconv.Itoa(port)).Output()
 	if err != nil {
 		if container.IsHostNetworked(engine, containerName) {
 			return fmt.Sprintf("127.0.0.1:%d", port), nil

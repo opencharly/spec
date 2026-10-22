@@ -22,9 +22,10 @@
 	box: string @go(Box)
 
 	// engine selects the container engine kind provisions its node containers with.
-	// It maps 1:1 to kind's KIND_EXPERIMENTAL_PROVIDER (podman/docker/nerdctl), so
-	// the authored #EngineName vocabulary is used directly — no separate selector.
-	// Absent → the resolved runtime engine (engine.run).
+	// The authored field is the charly #EngineName vocabulary (podman/docker/
+	// containerd); the plugin maps `containerd` to kind's own provider word
+	// (KIND_EXPERIMENTAL_PROVIDER=nerdctl) at the edge. Absent → the resolved
+	// runtime engine (engine.run).
 	engine?: #EngineName @go(Engine)
 
 	// node_image is the digest-pinned kind node image (kindest/node:vX@sha256:…).

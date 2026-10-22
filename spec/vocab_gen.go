@@ -293,11 +293,18 @@ var KindValueDefs = map[string]string{
 	"vm":          "#VmValue",
 }
 
-// EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.
+// EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/containerd. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.
 var EngineNames = []string{
 	"podman",
 	"docker",
-	"nerdctl",
+	"containerd",
+}
+
+// EngineBinaries is the engine WORD → CLI BINARY mapping (#EngineBinaries) — containerd is driven through nerdctl, so the engine word is not the binary. container.engineCapabilities and exec's jump read this ONE table; it lives in the contract module so neither package needs to import the other.
+var EngineBinaries = map[string]string{
+	"containerd": "nerdctl",
+	"docker":     "docker",
+	"podman":     "podman",
 }
 
 // EngineRunModes is the CLOSED engine run-mode vocabulary (#EngineRunMode) — quadlet/systemd-unit/direct. IsRunMode and ValidateRunMode derive from it; the per-engine mode mapping is container.EngineCapabilityFor.

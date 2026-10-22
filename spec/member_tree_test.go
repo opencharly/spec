@@ -123,7 +123,10 @@ func TestStampDescentReachesUniformMembers(t *testing.T) {
 	before := *root.MemberByName("zulu").Node.Descent
 	StampDescent(root, traitsFor)
 	after := *root.MemberByName("zulu").Node.Descent
-	if before != after {
+	// DeepEqual, not !=: #DeployTraits now carries the `selectors` slice, so the
+	// struct is no longer comparable with == / !=. The idempotence claim is
+	// unchanged — the second stamp must write the same value.
+	if !reflect.DeepEqual(before, after) {
 		t.Fatal("StampDescent must be idempotent")
 	}
 }
