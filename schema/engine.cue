@@ -190,6 +190,12 @@
 	// illegal (the container is then cleaned by the unit's ExecStop / an explicit
 	// rm) instead of switching on the engine name.
 	no_remove_with_detach: bool @go(NoRemoveWithDetach)
+	// systemd_mode_arg — the argv token that turns the engine's systemd mode ON
+	// for a container whose init declares `systemd_mode: true` (podman
+	// `--systemd=always`, nerdctl `--systemd=true`). EMPTY when the engine has
+	// no such mode (docker): the deploy then omits it rather than inventing a
+	// flag, and only the stop signal is emitted.
+	systemd_mode_arg?: string @go(SystemdModeArg)
 }
 
 // #EngineBinaryRequest / #EngineBinaryReply — the `binary` op: resolve the CLI

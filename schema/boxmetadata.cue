@@ -79,6 +79,13 @@
 #CapabilityInitDef: {
 	entrypoint?: [...string] @go(Entrypoint)
 	fallback_entrypoint?: [...string] @go(FallbackEntrypoint)
+	// The container-venue runtime contract, carried to the deploy so the runtime
+	// argv and the deploy overlay read it from the IMAGE, never from a name
+	// switch. RequiresRoot keeps the image and its overlays at USER root;
+	// SystemdMode asks the engine for systemd mode; StopSignal is the clean stop.
+	requires_root?: bool   @go(RequiresRoot)
+	systemd_mode?:  bool   @go(SystemdMode)
+	stop_signal?:   string @go(StopSignal)
 	management_tool?: string @go(ManagementTool)
 	management_commands?: {[string]: string} @go(ManagementCommands)
 }

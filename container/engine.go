@@ -165,6 +165,10 @@ var engineCapabilities = map[string]spec.EngineCapability{
 		Substrates:           []string{"pod"},
 		RuntimeHandlers:      []string{},
 		ImageExistsArgv:      []string{"image", "exists"},
+		// `always` (not `true`) because the init DECLARES systemd mode: podman's
+		// `true` is auto-detection, which is exactly the guess the declaration
+		// replaces. Measured values: --systemd ("true"|"false"|"always").
+		SystemdModeArg: "--systemd=always",
 	},
 	"docker": {
 		Name:             "docker",
