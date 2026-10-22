@@ -167,7 +167,7 @@ func TestEngineVocabularyIsSingleSource(t *testing.T) {
 	}
 }
 
-func TestEngineCapabilityFor(t *testing.T) {
+func TestEngineCapabilityForPodmanAndDocker(t *testing.T) {
 	podman, ok := EngineCapabilityFor("podman")
 	if !ok {
 		t.Fatal("EngineCapabilityFor(podman) not found")
@@ -184,7 +184,37 @@ func TestEngineCapabilityFor(t *testing.T) {
 	if podman.Name != "podman" {
 		t.Errorf("podman Name = %q, want podman", podman.Name)
 	}
+	if podman.NoRemoveWithDetach {
+		t.Error("podman accepts -d with --rm; NoRemoveWithDetach must be false")
+	}
 
+	docker, ok := EngineCapabilityFor("docker")
+	if !ok {
+		t.Fatal("EngineCapabilityFor(docker) not found")
+	}
+	if docker.RunMode != "direct" {
+		t.Errorf("docker RunMode = %q, want direct", docker.RunMode)
+	}
+	if docker.SupportsSecrets {
+		t.Error("docker must not claim a native secret store")
+	}
+	if docker.NoRemoveWithDetach {
+		t.Error("docker accepts -d with --rm; NoRemoveWithDetach must be false")
+	}
+
+	// An unknown non-empty word resolves to the ONE default engine (like the
+	// empty word), so binary/mode/gpu-args/probe never split across two engines.
+	// IsEngineName is the typo gate, not this bool.
+	bogus, ok := EngineCapabilityFor("bogus")
+	if !ok {
+		t.Fatal("EngineCapabilityFor(bogus) must resolve (to the default engine), not report not-found")
+	}
+	if bogus.Binary != spec.DefaultContainerEngine {
+		t.Errorf("EngineCapabilityFor(bogus).Binary = %q, want the default engine %q", bogus.Binary, spec.DefaultContainerEngine)
+	}
+}
+
+func TestEngineCapabilityForContainerd(t *testing.T) {
 	containerd, ok := EngineCapabilityFor("containerd")
 	if !ok {
 		t.Fatal("EngineCapabilityFor(containerd) not found")
@@ -207,6 +237,13 @@ func TestEngineCapabilityFor(t *testing.T) {
 	}
 	if containerd.GPUArgStyle != "gpus" {
 		t.Errorf("containerd GPUArgStyle = %q, want gpus", containerd.GPUArgStyle)
+	}
+}
+
+func TestContainerdWorkloadUserAndTargetData(t *testing.T) {
+	containerd, ok := EngineCapabilityFor("containerd")
+	if !ok {
+		t.Fatal("EngineCapabilityFor(containerd) not found")
 	}
 	// The spike-proven sharing invariant is MODE-SPLIT: rootless runs as
 	// container-uid 0 (== the invoking host user); rootful forces no user.
@@ -241,40 +278,8 @@ func TestEngineCapabilityFor(t *testing.T) {
 	if containerd.DetectProbe == "" {
 		t.Error("containerd must declare a detect_probe")
 	}
-	// The nerdctl CLI rejects `-d` with `--rm` (measured live on 2.3.5);
-	// podman/docker accept both. The fact lets a detached-argv builder drop --rm
-	// where illegal.
 	if !containerd.NoRemoveWithDetach {
 		t.Error("containerd must set NoRemoveWithDetach (flags -d and --rm cannot be combined)")
-	}
-
-	docker, ok := EngineCapabilityFor("docker")
-	if !ok {
-		t.Fatal("EngineCapabilityFor(docker) not found")
-	}
-	if docker.RunMode != "direct" {
-		t.Errorf("docker RunMode = %q, want direct", docker.RunMode)
-	}
-	if docker.SupportsSecrets {
-		t.Error("docker must not claim a native secret store")
-	}
-	// docker (like podman) accepts `-d --rm`.
-	if docker.NoRemoveWithDetach {
-		t.Error("docker accepts -d with --rm; NoRemoveWithDetach must be false")
-	}
-	if podman.NoRemoveWithDetach {
-		t.Error("podman accepts -d with --rm; NoRemoveWithDetach must be false")
-	}
-
-	// An unknown non-empty word resolves to the ONE default engine (like the
-	// empty word), so binary/mode/gpu-args/probe never split across two engines.
-	// IsEngineName is the typo gate, not this bool.
-	bogus, ok := EngineCapabilityFor("bogus")
-	if !ok {
-		t.Fatal("EngineCapabilityFor(bogus) must resolve (to the default engine), not report not-found")
-	}
-	if bogus.Binary != spec.DefaultContainerEngine {
-		t.Errorf("EngineCapabilityFor(bogus).Binary = %q, want the default engine %q", bogus.Binary, spec.DefaultContainerEngine)
 	}
 }
 
