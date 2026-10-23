@@ -41,28 +41,28 @@ func TestRepoCacheFresh(t *testing.T) {
 	cachePath := filepath.Join(dir, "repo@main")
 	commit := "2d731456b0b8cfbe2e19b64de75b4d652d2fc94c"
 
-	if repoCacheFresh(cachePath, commit) {
+	if repoCacheFreshMode(cachePath, commit, fetchProject) {
 		t.Fatal("missing export must be stale")
 	}
 	if err := os.MkdirAll(cachePath, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if repoCacheFresh(cachePath, commit) {
+	if repoCacheFreshMode(cachePath, commit, fetchProject) {
 		t.Fatal("export without provenance sidecar (pre-contract cache) must be stale")
 	}
 	if err := WriteRepoCacheProvenance(cachePath, "aaa111bbb222aaa111bbb222aaa111bbb222aaa111"); err != nil {
 		t.Fatal(err)
 	}
-	if repoCacheFresh(cachePath, commit) {
+	if repoCacheFreshMode(cachePath, commit, fetchProject) {
 		t.Fatal("sidecar naming a different commit (moved ref) must be stale")
 	}
 	if err := WriteRepoCacheProvenance(cachePath, commit); err != nil {
 		t.Fatal(err)
 	}
-	if !repoCacheFresh(cachePath, commit) {
+	if !repoCacheFreshMode(cachePath, commit, fetchProject) {
 		t.Fatal("export with matching provenance must be fresh")
 	}
-	if repoCacheFresh(cachePath, "") {
+	if repoCacheFreshMode(cachePath, "", fetchProject) {
 		t.Fatal("empty commit is never fresh")
 	}
 }
@@ -104,7 +104,7 @@ func TestDownloadRepoFrom_RefreshesMovedBranch(t *testing.T) {
 	git(work, "push", "-q", "origin", "main")
 	remoteURL := "file://" + remote
 
-	first, err := downloadRepoFrom(remoteURL, "local/test", "main")
+	first, err := downloadRepoFromMode(remoteURL, "local/test", "main", fetchProject)
 	if err != nil {
 		t.Fatalf("initial download: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestDownloadRepoFrom_RefreshesMovedBranch(t *testing.T) {
 	// Unmoved ref → cache hit: the export must NOT be replaced (provenance
 	// sidecar content identical and no fresh clone — marker file mtime proves
 	// no re-clone, so compare content + that the same path is returned).
-	second, err := downloadRepoFrom(remoteURL, "local/test", "main")
+	second, err := downloadRepoFromMode(remoteURL, "local/test", "main", fetchProject)
 	if err != nil {
 		t.Fatalf("second download: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestDownloadRepoFrom_RefreshesMovedBranch(t *testing.T) {
 	git(work, "commit", "-q", "-m", "v2")
 	git(work, "push", "-q", "origin", "main")
 
-	third, err := downloadRepoFrom(remoteURL, "local/test", "main")
+	third, err := downloadRepoFromMode(remoteURL, "local/test", "main", fetchProject)
 	if err != nil {
 		t.Fatalf("download after branch moved: %v", err)
 	}

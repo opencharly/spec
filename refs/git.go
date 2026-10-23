@@ -235,9 +235,43 @@ func pickResolvedCommit(lines []string, ref string) string {
 	return ""
 }
 
+// fetchMode says WHICH CONTENT a fetch must certify. It is the discriminator the
+// two public entry points (DownloadRepo, DownloadRepoFiles) set, and it reaches
+// exactly two decisions: whether the clone populates submodules, and which cache
+// entry the export is published to.
+//
+// It is deliberately NOT a caller-visible option. Two named fetches read better
+// at a call site than one variadic-option signature, and the kit seam both
+// generators already take (candywalk.RemoteResolver) is a plain
+// func(repoPath, version string) (string, error) — so the files-only fetch
+// threads through it with no SDK change at all, while DownloadRepo keeps the
+// signature a `--repo` caller has always used.
+type fetchMode int
+
+const (
+	// fetchProject is the `--repo` cache: a WHOLE PROJECT a user drives with
+	// nothing but the charly binary. Every declared submodule may be load-bearing
+	// for a documented command, so every one is populated (see populateSubmodules).
+	fetchProject fetchMode = iota
+	// fetchFiles is a corpus/docs SOURCE read: the repo's OWN TREE — its
+	// charly.yml and its .agents/ trees — and nothing else. Its submodules are
+	// never read, so they are never fetched, and an unreachable one cannot fail
+	// it. This is not a relaxation of fetchProject: it is a different caller with
+	// a different, smaller contract.
+	fetchFiles
+)
+
 // GitClone clones a git repository at a specific ref into the target directory.
-// Uses shallow clone for efficiency.
+// Uses shallow clone for efficiency. It is the WHOLE-PROJECT clone (fetchProject),
+// so it populates submodules.
 func GitClone(repoURL string, ref string, commit string, targetDir string) error {
+	return gitCloneMode(repoURL, ref, commit, targetDir, fetchProject)
+}
+
+// gitCloneMode is GitClone parameterised by fetchMode. fetchFiles clones the
+// repo's own tree and deliberately stops there: populateSubmodules is never
+// called, so no submodule URL is contacted and no submodule can fail the clone.
+func gitCloneMode(repoURL string, ref string, commit string, targetDir string, mode fetchMode) error {
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
 		return fmt.Errorf("creating parent directory: %w", err)
@@ -251,7 +285,7 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 	// ref is a tag object, not a commit).
 	if len(commit) >= 7 && isHex(commit) {
 		if err := gitCloneByCommit(repoURL, commit, targetDir); err == nil {
-			return populateSubmodules(targetDir)
+			return populateByMode(targetDir, mode)
 		}
 		_ = os.RemoveAll(targetDir) // clean up partial clone before falling back
 	}
@@ -262,6 +296,15 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 		return fmt.Errorf("git clone --branch %s %s: %w", ref, repoURL, err)
 	}
 
+	return populateByMode(targetDir, mode)
+}
+
+// populateByMode populates submodules for a whole-project fetch and does nothing
+// for a files-only one. One branch, no duplicated clone logic (R2).
+func populateByMode(targetDir string, mode fetchMode) error {
+	if mode == fetchFiles {
+		return nil
+	}
 	return populateSubmodules(targetDir)
 }
 
@@ -305,6 +348,14 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 // --init` walks the INDEX, so an entry declared in .gitmodules with no gitlink
 // (mode 160000) recorded is ignored and cannot fail a fetch. Only submodules
 // genuinely committed into the tree are attempted.
+//
+// ONLY a whole-project fetch reaches this function (populateByMode). A caller
+// that reads the repo's own tree — the corpus/docs generators — uses
+// DownloadRepoFiles, which never calls it: making a corpus source pay for 412
+// submodules it never reads is the defect spec#267 measured, and failing the
+// fetch when one of them is unreachable (spec#279) made such a repo unusable as
+// a source at all. That opt-out is PER FETCH, not global: the `--repo` cache
+// still populates, and still fails loud here when it cannot.
 func populateSubmodules(targetDir string) error {
 	gm := filepath.Join(targetDir, ".gitmodules")
 	if _, err := os.Stat(gm); err != nil {
@@ -434,8 +485,8 @@ func ReadRepoCacheProvenance(cachePath string) (RepoCacheProvenance, bool) {
 	return p, true
 }
 
-// repoCacheFresh reports whether the cache at cachePath is a complete export
-// cloned from exactly commit AND carrying v2 provenance. A missing export, a
+// repoCacheFreshMode reports whether the cache at cachePath is a complete export
+// for fetchMode, cloned from exactly commit AND carrying v2 provenance. A missing export, a
 // legacy/invalid provenance sidecar (see RepoCacheProvenance), a sidecar naming
 // a different commit (the ref moved upstream), or an INCOMPLETE export all count
 // as stale.
@@ -451,7 +502,13 @@ func ReadRepoCacheProvenance(cachePath string) (RepoCacheProvenance, bool) {
 // cache entry (`charly clean --invalidate` targets image tags), leaving hand-
 // deleting a cache directory as the only remedy. Verifying content instead makes
 // every such cache self-heal on next access.
-func repoCacheFresh(cachePath, commit string) bool {
+//
+// Completeness is MODE-RELATIVE (see fetchMode): a whole-project export must
+// carry its submodule content, while a files-only export is complete the moment
+// its own tree is there — that is the whole content its reader asked for. The
+// two never share a cache path, so this predicate is never asked to judge one
+// mode's export by the other mode's contract.
+func repoCacheFreshMode(cachePath, commit string, mode fetchMode) bool {
 	if commit == "" {
 		return false
 	}
@@ -461,6 +518,12 @@ func repoCacheFresh(cachePath, commit string) bool {
 	p, ok := ReadRepoCacheProvenance(cachePath)
 	if !ok || p.Commit != commit {
 		return false
+	}
+	if mode == fetchFiles {
+		// A files-only export is produced by a clone of exactly this commit and
+		// published by an atomic rename, so its tree IS complete by construction;
+		// the submodule verdict says nothing about the content it certified.
+		return true
 	}
 	return submodulesPopulated(cachePath)
 }
@@ -478,7 +541,7 @@ var submodulesPopulatedCache sync.Map // cachePath -> bool
 // content on disk. An export declaring none is trivially complete. Cached
 // process-wide per cache path, with a persistent cache file across runs.
 //
-// The export has had its .git removed (see downloadRepoFrom), so this reads
+// The export has had its .git removed (see downloadRepoFromMode), so this reads
 // .gitmodules directly — via `git config -f`, the same parser git itself uses,
 // rather than a second hand-rolled INI reader that could disagree with it. An
 // unreadable or absent .gitmodules means nothing to verify, which keeps a
@@ -570,7 +633,9 @@ func submodulesPopulatedUncached(cachePath string) bool {
 	return true
 }
 
-// DownloadRepo downloads a remote repo to the cache.
+// DownloadRepo downloads a remote repo to the cache, as a WHOLE PROJECT: every
+// submodule it declares is populated (see populateSubmodules), because a `--repo`
+// cache is driven by the charly binary and any submodule may be load-bearing.
 // Returns the cache path where the repo was stored.
 //
 // Freshness contract: the cache is reused ONLY when its recorded provenance
@@ -580,32 +645,71 @@ func submodulesPopulatedUncached(cachePath string) bool {
 // GitResolveRef already performs; for immutable tags the provenance always
 // matches, so their cache-hit behavior is unchanged. A cache written before
 // this contract has no provenance and is re-downloaded once, then self-heals.
+//
+// A caller that reads only the repo's OWN TREE uses DownloadRepoFiles instead.
 func DownloadRepo(repoPath string, version string) (string, error) {
+	return downloadRepoWithOverride(repoPath, version, fetchProject)
+}
+
+// DownloadRepoFiles downloads a remote repo to the cache FILES-ONLY: the repo's
+// own tree (its charly.yml, its .agents/ trees, its candy/ dirs) and nothing
+// else. Declared submodules are NEITHER fetched NOR required, so an unreachable
+// one can never fail this fetch.
+//
+// It exists for the corpus/docs SOURCE readers — `charly marketplace generate`
+// (via candywalk.CollectEntitiesRemote) is the caller that forced it: it reads a
+// manifest and a skills tree and never a submodule, yet had to inherit a
+// whole-project fetch that initialised all 412 gitlinks of
+// opencharly/opencharly and failed outright when one could not be reached
+// (spec#279). Fetching content the reader cannot use is a cost defect (spec#267);
+// failing on it is a correctness defect.
+//
+// The returned export is a DIFFERENT CACHE ENTRY from DownloadRepo's
+// (<cache>/.files/<repo>@<version> vs <cache>/<repo>@<version>): content decides
+// the key, so a
+// corpus run and a `--repo` run never re-download each other's entry, and the
+// submodule-completeness predicate the `--repo` cache needs is never applied to
+// a tree export (see repoCacheFreshMode).
+//
+// The signature is exactly candywalk.RemoteResolver's, so a generator passes it
+// as the seam with no SDK change:
+//
+//	candywalk.CollectEntitiesRemote(roots, refs.DownloadRepoFiles)
+func DownloadRepoFiles(repoPath string, version string) (string, error) {
+	return downloadRepoWithOverride(repoPath, version, fetchFiles)
+}
+
+// downloadRepoWithOverride is the ONE entry-point body both public fetches share:
+// the RDD local override first, then the mode-specific fetch.
+func downloadRepoWithOverride(repoPath, version string, mode fetchMode) (string, error) {
 	// RDD local-override (CHARLY_REPO_OVERRIDE): resolve a remote repo ref to a LOCAL
 	// working tree instead of fetching, so an UNCOMMITTED candy/charly.yml change can
 	// be built and evaluated by ANY consumer before it is pushed. Enforced HERE, at the
 	// fetch LEAF, so every caller inherits it — the loader-side orchestration AND the
 	// direct callers (`charly marketplace generate`, `charly docs generate`,
 	// pluginsgen). The override tree is the dev's LIVE tree: used verbatim, never
-	// migrated (migration would mutate the working tree).
+	// migrated (migration would mutate the working tree). It is a live checkout, so it
+	// already holds whatever submodule content the dev has: the override is mode-neutral.
 	if dir, ok, err := proc.RepoOverrideDir(repoPath, os.Getenv(proc.RepoOverrideEnv)); err != nil {
 		return "", err
 	} else if ok {
 		return dir, nil
 	}
-	return downloadRepoFrom(RepoGitURL(repoPath), repoPath, version)
+	return downloadRepoFromMode(RepoGitURL(repoPath), repoPath, version, mode)
 }
 
-// downloadRepoFrom is DownloadRepo with the clone URL explicit, so the
+// downloadRepoFromMode is the ONE fetch implementation, parameterised by
+// fetchMode: resolve → lock → fresh? → clone (mode) → publish. It takes
+// the clone URL explicitly (rather than deriving it from repoPath) so the
 // freshness contract is testable against a local file:// remote.
-func downloadRepoFrom(repoURL, repoPath, version string) (string, error) {
+func downloadRepoFromMode(repoURL, repoPath, version string, mode fetchMode) (string, error) {
 	// Resolve the ref to a commit hash
 	commit, err := GitResolveRef(repoURL, version)
 	if err != nil {
 		return "", fmt.Errorf("resolving %s:%s: %w", repoPath, version, err)
 	}
 
-	cachePath, err := RepoCachePath(repoPath, version)
+	cachePath, err := repoCachePathFor(repoPath, version, mode)
 	if err != nil {
 		return "", err
 	}
@@ -620,17 +724,21 @@ func downloadRepoFrom(repoURL, repoPath, version string) (string, error) {
 	}
 	defer func() { _ = release() }()
 
-	if repoCacheFresh(cachePath, commit) {
+	if repoCacheFreshMode(cachePath, commit, mode) {
 		return cachePath, nil
 	}
 
-	fmt.Fprintf(os.Stderr, "Downloading %s:%s...\n", repoPath, version)
+	if mode == fetchFiles {
+		fmt.Fprintf(os.Stderr, "Downloading %s:%s (files only)...\n", repoPath, version)
+	} else {
+		fmt.Fprintf(os.Stderr, "Downloading %s:%s...\n", repoPath, version)
+	}
 
 	// Clone into a sibling temp dir first, then swap: readers see either the
 	// complete old export or the complete new one, never a half-cloned tree.
 	tmpPath := cachePath + ".download"
 	_ = os.RemoveAll(tmpPath) // leftover from an interrupted earlier download
-	if err := GitClone(repoURL, version, commit, tmpPath); err != nil {
+	if err := gitCloneMode(repoURL, version, commit, tmpPath, mode); err != nil {
 		_ = os.RemoveAll(tmpPath)
 		return "", fmt.Errorf("downloading %s:%s: %w", repoPath, version, err)
 	}
