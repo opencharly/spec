@@ -160,6 +160,12 @@
 	rng?: bool
 	// disks/filesystems are the extra (non-boot) volumes, typed-open passthrough.
 	disks?: [...{[string]: _}]
+	// host_devices is KubeVirt host-device passthrough (spec.domain.devices.hostDevices).
+	// It is the ONLY way a guest gets its own /dev/kvm, which is what nested virtualisation
+	// needs; a CPU feature alone is not enough. The device vocabulary belongs to the
+	// cluster's device plugin — on quant-dev it advertises `devices.kubevirt.io/kvm`, so the
+	// entry is `{device_name: "kvm", name: "kvm"}`.
+	host_devices?: [...#KubevirtHostDevice]
 	inputs?: [...#KubevirtInput]
 	watchdog?: #KubevirtWatchdog @go(Watchdog,optional=nillable)
 }
@@ -167,6 +173,14 @@
 #KubevirtInput: {
 	type: "tablet" | "mouse" | "keyboard"
 	bus?: "virtio" | "usb" | "ps2"
+}
+
+#KubevirtHostDevice: {
+	// device_name is the resource the cluster's device plugin advertises, without its
+	// `devices.kubevirt.io/` prefix — `kvm`, `nvidia.com/gpu`, …
+	device_name: string
+	// name is the device's label inside the guest; KubeVirt defaults it to device_name.
+	name?: string
 }
 
 #KubevirtWatchdog: {
