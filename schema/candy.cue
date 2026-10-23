@@ -21,7 +21,7 @@
 	// candy chain (engine.go ResolveBoxEngine) and cross-candy conflicts are a
 	// validate error. RETAINED by the schema-compaction consumer audit.
 	// The engine vocabulary is #EngineName (schema/engine.cue) — one source shared
-	// by every authored engine field, so a new engine (nerdctl) lands once.
+	// by every authored engine field, so a new engine (containerd) lands once.
 	engine?: #EngineName
 	// `from:` is NOT a candy field — EDGE-INHERIT cutover D: a candy: node carrying
 	// `base:` or `from:` is a full IMAGE (#Box, the former box:), routed there by the

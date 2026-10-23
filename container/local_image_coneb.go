@@ -43,7 +43,7 @@ import (
 var LocalImageExists = defaultLocalImageExists
 
 // imageExistsProbeArgv returns the local-store probe subcommand for an engine:
-// podman's `image exists`, or the `image inspect` fallback docker/nerdctl need
+// podman's `image exists`, or the `image inspect` fallback docker/containerd need
 // (docker has no `image exists`). It is a pure function of the capability table,
 // so the engine→probe mapping is testable without shelling out and no engine
 // name is switched on.
@@ -56,7 +56,7 @@ func imageExistsProbeArgv(engine string) []string {
 
 func defaultLocalImageExists(engine, imageRef string) bool {
 	binary := EngineBinary(engine)
-	// The probe argv is a capability fact (podman `image exists`; docker/nerdctl
+	// The probe argv is a capability fact (podman `image exists`; docker/containerd
 	// `image inspect`), so this does not switch on the engine name.
 	cmd := exec.Command(binary, append(imageExistsProbeArgv(engine), imageRef)...)
 	cmd.Stdout = nil

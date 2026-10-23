@@ -673,11 +673,12 @@ func TestParseContainerUserHome(t *testing.T) {
 	}
 }
 
-// TestWrapWithJump_Nerdctl proves the engine is DATA on the jump: JumpContainerExec
-// with Engine "nerdctl" emits `nerdctl exec -i`, not podman. It fails against the
+// TestWrapWithJump_Containerd proves the engine is DATA on the jump: the ENGINE
+// word containerd resolves to its nerdctl CLI, so JumpContainerExec with Engine
+// "containerd" emits `nerdctl exec -i`, not podman. It fails against the
 // pre-engine-data code, where an unknown engine silently fell through to podman.
-func TestWrapWithJump_Nerdctl(t *testing.T) {
-	j := NestedJump{Kind: JumpContainerExec, Engine: "nerdctl", Target: "mybox"}
+func TestWrapWithJump_Containerd(t *testing.T) {
+	j := NestedJump{Kind: JumpContainerExec, Engine: "containerd", Target: "mybox"}
 	out, err := wrapWithJump(j, "echo hi", false)
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
@@ -686,7 +687,7 @@ func TestWrapWithJump_Nerdctl(t *testing.T) {
 		t.Errorf("wrapped missing `nerdctl exec -i`: %s", out)
 	}
 	if strings.Contains(out, "podman exec") {
-		t.Errorf("nerdctl jump leaked podman: %s", out)
+		t.Errorf("containerd jump leaked podman: %s", out)
 	}
 }
 
@@ -697,7 +698,7 @@ func TestJumpEngineBinary(t *testing.T) {
 		jump NestedJump
 		want string
 	}{
-		{NestedJump{Kind: JumpContainerExec, Engine: "nerdctl"}, "nerdctl"},
+		{NestedJump{Kind: JumpContainerExec, Engine: "containerd"}, "nerdctl"},
 		{NestedJump{Kind: JumpContainerExec, Engine: "docker"}, "docker"},
 		{NestedJump{Kind: JumpContainerExec, Engine: "podman"}, "podman"},
 		{NestedJump{Kind: JumpContainerExec}, "podman"},
@@ -709,14 +710,14 @@ func TestJumpEngineBinary(t *testing.T) {
 	}
 }
 
-// TestCopyIntoJumpCommand_Nerdctl is the cp-side twin of the wrap test.
-func TestCopyIntoJumpCommand_Nerdctl(t *testing.T) {
-	j := NestedJump{Kind: JumpContainerExec, Engine: "nerdctl", Target: "mybox"}
+// TestCopyIntoJumpCommand_Containerd is the cp-side twin of the wrap test.
+func TestCopyIntoJumpCommand_Containerd(t *testing.T) {
+	j := NestedJump{Kind: JumpContainerExec, Engine: "containerd", Target: "mybox"}
 	out, err := copyIntoJumpCommand(j, "/stage/f", "/remote/f", 0o644, false)
 	if err != nil {
 		t.Fatalf("copy: %v", err)
 	}
 	if !strings.Contains(out, "nerdctl cp") || strings.Contains(out, "podman") {
-		t.Errorf("nerdctl copy jump wrong: %s", out)
+		t.Errorf("containerd copy jump wrong: %s", out)
 	}
 }

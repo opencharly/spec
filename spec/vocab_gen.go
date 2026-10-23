@@ -293,11 +293,18 @@ var KindValueDefs = map[string]string{
 	"vm":          "#VmValue",
 }
 
-// EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.
+// EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/containerd. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.
 var EngineNames = []string{
 	"podman",
 	"docker",
-	"nerdctl",
+	"containerd",
+}
+
+// EngineBinaries is the engine WORD → CLI BINARY mapping (#EngineBinaries) — containerd is driven through nerdctl, so the engine word is not the binary. container.engineCapabilities and exec's jump read this ONE table; it lives in the contract module so neither package needs to import the other.
+var EngineBinaries = map[string]string{
+	"containerd": "nerdctl",
+	"docker":     "docker",
+	"podman":     "podman",
 }
 
 // EngineRunModes is the CLOSED engine run-mode vocabulary (#EngineRunMode) — quadlet/systemd-unit/direct. IsRunMode and ValidateRunMode derive from it; the per-engine mode mapping is container.EngineCapabilityFor.
@@ -311,4 +318,19 @@ var EngineRunModes = []string{
 var EngineUnitRunModeWords = []string{
 	"quadlet",
 	"systemd-unit",
+}
+
+// RootfulModes is the CLOSED rootful-launch vocabulary (#RootfulMode) — auto/machine/sudo/native, shared by engine.rootful, CHARLY_ENGINE_ROOTFUL and the per-deploy rootful: selector. A resolver validates a flag/env/settings value against it instead of carrying literals.
+var RootfulModes = []string{
+	"auto",
+	"machine",
+	"sudo",
+	"native",
+}
+
+// VmBackends is the CLOSED VM-backend PROVIDER vocabulary (#VmBackendName) — libvirt/qemu/krun, excluding the auto resolution selector that #VmBackend adds as its default. A resolver validates --backend / CHARLY_VM_BACKEND / vm.backend against it instead of carrying literals.
+var VmBackends = []string{
+	"libvirt",
+	"qemu",
+	"krun",
 }

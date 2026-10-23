@@ -91,7 +91,7 @@ const (
 	// OpEngineDescribe / OpEngineBinary / OpEngineGPURunArgs / OpEngineStartPlan /
 	// OpEngineUnitEmit / OpEngineNetworkEnsure are the `engine` provider-class selectors
 	// (spec/schema/engine.cue). A compiled-in engine:podman / engine:docker provider (and
-	// the out-of-process engine:nerdctl plugin) dispatches req.GetOp() against these,
+	// the out-of-process engine:containerd plugin) dispatches req.GetOp() against these,
 	// decoding the matching spec.Engine*Request and returning the spec.Engine*Reply. The
 	// values are the op NAMES the engine.cue doc comments use ("describe", "binary",
 	// "gpu_args", "start_plan", "unit_emit", "network_ensure"); none collides with another

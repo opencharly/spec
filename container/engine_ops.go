@@ -17,7 +17,7 @@ import (
 //
 // The kernel/plugin boundary law places engine BEHAVIOR on a provider: this is
 // the placement-agnostic op BODY. A compiled-in charly provider
-// (engine:podman / engine:docker) and an out-of-process engine:nerdctl plugin
+// (engine:podman / engine:docker) and an out-of-process engine:containerd plugin
 // both wrap InvokeEngineOp, so an op is written once and served from either
 // placement — the same F8 property every other class relies on. The spec module
 // carries no project state, so the servant is pure: it takes the op envelope's
@@ -45,7 +45,7 @@ func EngineOps() []string {
 }
 
 // InvokeEngineOp dispatches one engine-class op for the provider word `reserved`
-// (podman/docker/nerdctl) and returns the reply as JSON. It is the placement-
+// (podman/docker/containerd) and returns the reply as JSON. It is the placement-
 // agnostic body both a compiled-in charly provider and an out-of-process plugin
 // wrap. An unknown op is a hard error (never a silent empty reply), so a
 // dispatch gap is visible.
@@ -160,9 +160,11 @@ func engineDescribe(engine string) (json.RawMessage, error) {
 
 // engineStartPlan answers OpEngineStartPlan: the engine-specific container launch
 // argv. The plan's spike-proven sharing rule is applied here from the capability
-// table — an engine without keep-id (nerdctl rootless) launches the workload as
-// its declared WorkloadUser (container-uid 0 == the invoking host user), while a
-// keep-id engine uses its UsernsKeepIDArg when the caller asked for keep_id.
+// table — an engine without keep-id (containerd rootless) launches the workload
+// as its mode-specific workload user (container-uid 0 == the invoking host user),
+// while a keep-id engine uses its UsernsKeepIDArg when the caller asked for
+// keep_id. `rootful` selects the rootful fact, so the plan never assumes the
+// rootless mode; a non-empty `runtime` is passed as `--runtime` from data.
 func engineStartPlan(engine string, req spec.EngineStartPlanRequest) (json.RawMessage, error) {
 	c, ok := EngineCapabilityFor(engine)
 	if !ok {
@@ -179,17 +181,30 @@ func engineStartPlan(engine string, req spec.EngineStartPlanRequest) (json.RawMe
 		argv = append(argv, "--network", req.Network)
 	}
 	// uid-identical sharing: keep-id engines map the invoking user; engines
-	// without keep-id run as the declared workload user (0 == host user rootless).
+	// without keep-id run as the mode-specific workload user (rootless 0 == the
+	// invoking host user; rootful empty means "leave the image's user alone").
+	workloadUser := WorkloadUserFor(c, req.Rootful)
 	switch {
 	case req.KeepID && c.SupportsUsernsKeepID && c.UsernsKeepIDArg != "":
 		argv = append(argv, c.UsernsKeepIDArg)
-	case !c.SupportsUsernsKeepID && c.WorkloadUser != "":
+	case !c.SupportsUsernsKeepID && workloadUser != "":
 		if req.WorkloadUser == "" {
-			req.WorkloadUser = c.WorkloadUser
+			req.WorkloadUser = workloadUser
 		}
 		argv = append(argv, "--user", req.WorkloadUser)
 	case req.WorkloadUser != "":
 		argv = append(argv, "--user", req.WorkloadUser)
+	}
+	// The runtime handler is DATA (the capability's runtime_handlers) — the plan
+	// never spells a handler literal, and it refuses a handler the engine does
+	// not declare rather than passing an unvalidated word to the CLI.
+	if req.Runtime != "" {
+		if !contains(c.RuntimeHandlers, req.Runtime) {
+			return marshalReply(spec.EngineStartPlanReply{Error: fmt.Sprintf(
+				"runtime %q is not a handler of engine %q; supported: %s",
+				req.Runtime, c.Name, strings.Join(c.RuntimeHandlers, ", "))})
+		}
+		argv = append(argv, "--runtime", req.Runtime)
 	}
 	if req.UsernsHost {
 		argv = append(argv, "--userns", "host")
@@ -309,7 +324,7 @@ func renderSystemdUnit(req spec.EngineUnitRequest) string {
 }
 
 // engineNetworkEnsure answers OpEngineNetworkEnsure: the argv that makes the
-// shared container network exist (podman `network create`; nerdctl CNI
+// shared container network exist (podman `network create`; containerd's nerdctl CNI
 // `network create`). The caller runs the argv; the servant returns it.
 func engineNetworkEnsure(engine string, req spec.EngineNetworkEnsureRequest) (json.RawMessage, error) {
 	c, ok := EngineCapabilityFor(engine)

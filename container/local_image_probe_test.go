@@ -13,9 +13,9 @@ func TestImageExistsProbeArgv(t *testing.T) {
 	cases := map[string][]string{
 		// podman has a dedicated `image exists` subcommand.
 		"podman": {"image", "exists"},
-		// docker has no `image exists`; docker and nerdctl both use `image inspect`.
-		"docker":  {"image", "inspect"},
-		"nerdctl": {"image", "inspect"},
+		// docker has no `image exists`; docker and containerd both use `image inspect`.
+		"docker":     {"image", "inspect"},
+		"containerd": {"image", "inspect"},
 		// The EMPTY word AND an unknown non-empty word both resolve to the ONE
 		// default engine (podman → `image exists`), agreeing with EngineBinary, so
 		// one input never splits across two engines' probes.
@@ -51,7 +51,7 @@ func TestImageExistsProbeArgvMatchesTable(t *testing.T) {
 // TestResolveShellImageRefProbesInstalledEngine gates the fix for the local
 // CalVer resolution: ResolveShellImageRef must resolve against the engine
 // ACTUALLY installed on the host, not the hardcoded "podman". Before the change
-// it called ResolveNewestLocalCalVer("podman", name) — wrong on a docker/nerdctl
+// it called ResolveNewestLocalCalVer("podman", name) — wrong on a docker/containerd
 // host, where it inspected the wrong local store. The engine that reaches the
 // lister must therefore be the "auto" selector (which EngineBinary resolves via
 // DetectEngine), not a literal engine word. This test FAILS if the call reverts

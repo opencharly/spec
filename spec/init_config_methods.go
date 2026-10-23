@@ -67,7 +67,8 @@ func detectsInit(def *ResolvedInit, ly *CandyYAML, candyPath string) bool {
 }
 
 // ResolveInitSystem determines the active init system for an image.
-// Priority: explicit override → auto-detect from candies.
+// Priority: explicit box override → the composition's init-system HINT → the
+// venue defaults (bootc's systemd, a container's supervisord) → any candidate.
 // Returns ("", nil) if no init system is needed.
 //
 // Candy capability requirements (RequiresCapabilities) are checked
@@ -104,6 +105,24 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]CandyReader, candyOrde
 	if explicit != "" {
 		if def, ok := candidates[explicit]; ok {
 			return explicit, def
+		}
+	}
+
+	// A candy's `capability: {init_system_hint: <name>}` is the composition's
+	// DECLARED init preference — the only data that selects a CONTAINER-venue init
+	// which is neither bootc's systemd: nor the default supervisord:. It is honored
+	// ONLY for a viable candidate, so the resolved name is always a key of
+	// ActiveInit (the EmitInitAssembly invariant) and a hint naming an init whose
+	// requirement is unmet falls through to the venue defaults below instead of
+	// resolving to a name nothing can enable.
+	//
+	// The hint is intentionally a PREFERENCE, not a conflict detector:
+	// AggregateCandyCapabilities keeps the last non-empty hint in the resolved
+	// candy order, so a composition with two competing hints gets the later one.
+	// The box's explicit `init:` (the branch above) is the disambiguator.
+	if hint := caps.InitSystemHint; hint != "" {
+		if def, ok := candidates[hint]; ok {
+			return hint, def
 		}
 	}
 

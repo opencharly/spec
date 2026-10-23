@@ -37,6 +37,7 @@ type RuntimeConfig struct {
 	ForwardGpgAgent        *bool             `yaml:"forward_gpg_agent,omitempty" json:"forward_gpg_agent,omitempty"` // Forward host GPG agent socket into containers (default: true)
 	ForwardSSHAgent        *bool             `yaml:"forward_ssh_agent,omitempty" json:"forward_ssh_agent,omitempty"` // Forward host SSH agent socket into containers (default: true)
 	Vm                     RuntimeVmConfig   `yaml:"vm,omitempty" json:"vm,omitempty"`
+	Containerd             ContainerdConfig  `yaml:"containerd,omitempty" json:"containerd,omitempty"`
 	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty" json:"vnc_passwords,omitempty"`                       // VNC passwords keyed by image[-instance]
 	KeyringKeys            []string          `yaml:"keyring_keys,omitempty" json:"keyring_keys,omitempty"`                         // Shadow index: names of keys stored in keyring (no values)
 	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty" json:"keyring_collection_label,omitempty"` // Preferred Secret Service collection label; empty means use default alias then iterate.
@@ -63,6 +64,14 @@ type RuntimeVmConfig struct {
 	ImageDir string `yaml:"image_dir,omitempty" json:"image_dir,omitempty"`
 }
 
+// ContainerdConfig holds the containerd-engine settings that are not per-engine
+// capability facts: the namespace a deploy's images and containers live in.
+// The default resolution is deploy > this setting > the engine capability's
+// `namespace` fact (containerd: "default"); there is no env mirror.
+type ContainerdConfig struct {
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+}
+
 // EngineConfig specifies which container engine to use AS A RUNTIME.
 //
 // There is no `build:` here. The image BUILDER is not an engine and is not selectable:
@@ -80,7 +89,7 @@ type EngineConfig struct {
 
 // ResolvedRuntime holds the fully resolved runtime configuration
 type ResolvedRuntime struct {
-	RunEngine            string // a member of spec.EngineNames (podman/docker/nerdctl)
+	RunEngine            string // a member of spec.EngineNames (podman/docker/containerd)
 	Rootful              string // "auto", "machine", "sudo", "native"
 	RunMode              string // a member of spec.EngineRunModes (quadlet/systemd-unit/direct)
 	AutoEnable           bool   // auto-enable quadlet on first start
@@ -90,6 +99,7 @@ type ResolvedRuntime struct {
 	ForwardGpgAgent      bool   // forward host GPG agent socket into containers
 	ForwardSSHAgent      bool   // forward host SSH agent socket into containers
 	VmBackend            string // "auto", "libvirt", or "qemu"
+	Namespace            string // containerd namespace: settings value, else the engine capability's namespace fact
 }
 
 // RuntimeConfigPath returns the path to the user's runtime config file. A test-injection SEAM var
@@ -189,6 +199,17 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		}
 	}
 
+	// Namespace: the settings value, else the resolved engine's capability
+	// namespace fact. containerd's row carries "default"; an engine with no
+	// namespace concept leaves it empty (the field is unused for that engine).
+	// There is no env mirror — the plan's precedence is deploy > config > default.
+	rt.Namespace = cfg.Containerd.Namespace
+	if rt.Namespace == "" {
+		if capability, ok := container.EngineCapabilityFor(rt.RunEngine); ok {
+			rt.Namespace = capability.Namespace
+		}
+	}
+
 	// Auto-detect run mode: default to quadlet when podman + systemd are present
 	if rt.RunMode == "auto" {
 		rt.RunMode = DetectRunMode(rt.RunEngine)
@@ -277,8 +298,8 @@ func ValidateRunMode(value string) error {
 //
 //   - podman  → "quadlet" when a functional systemd-user session is reachable,
 //     otherwise "direct".
-//   - nerdctl → "systemd-unit" when a functional systemd-user session is
-//     reachable (nerdctl has no quadlet generator; charly emits a .service that
+//   - containerd → "systemd-unit" when a functional systemd-user session is
+//     reachable (containerd has no quadlet generator; charly emits a .service that
 //     wraps the nerdctl CLI), otherwise "direct".
 //   - anything else (docker) → "direct".
 //

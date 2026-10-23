@@ -43,7 +43,7 @@ func boxInit(t *testing.T, init string) error {
 // This case fails on the pre-change enum: `openrc` is not a member, so unification
 // with #Box is a conflict.
 func TestBoxInitAcceptsEveryVocabularyInit(t *testing.T) {
-	for _, init := range []string{"supervisord", "systemd", "openrc"} {
+	for _, init := range []string{"supervisord", "systemd", "systemd-container", "openrc"} {
 		if err := boxInit(t, init); err != nil {
 			t.Errorf("#Box.init rejects %q, which the build vocabulary defines as a "+
 				"first-class init: a box cannot select an init charly implements\n%v", init, err)

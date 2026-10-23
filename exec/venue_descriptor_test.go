@@ -136,7 +136,7 @@ func TestDescriptorFromExecutor_Container(t *testing.T) {
 	}{
 		{"podman", "podman", "podman"},
 		{"docker", "docker", "docker"},
-		{"nerdctl", "nerdctl", "nerdctl"},
+		{"containerd", "containerd", "containerd"},
 		{"empty stays empty (pure inverse)", "", ""},
 	}
 	for _, tc := range cases {
@@ -162,7 +162,7 @@ func TestVenueFromDescriptor_Container(t *testing.T) {
 	}{
 		{"podman", "podman", "podman"},
 		{"docker", "docker", "docker"},
-		{"nerdctl", "nerdctl", "nerdctl"},
+		{"containerd", "containerd", "containerd"},
 		{"empty engine defaults to podman", "", ""},
 	}
 	for _, tc := range cases {
