@@ -168,7 +168,9 @@ spec-skill-shelf:
   candy:
     description: |-
       Concept candy owning the contract module's own skills — the ones whose source of truth is
-      this module's CUE schema and wire types (`schema/deploy.cue`, `spec/install_plan.go`). It ships
+      this module's CUE schema and wire types: `schema/deploy.cue` + `spec/install_plan.go`, and the
+      authoring defs `schema/box.cue`, `schema/candy.cue`, `schema/pod.cue`, `schema/vm.cue` and
+      `schema/local.cue`. It ships
       no install content and composes no image; it carries the `skill:` routing nodes, and the prose
       lives in `.agents/skills/<name>/SKILL.md` at this repo's root.
     plan:
@@ -195,3 +197,59 @@ install-plan-skill:
     owner: spec-skill-shelf
     triggers:
       - "IR / InstallPlan / EmitTarget / OCITarget"
+
+# -----------------------------------------------------------------------------
+# The SCHEMA-AUTHORING skills — authored beside the CUE defs they document.
+#
+# Each is a ROUTING-ONLY node: `name`/`family`/`owner` (plus `triggers:` where the
+# skill generates DISPATCHER.md rows). The prose is the skill FILE at
+# `.agents/skills/<name>/SKILL.md`; nothing here inlines a `description:` or a
+# `content:` — the two disagreeing is a hard error in the marketplace generator.
+#
+# `owner:` names the shelf candy above. What each skill documents is a def in
+# `schema/` whose generated Go types live in `spec/cue_types_gen.go`
+# (`box.cue`/`candy.cue` → the image and layer authoring shapes, `pod.cue` →
+# `PodSpec` + the deploy node, `vm.cue` → `VmSpec`, `local.cue` → the
+# `kind: local` template) — the contract this repo is. `family:` is the
+# marketplace family each skill was authored under, kept so every existing
+# `/charly-image:*`, `/charly-pod:*`, `/charly-vm:*` and `/charly-local:*`
+# address still resolves; it is a registry namespace, never a repo class.
+# -----------------------------------------------------------------------------
+image-skill:
+  skill:
+    name: image
+    family: image
+    owner: spec-skill-shelf
+    triggers:
+      - "Editing a box (`box/<name>/charly.yml` — boxes live in the `box/<distro>` submodules; main owns none), box composition"
+layer-skill:
+  skill:
+    name: layer
+    family: image
+    owner: spec-skill-shelf
+    triggers:
+      - "Editing a candy (`candy/<name>/charly.yml`), candy authoring, candy tasks/services"
+pod-skill:
+  skill:
+    name: pod
+    family: pod
+    owner: spec-skill-shelf
+vms-catalog-skill:
+  skill:
+    name: vms-catalog
+    family: vm
+    owner: spec-skill-shelf
+vm-spec-skill:
+  skill:
+    name: vm-spec
+    family: internals
+    owner: spec-skill-shelf
+    triggers:
+      - "VmSpec / libvirt / cloud-init / OVMF internals"
+local-spec-skill:
+  skill:
+    name: local-spec
+    family: local
+    owner: spec-skill-shelf
+    triggers:
+      - "Editing `local.yml` / authoring `kind: local` templates"
