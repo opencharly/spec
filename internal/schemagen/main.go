@@ -229,6 +229,20 @@ func writeVocab(dir, out string) error {
 	if err != nil {
 		return err
 	}
+	// rootfulModes — the rootful-launch vocabulary, so a resolver validates
+	// engine.rootful / CHARLY_ENGINE_ROOTFUL / the per-deploy rootful: against
+	// the schema rather than a hand-listed word set.
+	rootfulModes, err := enumValues(schema, "#RootfulMode")
+	if err != nil {
+		return err
+	}
+	// vmBackends — the VM-backend PROVIDER words (no `auto` selector), so a
+	// resolver validates --backend / CHARLY_VM_BACKEND / vm.backend without
+	// literals. #VmBackend itself keeps `auto` as its resolution default.
+	vmBackends, err := enumValues(schema, "#VmBackendName")
+	if err != nil {
+		return err
+	}
 	opVerbs, err := enumValues(schema, "#OpVerb")
 	if err != nil {
 		return err
@@ -266,6 +280,8 @@ func writeVocab(dir, out string) error {
 		engineBinaries:      engineBinaries,
 		engineRunModes:      engineRunModes,
 		engineUnitRunModes:  engineUnitRunModes,
+		rootfulModes:        rootfulModes,
+		vmBackends:          vmBackends,
 	})
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
@@ -510,6 +526,8 @@ type vocabSets struct {
 	engineBinaries      map[string]string
 	engineRunModes      []string
 	engineUnitRunModes  []string
+	rootfulModes        []string
+	vmBackends          []string
 }
 
 func renderVocab(s vocabSets) string {
@@ -541,6 +559,8 @@ func renderVocab(s vocabSets) string {
 	writeStrMap(&b, "EngineBinaries", "the engine WORD → CLI BINARY mapping (#EngineBinaries) — containerd is driven through nerdctl, so the engine word is not the binary. container.engineCapabilities and exec's jump read this ONE table; it lives in the contract module so neither package needs to import the other.", s.engineBinaries)
 	writeStrSlice(&b, "EngineRunModes", "the CLOSED engine run-mode vocabulary (#EngineRunMode) — quadlet/systemd-unit/direct. IsRunMode and ValidateRunMode derive from it; the per-engine mode mapping is container.EngineCapabilityFor.", s.engineRunModes)
 	writeStrSlice(&b, "EngineUnitRunModeWords", "the SUBSET of EngineRunModes supervised by a generated unit file (#EngineUnitRunModes) — quadlet/systemd-unit, not direct. container.IsUnitRunMode reads it, so the unit-capability question is a data fact, never a hand-listed pair.", s.engineUnitRunModes)
+	writeStrSlice(&b, "RootfulModes", "the CLOSED rootful-launch vocabulary (#RootfulMode) — auto/machine/sudo/native, shared by engine.rootful, CHARLY_ENGINE_ROOTFUL and the per-deploy rootful: selector. A resolver validates a flag/env/settings value against it instead of carrying literals.", s.rootfulModes)
+	writeStrSlice(&b, "VmBackends", "the CLOSED VM-backend PROVIDER vocabulary (#VmBackendName) — libvirt/qemu/krun, excluding the auto resolution selector that #VmBackend adds as its default. A resolver validates --backend / CHARLY_VM_BACKEND / vm.backend against it instead of carrying literals.", s.vmBackends)
 	return b.String()
 }
 

@@ -179,6 +179,56 @@ func TestDeployBackendAndNamespace(t *testing.T) {
 	}
 }
 
+// TestDeployRootfulVocabulary pins the per-deploy rootful selector and its closed
+// vocabulary. `rootful:` is an authored deploy field (the W3.1 selection model),
+// so a typo must be a schema conflict, not a value that reaches a resolver.
+func TestDeployRootfulVocabulary(t *testing.T) {
+	def, ctx := defValue(t, "#Deploy")
+	check := checker(def, ctx)
+	for _, mode := range []string{"auto", "machine", "sudo", "native"} {
+		if err := check(`{rootful: "` + mode + `"}`); err != nil {
+			t.Errorf("#Deploy rejects rootful: %q: %v", mode, err)
+		}
+	}
+	if err := check(`{rootful: "bogus"}`); err == nil {
+		t.Error("#Deploy accepts rootful: bogus; #RootfulMode is not closed")
+	}
+
+	// The bare def is closed too, so the rejection is the vocabulary's, not a
+	// quirk of the authored field.
+	modeDef, modeCtx := defValue(t, "#RootfulMode")
+	mode := checker(modeDef, modeCtx)
+	if err := mode(`"bogus"`); err == nil {
+		t.Error("#RootfulMode accepts \"bogus\"; the rootful vocabulary is not closed")
+	}
+}
+
+// TestVmBackendNameIsProviderWordsOnly pins the split the resolver depends on:
+// #VmBackendName is the PROVIDER vocabulary (libvirt/qemu/krun) that cue-gen
+// emits as spec.VmBackends, while #VmBackend adds `auto` as the resolution
+// default. `auto` must never leak into the provider list.
+func TestVmBackendNameIsProviderWordsOnly(t *testing.T) {
+	def, ctx := defValue(t, "#VmBackendName")
+	check := checker(def, ctx)
+	for _, word := range []string{"libvirt", "qemu", "krun"} {
+		if err := check(`"` + word + `"`); err != nil {
+			t.Errorf("#VmBackendName rejects %q: %v", word, err)
+		}
+	}
+	for _, word := range []string{"auto", "bogus"} {
+		if err := check(`"` + word + `"`); err == nil {
+			t.Errorf("#VmBackendName accepts %q; the provider vocabulary excludes the auto selector", word)
+		}
+	}
+
+	// The authored/persisted selector still carries auto as its default.
+	fullDef, fullCtx := defValue(t, "#VmBackend")
+	full := checker(fullDef, fullCtx)
+	if err := full(`"auto"`); err != nil {
+		t.Errorf("#VmBackend rejects \"auto\": %v", err)
+	}
+}
+
 // TestVmKrunDefaultsMaterialize proves the krun defaults are the authoritative
 // CUE data, not a consumer-side literal: with the block's fields omitted, CUE
 // materializes 962/256 and tsi/stock/off/false. The fields are
@@ -238,7 +288,8 @@ func TestDeployTraitsSelectorData(t *testing.T) {
 	for _, body := range []string{
 		`{selectors: ["engine"]}`,
 		`{selectors: ["backend"]}`,
-		`{selectors: ["engine", "backend"]}`,
+		`{selectors: ["rootful"]}`,
+		`{selectors: ["engine", "backend", "rootful"]}`,
 		`{}`,
 	} {
 		if err := check(body); err != nil {

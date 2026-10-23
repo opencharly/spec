@@ -84,6 +84,15 @@
 // as spec.EngineUnitRunModeWords, which container.IsUnitRunMode reads.
 #EngineUnitRunModes: ["quadlet", "systemd-unit"] @go(-)
 
+// #RootfulMode — the CLOSED rootful-launch vocabulary shared by the
+// `engine.rootful` settings key, its `CHARLY_ENGINE_ROOTFUL` env mirror, and the
+// per-deploy `rootful:` selector. `auto` asks the resolver to pick from the
+// engine's capability facts (`supports_rootful` / `privilege_prefix`); the rest
+// are explicit operator choices. `charly task cue-gen` emits it as
+// spec.RootfulModes, so a resolver validates a flag/env/settings value without a
+// hand-listed word set.
+#RootfulMode: ("auto" | "machine" | "sudo" | "native")
+
 // #EngineCapability — the static facts about an engine, answered by OpDescribe.
 // This is the PUBLISHED provider contract: the fields a provider fills and the
 // consumers read.

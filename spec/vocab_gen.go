@@ -319,3 +319,18 @@ var EngineUnitRunModeWords = []string{
 	"quadlet",
 	"systemd-unit",
 }
+
+// RootfulModes is the CLOSED rootful-launch vocabulary (#RootfulMode) — auto/machine/sudo/native, shared by engine.rootful, CHARLY_ENGINE_ROOTFUL and the per-deploy rootful: selector. A resolver validates a flag/env/settings value against it instead of carrying literals.
+var RootfulModes = []string{
+	"auto",
+	"machine",
+	"sudo",
+	"native",
+}
+
+// VmBackends is the CLOSED VM-backend PROVIDER vocabulary (#VmBackendName) — libvirt/qemu/krun, excluding the auto resolution selector that #VmBackend adds as its default. A resolver validates --backend / CHARLY_VM_BACKEND / vm.backend against it instead of carrying literals.
+var VmBackends = []string{
+	"libvirt",
+	"qemu",
+	"krun",
+}

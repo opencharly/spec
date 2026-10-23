@@ -4410,11 +4410,12 @@ type DeployTraits struct {
 	//
 	//	"engine"  — a container-engine selector (pod).
 	//	"backend" — a VM-backend selector (vm).
+	//	"rootful" — a rootful-launch selector (pod; the engine must support it).
 	//
 	// A loader reads this (together with the engine capability's `substrates`)
 	// instead of switching on the substrate kind word: `engine:` on a substrate
-	// without "engine" is an error, and likewise `backend:`. This is the DATA
-	// half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	// without "engine" is an error, and likewise `backend:`/`rootful:`. This is
+	// the DATA half of "engine: only on a pod deploy, backend: only on a vm deploy".
 	Selectors []string `yaml:"selectors,omitempty" json:"selectors,omitempty"`
 }
 
@@ -4490,11 +4491,12 @@ type DescentDescriptor struct {
 	//
 	//	"engine"  — a container-engine selector (pod).
 	//	"backend" — a VM-backend selector (vm).
+	//	"rootful" — a rootful-launch selector (pod; the engine must support it).
 	//
 	// A loader reads this (together with the engine capability's `substrates`)
 	// instead of switching on the substrate kind word: `engine:` on a substrate
-	// without "engine" is an error, and likewise `backend:`. This is the DATA
-	// half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	// without "engine" is an error, and likewise `backend:`/`rootful:`. This is
+	// the DATA half of "engine: only on a pod deploy, backend: only on a vm deploy".
 	Selectors []string `yaml:"selectors,omitempty" json:"selectors,omitempty"`
 }
 
@@ -4589,6 +4591,12 @@ type Deploy struct {
 	// namespace is the per-deploy containerd namespace override (kind:pod). The
 	// default resolution stays in code: deploy > config > "default".
 	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// rootful is the per-deploy rootful-launch override (kind:pod). It is valid
+	// only on a substrate whose declared #DeployTraits.selectors includes
+	// "rootful"; the resolution stays in code: flag > deploy > env > config >
+	// the engine capability's default.
+	Rootful RootfulMode `yaml:"rootful,omitempty" json:"rootful,omitempty"`
 
 	Security *Security `yaml:"security,omitempty" json:"security,omitempty"`
 
@@ -4778,12 +4786,21 @@ type Deploy struct {
 	Member []Member `yaml:"member,omitempty" json:"member,omitempty"`
 }
 
-// #VmBackend — the CLOSED VM-backend vocabulary. "auto" is a RESOLUTION
-// selector (today: libvirt, then qemu), never a backend provider word; krun is
-// selected explicitly. The word list lives HERE so the template (#Vm), the
+// #VmBackend — the authored/persisted VM-backend selector: the provider words
+// plus "auto", which resolves by detection (today: libvirt, then qemu) and is
+// never a provider word. The word list lives HERE so the template (#Vm), the
 // persisted deploy state (#VmDeployState) and the VM-backend class all read ONE
 // source.
 type VmBackend string
+
+// #RootfulMode — the CLOSED rootful-launch vocabulary shared by the
+// `engine.rootful` settings key, its `CHARLY_ENGINE_ROOTFUL` env mirror, and the
+// per-deploy `rootful:` selector. `auto` asks the resolver to pick from the
+// engine's capability facts (`supports_rootful` / `privilege_prefix`); the rest
+// are explicit operator choices. `charly task cue-gen` emits it as
+// spec.RootfulModes, so a resolver validates a flag/env/settings value without a
+// hand-listed word set.
+type RootfulMode string
 
 type DeploySecret struct {
 	Name string `yaml:"name,omitempty" json:"name"`
@@ -11558,6 +11575,13 @@ type ValidateWordSetsReply struct {
 
 	ActCapableVerbs []string `yaml:"act_capable_verbs,omitempty" json:"act_capable_verbs,omitempty"`
 }
+
+// #VmBackendName — the CLOSED VM-backend PROVIDER vocabulary, with no
+// resolution selector. `charly task cue-gen` emits it as spec.VmBackends, so a
+// resolver validates `--backend` / `CHARLY_VM_BACKEND` / `vm.backend` against the
+// schema's own word list instead of carrying literals. `auto` is NOT a member:
+// it is a resolution selector, never a provider word.
+type VmBackendName string
 
 type Vm struct {
 	Source VmSource `yaml:"source,omitempty" json:"source"`
