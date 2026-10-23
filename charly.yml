@@ -1,7 +1,10 @@
 # The spec module's project manifest. Its maintenance surface is the
 # `charly task` verbs below — the same generic plugin-task surface the umbrella
-# and charly use. spec owns NO candies/boxes, so there is no `discover:`; only
-# the task entities are declared.
+# and charly use. spec ships NO image and composes NO box, so there is no
+# `discover:`; what this file declares are the task entities plus ONE CONCEPT
+# candy — `spec-skill-shelf`, at the end of the file — which owns the routing
+# metadata of the skills whose source of truth is this module's CUE schema and
+# wire types.
 #
 # Run a task with the `charly` binary (spec is a submodule of
 # opencharly/opencharly and opencharly/charly):
@@ -140,3 +143,55 @@ cue-gen:
         stdout:
           - contains: ok
         context: [runtime]
+
+# -----------------------------------------------------------------------------
+# spec-skill-shelf — the concept candy that owns this module's skills.
+#
+# `charly.yml` is where a skill's routing metadata (`family`/`owner`/`triggers`) is
+# authored beside a `candy:` node (AGENTS.md Part II #5, `spec/schema/skill.cue`), so a
+# module that owns skills must declare one. This is a CARRIER CANDY inside a repo that
+# already holds code — the shape "Repo classes and naming" explicitly sanctions for
+# skills whose entity is an IMAGE, and the same shape used here for a module — not a
+# product family (a family is a `layer-<family>` repo, never a bare one), and not the
+# retired `*-skills` carrier REPO class. The name states what it holds (this repo's
+# skill shelf) and carries the repo's own class (`spec-`), so it cannot be read as a
+# product variant and leaves this repo's bare name — and therefore its class — as it was.
+#
+# It ships no install content, composes no box and appears in no image, so these
+# `skill:` nodes add NOTHING to any `ai.opencharly.skill` OCI label. The prose is the
+# FILE at `.agents/skills/<name>/SKILL.md`; nothing here inlines a `description:` or a
+# `content:` — an inline body that disagrees with its file is a hard error in the
+# marketplace generator, and copying a body back into a node is how a skill drifts from
+# the file that is its source.
+# -----------------------------------------------------------------------------
+spec-skill-shelf:
+  candy:
+    description: |-
+      Concept candy owning the contract module's own skills — the ones whose source of truth is
+      this module's CUE schema and wire types (`schema/deploy.cue`, `spec/install_plan.go`). It ships
+      no install content and composes no image; it carries the `skill:` routing nodes, and the prose
+      lives in `.agents/skills/<name>/SKILL.md` at this repo's root.
+    plan:
+      - run: this documentation-only candy ships no install content (it carries the contract module's skill entities); validate-satisfying no-op
+        command: "true"
+        context:
+          - build
+      - check: validate-satisfying no-op — the assertion is NOT performed by this command; the real body-existence gate is `charly box validate`
+        id: spec-skill-shelf-present
+        context:
+          - build
+        command: "true"
+disposable-skill:
+  skill:
+    name: disposable
+    family: internals
+    owner: spec-skill-shelf
+    triggers:
+      - "Disposable-flag semantics / `disposable: true` authorization / preemptible-flag / `requires_exclusive:` / `charly preempt` / exclusive host-resource arbitration (GPU passthrough contention)"
+install-plan-skill:
+  skill:
+    name: install-plan
+    family: internals
+    owner: spec-skill-shelf
+    triggers:
+      - "IR / InstallPlan / EmitTarget / OCITarget"
