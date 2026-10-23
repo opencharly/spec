@@ -7627,9 +7627,25 @@ type KubevirtDevices struct {
 	// disks/filesystems are the extra (non-boot) volumes, typed-open passthrough.
 	Disks []map[string]any/* CUE top */ `yaml:"disks,omitempty" json:"disks,omitempty"`
 
+	// host_devices is KubeVirt host-device passthrough (spec.domain.devices.hostDevices).
+	// It is the ONLY way a guest gets its own /dev/kvm, which is what nested virtualisation
+	// needs; a CPU feature alone is not enough. The device vocabulary belongs to the
+	// cluster's device plugin — on quant-dev it advertises `devices.kubevirt.io/kvm`, so the
+	// entry is `{device_name: "kvm", name: "kvm"}`.
+	Host_devices []KubevirtHostDevice `yaml:"host_devices,omitempty" json:"host_devices,omitempty"`
+
 	Inputs []KubevirtInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 
 	Watchdog *KubevirtWatchdog `yaml:"watchdog,omitempty" json:"watchdog,omitempty"`
+}
+
+type KubevirtHostDevice struct {
+	// device_name is the resource the cluster's device plugin advertises, without its
+	// `devices.kubevirt.io/` prefix — `kvm`, `nvidia.com/gpu`, …
+	Device_name string `yaml:"device_name,omitempty" json:"device_name"`
+
+	// name is the device's label inside the guest; KubeVirt defaults it to device_name.
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 }
 
 type KubevirtInput struct {
