@@ -7,7 +7,7 @@ import (
 )
 
 // TestIsRepoCached_IncompleteExportIsNotCached is the IMMUTABLE-ref half of the
-// self-heal contract, and it needs its own test because repoCacheFresh never
+// self-heal contract, and it needs its own test because repoCacheFreshMode never
 // sees a tag: EnsureRepoDownloaded short-circuits on
 // `cached && !IsMutableRef(version)` and returns RepoCachePath without entering
 // DownloadRepo. So directory-exists alone pinned every incomplete TAG export
@@ -47,7 +47,7 @@ func TestIsRepoCached_IncompleteExportIsNotCached(t *testing.T) {
 	}
 	if got {
 		t.Error("an incomplete TAG export must NOT count as cached — it can never be " +
-			"re-fetched otherwise, since a tag does not move and repoCacheFresh never sees it")
+			"re-fetched otherwise, since a tag does not move and repoCacheFreshMode never sees it")
 	}
 
 	mk(t, "v2.0.0", true) // complete: must stay a hit, or every access re-clones
