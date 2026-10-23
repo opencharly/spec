@@ -11,12 +11,19 @@
 // ssh.port ⊕ ssh.port_auto, cpu.mode:custom ⇒ model required, hostdev pci ⇒ hex
 // source domain/bus/slot/function. Shared #Step from _common.cue (R3).
 
-// #VmBackend — the CLOSED VM-backend vocabulary. "auto" is a RESOLUTION
-// selector (today: libvirt, then qemu), never a backend provider word; krun is
-// selected explicitly. The word list lives HERE so the template (#Vm), the
+// #VmBackendName — the CLOSED VM-backend PROVIDER vocabulary, with no
+// resolution selector. `charly task cue-gen` emits it as spec.VmBackends, so a
+// resolver validates `--backend` / `CHARLY_VM_BACKEND` / `vm.backend` against the
+// schema's own word list instead of carrying literals. `auto` is NOT a member:
+// it is a resolution selector, never a provider word.
+#VmBackendName: ("libvirt" | "qemu" | "krun")
+
+// #VmBackend — the authored/persisted VM-backend selector: the provider words
+// plus "auto", which resolves by detection (today: libvirt, then qemu) and is
+// never a provider word. The word list lives HERE so the template (#Vm), the
 // persisted deploy state (#VmDeployState) and the VM-backend class all read ONE
 // source.
-#VmBackend: *"auto" | "libvirt" | "qemu" | "krun"
+#VmBackend: *"auto" | #VmBackendName
 
 // #VmKrun — the krun backend's knobs. The BLOCK is optional, and meaningful
 // only when the resolved backend is krun. A krun guest's root is a containerd

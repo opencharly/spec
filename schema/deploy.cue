@@ -55,11 +55,12 @@
 	// selectors: the authored DEPLOY SELECTOR fields this substrate accepts.
 	//   "engine"  — a container-engine selector (pod).
 	//   "backend" — a VM-backend selector (vm).
+	//   "rootful" — a rootful-launch selector (pod; the engine must support it).
 	// A loader reads this (together with the engine capability's `substrates`)
 	// instead of switching on the substrate kind word: `engine:` on a substrate
-	// without "engine" is an error, and likewise `backend:`. This is the DATA
-	// half of "engine: only on a pod deploy, backend: only on a vm deploy".
-	selectors?: [...("engine" | "backend")] @go(Selectors)
+	// without "engine" is an error, and likewise `backend:`/`rootful:`. This is
+	// the DATA half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	selectors?: [...("engine" | "backend" | "rootful")] @go(Selectors)
 }
 
 // #DescentDescriptor is the loader-DERIVED venue-hop descriptor (Cutover H + P9).
@@ -158,7 +159,12 @@
 	// namespace is the per-deploy containerd namespace override (kind:pod). The
 	// default resolution stays in code: deploy > config > "default".
 	namespace?: string @go(Namespace)
-	security?: #Security @go(Security,optional=nillable)
+	// rootful is the per-deploy rootful-launch override (kind:pod). It is valid
+	// only on a substrate whose declared #DeployTraits.selectors includes
+	// "rootful"; the resolution stays in code: flag > deploy > env > config >
+	// the engine capability's default.
+	rootful?:  #RootfulMode @go(Rootful)
+	security?: #Security    @go(Security,optional=nillable)
 	secret?: [...#DeploySecret]
 	volume?: [...#DeployVolume]
 	// volume_project_checked marks that this deploy's PROJECT-declared `volume:` override has
