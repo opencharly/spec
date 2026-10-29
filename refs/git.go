@@ -70,15 +70,69 @@ var (
 	gitOpWaitDelay = 5 * time.Second
 )
 
-// gitOpTransientRe matches git's stderr signatures for a connection killed in a
-// reset window or otherwise-flaky network — the exact curl-error-92 /
-// "RPC failed; HTTP/2 stream 5 reset" class that introduced this runner. A
-// permanently-missing repo ("Repository not found", URL error 404/403) does NOT
-// match and is NOT retried: retrying a permanent failure would mask the real
-// error and triple its latency.
-var gitOpTransientRe = regexp.MustCompile(
-	`(?i)(rpc failed|http/2|connection (reset|refused|closed|aborted)|could not resolve host|failed to connect to|timed out|early eof|network is unreachable|transfer closed with outstanding|hung up unexpectedly|unexpected disconnect|empty reply from server|returned error: 5\d\d)`,
-)
+// gitOpTransientSignatures is the vocabulary of TRANSIENT network faults — the
+// stderr strings git and curl actually write when a connection dies in a reset
+// window or on a flaky network.
+//
+// It is a TABLE of fault CLASSES and not one hand-written pattern because the
+// same fault family is spelled more than one way: git writes "RPC failed;
+// HTTP/2 stream 5 reset" (with a slash) while curl writes "Error in the HTTP2
+// framing layer" (without one). A single pattern carrying only the slashed
+// spelling classified curl's framing fault as PERMANENT, so the bounded retry
+// below never fired and ONE transient fault aborted an entire `charly
+// marketplace generate` at entity 253 of ~1400 (opencharly/spec#284).
+//
+// Each entry is one class, and the class NAME is the key the recorded fixture
+// table in refs/git_transient_signatures_test.go is keyed by: that file holds a
+// RECORDED stderr string per class, and the test asserts both directions —
+// every recorded fault is classified transient, every recorded permanent
+// failure is not, and every class here is backed by a record there. A class
+// added here with no recorded signature behind it is a guess, and the test says
+// so.
+//
+// A permanently-missing repo ("Repository not found", URL error 404/403) is NOT
+// in this table and is NOT retried: retrying a permanent failure would mask the
+// real error and triple its latency.
+var gitOpTransientSignatures = []gitOpTransientSignature{
+	{class: "rpc failed", re: regexp.MustCompile(`(?i)rpc failed`)},
+	{class: "http2 protocol fault", re: regexp.MustCompile(`(?i)http/2|http2`)},
+	{class: "connect failed", re: regexp.MustCompile(`(?i)failed to connect to`)},
+	{class: "connection reset", re: regexp.MustCompile(`(?i)connection (reset|refused|closed|aborted)`)},
+	{class: "host unresolvable", re: regexp.MustCompile(`(?i)could not resolve host`)},
+	{class: "deadline exceeded", re: regexp.MustCompile(`(?i)timed out`)},
+	{class: "early eof", re: regexp.MustCompile(`(?i)early eof`)},
+	{class: "network unreachable", re: regexp.MustCompile(`(?i)network is unreachable`)},
+	{class: "transfer closed", re: regexp.MustCompile(`(?i)transfer closed with outstanding`)},
+	{class: "hung up", re: regexp.MustCompile(`(?i)hung up unexpectedly`)},
+	{class: "unexpected disconnect", re: regexp.MustCompile(`(?i)unexpected disconnect`)},
+	{class: "empty reply", re: regexp.MustCompile(`(?i)empty reply from server`)},
+	{class: "server error", re: regexp.MustCompile(`(?i)returned error: 5\d\d`)},
+}
+
+// gitOpTransientSignature is one fault class of the transient vocabulary: the
+// class's name, and the pattern that recognises it in git's stderr.
+type gitOpTransientSignature struct {
+	class string
+	re    *regexp.Regexp
+}
+
+// transientFaultClass returns the name of the transient fault class carried by
+// git's stderr detail, and whether the detail carries one at all. A permanent
+// failure — 404, 403, a missing repository, a credential challenge — matches no
+// class and is never retried.
+//
+// The ORDER of gitOpTransientSignatures is the order of the classes: the FIRST
+// class that matches is the class reported, so a more specific pattern comes
+// before a more general one ("failed to connect to … Connection refused" is
+// the connect class, not the connection-reset class).
+func transientFaultClass(detail string) (string, bool) {
+	for _, sig := range gitOpTransientSignatures {
+		if sig.re.MatchString(detail) {
+			return sig.class, true
+		}
+	}
+	return "", false
+}
 
 // runGitOp executes one `git` subprocess under a context deadline with a bounded
 // retry. transfer selects the transfer (60s) vs metadata (30s) timeout; dir is
@@ -128,13 +182,23 @@ func runGitOp(transfer bool, dir string, tee io.Writer, args ...string) ([]byte,
 			return out, nil
 		}
 		lastErr, lastDetail = err, strings.TrimSpace(stderr.String())
-		if !timedOut && !gitOpTransientRe.MatchString(lastDetail) {
-			break // permanent failure — retrying cannot help
+		if !timedOut {
+			if _, transient := transientFaultClass(lastDetail); !transient {
+				break // permanent failure — retrying cannot help
+			}
 		}
 	}
 	wrapped := lastErr
 	if timedOut {
 		wrapped = fmt.Errorf("timed out after %s", timeout)
+	}
+	// Name the fault CLASS a transient failure carries, so the reader learns what
+	// killed the op without reading the vocabulary table: the class is the key
+	// the recorded fixture table (refs/git_transient_signatures_test.go) is
+	// keyed by, and it is what tells a reader that the op failed in the network
+	// rather than in the repository.
+	if class, transient := transientFaultClass(lastDetail); transient {
+		wrapped = fmt.Errorf("%w (transient network fault: %s)", wrapped, class)
 	}
 	// Bare error: every caller wraps with its own "git <op> <url>" context
 	// (e.g. GitLatestTag: "git ls-remote --tags %s"), so a prefix here would

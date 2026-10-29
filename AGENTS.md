@@ -49,6 +49,14 @@ Canonical files:
   `protocol/schema/*.cue`.
 - `GOWORK=off go test ./...` / `go build ./...` — the module's Go gates. CI
   (`.github/workflows/ci.yml`) runs build, test, gofmt and golangci-lint.
+  Run the lint under the toolchain `go.mod` declares (`go 1.26.0`, so go1.26.x),
+  which is the one CI builds the pinned linter with — `GOTOOLCHAIN=go1.26.8
+  golangci-lint run ./...`. `golangci-lint` v2.13.2 embeds a type-checker that
+  reads only export-data version 4, while go1.27's standard library writes
+  version 5, so a newer local toolchain fails the lint in an unrelated package
+  with `export data version 5 is greater than maximum supported version 4`
+  (measured 2026-10-29) — an environment mismatch, not a finding about the
+  code.
 - The merge gate is the **org-wide** `charly/pr-validator` (required check
   `validate / validate`, defined in `opencharly/.github`); this repo carries no
   per-repo candy gate.
