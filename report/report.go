@@ -18,6 +18,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/opencharly/spec/exec"
 	"github.com/opencharly/spec/spec"
@@ -51,6 +52,28 @@ func FormatStepResultsText(w io.Writer, results []spec.StepResult) {
 		len(results), Plural(len(results)), passed, failed, skipped)
 }
 
+// OneLine flattens s to a SINGLE line: every run of whitespace — a newline included —
+// becomes one space.
+//
+// The text report is a LINE format. A reader pairs each step's status with its id by
+// parsing ONE line per step (the shape renderStep writes below), and the report states its
+// own step count in the rollup it prints underneath. A step whose TEXT or whose MESSAGE
+// carries a newline therefore used to SPAN several lines, and its id bracket landed on a
+// line of its own: the report's step lines then disagreed with the report's own rollup, and
+// a reader that checks the two — every verdict reader in the org does — refuses the WHOLE
+// report and credits NOTHING from it (opencharly/spec#282).
+//
+// The PRODUCER owns the format, so the producer guarantees the shape it publishes. This is
+// the ONE flattening rule for the report: a step's text, keyword, id and message all go
+// through it.
+//
+// Flattening also collapses every run of TWO OR MORE spaces, so the two-space separator
+// before a step's id bracket is the only one on the line — a reader can split the line on
+// it without a bracket inside the text stealing the split.
+func OneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 func renderStep(w io.Writer, step *spec.StepResult) {
 	status := strings.ToUpper(step.Result.Status.String())
 	// A podman container-SETUP infra failure (R44) is NOT a checks-failed verdict — label it
@@ -63,19 +86,24 @@ func renderStep(w io.Writer, step *spec.StepResult) {
 		retryInfo = fmt.Sprintf(" (attempts=%d, elapsed=%s)",
 			step.Result.Attempts, step.Result.TotalElapsed.Round(time.Millisecond))
 	}
-	msg := step.Result.Message
+	msg := OneLine(step.Result.Message)
 	if msg != "" {
 		msg = "  " + msg
 	}
 	fmt.Fprintf(w, "  %-5s %s %s  [%s]%s%s\n",
-		status, step.Keyword, step.Text, step.StepID, retryInfo, truncate(msg, 200))
+		status, OneLine(step.Keyword), OneLine(step.Text), OneLine(step.StepID), retryInfo, truncate(msg, 200))
 }
 
+// truncate shortens s to at most n CHARACTERS, marking the cut with an ellipsis.
+//
+// It counts RUNES, not bytes: a byte cut can land inside a multi-byte rune and emit
+// invalid UTF-8 into the report — a line a reader cannot decode, in a report whose whole
+// value is that a reader can read it (opencharly/spec#282).
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return string([]rune(s)[:n]) + "…"
 }
 
 // FormatStepResultsJSON emits a structured JSON document.
@@ -86,6 +114,10 @@ func FormatStepResultsJSON(w io.Writer, results []spec.StepResult) error {
 }
 
 // FormatStepResultsTAP emits TAP v13. Each step is one TAP test point.
+//
+// TAP is a line format too — a test point is one line — so the step's text is flattened
+// the same way the text report flattens it (opencharly/spec#282). The diagnostic block
+// below is quoted, so it carries a multi-line message without breaking the point.
 func FormatStepResultsTAP(w io.Writer, results []spec.StepResult) {
 	fmt.Fprintln(w, "TAP version 13")
 	fmt.Fprintf(w, "1..%d\n", len(results))
@@ -94,7 +126,7 @@ func FormatStepResultsTAP(w io.Writer, results []spec.StepResult) {
 		if step.Result.Status == spec.StatusFail {
 			directive = "not ok"
 		}
-		fmt.Fprintf(w, "%s %d - %s %s\n", directive, i+1, step.Keyword, step.Text)
+		fmt.Fprintf(w, "%s %d - %s %s\n", directive, i+1, OneLine(step.Keyword), OneLine(step.Text))
 		if step.Result.Status == spec.StatusFail {
 			fmt.Fprintln(w, "  ---")
 			fmt.Fprintf(w, "  origin: %q\n", step.Origin)
