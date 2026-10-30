@@ -1,6 +1,7 @@
 package retired
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,31 +79,62 @@ func TestTheRegistryIsWellFormed(t *testing.T) {
 				continue
 			}
 		}
-		// A withdrawal whose replacement never landed is a rename that did
-		// not arrive. The Go surface is where the renames are exact, so the
-		// check is made there: the field the entry names must exist, in the
-		// scoped type or in some type when the name is unscoped. The wire
-		// spellings ride on the same renames, and their replacements are
-		// owned by the repos that read them.
-		if id.Kind != KindField {
-			continue
+		if err := replacementLanded(id, types); err != nil {
+			t.Errorf("%v", err)
 		}
+	}
+}
+
+// replacementLanded judges an entry's replacement: a withdrawal whose
+// replacement never landed is a rename that did not arrive.
+//
+// The Go surface is where the renames are exact, so the check is made there:
+// the field the entry names must exist, in the scoped type or in some type
+// when the name is unscoped; and a SCOPED configuration key's replacement
+// must be a key its scoped type carries. An UNSCOPED key's replacement may
+// be a path across types (`engine.run`), which no single type carries, so it
+// is not judged here. The wire spellings ride on the same renames, and their
+// replacements are owned by the repos that read them.
+func replacementLanded(id Identifier, types map[string]TypeFields) error {
+	switch id.Kind {
+	case KindField:
 		if id.Scoped() {
 			if !carries(types[id.Type].Fields, id.ReplacedBy) {
-				t.Errorf("the withdrawn %s names the replacement %q, which %s does not carry", id, id.ReplacedBy, id.Type)
+				return fmt.Errorf("the withdrawn %s names the replacement %q, which %s does not carry", id, id.ReplacedBy, id.Type)
 			}
-			continue
+			return nil
 		}
-		found := false
 		for _, info := range types {
 			if carries(info.Fields, id.ReplacedBy) {
-				found = true
-				break
+				return nil
 			}
 		}
-		if !found {
-			t.Errorf("the withdrawn %s names the replacement %q, which no type in the contract carries", id, id.ReplacedBy)
+		return fmt.Errorf("the withdrawn %s names the replacement %q, which no type in the contract carries", id, id.ReplacedBy)
+	case KindConfigKey:
+		if id.Scoped() && !carries(types[id.Type].Keys, id.ReplacedBy) {
+			return fmt.Errorf("the withdrawn %s names the replacement %q, which %s does not carry as a configuration key", id, id.ReplacedBy, id.Type)
 		}
+	}
+	return nil
+}
+
+// The replacement rule can FAIL. A rule that cannot fail proves nothing, and
+// the rule is what tells a landed rename from a rename that never arrived.
+func TestTheReplacementRuleCanFail(t *testing.T) {
+	types := map[string]TypeFields{
+		"EngineConfig": {Fields: []string{"Run"}, Keys: []string{"run"}},
+	}
+	landed := Identifier{Kind: KindField, Name: "Selector", Type: "EngineConfig", ReplacedBy: "Run"}
+	if err := replacementLanded(landed, types); err != nil {
+		t.Errorf("the rule must accept the replacement that landed: %v", err)
+	}
+	neverLanded := Identifier{Kind: KindField, Name: "Selector", Type: "EngineConfig", ReplacedBy: "Runn"}
+	if err := replacementLanded(neverLanded, types); err == nil {
+		t.Error("the rule must reject a field replacement that never landed")
+	}
+	neverLandedKey := Identifier{Kind: KindConfigKey, Name: "selector", Type: "EngineConfig", ReplacedBy: "runner"}
+	if err := replacementLanded(neverLandedKey, types); err == nil {
+		t.Error("the rule must reject a scoped configuration key whose replacement key is not carried")
 	}
 }
 
