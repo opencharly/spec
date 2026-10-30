@@ -1,0 +1,73 @@
+{
+  "identifiers": [
+    {
+      "kind": "field",
+      "name": "Build",
+      "type": "EngineConfig",
+      "replacedBy": "Run",
+      "why": "the image BUILDER is BuildKit, not a selectable engine, so a builder selector would have had exactly one legal value; the runtime config selects the RUN engine instead"
+    },
+    {
+      "kind": "field",
+      "name": "BuildEngine",
+      "type": "ResolvedRuntime",
+      "replacedBy": "RunEngine",
+      "why": "the resolved runtime carries the RUN engine; there is no builder to resolve"
+    },
+    {
+      "kind": "config-key",
+      "name": "build",
+      "type": "EngineConfig",
+      "replacedBy": "run",
+      "why": "the yaml key of the withdrawn builder selector, scoped to the one type it lived on because `build` is still a legal key elsewhere in the contract"
+    },
+    {
+      "kind": "config-key",
+      "name": "engine.build",
+      "replacedBy": "engine.run",
+      "why": "the dotted path the withdrawn builder selector was addressed by"
+    },
+    {
+      "kind": "field",
+      "name": "PodmanJobs",
+      "replacedBy": "StageParallelism",
+      "why": "the knob named the engine it was handed to (`podman build --jobs N`); with one builder there is no second engine to name, so it bounds the STAGES of a single build"
+    },
+    {
+      "kind": "field",
+      "name": "PodmanJobsCap",
+      "replacedBy": "StageParallelismCap",
+      "why": "the cap on the withdrawn engine-named knob"
+    },
+    {
+      "kind": "config-key",
+      "name": "podman_jobs",
+      "replacedBy": "stage_parallelism",
+      "why": "the authored key of the withdrawn engine-named knob"
+    },
+    {
+      "kind": "config-key",
+      "name": "podman_jobs_cap",
+      "replacedBy": "stage_parallelism_cap",
+      "why": "the authored cap key of the withdrawn engine-named knob"
+    },
+    {
+      "kind": "env",
+      "name": "CHARLY_PODMAN_JOBS",
+      "replacedBy": "CHARLY_STAGE_PARALLELISM",
+      "why": "the environment override of the withdrawn engine-named knob"
+    },
+    {
+      "kind": "env",
+      "name": "CHARLY_BUILD_ENGINE",
+      "replacedBy": "CHARLY_RUN_ENGINE",
+      "why": "the environment override of the withdrawn builder selector"
+    },
+    {
+      "kind": "flag",
+      "name": "--podman-jobs",
+      "replacedBy": "--stage-parallelism",
+      "why": "the command-line flag of the withdrawn engine-named knob"
+    }
+  ]
+}
