@@ -3,7 +3,6 @@ package hostenv
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 )
 
@@ -13,27 +12,11 @@ import (
 // selector at all — `engine.build` / CHARLY_BUILD_ENGINE / ResolvedRuntime.BuildEngine
 // are gone, and every consumer that read them now reads the RUN engine.
 //
-// This is the cutover's fail-without instrument for the Go half: it FAILS while
-// those fields exist, which is what keeps the removal from being re-added by a
-// later "compatibility" commit.
-func TestNoBuilderSelectorInTheContract(t *testing.T) {
-	// POSITIVE CONTROL first: the reflective instrument can find a field that IS
-	// there, so the two negative lookups below cannot pass vacuously.
-	if _, ok := reflect.TypeOf(ResolvedRuntime{}).FieldByName("RunEngine"); !ok {
-		t.Fatal("control failed: ResolvedRuntime.RunEngine not found — the instrument is broken, not the contract")
-	}
-	if _, ok := reflect.TypeOf(EngineConfig{}).FieldByName("Run"); !ok {
-		t.Fatal("control failed: EngineConfig.Run not found — the instrument is broken, not the contract")
-	}
-
-	if f, ok := reflect.TypeOf(EngineConfig{}).FieldByName("Build"); ok {
-		t.Errorf("EngineConfig must not carry a builder selector; found field %q (yaml %q)", f.Name, f.Tag.Get("yaml"))
-	}
-	if f, ok := reflect.TypeOf(ResolvedRuntime{}).FieldByName("BuildEngine"); ok {
-		t.Errorf("ResolvedRuntime must not carry a build engine; found field %q", f.Name)
-	}
-}
-
+// The ABSENCE of those names is asserted by the contract's list-driven guard
+// (`retired.Identifiers`): the canonical retired-identifier list holds the withdrawn
+// names and one guard reads that list, so the assertion lives in one place and a
+// withdrawn name is never restated per type.
+//
 // The documented AFTERMATH of the cutover, guarded so the promise in the change's
 // own notes cannot silently stop being true: an existing `engine.build:` in
 // ~/.config/charly/config.yml is INERT, not a load failure. RuntimeConfig is parsed
@@ -41,8 +24,8 @@ func TestNoBuilderSelectorInTheContract(t *testing.T) {
 // charly.yml ingress), so a retired key is ignored and every other key still
 // resolves.
 //
-// Note the honest scope: this is a regression guard for that guarantee, NOT this
-// change's fail-without coverage — TestNoBuilderSelectorInTheContract above is that.
+// Note the honest scope: this is a regression guard for that guarantee, NOT the
+// fail-without coverage of the withdrawal itself — the list-driven guard is that.
 // It can still fail (a future closed gate or hard error on the retired key trips it).
 func TestResolveRuntime_RetiredBuildKeyIsInert(t *testing.T) {
 	dir := t.TempDir()
