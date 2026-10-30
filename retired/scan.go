@@ -89,7 +89,9 @@ func ScanTree(root string, ids []Identifier) ([]Finding, error) {
 }
 
 // TypeFields is what a struct type declares: its field names, and the
-// yaml/json keys those fields carry.
+// yaml/json keys those fields carry. The registry's replacement rule reads
+// both: a withdrawn FIELD is replaced by a field, and a withdrawn
+// configuration key by a key.
 type TypeFields struct {
 	Fields []string
 	Keys   []string
@@ -154,11 +156,16 @@ func scanGoFile(path, rel string, ids []Identifier) ([]Finding, error) {
 		return nil, fmt.Errorf("parsing %s: %w", rel, err)
 	}
 
+	// The file's struct types are walked once: the tag rule and the field
+	// rule both need them, and re-deriving them would read the same
+	// declarations twice for no gain.
+	structs := structTypes(file)
+
 	// A struct tag is checked by the TAG rule, which knows the field's type.
 	// The literal rule skips the tags, so one withdrawn key is reported once
 	// and not twice.
 	tags := map[token.Pos]bool{}
-	for _, structType := range structTypes(file) {
+	for _, structType := range structs {
 		for _, field := range structType.structType.Fields.List {
 			if field.Tag != nil {
 				tags[field.Tag.Pos()] = true
@@ -167,7 +174,7 @@ func scanGoFile(path, rel string, ids []Identifier) ([]Finding, error) {
 	}
 
 	var findings []Finding
-	for _, structType := range structTypes(file) {
+	for _, structType := range structs {
 		findings = append(findings, scanStruct(fset, rel, structType.typeName, structType.structType, ids)...)
 	}
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -395,26 +402,38 @@ func skipDir(name string) bool {
 // inside a longer one that starts with it, and one that ends in an underscore
 // does not match inside the name that extends it.
 func containsToken(text, name string) bool {
+	return tokenIndex(text, name) >= 0
+}
+
+// tokenIndex returns the index of the first TOKEN occurrence of name in text,
+// or -1 when there is none.
+//
+// The TOKEN rule lives here and nowhere else, so the predicate and the line
+// reporter cannot disagree about WHICH occurrence matched: a name whose first
+// substring sits inside a longer word (`run` in `runtime`) is not a match,
+// and reporting the line of that substring would point the reader at a place
+// the name does not occur as a token.
+func tokenIndex(text, name string) int {
 	if name == "" || len(name) > len(text) {
-		return false
+		return -1
 	}
 	for from := 0; from+len(name) <= len(text); {
 		i := strings.Index(text[from:], name)
 		if i < 0 {
-			return false
+			return -1
 		}
 		i += from
 		if !isWordByte(byteAt(text, i-1)) && !isWordByte(byteAt(text, i+len(name))) {
-			return true
+			return i
 		}
 		from = i + 1
 	}
-	return false
+	return -1
 }
 
-// lineOf returns the 1-indexed line the first occurrence of name is on.
+// lineOf returns the 1-indexed line the first TOKEN occurrence of name is on.
 func lineOf(text, name string) int {
-	i := strings.Index(text, name)
+	i := tokenIndex(text, name)
 	if i < 0 {
 		return 0
 	}
