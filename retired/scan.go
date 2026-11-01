@@ -272,11 +272,19 @@ func scanTextFile(path, rel string, ids []Identifier) ([]Finding, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", rel, err)
 	}
-	text := string(data)
+	return scanText(string(data), rel, ids), nil
+}
+
+// scanText reports the withdrawn identifiers a TEXT surface carries.
+//
+// The rule lives here and nowhere else, so the schema scan and the org-wide
+// sweep cannot disagree about what a text surface is: the whole text is
+// swept, comments included, because the prose IS the published surface; and
+// a SCOPED name is never swept here, because a scope is a Go type and a text
+// file has no such notion.
+func scanText(text, rel string, ids []Identifier) []Finding {
 	var findings []Finding
 	for _, id := range ids {
-		// A scope is a Go type, and a CUE or protobuf file has no such notion,
-		// so a scoped name is not swept here.
 		if id.Scoped() {
 			continue
 		}
@@ -290,7 +298,7 @@ func scanTextFile(path, rel string, ids []Identifier) ([]Finding, error) {
 			Detail:     "named in the source text",
 		})
 	}
-	return findings, nil
+	return findings
 }
 
 // declaredTypes returns what every struct type a Go file declares.
