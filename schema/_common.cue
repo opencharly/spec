@@ -1,4 +1,3 @@
-import "strings"
 
 // Shared CUE definitions referenced by multiple kinds. R3: define each shared
 // shape ONCE here, not per-kind. All schema/*.cue files compile into one
@@ -262,8 +261,15 @@ import "strings"
 // A lowercase-hyphenated entity name / cross-ref.
 #EntityRef: string & =~"^[a-z0-9]+(-[a-z0-9]+)*$" @go(-)
 
-// A candy ref: bare lowercase-hyphenated name OR a remote @github…:vTAG ref.
-#CandyRef: string & =~"^(@.+|[a-z0-9]+(-[a-z0-9]+)*)$" @go(-)
+// A candy ref: a bare lowercase-hyphenated name, an @github…  git ref, or an @oci://…
+// registry ref. Exactly THREE arms — the former `@.+` catch-all admitted every
+// scheme, so `@oci:/x` and `@s3://bucket/x` passed the schema and only failed much
+// later, as a nonsense git URL (`https://oci://x.git`) with nothing naming the real
+// mistake. The two remote arms are the @-prefixed REF-SITE spelling of the SOURCE
+// shapes `#GithubRef` / `#OciRef` (candy.cue); CUE's regex-only vocabulary cannot
+// interpolate one into the other, so `TestRefGrammarsAgreeWithTheirSourceShapes`
+// pins the two spellings to each other and they cannot drift.
+#CandyRef: string & =~"^(@github\\.com/[^/]+/[^/]+(/.+)?|@oci://[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?|[a-z0-9]+(-[a-z0-9]+)*)$" @go(-)
 
 // A host:container port pin (optionally IP-prefixed).
 #PortPin: string & =~"^(\\[[0-9a-fA-F:]+\\]:|[0-9]{1,3}(\\.[0-9]{1,3}){3}:)?[0-9]+:[0-9]+$" @go(-)
@@ -369,11 +375,21 @@ import "strings"
 // the existing from_snapshot: (boot from a backing chain) with capture-and-reset
 // semantics for check runs: capture at install finalize (on_finalize), revert
 // before every check run (reset_before_check), optionally quiesced (consistent),
-// internal or external mode, and keep_venue for batch loops.
+// internal or external mode, keep_venue for batch loops, and force_stop for a
+// keeper guest that ignores ACPI.
 #VmSnapshotPolicy: {
 	on_finalize?:        string & !="" @go(OnFinalize)
 	reset_before_check?: string & !="" @go(ResetBeforeCheck)
 	mode?:               *"internal" | "external" @go(Mode)
 	consistent?:         bool @go(Consistent)
 	keep_venue?:         bool @go(KeepVenue)
+	// force_stop: stop the keeper with a FORCE stop (kill the domain process)
+	// rather than a graceful ACPI shutdown, when the finalize releases the venue
+	// lock. A desktop guest can ignore ACPI past the stop grace — measured: an
+	// Omarchy keeper was still running after the full 3m cap and needed the force
+	// path — and the venue stays KEPT either way, because a force stop releases
+	// the process, not the domain definition. The finalize falls back to a force
+	// stop when the graceful one fails, so declaring this is about intent and
+	// time, not about being unstuck.
+	force_stop?:         bool @go(ForceStop)
 }

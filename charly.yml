@@ -1,7 +1,10 @@
 # The spec module's project manifest. Its maintenance surface is the
 # `charly task` verbs below — the same generic plugin-task surface the umbrella
-# and charly use. spec owns NO candies/boxes, so there is no `discover:`; only
-# the task entities are declared.
+# and charly use. spec ships NO image and composes NO box, so there is no
+# `discover:`; what this file declares are the task entities plus ONE CONCEPT
+# candy — `spec-skill-shelf`, at the end of the file — which owns the routing
+# metadata of the skills whose source of truth is this module's CUE schema and
+# wire types.
 #
 # Run a task with the `charly` binary (spec is a submodule of
 # opencharly/opencharly and opencharly/charly):
@@ -29,28 +32,10 @@ bootstrap-cue:
       - run: download and checksum-verify the pinned cue CLI
         command: |
           set -euo pipefail
-          mkdir -p bin
-          if test -x bin/cue && bin/cue version 2>/dev/null | grep -q 'v0.16.1'; then
-            echo "bootstrap-cue: bin/cue is $(bin/cue version | head -1) (already present)"
-            exit 0
-          fi
-          arch="$(uname -m)"
-          case "$arch" in
-            x86_64) goarch=amd64; sha='5d644c1305a2b86504c8dcd2ec829cf5b4999efc2cf51ee375624e0455f774ae' ;;
-            *) echo "bootstrap-cue: unsupported arch $arch (only linux/amd64 is checksum-pinned)" >&2; exit 1 ;;
-          esac
-          tarball="cue_v0.16.1_linux_${goarch}.tar.gz"
-          url="https://github.com/cue-lang/cue/releases/download/v0.16.1/${tarball}"
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-          echo "bootstrap-cue: downloading $url"
-          curl -fsSL -o "$tmp/$tarball" "$url"
-          echo "${sha}  $tmp/$tarball" | sha256sum -c - || { echo "bootstrap-cue: checksum mismatch — refusing to extract" >&2; exit 1; }
-          tar -xzf "$tmp/$tarball" -C "$tmp" cue
-          mv "$tmp/cue" bin/cue
-          chmod +x bin/cue
-          bin/cue version | grep -q 'v0.16.1' || { echo "bootstrap-cue: bin/cue is not v0.16.1" >&2; exit 1; }
-          echo "bootstrap-cue: bin/cue is $(bin/cue version | head -1)"
+          # The version, URL, checksum and arch rules live in ONE place —
+          # internal/cuesetup -> cuetoolchain — shared with the charly-side generation
+          # verb, so this task and that verb can never run different toolchains.
+          GOWORK=off go run ./internal/cuesetup bin
         context: [deploy]
 
 # -----------------------------------------------------------------------------
@@ -141,26 +126,13 @@ cue-gen:
       - run: gengotypes + schemagen the generated Go
         command: |
           set -euo pipefail
-          cue_bin="$PWD/bin/cue"
-          gendir="$(mktemp -d)"
-          trap 'rm -rf "$gendir"' EXIT
-          mkdir -p "$gendir/cue.mod"
-          cat > "$gendir/cue.mod/module.cue" <<EOM
-          module: "github.com/opencharly/spec/schema/spec-codegen"
-          language: version: "v0.16.1"
-          EOM
-          # 1) Concatenate schema/*.cue the SAME way the runtime sharedCueSchema does,
-          #    headed `package spec` + `@go(spec)` (R3: one concatenation, in schemagen).
-          GOWORK=off go run ./internal/schemagen -mode=concat -schema=schema -out="$gendir/schema_spec.cue"
-          # 2) cue exp gengotypes -> the Go param structs.
-          ( cd "$gendir" && "$cue_bin" exp gengotypes ./schema_spec.cue )
-          gen="$(ls "$gendir"/cue_types*_gen.go 2>/dev/null | head -1)"
-          test -n "$gen" || { echo "cue-gen: gengotypes produced no cue_types*_gen.go" >&2; exit 1; }
-          cp "$gen" spec/cue_types_gen.go
-          # 2b) Double the generated json struct tags with yaml tags (principled Go
-          #     transform inside schemagen -mode=retag — never sed on generated Go).
-          GOWORK=off go run ./internal/schemagen -mode=retag -out=spec/cue_types_gen.go
-          # 3) Companion generator -> the vocab lists.
+          # 1) The params file comes from the ONE pipeline (schemaparams): concatenate
+          #    schema/*.cue under `package spec` + `@go(spec)`, run the pinned cue
+          #    gengotypes (provisioned checksum-verified into ./bin), normalize the
+          #    struct tags. No step of it is re-implemented here or in schemagen, and
+          #    the charly-side verb calls the same function.
+          GOWORK=off go run ./internal/schemagen -mode=params -schema=schema -pkg=spec -out=spec/cue_types_gen.go
+          # 2) Companion generator -> the vocab lists.
           GOWORK=off go run ./internal/schemagen -mode=vocab -schema=schema -out=spec/vocab_gen.go
           # 4) gofmt the committed generated files.
           gofmt -w spec/cue_types_gen.go spec/vocab_gen.go
@@ -171,3 +143,113 @@ cue-gen:
         stdout:
           - contains: ok
         context: [runtime]
+
+# -----------------------------------------------------------------------------
+# spec-skill-shelf — the concept candy that owns this module's skills.
+#
+# `charly.yml` is where a skill's routing metadata (`family`/`owner`/`triggers`) is
+# authored beside a `candy:` node (AGENTS.md Part II #5, `spec/schema/skill.cue`), so a
+# module that owns skills must declare one. This is a CARRIER CANDY inside a repo that
+# already holds code — the shape "Repo classes and naming" explicitly sanctions for
+# skills whose entity is an IMAGE, and the same shape used here for a module — not a
+# product family (a family is a `layer-<family>` repo, never a bare one), and not the
+# retired `*-skills` carrier REPO class. The name states what it holds (this repo's
+# skill shelf) and carries the repo's own class (`spec-`), so it cannot be read as a
+# product variant and leaves this repo's bare name — and therefore its class — as it was.
+#
+# It ships no install content, composes no box and appears in no image, so these
+# `skill:` nodes add NOTHING to any `ai.opencharly.skill` OCI label. The prose is the
+# FILE at `.agents/skills/<name>/SKILL.md`; nothing here inlines a `description:` or a
+# `content:` — an inline body that disagrees with its file is a hard error in the
+# marketplace generator, and copying a body back into a node is how a skill drifts from
+# the file that is its source.
+# -----------------------------------------------------------------------------
+spec-skill-shelf:
+  candy:
+    description: |-
+      Concept candy owning the contract module's own skills — the ones whose source of truth is
+      this module's CUE schema and wire types: `schema/deploy.cue` + `spec/install_plan.go`, and the
+      authoring defs `schema/box.cue`, `schema/candy.cue`, `schema/pod.cue`, `schema/vm.cue` and
+      `schema/local.cue`. It ships
+      no install content and composes no image; it carries the `skill:` routing nodes, and the prose
+      lives in `.agents/skills/<name>/SKILL.md` at this repo's root.
+    plan:
+      - run: this documentation-only candy ships no install content (it carries the contract module's skill entities); validate-satisfying no-op
+        command: "true"
+        context:
+          - build
+      - check: validate-satisfying no-op — the assertion is NOT performed by this command; the real body-existence gate is `charly box validate`
+        id: spec-skill-shelf-present
+        context:
+          - build
+        command: "true"
+disposable-skill:
+  skill:
+    name: disposable
+    family: internals
+    owner: spec-skill-shelf
+    triggers:
+      - "Disposable-flag semantics / `disposable: true` authorization / preemptible-flag / `requires_exclusive:` / `charly preempt` / exclusive host-resource arbitration (GPU passthrough contention)"
+install-plan-skill:
+  skill:
+    name: install-plan
+    family: internals
+    owner: spec-skill-shelf
+    triggers:
+      - "IR / InstallPlan / EmitTarget / OCITarget"
+
+# -----------------------------------------------------------------------------
+# The SCHEMA-AUTHORING skills — authored beside the CUE defs they document.
+#
+# Each is a ROUTING-ONLY node: `name`/`family`/`owner` (plus `triggers:` where the
+# skill generates DISPATCHER.md rows). The prose is the skill FILE at
+# `.agents/skills/<name>/SKILL.md`; nothing here inlines a `description:` or a
+# `content:` — the two disagreeing is a hard error in the marketplace generator.
+#
+# `owner:` names the shelf candy above. What each skill documents is a def in
+# `schema/` whose generated Go types live in `spec/cue_types_gen.go`
+# (`box.cue`/`candy.cue` → the image and layer authoring shapes, `pod.cue` →
+# `PodSpec` + the deploy node, `vm.cue` → `VmSpec`, `local.cue` → the
+# `kind: local` template) — the contract this repo is. `family:` is the
+# marketplace family each skill was authored under, kept so every existing
+# `/charly-image:*`, `/charly-pod:*`, `/charly-vm:*` and `/charly-local:*`
+# address still resolves; it is a registry namespace, never a repo class.
+# -----------------------------------------------------------------------------
+image-skill:
+  skill:
+    name: image
+    family: image
+    owner: spec-skill-shelf
+    triggers:
+      - "Editing a box (`box/<name>/charly.yml` — boxes live in the `box/<distro>` submodules; main owns none), box composition"
+layer-skill:
+  skill:
+    name: layer
+    family: image
+    owner: spec-skill-shelf
+    triggers:
+      - "Editing a candy (`candy/<name>/charly.yml`), candy authoring, candy tasks/services"
+pod-skill:
+  skill:
+    name: pod
+    family: pod
+    owner: spec-skill-shelf
+vms-catalog-skill:
+  skill:
+    name: vms-catalog
+    family: vm
+    owner: spec-skill-shelf
+vm-spec-skill:
+  skill:
+    name: vm-spec
+    family: internals
+    owner: spec-skill-shelf
+    triggers:
+      - "VmSpec / libvirt / cloud-init / OVMF internals"
+local-spec-skill:
+  skill:
+    name: local-spec
+    family: local
+    owner: spec-skill-shelf
+    triggers:
+      - "Editing `local.yml` / authoring `kind: local` templates"

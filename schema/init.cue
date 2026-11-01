@@ -7,7 +7,19 @@
 	candy_field?: [...(string & !="")] @go(CandyFields)
 	candy_file?: [...(string & !="")] @go(CandyFiles)
 	depends_candy?: string & !="" @go(DependsCandy)
-	requires_capability?: [...(string & =~"^[a-z][a-z0-9_]*$")] @go(RequiresCapability)
+	// requires_capability names the aggregated candy-capability keys this init
+	// needs before it is a candidate. The `init_system:<name>` form is the
+	// init-system HINT key candy_capabilities.go already provides for
+	// `capability: {init_system_hint: <name>}` — the colon is part of that key's
+	// grammar, which is why it is admitted here.
+	requires_capability?: [...(string & =~"^[a-z][a-z0-9_]*(:[a-z][a-z0-9-]*)?$")] @go(RequiresCapability)
+
+	// extends — inherit another init-system entry of the SAME vocabulary, then
+	// override. It exists so a variant that is genuinely the same init in a
+	// different venue (systemd-container vs systemd) shares ONE authored
+	// service_template instead of copy-pasting a YAML stanza (R2). The child's
+	// own non-empty fields win; the merged body is what the render leg sees.
+	extends?: string & !="" @go(Extends)
 
 	// The one mandatory field: the build model.
 	model: "fragment_assembly" | "file_copy"
@@ -26,6 +38,26 @@
 
 	entrypoint?: [...(string & !="")]
 	fallback_entrypoint?: [...(string & !="")] @go(FallbackEntrypoint)
+
+	// --- container-venue runtime contract -------------------------------------
+	// An init can boot inside a container as PID 1 (systemd does, under
+	// podman/runc on cgroup v2). These three declare what such a venue must do;
+	// they are EMPTY for a machine-venue init (e.g. bootc's systemd), where the
+	// host OS owns the runtime.
+
+	// requires_root — the image must end at USER root and a deploy overlay must
+	// not restore a non-root USER over it. systemd refuses to run in system mode
+	// as a non-root PID 1 (measured: exit 255 / start-limit-hit).
+	requires_root?: bool @go(RequiresRoot)
+
+	// systemd_mode — the container runtime must be told to enable its systemd
+	// mode (podman `--systemd=always` / quadlet `Systemd=always`): a systemd
+	// cgroup subtree, the /run tmpfs, and SIGRTMIN+3 as the stop signal.
+	systemd_mode?: bool @go(SystemdMode)
+
+	// stop_signal — the signal the runtime sends to stop the container. For
+	// systemd SIGRTMIN+3 is `systemctl halt`, the clean shutdown.
+	stop_signal?: string @go(StopSignal)
 
 	management_tool?: string & !="" @go(ManagementTool)
 	management_command?: {
@@ -172,6 +204,9 @@
 	candy_file?: [...string] @go(CandyFiles)
 	depends_candy?:       string @go(DependsCandy)
 	requires_capability?: [...string] @go(RequiresCapability)
+	// extends — resolved by ProjectInitConfig before this envelope is consumed;
+	// empty on a fully-merged entry.
+	extends?:             string @go(Extends)
 	model?:               string @go(Model)
 	header_file?:         string @go(HeaderFile)
 	fragment_dir?:        string @go(FragmentDir)
@@ -184,6 +219,12 @@
 	post_assembly_template?: string @go(PostAssemblyTemplate)
 	entrypoint?: [...string] @go(Entrypoint)
 	fallback_entrypoint?: [...string] @go(FallbackEntrypoint)
+	// The container-venue runtime contract (#Init). RequiresRoot gates the
+	// build's final USER and the deploy overlay's USER restore; SystemdMode and
+	// StopSignal are the runtime argv/quadlet facts.
+	requires_root?: bool   @go(RequiresRoot)
+	systemd_mode?:  bool   @go(SystemdMode)
+	stop_signal?:   string @go(StopSignal)
 	management_tool?: string @go(ManagementTool)
 	management_command?: {[string]: string} @go(ManagementCommands)
 	label_key?:      string             @go(LabelKey)

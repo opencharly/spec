@@ -18,6 +18,10 @@ Canonical files:
   protocol model and its GENERATED gRPC stubs.
 - `internal/schemagen`, `internal/wiregen` — the generation pipelines (not
   importable).
+- `.agents/skills/<name>/SKILL.md` — the prose for this module's own six
+  schema-authoring skills (`image`, `layer`, `pod`, `vms-catalog`, `vm-spec`,
+  `local-spec`) plus `install-plan` and `disposable`; the `skill:` routing nodes
+  live in `charly.yml` beside the `spec-skill-shelf` candy that owns them.
 - `README.md` — user overview only; never agent guidance.
 
 ## Load these skills first (R0)
@@ -26,6 +30,14 @@ Canonical files:
   pipeline map, the schema-change recipe, and the generation-coverage state.
 - `/charly-internals:plugin` — the per-plugin CUE-schema contract and the
   provider model the wire types serve.
+- `/charly-image:image` and `/charly-image:layer` — the image and candy
+  authoring shapes (`schema/box.cue`, `schema/candy.cue`): what a `candy:` node
+  carrying `base:`/`from:` means versus one that is a layer fragment.
+- `/charly-pod:pod`, `/charly-vm:vms-catalog`, `/charly-local:local-spec` — the
+  `kind: pod` deploy node, the vm authoring surface, and the `kind: local`
+  template, each owned by the CUE def it documents.
+- `/charly-internals:vm-spec` — the `VmSpec` Go type reference (`schema/vm.cue`
+  → `spec/cue_types_gen.go`).
 
 ## Build / validate / test
 
@@ -37,6 +49,14 @@ Canonical files:
   `protocol/schema/*.cue`.
 - `GOWORK=off go test ./...` / `go build ./...` — the module's Go gates. CI
   (`.github/workflows/ci.yml`) runs build, test, gofmt and golangci-lint.
+  Run the lint under the toolchain `go.mod` declares (`go 1.26.0`, so go1.26.x),
+  which is the one CI builds the pinned linter with — `GOTOOLCHAIN=go1.26.8
+  golangci-lint run ./...`. `golangci-lint` v2.13.2 embeds a type-checker that
+  reads only export-data version 4, while go1.27's standard library writes
+  version 5, so a newer local toolchain fails the lint in an unrelated package
+  with `export data version 5 is greater than maximum supported version 4`
+  (measured 2026-10-29) — an environment mismatch, not a finding about the
+  code.
 - The merge gate is the **org-wide** `charly/pr-validator` (required check
   `validate / validate`, defined in `opencharly/.github`); this repo carries no
   per-repo candy gate.

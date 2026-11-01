@@ -37,6 +37,7 @@ type RuntimeConfig struct {
 	ForwardGpgAgent        *bool             `yaml:"forward_gpg_agent,omitempty" json:"forward_gpg_agent,omitempty"` // Forward host GPG agent socket into containers (default: true)
 	ForwardSSHAgent        *bool             `yaml:"forward_ssh_agent,omitempty" json:"forward_ssh_agent,omitempty"` // Forward host SSH agent socket into containers (default: true)
 	Vm                     RuntimeVmConfig   `yaml:"vm,omitempty" json:"vm,omitempty"`
+	Containerd             ContainerdConfig  `yaml:"containerd,omitempty" json:"containerd,omitempty"`
 	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty" json:"vnc_passwords,omitempty"`                       // VNC passwords keyed by image[-instance]
 	KeyringKeys            []string          `yaml:"keyring_keys,omitempty" json:"keyring_keys,omitempty"`                         // Shadow index: names of keys stored in keyring (no values)
 	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty" json:"keyring_collection_label,omitempty"` // Preferred Secret Service collection label; empty means use default alias then iterate.
@@ -63,17 +64,32 @@ type RuntimeVmConfig struct {
 	ImageDir string `yaml:"image_dir,omitempty" json:"image_dir,omitempty"`
 }
 
-// EngineConfig specifies which container engine to use
+// ContainerdConfig holds the containerd-engine settings that are not per-engine
+// capability facts: the namespace a deploy's images and containers live in.
+// The default resolution is deploy > this setting > the engine capability's
+// `namespace` fact (containerd: "default"); there is no env mirror.
+type ContainerdConfig struct {
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+}
+
+// EngineConfig specifies which container engine to use AS A RUNTIME.
+//
+// There is no `build:` here. The image BUILDER is not an engine and is not selectable:
+// BuildKit is the one builder, so a `build:` key would be a selector with a single legal
+// value. The retired key is inert on load — RuntimeConfig is parsed with a plain
+// yaml.Unmarshal (no closed gate), so an existing `engine.build:` in
+// ~/.config/charly/config.yml is silently ignored rather than a load failure. See
+// opencharly/opencharly AGENTS.md "Hard Cutover by Default" and the BuildKit adoption
+// record for why no migration entry is owed for it (the migration table reshapes
+// charly.yml and the per-host overlay, never this runtime settings file).
 type EngineConfig struct {
-	Build   string `yaml:"build,omitempty" json:"build,omitempty"`
 	Run     string `yaml:"run,omitempty" json:"run,omitempty"`
 	Rootful string `yaml:"rootful,omitempty" json:"rootful,omitempty"` // "auto", "machine", "sudo", "native"
 }
 
 // ResolvedRuntime holds the fully resolved runtime configuration
 type ResolvedRuntime struct {
-	BuildEngine          string // a member of spec.EngineNames (podman/docker/nerdctl)
-	RunEngine            string // a member of spec.EngineNames (podman/docker/nerdctl)
+	RunEngine            string // a member of spec.EngineNames (podman/docker/containerd)
 	Rootful              string // "auto", "machine", "sudo", "native"
 	RunMode              string // a member of spec.EngineRunModes (quadlet/systemd-unit/direct)
 	AutoEnable           bool   // auto-enable quadlet on first start
@@ -83,6 +99,7 @@ type ResolvedRuntime struct {
 	ForwardGpgAgent      bool   // forward host GPG agent socket into containers
 	ForwardSSHAgent      bool   // forward host SSH agent socket into containers
 	VmBackend            string // "auto", "libvirt", or "qemu"
+	Namespace            string // containerd namespace: settings value, else the engine capability's namespace fact
 }
 
 // RuntimeConfigPath returns the path to the user's runtime config file. A test-injection SEAM var
@@ -160,7 +177,6 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 	}
 
 	rt := &ResolvedRuntime{
-		BuildEngine:          ResolveValue(os.Getenv("CHARLY_BUILD_ENGINE"), cfg.Engine.Build, "auto"),
 		RunEngine:            ResolveValue(os.Getenv("CHARLY_RUN_ENGINE"), cfg.Engine.Run, "auto"),
 		Rootful:              ResolveValue(os.Getenv("CHARLY_ENGINE_ROOTFUL"), cfg.Engine.Rootful, "auto"),
 		RunMode:              ResolveValue(os.Getenv("CHARLY_RUN_MODE"), cfg.RunMode, "auto"),
@@ -173,18 +189,24 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		VmBackend:            ResolveValue(os.Getenv("CHARLY_VM_BACKEND"), cfg.Vm.Backend, "auto"),
 	}
 
-	// Auto-detect engines
+	// Auto-detect the RUN engine. The build engine is NOT resolved here: the builder is
+	// BuildKit and is not an engine word, so there is nothing to select or detect.
 	var detectErr error
-	if rt.BuildEngine == "auto" {
-		rt.BuildEngine, detectErr = container.DetectEngine()
-		if detectErr != nil {
-			return nil, fmt.Errorf("engine.build: %w", detectErr)
-		}
-	}
 	if rt.RunEngine == "auto" {
 		rt.RunEngine, detectErr = container.DetectEngine()
 		if detectErr != nil {
 			return nil, fmt.Errorf("engine.run: %w", detectErr)
+		}
+	}
+
+	// Namespace: the settings value, else the resolved engine's capability
+	// namespace fact. containerd's row carries "default"; an engine with no
+	// namespace concept leaves it empty (the field is unused for that engine).
+	// There is no env mirror — the plan's precedence is deploy > config > default.
+	rt.Namespace = cfg.Containerd.Namespace
+	if rt.Namespace == "" {
+		if capability, ok := container.EngineCapabilityFor(rt.RunEngine); ok {
+			rt.Namespace = capability.Namespace
 		}
 	}
 
@@ -193,9 +215,6 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		rt.RunMode = DetectRunMode(rt.RunEngine)
 	}
 
-	if err := ValidateEngine(rt.BuildEngine, "engine.build"); err != nil {
-		return nil, err
-	}
 	if err := ValidateEngine(rt.RunEngine, "engine.run"); err != nil {
 		return nil, err
 	}
@@ -279,8 +298,8 @@ func ValidateRunMode(value string) error {
 //
 //   - podman  → "quadlet" when a functional systemd-user session is reachable,
 //     otherwise "direct".
-//   - nerdctl → "systemd-unit" when a functional systemd-user session is
-//     reachable (nerdctl has no quadlet generator; charly emits a .service that
+//   - containerd → "systemd-unit" when a functional systemd-user session is
+//     reachable (containerd has no quadlet generator; charly emits a .service that
 //     wraps the nerdctl CLI), otherwise "direct".
 //   - anything else (docker) → "direct".
 //

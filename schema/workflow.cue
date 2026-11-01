@@ -51,11 +51,43 @@
 	require_different_approver?: bool @go(RequireDifferentApprover)
 }
 
+// #WorkflowArgVal — the VALUE one workflow arg may carry: a scalar, or a FLAT
+// sequence of scalars.
+//
+// WHY A SEQUENCE IS ADMITTED AT ALL. An arg map is the ONE channel a runtime value
+// reaches an engine through, and a real workflow needs a COLLECTION as often as a
+// single value — the retired lane model's `--prs a b c` is the canonical case.
+// While every arg map on this wire was `map[string]string`, such a list could not
+// cross it: a caller had to smuggle it as one pre-joined string for the callee to
+// re-split, which no generic consumer can do correctly. The engine's own arg
+// resolution already carries `map[string]any` (`resolveWorkflowArgs` overlays a
+// `#LobsterFile` arg default, whose type is `_`), so the sequence was already
+// being carried on BOTH sides of a wire that refused it in the middle.
+//
+// The bounds are DELIBERATE: a scalar, or a flat list of scalars — never a nested
+// map and never a list of lists. An arg is addressed by name and rendered into a
+// per-arg binding (a CLI `-p`, an env var, or the `LOBSTER_ARGS_JSON` document); a
+// nested structure has no such rendering, so admitting one would let a document
+// VALIDATE and then be dropped or fail at execution time — the silent-drop failure
+// this file's header forbids. Anything richer than a flat list belongs in the
+// step's own data, not in an arg.
+//
+// The Go type at each use is `map[string]any` (the field-level `@go(,type=...)`
+// override), because a scalar-or-sequence disjunction has no single Go spelling.
+// Widening it also closes a pre-existing divergence: the CUE gate already admitted
+// `number` and `bool` here while the generated field was `string`, so a document
+// could validate and then fail to decode.
+//
+// The NAME matters, for the reason the NOTE further down gives: schemagen derives
+// `spec.KindValueDefs` from defs matching `#<Word>Value`, so `#WorkflowArgVal`
+// (like the shared `#StrVal`) registers no kind. `#WorkflowArgValue` would.
+#WorkflowArgVal: #StrVal | [...#StrVal] @go(-)
+
 // #WorkflowSchedule — the normalized cron trigger (see #PipelineSchedule).
 #WorkflowSchedule: {
 	cron!:       string & !=""
 	timezone?:   string & !=""
-	args?:       {[string]: #StrVal} @go(Args,type=map[string]string)
+	args?:       {[string]: #WorkflowArgVal} @go(Args,type=map[string]any)
 	persistent?: bool
 }
 
@@ -106,9 +138,19 @@
 // ---------------------------------------------------------------------------
 
 // #WorkflowRunRequest — start a workflow.
+//
+// `args` carries the run's RUNTIME arg values, so it admits `#WorkflowArgVal` (a
+// scalar, or a flat sequence of scalars) rather than the scalar-only `#StrVal`: a
+// workflow that operates on a list — the retired lane model's `--prs a b c` — has
+// no other channel to receive one. The WIRE is unchanged: still one JSON object
+// mapping arg name to value, and every payload that validated before still
+// validates, because the admitted value set only GREW. What changes is the
+// generated Go field, `map[string]string` → `map[string]any`, which is a
+// compile-time change for a Go caller that BUILDS the request and no change at all
+// for anything that only reads the JSON.
 #WorkflowRunRequest: {
 	pipeline!: string & !=""
-	args?:     {[string]: #StrVal} @go(Args,type=map[string]string)
+	args?:     {[string]: #WorkflowArgVal} @go(Args,type=map[string]any)
 	mode?:     *"human" | "tool"
 	dry_run?:  bool @go(DryRun)
 	gen_dir?:  string & !="" @go(GenDir)

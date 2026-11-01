@@ -177,3 +177,143 @@ func TestWorkflowApprovalCarriesTheEngineEnvelope(t *testing.T) {
 		})
 	}
 }
+
+// TestWorkflowArgsCarryARuntimeList pins the admission `#WorkflowArgVal` adds to the
+// three arg maps on the engine wire, AND the bound it does not cross.
+//
+// WHY THE WIRE NEEDED IT. An arg map is the only channel a runtime value reaches an
+// engine through, and a workflow that operates on a COLLECTION — the retired lane
+// model's `--prs a b c` — had no way to receive one: every arg map here was
+// scalar-only, so the list had to be pre-joined into a string and re-split by the
+// consumer. The engine's own resolution already carries `map[string]any`, so the
+// sequence was carried on both sides of a wire that refused it in the middle.
+//
+// WHY THE BOUND IS PINNED. Admitting arbitrary JSON would be a smaller diff and the
+// wrong contract: an arg is rendered into a per-arg binding (a CLI `-p`, an env var,
+// the `LOBSTER_ARGS_JSON` document), and a nested value has no such rendering — it
+// would VALIDATE here and then be dropped or fail at execution time. So the reject
+// cases below are as load-bearing as the accept cases: they stop a later "just use
+// `_`" from turning a loud schema error into a silent execution-time drop.
+//
+// The three defs move together because they are ONE mechanism: an authored
+// `#PipelineSchedule.args` is normalized into `#WorkflowSchedule.args`, which is what
+// a scheduled run's `#WorkflowRunRequest.args` is built from. A run that accepts a
+// list while its schedule does not is the half-fix this corpus exists to prevent.
+func TestWorkflowArgsCarryARuntimeList(t *testing.T) {
+	schema := loadPipelineSchema(t)
+
+	for _, tc := range []struct {
+		name   string
+		def    string
+		value  string
+		reject bool
+	}{
+		// --- accept: the list crossing the wire ---
+		{
+			"the run request carries a list arg",
+			"#WorkflowRunRequest",
+			`{pipeline: "lane", args: {prs: ["101", "102", "103"], who: "world"}}`,
+			false,
+		},
+		{
+			"an empty list arg is a value, not an absence",
+			"#WorkflowRunRequest",
+			`{pipeline: "lane", args: {prs: []}}`,
+			false,
+		},
+		{
+			"the schedule on the engine wire carries a list arg",
+			"#WorkflowSchedule",
+			`{cron: "0 * * * *", args: {prs: ["101"]}}`,
+			false,
+		},
+		{
+			"the AUTHORED schedule carries a list arg too",
+			"#PipelineSchedule",
+			`{cron: "0 * * * *", args: {prs: ["101"]}}`,
+			false,
+		},
+
+		// --- accept: nothing that already worked stops working ---
+		{
+			// The scalar control: the pre-existing shape, byte for byte.
+			"a scalar arg is unchanged",
+			"#WorkflowRunRequest",
+			`{pipeline: "lane", args: {who: "world"}}`,
+			false,
+		},
+		{
+			// The union did not narrow: `#StrVal` already admitted these, and the
+			// generated field was the only thing that could not hold them.
+			"the numeric and boolean scalars stay admitted",
+			"#WorkflowRunRequest",
+			`{pipeline: "lane", args: {count: 3, dry: true}}`,
+			false,
+		},
+		{
+			"a list of mixed scalars is admitted",
+			"#WorkflowRunRequest",
+			`{pipeline: "lane", args: {mixed: ["a", 2, true]}}`,
+			false,
+		},
+
+		// --- reject: the bound holds ---
+		{
+			"a nested map arg is rejected",
+			"#WorkflowRunRequest",
+			`{pipeline: "lane", args: {prs: {nested: "x"}}}`,
+			true,
+		},
+		{
+			"a list of lists is rejected",
+			"#WorkflowRunRequest",
+			`{pipeline: "lane", args: {prs: [["101"]]}}`,
+			true,
+		},
+		{
+			"a list of maps is rejected",
+			"#WorkflowRunRequest",
+			`{pipeline: "lane", args: {prs: [{number: 101}]}}`,
+			true,
+		},
+		{
+			"a nested map arg is rejected on the engine schedule too",
+			"#WorkflowSchedule",
+			`{cron: "0 * * * *", args: {prs: {nested: "x"}}}`,
+			true,
+		},
+		{
+			"a nested map arg is rejected on the authored schedule too",
+			"#PipelineSchedule",
+			`{cron: "0 * * * *", args: {prs: {nested: "x"}}}`,
+			true,
+		},
+
+		// --- the sub-workflow step arm: the same mechanism one level down ---
+		{
+			// A `workflow:` step hands its args to the SAME resolveWorkflowArgs the run
+			// request does, so leaving this arm scalar-only would let a lane carry a list
+			// at the top level and fail one step down.
+			"a sub-workflow step carries a list arg",
+			"#PipelineStep",
+			`{id: "s1", workflow: "child", workflow_args: {prs: ["101", "102"]}}`,
+			false,
+		},
+		{
+			"a sub-workflow step still rejects a nested map arg",
+			"#PipelineStep",
+			`{id: "s1", workflow: "child", workflow_args: {prs: {nested: "x"}}}`,
+			true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := unifyDef(t, schema, tc.def, tc.value)
+			if tc.reject && got == nil {
+				t.Errorf("%s ACCEPTED a value it must reject:\n%s", tc.def, tc.value)
+			}
+			if !tc.reject && got != nil {
+				t.Errorf("%s REJECTED a valid value: %v\n%s", tc.def, got, tc.value)
+			}
+		})
+	}
+}

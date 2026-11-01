@@ -2,16 +2,16 @@ package hostenv
 
 import "testing"
 
-func TestValidateEngine_AcceptsNerdctl(t *testing.T) {
-	for _, engine := range []string{"podman", "docker", "nerdctl"} {
+func TestValidateEngine_AcceptsContainerd(t *testing.T) {
+	for _, engine := range []string{"podman", "docker", "containerd"} {
 		if err := ValidateEngine(engine, "engine.run"); err != nil {
 			t.Errorf("ValidateEngine(%q) unexpectedly rejected: %v", engine, err)
 		}
 	}
-	// containerd is still not an engine word — nerdctl is the containerd CLI,
-	// containerd itself is a daemon, not a CLI engine.
-	if err := ValidateEngine("containerd", "engine.run"); err == nil {
-		t.Error("ValidateEngine(containerd) must still be rejected")
+	// nerdctl is the containerd CLI, never an engine word: the deleted spelling
+	// must be rejected by the same vocabulary gate.
+	if err := ValidateEngine("nerdctl", "engine.run"); err == nil {
+		t.Error("ValidateEngine(nerdctl) must be rejected — the engine word is containerd")
 	}
 	if err := ValidateEngine("", "engine.run"); err == nil {
 		t.Error("ValidateEngine(\"\") must be rejected")

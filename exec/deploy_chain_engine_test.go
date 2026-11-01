@@ -7,15 +7,15 @@ import (
 )
 
 // TestAppendHopForFlatPathCarriesEngine pins that a container-exec hop carries the
-// node's ENGINE as DATA on the Jump (node.Engine is #EngineName): a nerdctl deploy
-// must yield JumpContainerExec with Engine "nerdctl", not a podman hop. This is the
+// node's ENGINE as DATA on the Jump (node.Engine is #EngineName): a containerd deploy
+// must yield JumpContainerExec with Engine "containerd", not a podman hop. This is the
 // branch that the engine-provider-class cutover rewrote (the former per-engine jump
 // arms became one data-carrying jump); without the Engine field the value would
 // silently default to podman in engineBinary().
 func TestAppendHopForFlatPathCarriesEngine(t *testing.T) {
 	node := &spec.Deploy{
 		Target:  "pod",
-		Engine:  spec.EngineName("nerdctl"),
+		Engine:  spec.EngineName("containerd"),
 		Descent: &spec.DescentDescriptor{Transport: "container-exec"},
 	}
 
@@ -30,8 +30,8 @@ func TestAppendHopForFlatPathCarriesEngine(t *testing.T) {
 	if nested.Jump.Kind != JumpContainerExec {
 		t.Fatalf("jump kind = %d, want %d", nested.Jump.Kind, JumpContainerExec)
 	}
-	if nested.Jump.Engine != "nerdctl" {
-		t.Fatalf("jump engine = %q, want %q (the node's engine must ride the jump as data)", nested.Jump.Engine, "nerdctl")
+	if nested.Jump.Engine != "containerd" {
+		t.Fatalf("jump engine = %q, want %q (the node's engine must ride the jump as data)", nested.Jump.Engine, "containerd")
 	}
 	if nested.Jump.Target != "charly-web_db" {
 		t.Fatalf("jump target = %q, want %q", nested.Jump.Target, "charly-web_db")

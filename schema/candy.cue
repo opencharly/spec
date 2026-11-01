@@ -21,7 +21,7 @@
 	// candy chain (engine.go ResolveBoxEngine) and cross-candy conflicts are a
 	// validate error. RETAINED by the schema-compaction consumer audit.
 	// The engine vocabulary is #EngineName (schema/engine.cue) — one source shared
-	// by every authored engine field, so a new engine (nerdctl) lands once.
+	// by every authored engine field, so a new engine (containerd) lands once.
 	engine?: #EngineName
 	// `from:` is NOT a candy field — EDGE-INHERIT cutover D: a candy: node carrying
 	// `base:` or `from:` is a full IMAGE (#Box, the former box:), routed there by the
@@ -57,6 +57,25 @@
 	// (the STEP leg). A builtin builder (pixi/cargo/npm/aur) is selected by detection
 	// files, NOT this field. See generate.go emitExternalBuilderStages.
 	external_builder?: string & !="" @go(ExternalBuilder)
+
+	// --- harness skill trees (authored content) ---
+	// skills — the repo-relative SKILL TREES this candy DECLARES, each holding one entry per name:
+	// <tree>/<name>/SKILL.md plus references/<stem>.md. DEFAULT [".agents/skills"] — the
+	// Agent-Skills standard location, so a repo whose skills live there declares nothing. It is the
+	// ONE place the marketplace generator (candy/plugin-marketplace) and the docs projection
+	// (candy/plugin-docs) look for a skill's body, and it is what makes a sibling `skill:` node's
+	// description:/content:/references: omittable: the node keeps the ROUTING metadata
+	// (family/owner/triggers/category), the file keeps the prose. See schema/skill.cue.
+	//
+	// An `agent`-type node is a SUB-AGENT DEFINITION, not a skill, and this list does NOT govern it:
+	// its body is always authored at `.agents/agents/<name>.md`. So a mixed repo — skills under a
+	// declared tree, agents under `.agents/agents` — is the legal shape, not a half-move.
+	//
+	// The version of record is NOT in this file: it is the github ref that fetched this repo — the
+	// marketplace refs list's pin, or a consumer's `candy:` list. Nothing is fetched at authoring
+	// time; the generator reads the tree from the checkout it already has. See
+	// /charly-internals:marketplace.
+	skills?: [...(string & !="")] @go(Skills)
 
 	// --- runtime env / local vars / PATH ---
 	// env forbids PATH (validate.go: use path_append instead). Values are
@@ -493,16 +512,38 @@
 	// providers: the "<class>:<word>" reserved-word capabilities this plugin
 	// serves (e.g. "verb:exampleprobe", "kind:my-thing"). Each is registered into
 	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
-	providers: [...#PluginCapability]
-	// source: the plugin's Go module path — a git ref
-	// (github.com/org/repo[/sub]) fetched via the @github resolver + built into a
-	// provider binary when the candy is NOT compiled in. REQUIRED: every plugin
-	// candy names its module; whether the plugin runs compiled-in (in-proc) or
-	// out-of-process is the SEPARATE charly.yml `compiled_plugins:` selection, never
-	// a manifest sentinel. (The former `source: builtin` form was retired — it
-	// duplicated the compiled_plugins selection and had a dead in-repo-module
-	// fallback.)
-	source: #GithubRef @go(Source,type=string)
+	providers!: [...#PluginCapability]
+	// source: WHERE THIS PLUGIN'S PROVIDER COMES FROM — a git module
+	// (github.com/org/repo[/sub], #GithubRef) fetched via the @github resolver and
+	// built on the host into a provider binary, or a registry artifact
+	// (oci://…, #OciRef) fetched prebuilt for the consumer's platform and connected
+	// with no source checkout and no Go toolchain. REQUIRED: every plugin candy names
+	// its source; whether the plugin runs compiled-in (in-proc) or out-of-process is
+	// the SEPARATE charly.yml `compiled_plugins:` selection, never a manifest
+	// sentinel. (The former `source: builtin` form was retired — it duplicated the
+	// compiled_plugins selection and had a dead in-repo-module fallback.)
+	source!: #PluginSource @go(Source,type=string)
+	// release: the plugin RELEASE this declaration pins (D-CORE-4's "an embedded plugin
+	// runs only when a project declares that exact module, release and digest"). It is the
+	// release identity a resolver reports and compares — a charly CalVer-style tag for a
+	// first-party plugin release, else the publisher's own version string. Optional: a
+	// bare local candy pins nothing, and an unpinned declaration is a legitimate
+	// development state — what is NOT legitimate is a pin that only PRETENDS to pin.
+	release?: string & !="" @go(Release)
+	// digest: the artifact's INDEX digest — the only PLATFORM-INDEPENDENT digest in a
+	// multi-platform artifact. MEASURED: a plugin artifact carries one manifest per
+	// platform, so four per-platform manifest digests; an unqualified `digest:` would be
+	// ambiguous, while the index digest identifies the whole release. The consumer derives
+	// the selected platform's manifest digest by selection, from this.
+	//
+	// PRECEDENCE, when a plugin is both declared here and addressed by an `#OciRef` that
+	// carries its own `@sha256:` — the two must AGREE, and a disagreement is a hard load
+	// error (one pin, two spellings, never two competing answers). The ref's digest is what
+	// the transport FETCHES; this one is what the served bytes must BE.
+	//
+	// Declared and compared, never derived: the same source rebuilt elsewhere produces a
+	// different binary, so a digest can only be checked against what was published.
+	digest?: string & =~"^sha256:[a-f0-9]{64}$" @go(Digest)
 	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
 	// capabilities; the host resolves each against the provider registry and
 	// connects it declaratively (the same lazy-connect chain a call-time
@@ -520,20 +561,43 @@
 	primary?: {[string]: string & !=""}
 })
 
-// #GithubRef — the ONE canonical github module/candy ref shape
+// #GithubRef — the canonical github module/candy SOURCE shape
 // (github.com/org/repo[/sub-path]), shared by every field that names a remote
-// plugin/candy repo (the plugin `source:`, a requirement's `source:`) so the
+// plugin/candy module (the plugin `source:`, a requirement's `source:`) so the
 // pattern is defined once (R3). Each referencing field pins its Go type to string
 // (`@go(...,type=string)`), so `spec.PluginSource`/`Plugin.Source` stay plain strings.
 #GithubRef: string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$"
+
+// #OciRef — the registry-hosted SOURCE shape: the git-free sibling of #GithubRef,
+// `oci://<registry>[:<port>]/<repository>[:<tag>][@sha256:<digest>]`.
+//
+// A plugin release publishes its provider binary per platform as an OCI
+// image-spec v1.1.1 artifact, so a consumer that has neither the plugin's source
+// checkout nor a Go toolchain fetches the BINARY instead of building it — the
+// direction DESIGN.md D-CORE-4/D-PLUG-4 and TODO item 6.8 set, where an embedded
+// plugin runs only on an exact match and everything else is fetched prebuilt.
+//
+// A `@sha256:` digest, when present, is AUTHORITATIVE: it is what the consumer
+// verifies the fetched bytes against, and it is what keys the content-addressed
+// store (D-STORE-3/D-STORE-4). A tag without a digest resolves to a digest the
+// consumer records and reports; it is never silently re-resolved on a later run.
+#OciRef: string & =~"^oci://[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?$"
+
+// #PluginSource — where a plugin's provider comes from: a git MODULE (#GithubRef,
+// the legacy default, fetched and host-built) or a registry ARTIFACT (#OciRef,
+// fetched prebuilt for the consumer's platform). ONE def, used by BOTH the
+// plugin's own `source:` and a requirement's `source:` (R2/R3), so a peer plugin
+// is reachable by either route without a second declaration surface.
+#PluginSource: #GithubRef | #OciRef
 
 // #PluginRequirement — one declared inter-plugin dependency. CLOSED.
 #PluginRequirement: close({
 	// capability: the peer's "<class>:<word>" (e.g. "verb:enc").
 	capability: #PluginCapability
 	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
-	// fetched declaratively instead of by a call-time ExtraRef.
-	source?: #GithubRef @go(Source,type=string)
+	// fetched declaratively instead of by a call-time ExtraRef. Same two arms as the
+	// plugin's own `source:` (#PluginSource): a git module or a registry artifact.
+	source?: #PluginSource @go(Source,type=string)
 	// optional: when true, an absent peer is recorded and skipped rather than
 	// failing the load. Default false — a declared dependency must resolve.
 	optional?: bool
@@ -553,14 +617,21 @@
 // #ProviderClassNames — the CLOSED provider-class vocabulary (the classes a
 // `plugin.providers:` capability may name). THE single source: schemagen emits
 // spec.ProviderClasses from it (the Go closed set both charly's providerClasses and
-// plugin-box's validPluginClasses derive from — parser consolidation F4.2), and
-// #PluginCapability's regex derives from the same list, so the CUE-side capability
-// gate can never drift from the Go-side class set.
+// plugin-box's validPluginClasses derive from — parser consolidation F4.2).
+//
+// The CUE-side class PATTERN deliberately does NOT derive from this list any more
+// (opencharly/charly#853, plugin-box#29): a pattern built from the list REJECTS an
+// undeclared class as malformed, so the rule that is meant to NAME the class and this
+// set could never be reached for any undeclared class. The pattern owns SYNTAX; the
+// Go rule owns the VOCABULARY. This list stays the ONE source for the Go side, and it
+// is kept in step with that rule by the tests that cover it - not by a regex.
 #ProviderClassNames: ["kind", "deploy", "verb", "step", "build", "builder", "command", "engine", "workflow", "loader", "refs", "agent-runtime", "terminal"] @go(-)
 
-// #ProviderClassPattern — the class alternation derived from #ProviderClassNames
-// (the ONE hand-maintained list; the regex is computed, never authored).
-#ProviderClassPattern: "^(" + strings.Join(#ProviderClassNames, "|") + "):[a-z0-9][a-z0-9_-]*$" @go(-)
+// #ProviderClassPattern — the class segment is STRUCTURAL: any well-formed
+// lowercase-hyphenated class. It deliberately accepts a class #ProviderClassNames
+// omits, so the Go rule can report it as an UNKNOWN PROVIDER CLASS naming the class
+// and the set it was checked against (opencharly/charly#853, plugin-box#29).
+#ProviderClassPattern: "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9_-]*$" @go(-)
 
 // #CommandParentPattern — the THREE-segment form ONLY a class="command" capability
 // may carry: "command:<word>:<parent>". Kept as its own computed regex so the
@@ -575,6 +646,8 @@
 #PluginCapabilityPattern: #ProviderClassPattern + "|" + #CommandParentPattern @go(-)
 
 // #PluginCapability — a capability identity: "<class>:<word>", or the command-only
-// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
-// parent are lowercase-hyphenated.
+// three-segment form "<class>:<word>:<parent>". The class must be WELL-FORMED here and
+// DECLARED in #ProviderClassNames per the Go rule (charly's providerClasses /
+// plugin-box's validPluginClasses), which is the side that NAMES an undeclared class;
+// word and parent are lowercase-hyphenated.
 #PluginCapability: string & =~#PluginCapabilityPattern

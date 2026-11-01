@@ -92,6 +92,15 @@ func TestPipelineValueClosedness(t *testing.T) {
 			}]}`,
 			false,
 		},
+		{
+			"lanes with the pooled fan-out companions accepted",
+			`{description: "d", steps: [{
+				id: "s1", lanes: "$prev.json.items",
+				item_var: "it", index_var: "i", batch_size: 2,
+				steps: [{id: "inner", run: "echo $it"}],
+			}]}`,
+			false,
+		},
 
 		// --- accept: the charly form (the FULL #Step grammar, inside plan:) ---
 		{
@@ -143,7 +152,7 @@ func TestPipelineValueClosedness(t *testing.T) {
 		{
 			"two lobster exec arms are a Go rule, so CUE must NOT reject them here",
 			`{description: "d", steps: [{id: "s1", run: "echo hi", pipeline: "other"}]}`,
-			false, // documented: the XOR is OpValidate's job (see the pipeline.cue header)
+			false, // documented: the XOR is sdk/workflowkit.ValidatePipeline's job (see the pipeline.cue header)
 		},
 
 		// --- reject ---
@@ -180,7 +189,7 @@ func TestPipelineValueClosedness(t *testing.T) {
 		{
 			"a step with no exec arm is a Go rule too, so CUE must NOT reject it here either",
 			`{description: "d", steps: [{id: "s1", when: "true"}]}`,
-			false, // OpValidate rejects both zero arms and two arms; see the pipeline.cue header
+			false, // workflowkit.ValidatePipeline rejects both zero arms and two arms; see the pipeline.cue header
 		},
 		{
 			"an empty steps list rejected",
@@ -218,6 +227,18 @@ func TestPipelineValueClosedness(t *testing.T) {
 				{id: "inner", run: "echo hi", for_each: "$y"},
 			]}]}`,
 			true, // #PipelineSubStep is non-recursive by construction (lobster's own rule)
+		},
+		{
+			"a nested lanes in a substep rejected",
+			`{description: "d", steps: [{id: "s1", for_each: "$x", steps: [
+				{id: "inner", run: "echo hi", lanes: "$y", batch_size: 2},
+			]}]}`,
+			true, // #PipelineSubStep is non-recursive by construction (lobster's own rule)
+		},
+		{
+			"an empty lanes operand rejected",
+			`{description: "d", steps: [{id: "s1", lanes: "", batch_size: 2}]}`,
+			true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

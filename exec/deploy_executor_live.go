@@ -38,7 +38,6 @@ func runLiveExit(err error) (int, error) {
 }
 
 // --- ShellExecutor (operator's local machine) ---
-
 func (ShellExecutor) RunInteractive(_ context.Context, script string) (int, error) {
 	cmd := exec.Command("bash", "-c", script) // NOT CommandContext: the TTY owns the lifetime, not ctx
 	cmd.Stdin = os.Stdin
@@ -55,7 +54,6 @@ func (ShellExecutor) RunStream(_ context.Context, script string) (int, error) {
 }
 
 // --- SSHExecutor (over ssh) ---
-
 func (e *SSHExecutor) RunInteractive(_ context.Context, script string) (int, error) {
 	args := e.SSHBaseArgs()
 	args = append(args, "-t") // -t forces a remote PTY
@@ -79,7 +77,6 @@ func (e *SSHExecutor) RunStream(_ context.Context, script string) (int, error) {
 }
 
 // --- NestedExecutor (through a jump: container-in-vm etc.) ---
-
 func (n *NestedExecutor) RunInteractive(ctx context.Context, script string) (int, error) {
 	if n.Parent == nil {
 		return -1, fmt.Errorf("NestedExecutor: nil Parent")

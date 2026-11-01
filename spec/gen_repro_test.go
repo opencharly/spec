@@ -39,31 +39,17 @@ func findCue(t *testing.T) string {
 	return ""
 }
 
-// freshTypesGen reproduces spec/cue_types_gen.go: schemagen -mode=concat
-// → cue exp gengotypes, returning the gofmt-normalized bytes.
-func freshTypesGen(t *testing.T, cue string) []byte {
+// freshTypesGen reproduces spec/cue_types_gen.go through the ONE pipeline: the same
+// `schemagen -mode=params` the `cue-gen` task runs, which delegates to
+// schemaparams.GenerateExcluding. The test does not re-run the individual steps —
+// concatenation, `cue exp gengotypes` and the tag normalization all live in that one
+// function now, and a test that reproduced them itself would be a second copy of the
+// mechanism it is meant to gate (and would not notice the task's path breaking).
+func freshTypesGen(t *testing.T) []byte {
 	t.Helper()
-	gendir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(gendir, "cue.mod"), 0o755); err != nil {
-		t.Fatalf("mkdir cue.mod: %v", err)
-	}
-	module := "module: \"github.com/opencharly/spec/schema/spec-codegen\"\nlanguage: version: \"" + cueVersion + "\"\n"
-	if err := os.WriteFile(filepath.Join(gendir, "cue.mod", "module.cue"), []byte(module), 0o644); err != nil {
-		t.Fatalf("write module.cue: %v", err)
-	}
-	concat := filepath.Join(gendir, "schema_spec.cue")
-	runIn(t, "..", "go", "run", "./internal/schemagen", "-mode=concat", "-schema=schema", "-out="+concat)
-	runIn(t, gendir, cue, "exp", "gengotypes", "./schema_spec.cue")
-
-	matches, _ := filepath.Glob(filepath.Join(gendir, "cue_types*_gen.go"))
-	if len(matches) == 0 {
-		t.Fatalf("gengotypes produced no cue_types*_gen.go in %s", gendir)
-	}
-	// Apply the SAME yaml-tag doubling the real cue:gen pipeline runs — invoke
-	// schemagen -mode=retag on the gengotypes output (R3: ONE retag implementation,
-	// no parallel copy of the transform in the test).
-	runIn(t, "..", "go", "run", "./internal/schemagen", "-mode=retag", "-out="+matches[0])
-	raw, err := os.ReadFile(matches[0])
+	out := filepath.Join(t.TempDir(), "cue_types_gen.go")
+	runIn(t, "..", "go", "run", "./internal/schemagen", "-mode=params", "-schema=schema", "-pkg=spec", "-out="+out)
+	raw, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatalf("read fresh types: %v", err)
 	}
@@ -115,7 +101,7 @@ func TestGenReproducible(t *testing.T) {
 		t.Skipf("pinned cue %s not available (run `charly task cue-gen` to bootstrap ./bin/cue) — skipping reproducibility gate", cueVersion)
 	}
 
-	if got, want := freshTypesGen(t, cue), committed(t, "cue_types_gen.go"); !equalBytes(got, want) {
+	if got, want := freshTypesGen(t), committed(t, "cue_types_gen.go"); !equalBytes(got, want) {
 		t.Errorf("cue_types_gen.go is STALE: a fresh `charly task cue-gen` differs from the committed file.\n"+
 			"Run `charly task cue-gen` and commit the result. (fresh=%d bytes, committed=%d bytes)", len(got), len(want))
 	}

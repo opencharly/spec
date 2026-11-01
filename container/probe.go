@@ -14,8 +14,12 @@ import (
 )
 
 // IsHostNetworked checks if a running container uses --network host.
+//
+// engine is the engine WORD (#EngineName), not a binary: it is resolved through
+// EngineBinary here, so a containerd caller probes with nerdctl rather than the
+// daemon word.
 func IsHostNetworked(engine, containerName string) bool {
-	cmd := exec.Command(engine, "inspect", "--format",
+	cmd := exec.Command(EngineBinary(engine), "inspect", "--format",
 		"{{.HostConfig.NetworkMode}}", containerName)
 	output, err := cmd.Output()
 	if err != nil {

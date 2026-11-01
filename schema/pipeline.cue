@@ -17,7 +17,10 @@
 // change here.
 //
 // CLOSED (an unknown key is a typo). Shared defs (#Step/#StrVal/#Duration) come from
-// _common.cue; #TaskParamSpec from task.cue. #PipelineValue is the HOST value gate:
+// _common.cue; #TaskParamSpec from task.cue; #WorkflowArgVal from workflow.cue (the
+// same runtime arg VALUE the engine wire carries, so an authored trigger and the
+// request it later becomes cannot disagree about what a value may be).
+// #PipelineValue is the HOST value gate:
 // schemagen DERIVES spec.KindValueDefs["pipeline"] from it (the #TaskValue
 // precedent), so the host closedness-gates a pipeline body with zero per-kind code.
 //
@@ -25,8 +28,8 @@
 // carries the wire that engine is dispatched with.
 //
 // Exec-arm exclusivity (exactly one of run/pipeline/workflow/parallel/for_each/
-// input/plan/charly) is a GO rule in plugin-pipeline's OpValidate, NOT a CUE
-// disjunction: an entity-level nested disjunction breaks the closedness of the
+// lanes/input/plan/charly) is a GO rule in sdk/workflowkit.ValidatePipeline, NOT a
+// CUE disjunction: an entity-level nested disjunction breaks the closedness of the
 // surrounding def and collapses the generated Go type (the box.cue base⊻from
 // precedent, which has the same shape).
 
@@ -74,12 +77,19 @@
 	run?:           string & !=""
 	pipeline?:      string & !=""
 	workflow?:      string & !=""
-	workflow_args?: {[string]: #StrVal} @go(WorkflowArgs,type=map[string]string)
+	// workflow_args — the sub-workflow invocation's RUNTIME arg values, so the SAME
+	// admission as `#WorkflowRunRequest.args` (`#WorkflowArgVal`). The lowered step's
+	// `workflow_args` is the engine's own `{[string]: _}` (lobster.cue) and lands in the
+	// same `resolveWorkflowArgs(map[string]any)` the run request does, so a scalar-only
+	// spelling here would be a SECOND rule for one question — "what may a workflow arg
+	// value be" — and a lane that works at the top level would fail one step down.
+	workflow_args?: {[string]: #WorkflowArgVal} @go(WorkflowArgs,type=map[string]any)
 	parallel?:      #PipelineParallel
 	for_each?:      string & !="" @go(ForEach)
+	lanes?:         string & !="" @go(Lanes)
 	input?:         #PipelineInput
 
-	// --- for_each companions (meaningful only alongside for_each) ---
+	// --- for_each / lanes companions (meaningful only alongside for_each or lanes) ---
 	item_var?:   string & !="" @go(ItemVar)
 	index_var?:  string & !="" @go(IndexVar)
 	batch_size?: int & >0 @go(BatchSize)
@@ -142,10 +152,16 @@
 // deploy.schedule, a k8s CronJob and GitHub Actions `on.schedule` use, so one
 // authored schedule lowers to every consumer; the lobster engine converts it to a
 // systemd `OnCalendar` (validated with `systemd-analyze calendar`).
+//
+// `args` is the scheduled run's RUNTIME arg values — the same field, and therefore
+// the same `#WorkflowArgVal` admission, as `#WorkflowRunRequest.args`. It is
+// normalized into `#WorkflowSchedule.args` verbatim, so a lane that works on a
+// manual run works on a scheduled one; a scalar-only schedule would be the silent
+// half-fix that this def and its engine twin are one mechanism to prevent.
 #PipelineSchedule: {
 	cron!:       string & !=""
 	timezone?:   string & !=""
-	args?:       {[string]: #StrVal} @go(Args,type=map[string]string)
+	args?:       {[string]: #WorkflowArgVal} @go(Args,type=map[string]any)
 	persistent?: bool
 }
 

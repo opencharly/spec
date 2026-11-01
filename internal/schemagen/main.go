@@ -48,10 +48,11 @@ import (
 	"cuelang.org/go/cue/errors"
 
 	"github.com/opencharly/spec/schemaconcat"
+	"github.com/opencharly/spec/schemaparams"
 )
 
 func main() {
-	mode := flag.String("mode", "", "concat | vocab | retag")
+	mode := flag.String("mode", "", "params | vocab")
 	schemaDir := flag.String("schema", "schema", "path to the schema/*.cue directory")
 	pkg := flag.String("pkg", "spec", "Go package for the concat header (spec | params)")
 	out := flag.String("out", "", "output file path")
@@ -61,20 +62,16 @@ func main() {
 		fatal("schemagen: -out is required")
 	}
 	switch *mode {
-	case "concat":
-		if err := writeConcat(*schemaDir, *out, *pkg); err != nil {
-			fatal("schemagen concat: %v", err)
+	case "params":
+		if err := writeParams(*schemaDir, *out, *pkg); err != nil {
+			fatal("schemagen params: %v", err)
 		}
 	case "vocab":
 		if err := writeVocab(*schemaDir, *out); err != nil {
 			fatal("schemagen vocab: %v", err)
 		}
-	case "retag":
-		if err := retagFile(*out); err != nil {
-			fatal("schemagen retag: %v", err)
-		}
 	default:
-		fatal("schemagen: -mode must be concat, vocab, or retag (got %q)", *mode)
+		fatal("schemagen: -mode must be params or vocab (got %q)", *mode)
 	}
 }
 
@@ -125,52 +122,20 @@ func specSource(dir, pkg string, exclude func(name string) bool) (string, error)
 // retag mode — the Go-native yaml-tag doubling (replaces the former cue:gen sed)
 // ----------------------------------------------------------------------------
 
-// reJSONOnlyTag matches a struct field tag literal carrying ONLY a json tag,
-// `json:"X"` (backtick-delimited — gengotypes emits json tags only). retag doubles
-// it with a matching yaml tag so charly's yaml.v3 round-trip (saveDeployState, the
-// deploy-overlay merge, charly.yml read/write) keys off the SAME wire key — yaml.v3
-// otherwise lowercases the Go field name and silently drops every snake_case key.
-var reJSONOnlyTag = regexp.MustCompile("`json:\"([^\"]*)\"`")
-
-// reBareYamlKey matches a yaml tag whose value is a bare key (alpha first char, no
-// comma/quote). retag appends ,omitempty so a zero value drops out and the CUE
-// default re-applies (parity with the former hand structs — e.g. an empty
-// firmware:"" would otherwise break the `*"bios"|…` default). A key that already
-// carries a comma (an existing ,omitempty) is left untouched.
-var reBareYamlKey = regexp.MustCompile(`yaml:"([a-zA-Z][^",]*)"`)
-
-// retagFile rewrites the gengotypes-generated Go file in place: (1) double every
-// json-only struct tag with a matching yaml tag, then (2) append ,omitempty to
-// every bare yaml key. This is the principled Go-native replacement for the former
-// cue:gen `sed -i` steps — a compiled, documented, idempotent transform that lives
-// INSIDE schemagen (never sed on generated Go). The two substitutions are exactly
-// the former sed expressions, so the committed cue_types_gen.go is byte-identical;
-// gofmt (the next cue:gen step) realigns the tag columns. Idempotent: a fresh
-// gengotypes file carries json-only tags, and a re-run finds no json-only tag to
-// double and every yaml key already carrying ,omitempty.
-func retagFile(path string) error {
-	src, err := os.ReadFile(path)
+// writeParams emits the GENERATED Go params file by calling the ONE pipeline
+// (schemaparams): concatenate the param-gen schema subset under the `package <pkg>` +
+// `@go(<pkg>)` header, run the pinned cue gengotypes (provisioned through
+// cuetoolchain.Ensure into ./bin), normalize the struct tags. None of those steps is
+// implemented here any more — that is what makes the pipeline ONE thing rather than a
+// copy per caller. `excludeParamGen` (node.cue) is this caller's only difference, and
+// it is a parameter.
+func writeParams(dir, out, pkg string) error {
+	src, err := schemaparams.GenerateExcluding(dir, pkg, "bin", excludeParamGen)
 	if err != nil {
 		return err
 	}
-	out := reJSONOnlyTag.ReplaceAll(src, []byte("`yaml:\"${1}\" json:\"${1}\"`"))
-	out = reBareYamlKey.ReplaceAll(out, []byte(`yaml:"${1},omitempty"`))
-	return os.WriteFile(path, out, 0o644)
+	return os.WriteFile(out, src, 0o644)
 }
-
-// writeConcat emits the gengotypes input — the PARAM-GEN-scoped concatenation
-// (node.cue excluded; see excludeParamGen) headed with `package pkg`.
-func writeConcat(dir, out, pkg string) error {
-	src, err := specSource(dir, pkg, excludeParamGen)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(out, []byte(src), 0o644)
-}
-
-// ----------------------------------------------------------------------------
-// vocab mode
-// ----------------------------------------------------------------------------
 
 func writeVocab(dir, out string) error {
 	// FULL schema (nil exclude): the vocab generator needs #Node's arms
@@ -249,11 +214,32 @@ func writeVocab(dir, out string) error {
 	if err != nil {
 		return err
 	}
+	// engineBinaries — the engine word → CLI binary mapping. containerd is driven
+	// through nerdctl, so the word is not the binary; the map is the ONE source
+	// both the capability table and the exec layer read.
+	engineBinaries, err := strMapDef(schema, "#EngineBinaries")
+	if err != nil {
+		return err
+	}
 	engineRunModes, err := enumValues(schema, "#EngineRunMode")
 	if err != nil {
 		return err
 	}
 	engineUnitRunModes, err := listValues(schema, "#EngineUnitRunModes")
+	if err != nil {
+		return err
+	}
+	// rootfulModes — the rootful-launch vocabulary, so a resolver validates
+	// engine.rootful / CHARLY_ENGINE_ROOTFUL / the per-deploy rootful: against
+	// the schema rather than a hand-listed word set.
+	rootfulModes, err := enumValues(schema, "#RootfulMode")
+	if err != nil {
+		return err
+	}
+	// vmBackends — the VM-backend PROVIDER words (no `auto` selector), so a
+	// resolver validates --backend / CHARLY_VM_BACKEND / vm.backend without
+	// literals. #VmBackend itself keeps `auto` as its resolution default.
+	vmBackends, err := enumValues(schema, "#VmBackendName")
 	if err != nil {
 		return err
 	}
@@ -291,8 +277,11 @@ func writeVocab(dir, out string) error {
 		authoringVerbs:      authoringVerbs,
 		kindValueDefs:       kindValues,
 		engineNames:         engineNames,
+		engineBinaries:      engineBinaries,
 		engineRunModes:      engineRunModes,
 		engineUnitRunModes:  engineUnitRunModes,
+		rootfulModes:        rootfulModes,
+		vmBackends:          vmBackends,
 	})
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
@@ -534,8 +523,11 @@ type vocabSets struct {
 	authoringVerbs      []string
 	kindValueDefs       map[string]string
 	engineNames         []string
+	engineBinaries      map[string]string
 	engineRunModes      []string
 	engineUnitRunModes  []string
+	rootfulModes        []string
+	vmBackends          []string
 }
 
 func renderVocab(s vocabSets) string {
@@ -563,9 +555,12 @@ func renderVocab(s vocabSets) string {
 	writeStrSlice(&b, "OpVerbs", "the verb DISCRIMINATOR vocabulary (#OpVerb) — the exactly-one-set verb subset of #Op fields (Op.Kind() + the VerbCatalog dispatch table gate against it).", s.opVerbs)
 	writeStrSlice(&b, "AuthoringVerbs", "the AUTHORABLE #Op field vocabulary (#Op fields minus the never-authored origin/venue/intent_do/plugin/plugin_input/command).", s.authoringVerbs)
 	writeStrMap(&b, "KindValueDefs", "the word→#<Kind>Value CUE-def map the host uses to closedness-gate a substrate/candy node's authored VALUE (validateKindValueCUE). DERIVED from the #<X>Value defs themselves (every one except the shared #DeployValue disjunct), so a new value-gated kind needs no hand-maintained map.", s.kindValueDefs)
-	writeStrSlice(&b, "EngineNames", "the CLOSED container-engine vocabulary (#EngineName) — podman/docker/nerdctl. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.", s.engineNames)
+	writeStrSlice(&b, "EngineNames", "the CLOSED container-engine vocabulary (#EngineName) — podman/docker/containerd. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.", s.engineNames)
+	writeStrMap(&b, "EngineBinaries", "the engine WORD → CLI BINARY mapping (#EngineBinaries) — containerd is driven through nerdctl, so the engine word is not the binary. container.engineCapabilities and exec's jump read this ONE table; it lives in the contract module so neither package needs to import the other.", s.engineBinaries)
 	writeStrSlice(&b, "EngineRunModes", "the CLOSED engine run-mode vocabulary (#EngineRunMode) — quadlet/systemd-unit/direct. IsRunMode and ValidateRunMode derive from it; the per-engine mode mapping is container.EngineCapabilityFor.", s.engineRunModes)
 	writeStrSlice(&b, "EngineUnitRunModeWords", "the SUBSET of EngineRunModes supervised by a generated unit file (#EngineUnitRunModes) — quadlet/systemd-unit, not direct. container.IsUnitRunMode reads it, so the unit-capability question is a data fact, never a hand-listed pair.", s.engineUnitRunModes)
+	writeStrSlice(&b, "RootfulModes", "the CLOSED rootful-launch vocabulary (#RootfulMode) — auto/machine/sudo/native, shared by engine.rootful, CHARLY_ENGINE_ROOTFUL and the per-deploy rootful: selector. A resolver validates a flag/env/settings value against it instead of carrying literals.", s.rootfulModes)
+	writeStrSlice(&b, "VmBackends", "the CLOSED VM-backend PROVIDER vocabulary (#VmBackendName) — libvirt/qemu/krun, excluding the auto resolution selector that #VmBackend adds as its default. A resolver validates --backend / CHARLY_VM_BACKEND / vm.backend against it instead of carrying literals.", s.vmBackends)
 	return b.String()
 }
 

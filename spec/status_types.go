@@ -49,4 +49,5 @@ const (
 	SubstrateAndroid     SubstrateKind = "android"
 	SubstrateKindcluster SubstrateKind = "kindcluster"
 	SubstrateKubevirt    SubstrateKind = "kubevirt"
+	SubstrateFirecracker SubstrateKind = "firecracker"
 )

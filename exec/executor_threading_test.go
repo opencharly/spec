@@ -12,7 +12,6 @@ import (
 // real broker) is exercised by spec/transport's channel tests; here we prove the ctx path
 // returns the threaded executor WITHOUT touching the broker (the compiled-in placement's
 // contract: no broker needed).
-
 func TestContextWithExecutor_RoundTrip(t *testing.T) {
 	e := &Executor{}
 	ctx := context.Background()

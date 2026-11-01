@@ -104,3 +104,57 @@ func TestRepoIdentity_RepoRootKeepsBareIdentity(t *testing.T) {
 		t.Fatalf("repo-root local identity = %q, want github.com/opencharly/charly", got)
 	}
 }
+
+// TestRepoIdentity_LocalRefCannotEscapeItsRepository is the CONTAINMENT arm (charly#848): a local
+// ref that resolves outside the importing project's git working tree must NOT name the project it
+// finds there.
+//
+// Before this, the local ref path derived a directory from `ref` and handed it to
+// ProjectRepoIdentity, which reads THAT directory's charly.yml — so a `repo:` declared by a
+// neighbouring checkout was returned verbatim, from a read outside the project's own repository.
+// The qualification path in the same file was already bounded; this arm pins that the ref path now
+// obeys the same bound.
+//
+// The CONTROL arm matters as much as the escaping one: containment must refuse an ESCAPE, not
+// resolve to "" for everything — a blanket refusal would satisfy the escaping assertion while
+// destroying the identity the mutual-import cycle-break depends on.
+func TestRepoIdentity_LocalRefCannotEscapeItsRepository(t *testing.T) {
+	base := t.TempDir()
+	repo := filepath.Join(base, "repo")
+	other := filepath.Join(base, "other-checkout")
+	for _, d := range []string{repo, other} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitInitWithOrigin(t, repo, "https://github.com/opencharly/inside.git")
+	gitInitWithOrigin(t, other, "https://github.com/opencharly/outside.git")
+	// A DECLARED identity in the neighbour, so a cross-checkout read is visible in the result
+	// rather than inferable: pre-change this exact string came back from the escaping ref.
+	if err := os.WriteFile(filepath.Join(other, UnifiedFileName), []byte("repo: github.com/opencharly/outside-declared\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// CONTROL — a contained ref still resolves to its own project.
+	if got := RepoIdentity(".", repo); got != "github.com/opencharly/inside" {
+		t.Fatalf("contained repo-root ref = %q, want github.com/opencharly/inside (containment must not refuse everything)", got)
+	}
+	// CONTROL — a subdirectory project inside the repository is a definition mount, not an escape.
+	sub := filepath.Join(repo, "testdata", "fixture")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := RepoIdentity(filepath.Join("testdata", "fixture"), repo); got != "github.com/opencharly/inside/testdata/fixture" {
+		t.Fatalf("contained subdirectory ref = %q, want github.com/opencharly/inside/testdata/fixture", got)
+	}
+
+	// THE ARM — a ref that leaves the repository names no project in it.
+	if got := RepoIdentity("../other-checkout", repo); got != "" {
+		t.Fatalf("a ref escaping the repository named the other checkout: RepoIdentity(%q, repo) = %q, want \"\"", "../other-checkout", got)
+	}
+	// The ABSOLUTE spelling of the same escape must be refused identically — the bound is on where
+	// the ref RESOLVES, not on how it was spelled.
+	if got := RepoIdentity(other, repo); got != "" {
+		t.Fatalf("an absolute escaping ref named the other checkout: RepoIdentity(%q, repo) = %q, want \"\"", other, got)
+	}
+}

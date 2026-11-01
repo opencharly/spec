@@ -65,11 +65,17 @@
 }
 
 // #ResolvedKubernetes is the resolve-to-envelope form of a `kubernetes:` cluster
-// template. The kernel reads only KubeconfigContext (the deploy preresolver); the
-// full cluster model rides opaquely in Raw and is decoded by candy/plugin-k8sgen,
-// never the kernel.
+// template. The kernel reads only KubeconfigContext / Kubeconfig (the deploy
+// preresolver); the full cluster model rides opaquely in Raw and is decoded by
+// candy/plugin-k8sgen, never the kernel.
 #ResolvedKubernetes: {
 	kubeconfig_context?: string @go(KubeconfigContext)
+	// kubeconfig is the kubeconfig FILE the cluster template named (empty → the
+	// ambient `$KUBECONFIG` / `~/.kube/config`). It rides the resolve envelope
+	// beside the context so a consumer that must reach the cluster WITHOUT the
+	// ambient file — an externally-managed cluster's per-cluster kubeconfig —
+	// honours the same file the template declared.
+	kubeconfig?: string @go(Kubeconfig)
 	raw?: bytes @go(Raw,type=RawBody)
 }
 
@@ -123,6 +129,27 @@
 	resolved?: #ResolvedKubeVirt @go(Resolved,optional=nillable)
 }
 
+// #ResolvedFirecracker is the resolve-to-envelope form of a `firecracker:` template
+// (a microVM: a rootfs artefact + a kernel booted directly under KVM). The kernel
+// reads only the venue hint — the host the microVMs run on, which the deploy
+// preresolver resolves like the vm/kubevirt substrates do; the full microVM model
+// rides opaquely in Raw and is decoded by candy/plugin-firecracker, never the kernel.
+#ResolvedFirecracker: {
+	host?:     string @go(Host)
+	ssh_user?: string @go(SSHUser)
+	raw?:      bytes  @go(Raw,type=RawBody)
+}
+
+// #FirecrackerResolveInput carries one opaque kind:firecracker template body to project.
+#FirecrackerResolveInput: {
+	firecracker!: bytes @go(Firecracker,type=RawBody)
+}
+
+// #FirecrackerResolveReply wraps the resolved firecracker template.
+#FirecrackerResolveReply: {
+	resolved?: #ResolvedFirecracker @go(Resolved,optional=nillable)
+}
+
 // #LocalResolveInput / #AndroidResolveInput carry one opaque template body to
 // project.
 #LocalResolveInput: {
@@ -152,6 +179,7 @@
 	kindcluster?: #KindclusterResolveInput @go(Kindcluster,optional=nillable)
 	vm?:      #VmResolveInput      @go(Vm,optional=nillable)
 	kubevirt?: #KubeVirtResolveInput @go(KubeVirt,optional=nillable)
+	firecracker?: #FirecrackerResolveInput @go(Firecracker,optional=nillable)
 }
 
 // #VmResolveInput carries one opaque vm template body to project (Cutover L).

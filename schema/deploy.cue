@@ -10,8 +10,9 @@
 // stamps it onto every node's #DescentDescriptor. It is the SINGLE plugin-declared source for
 // "how does this substrate behave in the deploy chain", so the kernel consults the traits off
 // node.Descent BY TRAIT — never by switching on the substrate kind word (the boundary law).
-// Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+// Canonical table: pod=container+image_backed+image_context+selectors[engine];
+// vm=ssh+machine_venue+exclusive_venue+selectors[backend]; local=shell+machine_venue;
+// kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 // external-in-place. Not authored — charly-written state stamped at load.
 #DeployTraits: {
 	// venue: how commands physically execute in this substrate's venue:
@@ -51,6 +52,15 @@
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
 	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	supports_from_snapshot?: bool @go(SupportsFromSnapshot)
+	// selectors: the authored DEPLOY SELECTOR fields this substrate accepts.
+	//   "engine"  — a container-engine selector (pod).
+	//   "backend" — a VM-backend selector (vm).
+	//   "rootful" — a rootful-launch selector (pod; the engine must support it).
+	// A loader reads this (together with the engine capability's `substrates`)
+	// instead of switching on the substrate kind word: `engine:` on a substrate
+	// without "engine" is an error, and likewise `backend:`/`rootful:`. This is
+	// the DATA half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	selectors?: [...("engine" | "backend" | "rootful")] @go(Selectors)
 }
 
 // #DescentDescriptor is the loader-DERIVED venue-hop descriptor (Cutover H + P9).
@@ -84,7 +94,7 @@
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
-	target?: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster") @go(Target,type=string) // loader-DERIVED (yaml:"-")
+	target?: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" | "kubevirt" | "firecracker") @go(Target,type=string) // loader-DERIVED (yaml:"-")
 
 	// member_of is a loader-DERIVED runtime field (never authored; rejected by
 	// #DeployValue): it marks a folded deploy-level member entry registered as a
@@ -141,7 +151,20 @@
 	env_file?: string & !="" @go(EnvFile)
 	network?:  string & !=""
 	engine?:   #EngineName
-	security?: #Security @go(Security,optional=nillable)
+	// backend is the per-deploy VM-backend override (kind:vm only). It is valid
+	// only on a substrate whose declared #DeployTraits.selectors includes
+	// "backend"; the loader rejects it elsewhere from that data, never by a
+	// substrate-name switch.
+	backend?: #VmBackend @go(Backend)
+	// namespace is the per-deploy containerd namespace override (kind:pod). The
+	// default resolution stays in code: deploy > config > "default".
+	namespace?: string @go(Namespace)
+	// rootful is the per-deploy rootful-launch override (kind:pod). It is valid
+	// only on a substrate whose declared #DeployTraits.selectors includes
+	// "rootful"; the resolution stays in code: flag > deploy > env > config >
+	// the engine capability's default.
+	rootful?:  #RootfulMode @go(Rootful)
+	security?: #Security    @go(Security,optional=nillable)
 	secret?: [...#DeploySecret]
 	volume?: [...#DeployVolume]
 	// volume_project_checked marks that this deploy's PROJECT-declared `volume:` override has
@@ -171,7 +194,12 @@
 	// on VM venues need XDG_RUNTIME_DIR/WAYLAND_DISPLAY).
 	record?: #RecordWrap @go(Record,optional=nillable)
 
-	add_candy?: [...(string & !="")] @go(AddCandy)
+	// add_candy: the extra candies this deploy composes on top of its image. It uses
+	// the SAME ref vocabulary as every other candy ref site (#CandyRef): a bare name,
+	// an @github… git ref, or an @oci://… registry ref. It carried no pattern at all
+	// before, so a scheme typo (`@oci:/x`, `@s3://bucket/x`) was accepted here and
+	// only failed later — as a nonsense git URL — with nothing pointing at this line.
+	add_candy?: [...#CandyRef] @go(AddCandy)
 	install_opts?: #InstallOpts @go(InstallOpts,optional=nillable)
 
 	host?: string & !=""
@@ -214,6 +242,12 @@
 	// idempotent re-add + teardown. Validation-only (the Go type is hand-written,
 	// mirroring VmState's own treatment).
 	kubevirt_state?: #KubeVirtDeployState @go(KubeVirtState,type=*KubeVirtDeployState)
+	// firecracker_state — the persisted runtime identity of a kind:firecracker deploy
+	// (the microVM analog of vm_state/kubevirt_state): the host venue, the per-lease
+	// microVM name, the host-side artefacts (API socket, vsock path, serial log, TAP),
+	// the guest's address and the resolved artefacts — the source of truth for
+	// idempotent re-add and teardown. Written by candy/plugin-firecracker's lifecycle.
+	firecracker_state?: #FirecrackerDeployState @go(FirecrackerState,type=*FirecrackerDeployState)
 
 	// snapshot — the check-bed snapshot-anchoring policy (§5.3.1): capture at
 	// install finalize and reset before every check run, so a batch of PR runs
@@ -368,7 +402,7 @@
 	seed_iso?:                   string
 	ssh_port?:                   int
 	ssh_user?:                   string
-	backend?:                    "auto" | "qemu" | "libvirt" // "auto" persisted pre-resolution (the vm deploy lifecycle hook)
+	backend?:                    #VmBackend // "auto" persisted pre-resolution (the vm deploy lifecycle hook); krun is a resolved/selected backend
 	cloud_init_rendered_digest?: string
 	charly_install_strategy?:    "auto" | "scp" | "url" | "skip"
 	// port_forwards persists the auto-allocated host ports for `auto:<guest>`
@@ -441,6 +475,56 @@
 	name?:  string
 	phase?: string
 	refcount?: int
+	...
+} @go(-)
+
+// #FirecrackerDeployState — the persisted runtime identity of a kind:firecracker
+// deploy (the microVM analog of #VmDeployState / #KubeVirtDeployState). Written by
+// candy/plugin-firecracker's lifecycle. Validation-only (the Go type is hand-written,
+// mirroring VmState's/KubeVirtState's own @go(-) treatment).
+#FirecrackerDeployState: {
+	// host is the venue the microVM runs on (the local/ssh host the substrate was
+	// pointed at), so an idempotent re-add lands where the previous one did.
+	host?:     string
+	ssh_user?: string
+	// name is the per-lease microVM name (lease-scoped, not the shared entity).
+	name?: string
+	// The host-side artefacts of the lease: the Firecracker API socket, the vsock
+	// device path, the serial-console log, and the TAP the guest NIC is attached to.
+	api_sock?:   string
+	vsock_path?: string
+	serial_log?: string
+	tap?:        string
+	cni_netns?:  string
+	// The guest's identity for the plan walk + teardown.
+	guest_ip?:  string
+	guest_mac?: string
+	ssh_port?:  int
+	// The resolved artefacts — the source of truth for an idempotent re-add.
+	image_ref?:    string
+	image_digest?: string
+	kernel_ref?:   string
+	// pool names the fireactions pool that owns this microVM, when one does.
+	pool?: string
+	// snapshot is the per-lease snapshot ledger (names + refcounts) for teardown
+	// refcounting — the key matches the Go yaml/json tag (hand_state_types.go)
+	// and the #VmDeployState.snapshot convention.
+	snapshot?: [...#FirecrackerDeploySnapshot]
+	// ephemeral persists the cross-substrate ephemeral-instance lifecycle state,
+	// mirroring #VmDeployState.ephemeral.
+	ephemeral?: {
+		...
+	}
+	...
+} @go(-)
+
+#FirecrackerDeploySnapshot: {
+	name?:          string
+	mem_file_path?: string
+	snapshot_path?: string
+	snapshot_type?: string
+	created?:       string
+	refcount?:      int
 	...
 } @go(-)
 
@@ -730,7 +814,7 @@
 // OpPrepareVenue / OpTeardownExecutor returns (F6). K1-unblock W3 Unit B added the
 // "container" kind (engine/container_name) so a plugin-constructed
 // deploykit.ContainerChain venue — a single-hop *NestedExecutor{Parent:ShellExecutor{},
-// Jump:{Kind:JumpContainerExec,Engine:podman|docker|nerdctl}}, the MOST COMMON check-runner venue — round-trips
+// Jump:{Kind:JumpContainerExec,Engine:podman|docker|containerd}}, the MOST COMMON check-runner venue — round-trips
 // through kit.DescriptorFromExecutor/VenueFromDescriptor exactly like "shell"/"ssh" already do.
 // This does NOT generalize to arbitrary N-hop composition (a genuinely multi-hop NestedExecutor
 // still degrades to the zero descriptor, unchanged) — it closes the one enumerable, well-known
@@ -743,7 +827,7 @@
 	args?: [...string] @go(Args)
 	connect_timeout?: int @go(ConnectTimeout,type=int)
 	// engine/container_name are set ONLY for kind "container": the container engine
-	// ("podman"/"docker"/"nerdctl", carried as DATA on the jump) and the target container
+	// ("podman"/"docker"/"containerd", carried as DATA on the jump) and the target container
 	// name ContainerChain jumps into.
 	engine?:         string @go(Engine)
 	container_name?: string @go(ContainerName)
@@ -806,7 +890,12 @@
 	overlay_path!: string @go(OverlayPath) // <root>/overlays/<inst> — the `kubectl apply -k` argument
 	tree_root?:    string @go(TreeRoot)    // <root> = .opencharly/k8s/<name> — removed at teardown
 	kube_context?: string @go(KubeContext) // kind:kubernetes template's kubeconfig_context → `kubectl --context` (empty → current-context)
-	deploy_name?:  string @go(DeployName)  // for plugin-side log messages
+	// kubeconfig is the kind:kubernetes template's kubeconfig FILE → `kubectl --kubeconfig`
+	// (empty → the ambient $KUBECONFIG / ~/.kube/config). A context name alone cannot address
+	// an externally-managed cluster's per-cluster kubeconfig, so the file rides the venue
+	// beside the context and the apply honours both.
+	kubeconfig?:  string @go(Kubeconfig)
+	deploy_name?: string @go(DeployName) // for plugin-side log messages
 }
 
 // #KindclusterDeployVenue is the preresolved deploy:kindcluster substrate payload the
@@ -816,7 +905,7 @@
 // the node-image digest pin) the create leg needs.
 #KindclusterDeployVenue: {
 	cluster_name!: string @go(ClusterName) // kind cluster name (also the node-container name prefix)
-	provider!:     string @go(Provider)    // KIND_EXPERIMENTAL_PROVIDER (docker|podman|nerdctl)
+	provider!:     string @go(Provider)    // KIND_EXPERIMENTAL_PROVIDER (kind's own words docker|podman|nerdctl; charly maps containerd → nerdctl at the edge)
 	node_image!:   string @go(NodeImage)   // digest-pinned kindest/node image
 	// cluster_config is the egress-validated rendered kind Cluster config YAML (the
 	// `kind create cluster --config` argument). Rendered + validated plugin-side.
@@ -918,6 +1007,12 @@
 	// plugin-kubevirt's PrepareVenue as the generic State patch — the kubevirt analogue of
 	// vm_state (deploykit.SaveDeployState writes it whenever non-nil).
 	kubevirt_state?: #KubeVirtDeployState @go(KubeVirtState,type=*KubeVirtDeployState)
+	// firecracker_state — the persisted runtime identity of a kind:firecracker deploy
+	// (the microVM analog of vm_state/kubevirt_state): the host venue, the per-lease
+	// microVM name, the host-side artefacts (API socket, vsock path, serial log, TAP),
+	// the guest's address and the resolved artefacts — the source of truth for
+	// idempotent re-add and teardown. Written by candy/plugin-firecracker's lifecycle.
+	firecracker_state?: #FirecrackerDeployState @go(FirecrackerState,type=*FirecrackerDeployState)
 
 	// Resource-arbitration axis: the holder-side Preemptible block + the claimant-side
 	// requires_exclusive / requires_shared token lists. Persisted so a deploy/bed MEMBER round-trips

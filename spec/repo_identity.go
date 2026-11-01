@@ -92,6 +92,24 @@ func RepoIdentity(ref, baseDir string) string {
 	if info, statErr := os.Stat(abs); statErr == nil && !info.IsDir() {
 		dir = filepath.Dir(abs)
 	}
+	// CONTAINMENT — the ref path obeys the SAME bound the qualification path already obeys.
+	//
+	// Before this, a local ref resolved to ANY directory and ProjectRepoIdentity then read THAT
+	// directory's charly.yml: `RepoIdentity("../other-checkout", dir)` returned the other
+	// checkout's identity, and a `repo:` declared in its charly.yml was returned verbatim. The
+	// project's own containment boundary is the one gitTopLevelRel already uses — the git WORKING
+	// TREE TOPLEVEL of the importing project — so a sibling project inside the same repository
+	// still resolves (that is a definition mount, not an escape), while a ref that leaves the
+	// repository cannot name a project in it.
+	//
+	// An escaping ref is NOT an error: "" is this function's documented "cannot be determined"
+	// answer — the same one it gives for a non-git directory — and the loader then degrades to
+	// version/path-keyed identity, exactly as before. No new policy, and no new failure mode.
+	if top := gitTopLevel(baseDir); top != "" {
+		if _, ok := pathWithin(top, dir); !ok {
+			return ""
+		}
+	}
 	return ProjectRepoIdentity(dir)
 }
 
@@ -135,6 +153,54 @@ func ProjectRepoIdentity(dir string) string {
 // gitRemoteIdentityCache: a directory's toplevel does not change during a process run.
 var gitTopLevelCache sync.Map // dir -> rel ("" = repo root / not a git repo)
 
+// gitTopCache caches, per directory, the REAL (symlink-resolved) path of its git working-tree
+// toplevel — "" when dir is not inside a git repo. Same stability argument as the caches around it.
+var gitTopCache sync.Map // dir -> toplevel real path
+
+// gitTopLevel returns the real path of dir's git working-tree toplevel, or "" when dir is not
+// inside a git repo. This is the containment BOUNDARY both callers below share: GitRemoteIdentity
+// walks UP to the repository, so the repository is the unit a ref may or may not stay inside.
+func gitTopLevel(dir string) string {
+	if v, ok := gitTopCache.Load(dir); ok {
+		return v.(string)
+	}
+	top := ""
+	if out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output(); err == nil {
+		if raw := strings.TrimSpace(string(out)); raw != "" {
+			if real, rerr := filepath.EvalSymlinks(raw); rerr == nil {
+				top = real
+			}
+		}
+	}
+	gitTopCache.Store(dir, top)
+	return top
+}
+
+// pathWithin reports dir's slash-separated path relative to top, and whether dir is contained in
+// top AT ALL. It is the ONE implementation of the containment question, because two callers in this
+// file need exactly it: gitTopLevelRel (to qualify an identity by a project's sub-path) and
+// RepoIdentity (to refuse a local ref that escapes the project's repository). Both sides are
+// resolved through symlinks first, so a symlinked route to the same place is the same place — and
+// the guarded filepath.Rel is the predicate: "." (or "") means dir IS top, hence contained with no
+// sub-path to add; a ".."-prefixed result means it is not below top at all.
+func pathWithin(top, dir string) (string, bool) {
+	dirReal, derr := filepath.EvalSymlinks(dir)
+	if derr != nil {
+		return "", false
+	}
+	r, rerr := filepath.Rel(top, dirReal)
+	if rerr != nil {
+		return "", false
+	}
+	if r == "." || r == "" {
+		return "", true
+	}
+	if strings.HasPrefix(r, "..") {
+		return "", false
+	}
+	return filepath.ToSlash(r), true
+}
+
 // gitTopLevelRel reports dir's path relative to its git working-tree toplevel, or "" when dir is
 // the toplevel itself or is not inside a git repo.
 func gitTopLevelRel(dir string) string {
@@ -142,15 +208,9 @@ func gitTopLevelRel(dir string) string {
 		return v.(string)
 	}
 	rel := ""
-	if out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output(); err == nil {
-		if top := strings.TrimSpace(string(out)); top != "" {
-			topReal, terr := filepath.EvalSymlinks(top)
-			dirReal, derr := filepath.EvalSymlinks(dir)
-			if terr == nil && derr == nil {
-				if r, rerr := filepath.Rel(topReal, dirReal); rerr == nil && r != "." && r != "" && !strings.HasPrefix(r, "..") {
-					rel = filepath.ToSlash(r)
-				}
-			}
+	if top := gitTopLevel(dir); top != "" {
+		if r, ok := pathWithin(top, dir); ok {
+			rel = r
 		}
 	}
 	gitTopLevelCache.Store(dir, rel)

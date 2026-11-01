@@ -238,13 +238,13 @@ func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
 	}
 
 	// The exact shape the old code left behind: right commit, eleven empty dirs.
-	if repoCacheFresh(mk(t, false), commit) {
+	if repoCacheFreshMode(mk(t, false), commit, fetchProject) {
 		t.Error("an export with an EMPTY declared submodule must be stale — otherwise the " +
 			"one-of-twelve cache is served forever and the submodule fix never reaches existing users")
 	}
 	// A complete export at the same commit must still be a cache HIT; over-invalidating
 	// would re-clone every repo on every access.
-	if !repoCacheFresh(mk(t, true), commit) {
+	if !repoCacheFreshMode(mk(t, true), commit, fetchProject) {
 		t.Error("a COMPLETE export at the recorded commit must remain a cache hit")
 	}
 	// A repo declaring no submodules at all is trivially complete.
@@ -252,7 +252,7 @@ func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
 	if err := WriteRepoCacheProvenance(bare, commit); err != nil {
 		t.Fatal(err)
 	}
-	if !repoCacheFresh(bare, commit) {
+	if !repoCacheFreshMode(bare, commit, fetchProject) {
 		t.Error("an export declaring no submodules must remain a cache hit")
 	}
 
@@ -270,7 +270,7 @@ func TestRepoCacheFresh_IncompleteExportIsStale(t *testing.T) {
 	if err := WriteRepoCacheProvenance(nogl, commit); err != nil {
 		t.Fatal(err)
 	}
-	if !repoCacheFresh(nogl, commit) {
+	if !repoCacheFreshMode(nogl, commit, fetchProject) {
 		t.Error("a .gitmodules entry with no gitlink (no directory on disk) must NOT make the " +
 			"export stale — it is unfetchable, so this would re-clone on every command forever")
 	}

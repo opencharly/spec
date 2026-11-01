@@ -83,10 +83,15 @@ func TestKindclusterRejectsUnknownKey(t *testing.T) {
 	}
 }
 
-// An unknown engine word is rejected (#EngineName is the closed vocabulary).
-func TestKindclusterRejectsUnknownEngine(t *testing.T) {
-	if err := kindclusterUnifies(t, `{box: "", engine: "containerd"}`); err == nil {
-		t.Fatal("kindcluster with an unknown engine must be rejected")
+// The engine vocabulary is closed, and `nerdctl` is the DELETED engine word:
+// charly's word is containerd, which the plugin maps to kind's own nerdctl
+// provider at the edge.
+func TestKindclusterEngineVocabulary(t *testing.T) {
+	if err := kindclusterUnifies(t, `{box: "", engine: "nerdctl"}`); err == nil {
+		t.Fatal("kindcluster accepts engine: nerdctl; the engine word is deleted")
+	}
+	if err := kindclusterUnifies(t, `{box: "", engine: "containerd"}`); err != nil {
+		t.Fatalf("kindcluster rejects engine: containerd: %v", err)
 	}
 }
 

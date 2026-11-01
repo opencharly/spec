@@ -125,6 +125,60 @@ func TestResolveInitSystemHonorsAViableOverride(t *testing.T) {
 	}
 }
 
+// TestResolveInitSystemHonorsAContainerInitHint pins the CONTAINER-venue
+// selection rule: a candy's `capability: {init_system_hint: <name>}` selects that
+// init over the container default, because a declared hint is more specific than
+// the venue default. The fixture discriminates on the hint itself — the SAME
+// composition resolves to supervisord with no hint — so the assertion fails if
+// the hint branch is removed (measured: it did).
+func TestResolveInitSystemHonorsAContainerInitHint(t *testing.T) {
+	containerInit := &ResolvedInit{
+		Model:              "file_copy",
+		RequiresCapability: []string{"init_system:systemd-container"},
+	}
+	ic := &InitConfig{Init: map[string]*ResolvedInit{
+		"supervisord":       {Model: "fragment_assembly"},
+		"systemd-container": containerInit,
+	}}
+	layerWithHint := func(hint string) map[string]CandyReader {
+		caps := &CandyCapability{InitSystemHint: hint}
+		return map[string]CandyReader{
+			"c": fakeInitCandy{
+				inits: map[string]bool{"supervisord": true, "systemd-container": true},
+				caps:  caps,
+			},
+		}
+	}
+	order := []string{"c"}
+
+	// Control: the same composition with NO hint takes the container default.
+	// Without this arm the expectation below could be satisfied by the hint
+	// branch never running.
+	if got, _ := ic.ResolveInitSystem(layerWithHint(""), order, ""); got != "supervisord" {
+		t.Fatalf("control: ResolveInitSystem(no hint) = %q, want supervisord", got)
+	}
+
+	got, def := ic.ResolveInitSystem(layerWithHint("systemd-container"), order, "")
+	if got != "systemd-container" || def != containerInit {
+		t.Errorf("ResolveInitSystem(hint) = (%q, %v), want (systemd-container, %v)", got, def, containerInit)
+	}
+
+	// The box's explicit init still wins over the composition hint.
+	if got, _ := ic.ResolveInitSystem(layerWithHint("systemd-container"), order, "supervisord"); got != "supervisord" {
+		t.Errorf("ResolveInitSystem(hint, explicit) = %q, want supervisord (explicit override wins)", got)
+	}
+
+	// A hint that names a NON-candidate (its requirement is unmet) must fall
+	// through to the venue default, never resolve to a name ActiveInit excludes.
+	unmet := &InitConfig{Init: map[string]*ResolvedInit{
+		"supervisord":       {Model: "fragment_assembly"},
+		"systemd-container": {Model: "file_copy", RequiresCapability: []string{"preserve_user"}},
+	}}
+	if got, _ := unmet.ResolveInitSystem(layerWithHint("systemd-container"), order, ""); got != "supervisord" {
+		t.Errorf("ResolveInitSystem(hint with unmet requirement) = %q, want supervisord", got)
+	}
+}
+
 func keysOf(m map[string]*ResolvedInit) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

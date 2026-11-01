@@ -344,7 +344,8 @@ type InstallOpts struct {
 // the existing from_snapshot: (boot from a backing chain) with capture-and-reset
 // semantics for check runs: capture at install finalize (on_finalize), revert
 // before every check run (reset_before_check), optionally quiesced (consistent),
-// internal or external mode, and keep_venue for batch loops.
+// internal or external mode, keep_venue for batch loops, and force_stop for a
+// keeper guest that ignores ACPI.
 type VmSnapshotPolicy struct {
 	OnFinalize string `yaml:"on_finalize,omitempty" json:"on_finalize,omitempty"`
 
@@ -355,6 +356,16 @@ type VmSnapshotPolicy struct {
 	Consistent bool `yaml:"consistent,omitempty" json:"consistent,omitempty"`
 
 	KeepVenue bool `yaml:"keep_venue,omitempty" json:"keep_venue,omitempty"`
+
+	// force_stop: stop the keeper with a FORCE stop (kill the domain process)
+	// rather than a graceful ACPI shutdown, when the finalize releases the venue
+	// lock. A desktop guest can ignore ACPI past the stop grace — measured: an
+	// Omarchy keeper was still running after the full 3m cap and needed the force
+	// path — and the venue stays KEPT either way, because a force stop releases
+	// the process, not the domain definition. The finalize falls back to a force
+	// stop when the graceful one fails, so declaring this is about intent and
+	// time, not about being unstuck.
+	ForceStop bool `yaml:"force_stop,omitempty" json:"force_stop,omitempty"`
 }
 
 type Agent struct {
@@ -1078,9 +1089,9 @@ type Box struct {
 
 	Jobs *int `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs *int `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism *int `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
-	PodmanJobsCap *int `yaml:"podman_jobs_cap,omitempty" json:"podman_jobs_cap,omitempty"`
+	StageParallelismCap *int `yaml:"stage_parallelism_cap,omitempty" json:"stage_parallelism_cap,omitempty"`
 
 	ContextIgnore []string `yaml:"context_ignore,omitempty" json:"context_ignore,omitempty"`
 
@@ -1198,6 +1209,16 @@ type CapabilityInitDef struct {
 	Entrypoint []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
 
 	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty" json:"fallback_entrypoint,omitempty"`
+
+	// The container-venue runtime contract, carried to the deploy so the runtime
+	// argv and the deploy overlay read it from the IMAGE, never from a name
+	// switch. RequiresRoot keeps the image and its overlays at USER root;
+	// SystemdMode asks the engine for systemd mode; StopSignal is the clean stop.
+	RequiresRoot bool `yaml:"requires_root,omitempty" json:"requires_root,omitempty"`
+
+	SystemdMode bool `yaml:"systemd_mode,omitempty" json:"systemd_mode,omitempty"`
+
+	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
 
 	ManagementTool string `yaml:"management_tool,omitempty" json:"management_tool,omitempty"`
 
@@ -1706,7 +1727,7 @@ type BuildResolveRequest struct {
 
 	Jobs int64 `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int64 `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int64 `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
 	GenerateOnly bool `yaml:"generate_only,omitempty" json:"generate_only,omitempty"`
 }
@@ -1981,7 +2002,7 @@ type BuildResolveReply struct {
 
 	Jobs int64 `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int64 `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int64 `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 
 	Cache string `yaml:"cache,omitempty" json:"cache,omitempty"`
 
@@ -2367,7 +2388,8 @@ type PluginRequirement struct {
 	Capability PluginCapability `yaml:"capability,omitempty" json:"capability"`
 
 	// source: the peer's candy ref, for a peer NOT in the project's candy closure —
-	// fetched declaratively instead of by a call-time ExtraRef.
+	// fetched declaratively instead of by a call-time ExtraRef. Same two arms as the
+	// plugin's own `source:` (#PluginSource): a git module or a registry artifact.
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
 
 	// optional: when true, an absent peer is recorded and skipped rather than
@@ -2376,8 +2398,10 @@ type PluginRequirement struct {
 }
 
 // #PluginCapability — a capability identity: "<class>:<word>", or the command-only
-// three-segment form "<class>:<word>:<parent>". class ∈ #ProviderClassNames; word and
-// parent are lowercase-hyphenated.
+// three-segment form "<class>:<word>:<parent>". The class must be WELL-FORMED here and
+// DECLARED in #ProviderClassNames per the Go rule (charly's providerClasses /
+// plugin-box's validPluginClasses), which is the side that NAMES an undeclared class;
+// word and parent are lowercase-hyphenated.
 type PluginCapability string
 
 // #RouteConfig — a resolved route declaration (host + port-as-string). Mirrors deploykit.RouteConfig.
@@ -2477,11 +2501,28 @@ type CandyModel struct {
 
 	Aliases []CandyAlias `yaml:"aliases,omitempty" json:"aliases,omitempty"`
 
-	// --- security / hooks (the OCI-label-collector surface: CollectSecurity/CollectHooks
+	// --- security / hooks / skills (the OCI-label-collector surface: CollectSecurity/CollectHooks
 	// read this per-candy field then apply the box-level #ResolvedBoxView.security override) ---
 	Security *Security `yaml:"security,omitempty" json:"security,omitempty"`
 
 	Hook *CandyHook `yaml:"hook,omitempty" json:"hook,omitempty"`
+
+	// skills: the NAMES of the `skill:` nodes this candy OWNS — the build-time association
+	// `skill.cue`'s `owner:` records, projected onto the wire model so a consumer holding only
+	// the model can answer "which skills does this candy carry?" without reaching
+	// spec.Config.Skills (a separate map keyed by skill name with opaque bodies).
+	//
+	// WHY IT BELONGS HERE. CollectSkills (sdk/deploykit) is the reader, and it projects the
+	// composed candies' owned skills into the `ai.opencharly.skill` OCI label so a built image
+	// is self-describing. It already takes `layers map[string]CandyModel` — but it reads the
+	// association from cfg.Skills and filters by `s.Owner`, so the wire model carried the
+	// candy's IDENTITY and not its skills. That asymmetry is the gap
+	// (opencharly/spec#254): the model exists so a plugin can read a candy's build contract
+	// WITHOUT holding the live *Candy, and "which images carry this skill" is decided by the
+	// build. Owner-qualified NAMES, not opaque bodies: the bodies travel through
+	// Config.Skills and the marketplace generator, and duplicating them here would create a
+	// second source for content this model does not resolve.
+	Skills []string `yaml:"skills,omitempty" json:"skills,omitempty"`
 
 	// --- validate read-surface (candy-local config the validate ENGINE checks) ---
 	// external_builder: the reserved word of an EXTERNAL builder plugin this candy selects
@@ -2842,6 +2883,8 @@ type ProjectTemplates struct {
 
 	KubeVirt map[string]RawBody `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
 
+	Firecracker map[string]RawBody `yaml:"firecracker,omitempty" json:"firecracker,omitempty"`
+
 	Pod map[string]RawBody `yaml:"pod,omitempty" json:"pod,omitempty"`
 
 	VM map[string]RawBody `yaml:"vm,omitempty" json:"vm,omitempty"`
@@ -3001,7 +3044,7 @@ type BuildRequest struct {
 
 	Jobs int `yaml:"jobs,omitempty" json:"jobs,omitempty"`
 
-	PodmanJobs int `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`
+	StageParallelism int `yaml:"stage_parallelism,omitempty" json:"stage_parallelism,omitempty"`
 }
 
 // #BuildReply is what a build:box / build:generate plugin echoes back from
@@ -3391,15 +3434,20 @@ type RemoteImageResolveReply struct {
 }
 
 // #BuildEnsureRequest / #BuildEnsureReply — the build:ensure word's Invoke
-// envelope: ensure an image is present in local podman storage, falling back
-// to a local (or remote-cached) build when the identifier maps to a project
-// charly.yml entry.
+// envelope: ensure an image is present in the LOCAL RUN ENGINE's storage,
+// falling back to a local (or remote-cached) build when the identifier maps to
+// a project charly.yml entry.
+//
+// There is no build_engine here. Ensured presence is a property of the RUN
+// engine's store, and the builder is BuildKit — not an engine — so a
+// build_engine field could only ever have described a cross-engine transfer
+// (docker save | podman load) between two engines, a shape that cannot exist
+// once there is one builder. A stale build_engine on the wire is rejected by
+// the closed schema; the producing call site drops it in the same cutover.
 type BuildEnsureRequest struct {
 	Image string `yaml:"image,omitempty" json:"image"`
 
 	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
-
-	BuildEngine string `yaml:"build_engine,omitempty" json:"build_engine,omitempty"`
 
 	RunEngine string `yaml:"run_engine,omitempty" json:"run_engine,omitempty"`
 }
@@ -3476,7 +3524,7 @@ type Candy struct {
 	// candy chain (engine.go ResolveBoxEngine) and cross-candy conflicts are a
 	// validate error. RETAINED by the schema-compaction consumer audit.
 	// The engine vocabulary is #EngineName (schema/engine.cue) — one source shared
-	// by every authored engine field, so a new engine (nerdctl) lands once.
+	// by every authored engine field, so a new engine (containerd) lands once.
 	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
 
 	// `from:` is NOT a candy field — EDGE-INHERIT cutover D: a candy: node carrying
@@ -3517,6 +3565,25 @@ type Candy struct {
 	// (the STEP leg). A builtin builder (pixi/cargo/npm/aur) is selected by detection
 	// files, NOT this field. See generate.go emitExternalBuilderStages.
 	ExternalBuilder string `yaml:"external_builder,omitempty" json:"external_builder,omitempty"`
+
+	// --- harness skill trees (authored content) ---
+	// skills — the repo-relative SKILL TREES this candy DECLARES, each holding one entry per name:
+	// <tree>/<name>/SKILL.md plus references/<stem>.md. DEFAULT [".agents/skills"] — the
+	// Agent-Skills standard location, so a repo whose skills live there declares nothing. It is the
+	// ONE place the marketplace generator (candy/plugin-marketplace) and the docs projection
+	// (candy/plugin-docs) look for a skill's body, and it is what makes a sibling `skill:` node's
+	// description:/content:/references: omittable: the node keeps the ROUTING metadata
+	// (family/owner/triggers/category), the file keeps the prose. See schema/skill.cue.
+	//
+	// An `agent`-type node is a SUB-AGENT DEFINITION, not a skill, and this list does NOT govern it:
+	// its body is always authored at `.agents/agents/<name>.md`. So a mixed repo — skills under a
+	// declared tree, agents under `.agents/agents` — is the legal shape, not a half-move.
+	//
+	// The version of record is NOT in this file: it is the github ref that fetched this repo — the
+	// marketplace refs list's pin, or a consumer's `candy:` list. Nothing is fetched at authoring
+	// time; the generator reads the tree from the checkout it already has. See
+	// /charly-internals:marketplace.
+	Skills []string `yaml:"skills,omitempty" json:"skills,omitempty"`
 
 	// --- runtime env / local vars / PATH ---
 	// env forbids PATH (validate.go: use path_append instead). Values are
@@ -3632,6 +3699,10 @@ type Candy struct {
 // provider word — no engine:auto provider exists. It is resolved by
 // ResolveRuntime before any engine provider is consulted, so it is a runtime
 // value, not an authored union member here.
+//
+// The word `containerd` means "containerd, driven through the nerdctl CLI",
+// rootful OR rootless. `nerdctl` is the CLI binary, never an engine word: the
+// former `engine: nerdctl` spelling is deleted (R5, no alias, no dual path).
 type EngineName string
 
 // #Plugin — the candy's plugin declaration. Its presence makes the candy a
@@ -3643,15 +3714,39 @@ type Plugin struct {
 	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
 	Providers []PluginCapability `yaml:"providers,omitempty" json:"providers"`
 
-	// source: the plugin's Go module path — a git ref
-	// (github.com/org/repo[/sub]) fetched via the @github resolver + built into a
-	// provider binary when the candy is NOT compiled in. REQUIRED: every plugin
-	// candy names its module; whether the plugin runs compiled-in (in-proc) or
-	// out-of-process is the SEPARATE charly.yml `compiled_plugins:` selection, never
-	// a manifest sentinel. (The former `source: builtin` form was retired — it
-	// duplicated the compiled_plugins selection and had a dead in-repo-module
-	// fallback.)
+	// source: WHERE THIS PLUGIN'S PROVIDER COMES FROM — a git module
+	// (github.com/org/repo[/sub], #GithubRef) fetched via the @github resolver and
+	// built on the host into a provider binary, or a registry artifact
+	// (oci://…, #OciRef) fetched prebuilt for the consumer's platform and connected
+	// with no source checkout and no Go toolchain. REQUIRED: every plugin candy names
+	// its source; whether the plugin runs compiled-in (in-proc) or out-of-process is
+	// the SEPARATE charly.yml `compiled_plugins:` selection, never a manifest
+	// sentinel. (The former `source: builtin` form was retired — it duplicated the
+	// compiled_plugins selection and had a dead in-repo-module fallback.)
 	Source string `yaml:"source,omitempty" json:"source"`
+
+	// release: the plugin RELEASE this declaration pins (D-CORE-4's "an embedded plugin
+	// runs only when a project declares that exact module, release and digest"). It is the
+	// release identity a resolver reports and compares — a charly CalVer-style tag for a
+	// first-party plugin release, else the publisher's own version string. Optional: a
+	// bare local candy pins nothing, and an unpinned declaration is a legitimate
+	// development state — what is NOT legitimate is a pin that only PRETENDS to pin.
+	Release string `yaml:"release,omitempty" json:"release,omitempty"`
+
+	// digest: the artifact's INDEX digest — the only PLATFORM-INDEPENDENT digest in a
+	// multi-platform artifact. MEASURED: a plugin artifact carries one manifest per
+	// platform, so four per-platform manifest digests; an unqualified `digest:` would be
+	// ambiguous, while the index digest identifies the whole release. The consumer derives
+	// the selected platform's manifest digest by selection, from this.
+	//
+	// PRECEDENCE, when a plugin is both declared here and addressed by an `#OciRef` that
+	// carries its own `@sha256:` — the two must AGREE, and a disagreement is a hard load
+	// error (one pin, two spellings, never two competing answers). The ref's digest is what
+	// the transport FETCHES; this one is what the served bytes must BE.
+	//
+	// Declared and compared, never derived: the same source rebuilt elsewhere produces a
+	// different binary, so a digest can only be checked against what was published.
+	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
 
 	// requires: the OTHER plugins this plugin depends on. Declared as (class, word)
 	// capabilities; the host resolves each against the provider registry and
@@ -3770,12 +3865,34 @@ type ProvidesConfig struct {
 	MCP []MCPProvideEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 }
 
-// #GithubRef — the ONE canonical github module/candy ref shape
+// #GithubRef — the canonical github module/candy SOURCE shape
 // (github.com/org/repo[/sub-path]), shared by every field that names a remote
-// plugin/candy repo (the plugin `source:`, a requirement's `source:`) so the
+// plugin/candy module (the plugin `source:`, a requirement's `source:`) so the
 // pattern is defined once (R3). Each referencing field pins its Go type to string
 // (`@go(...,type=string)`), so `spec.PluginSource`/`Plugin.Source` stay plain strings.
 type GithubRef string
+
+// #OciRef — the registry-hosted SOURCE shape: the git-free sibling of #GithubRef,
+// `oci://<registry>[:<port>]/<repository>[:<tag>][@sha256:<digest>]`.
+//
+// A plugin release publishes its provider binary per platform as an OCI
+// image-spec v1.1.1 artifact, so a consumer that has neither the plugin's source
+// checkout nor a Go toolchain fetches the BINARY instead of building it — the
+// direction DESIGN.md D-CORE-4/D-PLUG-4 and TODO item 6.8 set, where an embedded
+// plugin runs only on an exact match and everything else is fetched prebuilt.
+//
+// A `@sha256:` digest, when present, is AUTHORITATIVE: it is what the consumer
+// verifies the fetched bytes against, and it is what keys the content-addressed
+// store (D-STORE-3/D-STORE-4). A tag without a digest resolves to a digest the
+// consumer records and reports; it is never silently re-resolved on a later run.
+type OciRef string
+
+// #PluginSource — where a plugin's provider comes from: a git MODULE (#GithubRef,
+// the legacy default, fetched and host-built) or a registry ARTIFACT (#OciRef,
+// fetched prebuilt for the consumer's platform). ONE def, used by BOTH the
+// plugin's own `source:` and a requirement's `source:` (R2/R3), so a peer plugin
+// is reachable by either route without a second declaration surface.
+type PluginSource string
 
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire/render struct, single-sourced
@@ -3930,7 +4047,7 @@ type VerifyChecksRequest struct {
 // OpPrepareVenue / OpTeardownExecutor returns (F6). K1-unblock W3 Unit B added the
 // "container" kind (engine/container_name) so a plugin-constructed
 // deploykit.ContainerChain venue — a single-hop *NestedExecutor{Parent:ShellExecutor{},
-// Jump:{Kind:JumpContainerExec,Engine:podman|docker|nerdctl}}, the MOST COMMON check-runner venue — round-trips
+// Jump:{Kind:JumpContainerExec,Engine:podman|docker|containerd}}, the MOST COMMON check-runner venue — round-trips
 // through kit.DescriptorFromExecutor/VenueFromDescriptor exactly like "shell"/"ssh" already do.
 // This does NOT generalize to arbitrary N-hop composition (a genuinely multi-hop NestedExecutor
 // still degrades to the zero descriptor, unchanged) — it closes the one enumerable, well-known
@@ -3949,7 +4066,7 @@ type VenueDescriptor struct {
 	ConnectTimeout int `yaml:"connect_timeout,omitempty" json:"connect_timeout,omitempty"`
 
 	// engine/container_name are set ONLY for kind "container": the container engine
-	// ("podman"/"docker"/"nerdctl", carried as DATA on the jump) and the target container
+	// ("podman"/"docker"/"containerd", carried as DATA on the jump) and the target container
 	// name ContainerChain jumps into.
 	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
 
@@ -4242,8 +4359,9 @@ type CLIModel struct {
 // stamps it onto every node's #DescentDescriptor. It is the SINGLE plugin-declared source for
 // "how does this substrate behave in the deploy chain", so the kernel consults the traits off
 // node.Descent BY TRAIT — never by switching on the substrate kind word (the boundary law).
-// Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+// Canonical table: pod=container+image_backed+image_context+selectors[engine];
+// vm=ssh+machine_venue+exclusive_venue+selectors[backend]; local=shell+machine_venue;
+// kubernetes=shell+image_context+leaf_only; android=parent; zero value =
 // external-in-place. Not authored — charly-written state stamped at load.
 type DeployTraits struct {
 	// venue: how commands physically execute in this substrate's venue:
@@ -4293,6 +4411,18 @@ type DeployTraits struct {
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
 	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	SupportsFromSnapshot bool `yaml:"supports_from_snapshot,omitempty" json:"supports_from_snapshot,omitempty"`
+
+	// selectors: the authored DEPLOY SELECTOR fields this substrate accepts.
+	//
+	//	"engine"  — a container-engine selector (pod).
+	//	"backend" — a VM-backend selector (vm).
+	//	"rootful" — a rootful-launch selector (pod; the engine must support it).
+	//
+	// A loader reads this (together with the engine capability's `substrates`)
+	// instead of switching on the substrate kind word: `engine:` on a substrate
+	// without "engine" is an error, and likewise `backend:`/`rootful:`. This is
+	// the DATA half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	Selectors []string `yaml:"selectors,omitempty" json:"selectors,omitempty"`
 }
 
 // #DescentDescriptor is the loader-DERIVED venue-hop descriptor (Cutover H + P9).
@@ -4362,6 +4492,18 @@ type DescentDescriptor struct {
 	// supports_from_snapshot: the substrate has a backing chain `from_snapshot:` restores from — vm
 	// only (pod/kubernetes have no backing chains). validateEphemeral reads this instead of a word switch.
 	SupportsFromSnapshot bool `yaml:"supports_from_snapshot,omitempty" json:"supports_from_snapshot,omitempty"`
+
+	// selectors: the authored DEPLOY SELECTOR fields this substrate accepts.
+	//
+	//	"engine"  — a container-engine selector (pod).
+	//	"backend" — a VM-backend selector (vm).
+	//	"rootful" — a rootful-launch selector (pod; the engine must support it).
+	//
+	// A loader reads this (together with the engine capability's `substrates`)
+	// instead of switching on the substrate kind word: `engine:` on a substrate
+	// without "engine" is an error, and likewise `backend:`/`rootful:`. This is
+	// the DATA half of "engine: only on a pod deploy, backend: only on a vm deploy".
+	Selectors []string `yaml:"selectors,omitempty" json:"selectors,omitempty"`
 }
 
 type Deploy struct {
@@ -4446,6 +4588,22 @@ type Deploy struct {
 
 	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
 
+	// backend is the per-deploy VM-backend override (kind:vm only). It is valid
+	// only on a substrate whose declared #DeployTraits.selectors includes
+	// "backend"; the loader rejects it elsewhere from that data, never by a
+	// substrate-name switch.
+	Backend VmBackend `yaml:"backend,omitempty" json:"backend,omitempty"`
+
+	// namespace is the per-deploy containerd namespace override (kind:pod). The
+	// default resolution stays in code: deploy > config > "default".
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// rootful is the per-deploy rootful-launch override (kind:pod). It is valid
+	// only on a substrate whose declared #DeployTraits.selectors includes
+	// "rootful"; the resolution stays in code: flag > deploy > env > config >
+	// the engine capability's default.
+	Rootful RootfulMode `yaml:"rootful,omitempty" json:"rootful,omitempty"`
+
 	Security *Security `yaml:"security,omitempty" json:"security,omitempty"`
 
 	Secret []DeploySecret `yaml:"secret,omitempty" json:"secret,omitempty"`
@@ -4484,7 +4642,12 @@ type Deploy struct {
 	// on VM venues need XDG_RUNTIME_DIR/WAYLAND_DISPLAY).
 	Record *Deploy_RecordWrap `yaml:"record,omitempty" json:"record,omitempty"`
 
-	AddCandy []string `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
+	// add_candy: the extra candies this deploy composes on top of its image. It uses
+	// the SAME ref vocabulary as every other candy ref site (#CandyRef): a bare name,
+	// an @github… git ref, or an @oci://… registry ref. It carried no pattern at all
+	// before, so a scheme typo (`@oci:/x`, `@s3://bucket/x`) was accepted here and
+	// only failed later — as a nonsense git URL — with nothing pointing at this line.
+	AddCandy []CandyRef `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
 
 	InstallOpts *InstallOpts `yaml:"install_opts,omitempty" json:"install_opts,omitempty"`
 
@@ -4537,6 +4700,13 @@ type Deploy struct {
 	// idempotent re-add + teardown. Validation-only (the Go type is hand-written,
 	// mirroring VmState's own treatment).
 	KubeVirtState *KubeVirtDeployState `yaml:"kubevirt_state,omitempty" json:"kubevirt_state,omitempty"`
+
+	// firecracker_state — the persisted runtime identity of a kind:firecracker deploy
+	// (the microVM analog of vm_state/kubevirt_state): the host venue, the per-lease
+	// microVM name, the host-side artefacts (API socket, vsock path, serial log, TAP),
+	// the guest's address and the resolved artefacts — the source of truth for
+	// idempotent re-add and teardown. Written by candy/plugin-firecracker's lifecycle.
+	FirecrackerState *FirecrackerDeployState `yaml:"firecracker_state,omitempty" json:"firecracker_state,omitempty"`
 
 	// snapshot — the check-bed snapshot-anchoring policy (§5.3.1): capture at
 	// install finalize and reset before every check run, so a batch of PR runs
@@ -4621,6 +4791,22 @@ type Deploy struct {
 	// authored); the fold stamps the position from the authored depth alone.
 	Member []Member `yaml:"member,omitempty" json:"member,omitempty"`
 }
+
+// #VmBackend — the authored/persisted VM-backend selector: the provider words
+// plus "auto", which resolves by detection (today: libvirt, then qemu) and is
+// never a provider word. The word list lives HERE so the template (#Vm), the
+// persisted deploy state (#VmDeployState) and the VM-backend class all read ONE
+// source.
+type VmBackend string
+
+// #RootfulMode — the CLOSED rootful-launch vocabulary shared by the
+// `engine.rootful` settings key, its `CHARLY_ENGINE_ROOTFUL` env mirror, and the
+// per-deploy `rootful:` selector. `auto` asks the resolver to pick from the
+// engine's capability facts (`supports_rootful` / `privilege_prefix`); the rest
+// are explicit operator choices. `charly task cue-gen` emits it as
+// spec.RootfulModes, so a resolver validates a flag/env/settings value without a
+// hand-listed word set.
+type RootfulMode string
 
 type DeploySecret struct {
 	Name string `yaml:"name,omitempty" json:"name"`
@@ -4979,6 +5165,12 @@ type KubernetesDeployVenue struct {
 
 	KubeContext string `yaml:"kube_context,omitempty" json:"kube_context,omitempty"`
 
+	// kubeconfig is the kind:kubernetes template's kubeconfig FILE → `kubectl --kubeconfig`
+	// (empty → the ambient $KUBECONFIG / ~/.kube/config). A context name alone cannot address
+	// an externally-managed cluster's per-cluster kubeconfig, so the file rides the venue
+	// beside the context and the apply honours both.
+	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
+
 	DeployName string `yaml:"deploy_name,omitempty" json:"deploy_name,omitempty"`
 }
 
@@ -5107,6 +5299,13 @@ type SaveDeployStateInput struct {
 	// plugin-kubevirt's PrepareVenue as the generic State patch — the kubevirt analogue of
 	// vm_state (deploykit.SaveDeployState writes it whenever non-nil).
 	KubeVirtState *KubeVirtDeployState `yaml:"kubevirt_state,omitempty" json:"kubevirt_state,omitempty"`
+
+	// firecracker_state — the persisted runtime identity of a kind:firecracker deploy
+	// (the microVM analog of vm_state/kubevirt_state): the host venue, the per-lease
+	// microVM name, the host-side artefacts (API socket, vsock path, serial log, TAP),
+	// the guest's address and the resolved artefacts — the source of truth for
+	// idempotent re-add and teardown. Written by candy/plugin-firecracker's lifecycle.
+	FirecrackerState *FirecrackerDeployState `yaml:"firecracker_state,omitempty" json:"firecracker_state,omitempty"`
 
 	// Resource-arbitration axis: the holder-side Preemptible block + the claimant-side
 	// requires_exclusive / requires_shared token lists. Persisted so a deploy/bed MEMBER round-trips
@@ -5727,8 +5926,8 @@ type EncExecReply struct {
 //
 //	quadlet      — podman's systemd generator: a .container/.pod unit under
 //	               ~/.config/containers/systemd/ (podman only).
-//	systemd-unit — a generated .service wrapping the engine CLI (nerdctl; no
-//	               quadlet equivalent exists).
+//	systemd-unit — a generated .service wrapping the engine CLI (containerd's
+//	               nerdctl CLI; no quadlet equivalent exists).
 //	direct       — an ephemeral argv launch with no unit (docker today).
 //
 // `charly task cue-gen` emits this as spec.EngineRunModes; ValidateRunMode derives
@@ -5741,8 +5940,8 @@ type EngineRunMode string
 //
 // AUTHORITY (the one home): `container.engineCapabilities` is the authoritative
 // table for the COMPILED-IN podman/docker engines and the built-in consumers
-// (EngineBinary/GPURunArgs/EngineRunModeFor/ImageExistsArgv/WorkloadUser). This
-// def is the shape an out-of-tree engine provider (plugin-nerdctl) answers over
+// (EngineBinary/GPURunArgs/EngineRunModeFor/ImageExistsArgv/WorkloadUserFor). This
+// def is the shape an out-of-tree engine provider (plugin-containerd) answers over
 // Describe; the runtime compares/consumes that answer through the same struct,
 // so the table and the wire answer are one type, not two divergent copies. The
 // op envelopes below (#EngineBinaryRequest …) are for a provider that chooses to
@@ -5751,17 +5950,25 @@ type EngineRunMode string
 // In this change the capability table + EngineBinary/GPURunArgs/EngineRunModeFor/
 // ImageExistsArgv consumers land; the class name (#ProviderClassNames) and the op
 // envelopes below are the STABLE wire contract the compiled-in podman/docker
-// providers and the out-of-tree plugin-nerdctl bind to. `#EngineCapability` is
+// providers and the out-of-tree plugin-containerd bind to. `#EngineCapability` is
 // the one type shared by the table and the wire answer. The pod/secret/keep-id
 // fields (SupportsPods / SupportsSecrets / SupportsUsernsKeepID /
-// UsernsKeepIDArg / WorkloadUser) are declared so that contract is complete; the
-// compiled-in EngineBinary consumer reads `binary`, and the remaining fields'
-// readers are the engine providers themselves.
+// UsernsKeepIDArg / WorkloadUserRootless / WorkloadUserRootful) are declared so
+// that contract is complete; the compiled-in EngineBinary consumer reads
+// `binary`, and the remaining fields' readers are the engine providers
+// themselves.
+//
+// The containerd row is the reason several of these fields exist as DATA: one
+// engine word covers a rootful daemon, a rootless daemon, a socket address, a
+// namespace, a privilege prefix and a set of runtime handlers (crun/krun/runc/
+// nvidia). A run plan reads them instead of spelling `--runtime <literal>` or
+// assuming rootless.
 type EngineCapability struct {
 	// The engine's own name (mirrors the provider word).
 	Name EngineName `yaml:"name,omitempty" json:"name"`
 
 	// The CLI binary the engine is driven through (podman / docker / nerdctl).
+	// containerd is driven through nerdctl; the ENGINE word remains containerd.
 	Binary string `yaml:"binary,omitempty" json:"binary"`
 
 	// A shell probe that exits 0 when the engine is installed on a host.
@@ -5773,17 +5980,22 @@ type EngineCapability struct {
 	SupportsPods bool `yaml:"supports_pods,omitempty" json:"supports_pods"`
 
 	// supports_secrets — the engine has a native secret store (podman secret).
-	// false means credentials are delivered as env/file (docker/nerdctl).
+	// false means credentials are delivered as env/file (docker/containerd).
 	SupportsSecrets bool `yaml:"supports_secrets,omitempty" json:"supports_secrets"`
 
 	// supports_userns_keepid — per-container uid mapping exists (podman
 	// --userns=keep-id). false means the workload must be launched as
 	// container-uid-0 under a rootless single-userns engine to share host files
-	// with the invoking user (nerdctl rootless).
+	// with the invoking user (containerd rootless).
 	SupportsUsernsKeepID bool `yaml:"supports_userns_keepid,omitempty" json:"supports_userns_keepid"`
 
 	// supports_rootless — the engine runs without host root.
 	SupportsRootless bool `yaml:"supports_rootless,omitempty" json:"supports_rootless"`
+
+	// supports_rootful — the engine can also be driven against a host-root daemon
+	// (directly or through privilege_prefix). containerd supports BOTH; a
+	// capability consumer must not assume the rootless mode.
+	SupportsRootful bool `yaml:"supports_rootful,omitempty" json:"supports_rootful"`
 
 	// run_mode — the persistence/supervision mode this engine uses on a host.
 	RunMode EngineRunMode `yaml:"run_mode,omitempty" json:"run_mode"`
@@ -5791,32 +6003,70 @@ type EngineCapability struct {
 	// gpu_arg_style — the vendor-GPU passthrough flag family.
 	//
 	//	cdi  — podman's `--device nvidia.com/gpu=all`
-	//	gpus — docker/nerdctl's `--gpus all`
+	//	gpus — docker/containerd's `--gpus all`
 	GPUArgStyle string `yaml:"gpu_arg_style,omitempty" json:"gpu_arg_style"`
 
 	// userns_keepid_arg — the per-container keep-id argv when supported (podman
 	// `--userns=keep-id`); empty otherwise.
 	UsernsKeepIDArg string `yaml:"userns_keepid_arg,omitempty" json:"userns_keepid_arg,omitempty"`
 
-	// workload_user — the in-container user a workload must run as for
-	// host-identical file sharing. For podman keep-id this is the invoking user;
-	// for rootless single-userns engines (nerdctl) it is "0" because container-uid
-	// 0 IS the invoking host user in the rootless userns.
-	WorkloadUser string `yaml:"workload_user,omitempty" json:"workload_user,omitempty"`
+	// workload_user_rootless — the in-container user a workload must run as in the
+	// ROOTLESS mode for host-identical file sharing. For rootless single-userns
+	// engines (containerd via nerdctl) it is "0" because container-uid 0 IS the
+	// invoking host user in the rootless userns. Empty means "do not force a user".
+	WorkloadUserRootless string `yaml:"workload_user_rootless,omitempty" json:"workload_user_rootless,omitempty"`
+
+	// workload_user_rootful — the in-container user for the ROOTFUL mode. Empty
+	// means "do not force a user": the workload runs as the image's declared user
+	// instead of inheriting the rootless uid-0 mapping. Splitting the field is what
+	// stops the capability from assuming every engine is rootless.
+	WorkloadUserRootful string `yaml:"workload_user_rootful,omitempty" json:"workload_user_rootful,omitempty"`
+
+	// address — the engine daemon endpoint (containerd's socket). Empty for an
+	// engine with no separate daemon endpoint (podman/docker's default context).
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+
+	// namespace — the engine's default namespace. containerd's uniform default is
+	// "default"; a per-deploy/config override is resolved in code (deploy > config
+	// > this default), never re-spelled here.
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// privilege_prefix — the argv prefix a ROOTFUL target uses to reach the daemon
+	// (e.g. `sudo -n`). Empty when the invoking user already has access. The
+	// prefix is data so a consumer never hard-codes an escalation command.
+	PrivilegePrefix string `yaml:"privilege_prefix,omitempty" json:"privilege_prefix,omitempty"`
+
+	// substrates — the deploy substrate kinds this engine may host, as DATA. The
+	// loader reads this instead of a word literal: containerd hosts ["pod"]; a
+	// kind:vm through the krun backend is reached by the VM-backend class, not by
+	// widening this list. An engine may host only these kinds and nothing else.
+	Substrates []string `yaml:"substrates,omitempty" json:"substrates"`
+
+	// runtime_handlers — the OCI runtime handlers this engine knows (containerd:
+	// crun/krun/runc/nvidia). A run plan selects `--runtime` from this set; the
+	// handler word is DATA, never a literal in the plan builder.
+	RuntimeHandlers []string `yaml:"runtime_handlers,omitempty" json:"runtime_handlers"`
 
 	// image_exists_argv — the subcommand pair that answers "is this image in the
-	// local store?" (podman `image exists`, docker/nerdctl `image inspect`, since
+	// local store?" (podman `image exists`, docker/containerd `image inspect`, since
 	// docker has no `image exists`). A capability fact so local-image probes do
 	// not switch on the engine name.
 	ImageExistsArgv []string `yaml:"image_exists_argv,omitempty" json:"image_exists_argv"`
 
 	// no_remove_with_detach — the engine REJECTS `-d` (detach) together with `--rm`
-	// (auto-remove). nerdctl does ("flags -d and --rm cannot be specified
-	// together", measured live on nerdctl 2.3.5); podman/docker accept both. A
-	// capability fact so a detached-argv builder drops `--rm` where it is illegal
-	// (the container is then cleaned by the unit's ExecStop / an explicit rm)
-	// instead of switching on the engine name.
+	// (auto-remove). containerd's nerdctl CLI does ("flags -d and --rm cannot be
+	// specified together", measured live on nerdctl 2.3.5); podman/docker accept
+	// both. A capability fact so a detached-argv builder drops `--rm` where it is
+	// illegal (the container is then cleaned by the unit's ExecStop / an explicit
+	// rm) instead of switching on the engine name.
 	NoRemoveWithDetach bool `yaml:"no_remove_with_detach,omitempty" json:"no_remove_with_detach"`
+
+	// systemd_mode_arg — the argv token that turns the engine's systemd mode ON
+	// for a container whose init declares `systemd_mode: true` (podman
+	// `--systemd=always`, nerdctl `--systemd=true`). EMPTY when the engine has
+	// no such mode (docker): the deploy then omits it rather than inventing a
+	// flag, and only the stop signal is emitted.
+	SystemdModeArg string `yaml:"systemd_mode_arg,omitempty" json:"systemd_mode_arg,omitempty"`
 }
 
 // #EngineBinaryRequest / #EngineBinaryReply — the `binary` op: resolve the CLI
@@ -5857,6 +6107,16 @@ type EngineStartPlanRequest struct {
 
 	WorkloadUser string `yaml:"workload_user,omitempty" json:"workload_user,omitempty"`
 
+	// rootful selects which workload-user fact applies (rootless vs rootful) and
+	// whether the engine target needs a privilege prefix. It is an explicit knob so
+	// the plan builder never assumes the rootless mode.
+	Rootful bool `yaml:"rootful,omitempty" json:"rootful,omitempty"`
+
+	// runtime is the OCI runtime handler word (crun/krun/runc/nvidia), validated by
+	// the caller against the engine capability's runtime_handlers. When set, the
+	// plan passes it as `--runtime`; never a hard-coded handler literal.
+	Runtime string `yaml:"runtime,omitempty" json:"runtime,omitempty"`
+
 	KeepID bool `yaml:"keep_id,omitempty" json:"keep_id,omitempty"`
 
 	UsernsHost bool `yaml:"userns_host,omitempty" json:"userns_host,omitempty"`
@@ -5886,7 +6146,7 @@ type EngineStartPlanReply struct {
 
 // #EngineUnitRequest / #EngineUnitReply — the `unit_emit` op: render the
 // non-quadlet persistent supervision unit for a deployment — a systemd .service
-// wrapping the engine CLI (nerdctl's mode). Names/paths are host-resolved; the
+// wrapping the engine CLI (containerd's mode). Names/paths are host-resolved; the
 // provider returns file contents keyed by absolute path.
 //
 // QUADLET IS NOT RENDERED HERE: podman's run mode is `quadlet`, and its
@@ -5935,7 +6195,7 @@ type EngineUnitReply struct {
 
 // #EngineNetworkEnsureRequest / #EngineNetworkEnsureReply — the `network_ensure`
 // op: make the engine's shared container network exist (podman netavark+aardvark
-// `charly`; nerdctl CNI network).
+// `charly`; containerd's nerdctl CNI network).
 type EngineNetworkEnsureRequest struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
@@ -5976,6 +6236,687 @@ type FeatureEntity struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+}
+
+type Firecracker struct {
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
+
+	// --- the HOST side: how this KVM host runs microVMs -------------------------
+	// vmm pins the Firecracker release installed on the host; absent → the host's
+	// own `firecracker` from PATH (the upstream default).
+	VMM *FirecrackerVMM `yaml:"vmm,omitempty" json:"vmm,omitempty"`
+
+	Kernel FirecrackerKernel `yaml:"kernel,omitempty" json:"kernel"`
+
+	Network *FirecrackerNetwork `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Containerd *FirecrackerContainerd `yaml:"containerd,omitempty" json:"containerd,omitempty"`
+
+	Fireactions *FirecrackerFireactions `yaml:"fireactions,omitempty" json:"fireactions,omitempty"`
+
+	// --- the microVM INSTANCE --------------------------------------------------
+	// image is required of a DEPLOY and optional here, because a host-only template is
+	// a legal authored shape: it names the kernel and the host's capabilities, and the
+	// instances it serves bring their OWN image (the `firecracker-host` profile plus a
+	// deploy that names it via `from:`). The plugin's OpValidate enforces "a deploy has
+	// an image"; the schema keeps the host form authorable.
+	Image *FirecrackerImage `yaml:"image,omitempty" json:"image,omitempty"`
+
+	Machine *FirecrackerMachine `yaml:"machine,omitempty" json:"machine,omitempty"`
+
+	MMDS *FirecrackerMMDS `yaml:"mmds,omitempty" json:"mmds,omitempty"`
+
+	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
+
+	Vsock *FirecrackerVsock `yaml:"vsock,omitempty" json:"vsock,omitempty"`
+
+	Console *FirecrackerConsole `yaml:"console,omitempty" json:"console,omitempty"`
+
+	Snapshot *FirecrackerSnapshot `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
+}
+
+// #FirecrackerVMM pins the VMM release and its integrity, and selects the jailer
+// posture. The jailer is OFF by default: it is Firecracker's production hardening
+// posture (a privileged jailer drops privileges and execs the VMM), and the
+// integration's upstream orchestrator runs the VMM as a plain process.
+type FirecrackerVMM struct {
+	Version string `yaml:"version,omitempty" json:"version"`
+
+	Sha256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
+
+	Binary_path string `yaml:"binary_path,omitempty" json:"binary_path,omitempty"`
+
+	Jailer *FirecrackerJailer `yaml:"jailer,omitempty" json:"jailer,omitempty"`
+}
+
+type FirecrackerJailer struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled"`
+
+	// One jail per microVM needs its OWN uid and gid; uid_base/gid_base are the
+	// allocation floor the substrate increments per VM (required when enabled).
+	UIDBase int `yaml:"uid_base,omitempty" json:"uid_base,omitempty"`
+
+	GIDBase int `yaml:"gid_base,omitempty" json:"gid_base,omitempty"`
+
+	Chroot_base string `yaml:"chroot_base,omitempty" json:"chroot_base,omitempty"`
+
+	CgroupVersion string `yaml:"cgroup_version,omitempty" json:"cgroup_version,omitempty"`
+
+	// resource_limits are the jailer's own rlimits, `<resource>=<value>` verbatim
+	// (fsize, no-file).
+	ResourceLimits []string `yaml:"resource_limits,omitempty" json:"resource_limits,omitempty"`
+}
+
+// #FirecrackerKernel is the guest kernel the microVMs boot. `from` is an artefact
+// reference (an OCI artefact whose layer carries the kernel, or a pinned URL);
+// `path` is a file already present on the host. Exactly one is required.
+type FirecrackerKernel struct {
+	From string `yaml:"from,omitempty" json:"from,omitempty"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+
+	Sha256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
+
+	// cmdline — the kernel command line. The guest's IP, when the network is a
+	// TAP, arrives HERE (`ip=<guest>::<host>:<mask>::<iface>:off`), the same
+	// channel the CNI path uses; the substrate defaults it when absent.
+	Cmdline string `yaml:"cmdline,omitempty" json:"cmdline,omitempty"`
+
+	Initrd string `yaml:"initrd,omitempty" json:"initrd,omitempty"`
+}
+
+// #FirecrackerNetwork is how guests reach the network. `tap` (the default) is one
+// TAP device per microVM with the guest's address delivered on the kernel command
+// line; `cni` is the netns+bridge+tc-redirect-tap path the upstream orchestrator
+// uses, which needs CAP_SYS_ADMIN.
+type FirecrackerNetwork struct {
+	Mode string `yaml:"mode,omitempty" json:"mode"`
+
+	Tap *FirecrackerTAP `yaml:"tap,omitempty" json:"tap,omitempty"`
+
+	CNI *FirecrackerCNI `yaml:"cni,omitempty" json:"cni,omitempty"`
+
+	// egress_iface is the host uplink to masquerade through; "auto" = the
+	// default-route interface.
+	EgressIface string `yaml:"egress_iface,omitempty" json:"egress_iface,omitempty"`
+
+	Forwarding *FirecrackerForwarding `yaml:"forwarding,omitempty" json:"forwarding,omitempty"`
+
+	// resolver — the guest's /etc/resolv.conf servers. A stock Firecracker guest
+	// image ships none, so IP egress can work while DNS does not; naming them here
+	// is what makes the difference checkable.
+	Resolver []string `yaml:"resolver,omitempty" json:"resolver,omitempty"`
+
+	MTU int `yaml:"mtu,omitempty" json:"mtu,omitempty"`
+}
+
+type FirecrackerTAP struct {
+	// name is a template; `{n}` is replaced by the per-lease index.
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	// subnet + prefix allocate one /prefix per microVM (host_offset is the host's
+	// own address inside it).
+	Subnet string `yaml:"subnet,omitempty" json:"subnet,omitempty"`
+
+	Prefix int `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+
+	HostOffset int `yaml:"host_offset,omitempty" json:"host_offset,omitempty"`
+}
+
+type FirecrackerCNI struct {
+	Network_name string `yaml:"network_name,omitempty" json:"network_name,omitempty"`
+
+	Conf_dir string `yaml:"conf_dir,omitempty" json:"conf_dir,omitempty"`
+
+	Bin_dir string `yaml:"bin_dir,omitempty" json:"bin_dir,omitempty"`
+
+	Cache_dir string `yaml:"cache_dir,omitempty" json:"cache_dir,omitempty"`
+
+	Subnet string `yaml:"subnet,omitempty" json:"subnet,omitempty"`
+}
+
+// #FirecrackerForwarding is the host forwarding posture. `append-accept` inserts an
+// ordered FORWARD accept (the host's own policy may be DROP, which a separate nft
+// table cannot override); `netns` puts guest traffic in a namespace whose
+// forwarding the substrate controls.
+type FirecrackerForwarding struct {
+	IPForward bool `yaml:"ip_forward,omitempty" json:"ip_forward"`
+
+	Policy string `yaml:"policy,omitempty" json:"policy,omitempty"`
+}
+
+// #FirecrackerContainerd is the containerd this host runs for image storage: the
+// connection, and the SNAPSHOTTER that backs a microVM root drive. Firecracker
+// attaches a block device or a FILE, so only the two file/device-backed
+// snapshotters can serve a root drive: `devmapper` (an LVM thin pool on a dedicated
+// block device — the upstream default) and `blockfile` (a file per snapshot, which
+// needs neither LVM nor a spare device). A snapshotter whose mount is a directory
+// (overlayfs, native) can never work.
+type FirecrackerContainerd struct {
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	Snapshotter string `yaml:"snapshotter,omitempty" json:"snapshotter"`
+
+	// manage says how charly treats an existing /etc/containerd/config.toml:
+	// `merge` (default) keeps every setting it does not model, `full` takes the
+	// file over, `adopt` changes nothing and only reports.
+	Manage string `yaml:"manage,omitempty" json:"manage,omitempty"`
+
+	Version int `yaml:"version,omitempty" json:"version,omitempty"`
+
+	Root string `yaml:"root,omitempty" json:"root,omitempty"`
+
+	State string `yaml:"state,omitempty" json:"state,omitempty"`
+
+	OOMScore int `yaml:"oom_score,omitempty" json:"oom_score,omitempty"`
+
+	GRPC *FirecrackerContainerdGRPC `yaml:"grpc,omitempty" json:"grpc,omitempty"`
+
+	Devmapper *FirecrackerDevmapper `yaml:"devmapper,omitempty" json:"devmapper,omitempty"`
+
+	// plugins is a typed-open passthrough for any containerd plugin table charly
+	// does not model yet.
+	Plugins map[string]any/* CUE top */ `yaml:"plugins,omitempty" json:"plugins,omitempty"`
+
+	RegistryMirrors []FirecrackerRegistryMirror `yaml:"registry_mirrors,omitempty" json:"registry_mirrors,omitempty"`
+
+	Service *FirecrackerContainerdService `yaml:"service,omitempty" json:"service,omitempty"`
+}
+
+type FirecrackerContainerdGRPC struct {
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+
+	UID int `yaml:"uid,omitempty" json:"uid,omitempty"`
+
+	GID int `yaml:"gid,omitempty" json:"gid,omitempty"`
+}
+
+// #FirecrackerDevmapper is the devmapper snapshotter's pool. `device` is the block
+// device the thin pool is created on — charly provisions it (pvcreate/vgcreate/
+// lvcreate + the autoextend profile) rather than leaving it to a hand-typed
+// command, and refuses with a visible skip when the host cannot satisfy it.
+type FirecrackerDevmapper struct {
+	Pool string `yaml:"pool,omitempty" json:"pool,omitempty"`
+
+	RootPath string `yaml:"root_path,omitempty" json:"root_path,omitempty"`
+
+	BaseImageSize string `yaml:"base_image_size,omitempty" json:"base_image_size,omitempty"`
+
+	DiscardBlocks bool `yaml:"discard_blocks,omitempty" json:"discard_blocks,omitempty"`
+
+	FSType string `yaml:"fs_type,omitempty" json:"fs_type,omitempty"`
+
+	Device string `yaml:"device,omitempty" json:"device,omitempty"`
+
+	Profile *FirecrackerThinPoolProfile `yaml:"profile,omitempty" json:"profile,omitempty"`
+}
+
+type FirecrackerThinPoolProfile struct {
+	ThinPoolAutoextendThreshold int `yaml:"thin_pool_autoextend_threshold,omitempty" json:"thin_pool_autoextend_threshold,omitempty"`
+
+	ThinPoolAutoextendPercent int `yaml:"thin_pool_autoextend_percent,omitempty" json:"thin_pool_autoextend_percent,omitempty"`
+}
+
+type FirecrackerRegistryMirror struct {
+	Host string `yaml:"host,omitempty" json:"host"`
+
+	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
+}
+
+type FirecrackerContainerdService struct {
+	// unit distro → keep the distribution's own containerd unit; charly → render
+	// one (the mixed-entry service polymorphism, per distro).
+	Unit string `yaml:"unit,omitempty" json:"unit,omitempty"`
+
+	Limits map[string]any/* CUE top */ `yaml:"limits,omitempty" json:"limits,omitempty"`
+}
+
+// #FirecrackerFireactions is the OPTIONAL runner-pool orchestrator on this host. Its
+// pools are a policy for how microVMs are created and registered as GitHub Actions
+// runners; the substrate RENDERS this into the orchestrator's own configuration
+// (validated before it is written) and supervises it — it does not reimplement the
+// scheduler.
+type FirecrackerFireactions struct {
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+
+	Install *FirecrackerFireactionsInstall `yaml:"install,omitempty" json:"install,omitempty"`
+
+	// bind_address defaults to LOOPBACK: the orchestrator's API is plaintext and
+	// unauthenticated upstream, so naming a wider address is a deliberate act.
+	BindAddress string `yaml:"bind_address,omitempty" json:"bind_address,omitempty"`
+
+	Metrics *FirecrackerFireactionsMetrics `yaml:"metrics,omitempty" json:"metrics,omitempty"`
+
+	LogLevel string `yaml:"log_level,omitempty" json:"log_level,omitempty"`
+
+	GitHub *FirecrackerFireactionsGitHub `yaml:"github,omitempty" json:"github,omitempty"`
+
+	Pools []FirecrackerPool `yaml:"pools,omitempty" json:"pools"`
+}
+
+type FirecrackerFireactionsInstall struct {
+	// from_source builds the pinned tag (the upstream release binaries carry no
+	// version stamp without the release toolchain's ldflags).
+	FromSource bool `yaml:"from_source,omitempty" json:"from_source,omitempty"`
+
+	Go string `yaml:"go,omitempty" json:"go,omitempty"`
+}
+
+type FirecrackerFireactionsMetrics struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled"`
+
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+}
+
+// #FirecrackerFireactionsGitHub names the GitHub App credential. The private key is
+// NEVER authored here: it is a secret reference resolved from the credential store
+// at deploy time.
+type FirecrackerFireactionsGitHub struct {
+	AppID int `yaml:"app_id,omitempty" json:"app_id,omitempty"`
+
+	AppPrivateKeySecret string `yaml:"app_private_key_secret,omitempty" json:"app_private_key_secret,omitempty"`
+}
+
+// #FirecrackerPool is one runner pool: a label set + a runner image + a machine
+// shape, kept at a replica count.
+type FirecrackerPool struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"`
+
+	ShutdownOnExit bool `yaml:"shutdown_on_exit,omitempty" json:"shutdown_on_exit,omitempty"`
+
+	Runner FirecrackerRunner `yaml:"runner,omitempty" json:"runner"`
+
+	Firecracker *FirecrackerPoolMachine `yaml:"firecracker,omitempty" json:"firecracker,omitempty"`
+}
+
+type FirecrackerRunner struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	// image is a runner guest image: charly's own (a box built into a rootfs
+	// artefact) or an upstream-compatible one.
+	Image string `yaml:"image,omitempty" json:"image"`
+
+	ImagePullPolicy string `yaml:"image_pull_policy,omitempty" json:"image_pull_policy,omitempty"`
+
+	// organization is ORGANISATION-scoped: the orchestrator's GitHub calls are
+	// org-level only (a repository-scoped runner is not expressible).
+	Organization string `yaml:"organization,omitempty" json:"organization,omitempty"`
+
+	GroupID int `yaml:"group_id,omitempty" json:"group_id,omitempty"`
+
+	Labels []string `yaml:"labels,omitempty" json:"labels"`
+}
+
+type FirecrackerPoolMachine struct {
+	MachineConfig *FirecrackerMachine `yaml:"machine_config,omitempty" json:"machine_config,omitempty"`
+
+	Metadata map[string]any/* CUE top */ `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+
+	RateLimits *FirecrackerRateLimits `yaml:"rate_limits,omitempty" json:"rate_limits,omitempty"`
+}
+
+// #FirecrackerMachine is the microVM shape. vcpu_count and mem_size_mib mirror
+// Firecracker's own machine-config (vcpu_count is 1–32, and either 1 or even; smt is
+// x86-only).
+type FirecrackerMachine struct {
+	VCPUCount int `yaml:"vcpu_count,omitempty" json:"vcpu_count,omitempty"`
+
+	MemSizeMiB int `yaml:"mem_size_mib,omitempty" json:"mem_size_mib,omitempty"`
+
+	Smt bool `yaml:"smt,omitempty" json:"smt,omitempty"`
+
+	HugePages string `yaml:"huge_pages,omitempty" json:"huge_pages,omitempty"`
+
+	// cpu_template mirrors Firecracker's (deprecated) CpuTemplate enum; it exists
+	// for snapshot/clone portability across hosts.
+	CPUTemplate string `yaml:"cpu_template,omitempty" json:"cpu_template,omitempty"`
+
+	Drives []FirecrackerDrive `yaml:"drives,omitempty" json:"drives,omitempty"`
+
+	// rate_limits bound the interfaces and the root drive; an omitted bucket is
+	// unlimited (Firecracker's own semantics).
+	RateLimits *FirecrackerRateLimits `yaml:"rate_limits,omitempty" json:"rate_limits,omitempty"`
+}
+
+// #FirecrackerDrive is one virtio-block device. The root drive is built from the
+// image; extra drives are named here.
+type FirecrackerDrive struct {
+	DriveID string `yaml:"drive_id,omitempty" json:"drive_id"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+
+	IsRootDevice bool `yaml:"is_root_device,omitempty" json:"is_root_device,omitempty"`
+
+	IsReadOnly bool `yaml:"is_read_only,omitempty" json:"is_read_only,omitempty"`
+
+	CacheType string `yaml:"cache_type,omitempty" json:"cache_type,omitempty"`
+
+	// io_engine Async needs a host kernel newer than 5.10.51.
+	IOEngine string `yaml:"io_engine,omitempty" json:"io_engine,omitempty"`
+
+	BlkSize int `yaml:"blk_size,omitempty" json:"blk_size,omitempty"`
+
+	// discard is only honoured by a writable virtio-block device on the Sync engine.
+	Discard bool `yaml:"discard,omitempty" json:"discard,omitempty"`
+
+	RateLimiter *FirecrackerRateLimiter `yaml:"rate_limiter,omitempty" json:"rate_limiter,omitempty"`
+}
+
+// #FirecrackerRateLimiter is Firecracker's token bucket: the rate is
+// size/refill_time, consumption below the refill rate is unbounded (bursts).
+type FirecrackerRateLimiter struct {
+	Bandwidth *FirecrackerTokenBucket `yaml:"bandwidth,omitempty" json:"bandwidth,omitempty"`
+
+	Ops *FirecrackerTokenBucket `yaml:"ops,omitempty" json:"ops,omitempty"`
+}
+
+type FirecrackerTokenBucket struct {
+	Size int `yaml:"size,omitempty" json:"size"`
+
+	RefillTime int `yaml:"refill_time,omitempty" json:"refill_time"`
+
+	OneTimeBurst int `yaml:"one_time_burst,omitempty" json:"one_time_burst,omitempty"`
+}
+
+type FirecrackerRateLimits struct {
+	NetworkIn *FirecrackerRateLimiter `yaml:"network_in,omitempty" json:"network_in,omitempty"`
+
+	NetworkOut *FirecrackerRateLimiter `yaml:"network_out,omitempty" json:"network_out,omitempty"`
+
+	Rootfs *FirecrackerRateLimiter `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`
+
+	Serial *FirecrackerRateLimiter `yaml:"serial,omitempty" json:"serial,omitempty"`
+}
+
+// #FirecrackerImage is the microVM root drive: the artefact charly BUILT (a
+// kind:firecracker deploy's image is a charly-produced rootfs, not somebody else's
+// container export). `format` is what the artefact's labels declare; a raw ext4
+// rootfs is the file-backed form, and `resize` grows the inner filesystem to
+// disk_mib on first boot (Firecracker attaches FILES — a truncated file alone does
+// not grow the filesystem inside it).
+type FirecrackerImage struct {
+	From string `yaml:"from,omitempty" json:"from"`
+
+	Format string `yaml:"format,omitempty" json:"format,omitempty"`
+
+	DiskMiB int `yaml:"disk_mib,omitempty" json:"disk_mib,omitempty"`
+
+	Resize bool `yaml:"resize,omitempty" json:"resize,omitempty"`
+}
+
+// #FirecrackerMMDS is the metadata service inside the guest. V2 is a session-token
+// IMDSv2 shape; the upstream orchestrator reads exactly
+// latest/meta-data/fireactions/{runner_jit_config,hostname,shutdown_on_exit} from
+// it, which is why the tree is authored under `latest/meta-data` here.
+type FirecrackerMMDS struct {
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+
+	IPv4Address string `yaml:"ipv4_address,omitempty" json:"ipv4_address,omitempty"`
+
+	// metadata is the tree under latest/meta-data (typed-open: its shape is the
+	// consumer's business — the orchestrator's, the candy's, the operator's).
+	Metadata map[string]any/* CUE top */ `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// cloud_init: VmCloudInit. CLOSED. Genuine passthroughs:
+// extra (raw cloud-config string) and network.ethernets (network-config v2,
+// map[string]map[string]any → {[string]: {[string]: _}}).
+// ---------------------------------------------------------------------------
+type VmCloudInit struct {
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+
+	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
+
+	Users []VmCloudInitUser `yaml:"users,omitempty" json:"users,omitempty"`
+
+	Package []string `yaml:"package,omitempty" json:"package,omitempty"`
+
+	RunCmd []string `yaml:"runcmd,omitempty" json:"runcmd,omitempty"`
+
+	BootCmd []string `yaml:"bootcmd,omitempty" json:"bootcmd,omitempty"`
+
+	WriteFiles []VmCloudInitFile `yaml:"write_files,omitempty" json:"write_files,omitempty"`
+
+	Network *VmCloudInitNetwork `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Mirrors *VmCloudInitMirrors `yaml:"mirrors,omitempty" json:"mirrors,omitempty"`
+
+	CharlyInstall *VmCharlyInstall `yaml:"charly_install,omitempty" json:"charly_install,omitempty"`
+
+	Extra string `yaml:"extra,omitempty" json:"extra,omitempty"`
+}
+
+type VmCloudInitUser struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Sudo bool `yaml:"sudo,omitempty" json:"sudo,omitempty"`
+
+	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
+
+	Shell string `yaml:"shell,omitempty" json:"shell,omitempty"`
+
+	LockPasswd *bool `yaml:"lock_passwd,omitempty" json:"lock_passwd,omitempty"`
+}
+
+type VmCloudInitFile struct {
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	Content string `yaml:"content,omitempty" json:"content,omitempty"`
+
+	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
+
+	Perms string `yaml:"perms,omitempty" json:"perms,omitempty"`
+
+	Encoding string `yaml:"encoding,omitempty" json:"encoding,omitempty"`
+}
+
+type VmCloudInitNetwork struct {
+	Version int `yaml:"version,omitempty" json:"version,omitempty"`
+
+	// network-config v2 map[string]map[string]any — typed-open passthrough.
+	Ethernets map[string]map[string]any/* CUE top */ `yaml:"ethernets,omitempty" json:"ethernets,omitempty"`
+}
+
+type VmCloudInitMirrors struct {
+	APT []string `yaml:"apt,omitempty" json:"apt,omitempty"`
+
+	DNF []string `yaml:"dnf,omitempty" json:"dnf,omitempty"`
+
+	Pacman []string `yaml:"pacman,omitempty" json:"pacman,omitempty"`
+}
+
+type VmCharlyInstall struct {
+	// VmCharlyInstall has ONLY `strategy` (the vm-spec skill's url/checksum are
+	// STALE — the Go struct dropped them). auto: scp host binary post-boot;
+	// scp: explicit form; skip: user-managed.
+	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+}
+
+type FirecrackerVsock struct {
+	// guest_cid must be >= 3 (2 is the host); the substrate allocates one per
+	// microVM when absent, since one device serves all guests.
+	GuestCID int `yaml:"guest_cid,omitempty" json:"guest_cid,omitempty"`
+
+	UDS_Path string `yaml:"uds_path,omitempty" json:"uds_path,omitempty"`
+}
+
+type FirecrackerConsole struct {
+	SerialOutPath string `yaml:"serial_out_path,omitempty" json:"serial_out_path,omitempty"`
+
+	RateLimiter *FirecrackerRateLimiter `yaml:"rate_limiter,omitempty" json:"rate_limiter,omitempty"`
+
+	LogPath string `yaml:"log_path,omitempty" json:"log_path,omitempty"`
+
+	LogLevel string `yaml:"log_level,omitempty" json:"log_level,omitempty"`
+
+	MetricsPath string `yaml:"metrics_path,omitempty" json:"metrics_path,omitempty"`
+}
+
+type FirecrackerSnapshot struct {
+	Create bool `yaml:"create,omitempty" json:"create,omitempty"`
+
+	MemFilePath string `yaml:"mem_file_path,omitempty" json:"mem_file_path,omitempty"`
+
+	SnapshotPath string `yaml:"snapshot_path,omitempty" json:"snapshot_path,omitempty"`
+
+	SnapshotType string `yaml:"snapshot_type,omitempty" json:"snapshot_type,omitempty"`
+
+	Resume bool `yaml:"resume,omitempty" json:"resume,omitempty"`
+}
+
+// #FirecrackerPluginEnv is the host→plugin env for an internal Firecracker-resolution
+// RPC. machine_op selects the operation: list / machine-state / resolve-console /
+// mmds-internal / snapshot-internal / pool-state / doctor.
+type FirecrackerPluginEnv struct {
+	MachineOp string `yaml:"machine_op,omitempty" json:"machine_op"`
+
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	SSHUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+
+	Force bool `yaml:"force,omitempty" json:"force,omitempty"`
+
+	DeleteDisks bool `yaml:"delete_disks,omitempty" json:"delete_disks,omitempty"`
+
+	MMDS *FirecrackerMMDSReq `yaml:"mmds,omitempty" json:"mmds,omitempty"`
+
+	Snap *FirecrackerSnapInternalReq `yaml:"snap,omitempty" json:"snap,omitempty"`
+}
+
+// #FirecrackerMMDSReq is an MMDS read/write payload (put replaces the tree, patch is
+// a JSON merge patch).
+type FirecrackerMMDSReq struct {
+	MMDSOp string `yaml:"mmds_op,omitempty" json:"mmds_op"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+
+	Document RawBody `yaml:"document,omitempty" json:"document,omitempty"`
+}
+
+// #FirecrackerSnapInternalReq is the snapshot-internal op payload.
+type FirecrackerSnapInternalReq struct {
+	SnapOp string `yaml:"snap_op,omitempty" json:"snap_op"`
+
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	MemFilePath string `yaml:"mem_file_path,omitempty" json:"mem_file_path,omitempty"`
+
+	SnapshotPath string `yaml:"snapshot_path,omitempty" json:"snapshot_path,omitempty"`
+
+	SnapshotType string `yaml:"snapshot_type,omitempty" json:"snapshot_type,omitempty"`
+
+	Resume bool `yaml:"resume,omitempty" json:"resume,omitempty"`
+
+	Entry *FirecrackerSnapshotEntry `yaml:"entry,omitempty" json:"entry,omitempty"`
+}
+
+// #FirecrackerSnapshotEntry is one snapshot record (the on-disk registry shape) —
+// carried on delete/revert ops so the plugin has the full record.
+type FirecrackerSnapshotEntry struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	MemFilePath string `yaml:"mem_file_path,omitempty" json:"mem_file_path,omitempty"`
+
+	SnapshotPath string `yaml:"snapshot_path,omitempty" json:"snapshot_path,omitempty"`
+
+	SnapshotType string `yaml:"snapshot_type,omitempty" json:"snapshot_type,omitempty"`
+
+	Created string `yaml:"created,omitempty" json:"created,omitempty"`
+
+	Refcount int `yaml:"refcount,omitempty" json:"refcount"`
+}
+
+// #FirecrackerMachineInfo mirrors a live microVM row for status collection.
+type FirecrackerMachineInfo struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	State string `yaml:"state,omitempty" json:"state"`
+
+	GuestIP string `yaml:"guest_ip,omitempty" json:"guest_ip,omitempty"`
+
+	VCPUCount int `yaml:"vcpu_count,omitempty" json:"vcpu_count,omitempty"`
+
+	MemSizeMiB int `yaml:"mem_size_mib,omitempty" json:"mem_size_mib,omitempty"`
+
+	Pool string `yaml:"pool,omitempty" json:"pool,omitempty"`
+}
+
+// #FirecrackerPoolInfo mirrors one orchestrator pool row.
+type FirecrackerPoolInfo struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Organization string `yaml:"organization,omitempty" json:"organization,omitempty"`
+
+	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"`
+
+	CurrentReplicas int `yaml:"current_replicas,omitempty" json:"current_replicas,omitempty"`
+
+	State string `yaml:"state,omitempty" json:"state,omitempty"`
+
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+}
+
+// #FirecrackerConsoleEndpoint describes how to reach a running microVM's console.
+type FirecrackerConsoleEndpoint struct {
+	// kind selects the channel: "serial" (the Firecracker console log), "ssh" (the
+	// guest over the TAP/CNI address) or "vsock" (the guest agent socket).
+	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	Port int `yaml:"port,omitempty" json:"port,omitempty"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+
+	User string `yaml:"user,omitempty" json:"user,omitempty"`
+}
+
+// #FirecrackerDoctorReport is the host-precondition probe result. Read-only: it
+// reports what the host can do (KVM, the binary, the kernel, the rootfs, whether the
+// configured snapshotter is actually served, and the forwarding posture) so a
+// precondition failure is a report, never a guess.
+type FirecrackerDoctorReport struct {
+	KVM bool `yaml:"kvm,omitempty" json:"kvm,omitempty"`
+
+	KVMPath string `yaml:"kvm_path,omitempty" json:"kvm_path,omitempty"`
+
+	Binary string `yaml:"binary,omitempty" json:"binary,omitempty"`
+
+	BinaryVersion string `yaml:"binary_version,omitempty" json:"binary_version,omitempty"`
+
+	Kernel string `yaml:"kernel,omitempty" json:"kernel,omitempty"`
+
+	Rootfs string `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`
+
+	Snapshotter string `yaml:"snapshotter,omitempty" json:"snapshotter,omitempty"`
+
+	SnapshotterServed bool `yaml:"snapshotter_served,omitempty" json:"snapshotter_served,omitempty"`
+
+	NetworkMode string `yaml:"network_mode,omitempty" json:"network_mode,omitempty"`
+
+	ForwardPolicy string `yaml:"forward_policy,omitempty" json:"forward_policy,omitempty"`
+
+	Problems []string `yaml:"problems,omitempty" json:"problems,omitempty"`
+}
+
+// #FirecrackerResolveResult decodes a resolve-console reply.
+type FirecrackerResolveResult struct {
+	Endpoint FirecrackerConsoleEndpoint `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
 // #VFIOPCIDevice is a single PCI function discovered under sysfs.
@@ -6140,7 +7081,19 @@ type Init struct {
 
 	DependsCandy string `yaml:"depends_candy,omitempty" json:"depends_candy,omitempty"`
 
+	// requires_capability names the aggregated candy-capability keys this init
+	// needs before it is a candidate. The `init_system:<name>` form is the
+	// init-system HINT key candy_capabilities.go already provides for
+	// `capability: {init_system_hint: <name>}` — the colon is part of that key's
+	// grammar, which is why it is admitted here.
 	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
+
+	// extends — inherit another init-system entry of the SAME vocabulary, then
+	// override. It exists so a variant that is genuinely the same init in a
+	// different venue (systemd-container vs systemd) shares ONE authored
+	// service_template instead of copy-pasting a YAML stanza (R2). The child's
+	// own non-empty fields win; the merged body is what the render leg sees.
+	Extends string `yaml:"extends,omitempty" json:"extends,omitempty"`
 
 	// The one mandatory field: the build model.
 	Model string `yaml:"model,omitempty" json:"model"`
@@ -6166,6 +7119,20 @@ type Init struct {
 	Entrypoint []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
 
 	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty" json:"fallback_entrypoint,omitempty"`
+
+	// requires_root — the image must end at USER root and a deploy overlay must
+	// not restore a non-root USER over it. systemd refuses to run in system mode
+	// as a non-root PID 1 (measured: exit 255 / start-limit-hit).
+	RequiresRoot bool `yaml:"requires_root,omitempty" json:"requires_root,omitempty"`
+
+	// systemd_mode — the container runtime must be told to enable its systemd
+	// mode (podman `--systemd=always` / quadlet `Systemd=always`): a systemd
+	// cgroup subtree, the /run tmpfs, and SIGRTMIN+3 as the stop signal.
+	SystemdMode bool `yaml:"systemd_mode,omitempty" json:"systemd_mode,omitempty"`
+
+	// stop_signal — the signal the runtime sends to stop the container. For
+	// systemd SIGRTMIN+3 is `systemctl halt`, the clean shutdown.
+	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
 
 	ManagementTool string `yaml:"management_tool,omitempty" json:"management_tool,omitempty"`
 
@@ -6341,6 +7308,10 @@ type ResolvedInit struct {
 
 	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
 
+	// extends — resolved by ProjectInitConfig before this envelope is consumed;
+	// empty on a fully-merged entry.
+	Extends string `yaml:"extends,omitempty" json:"extends,omitempty"`
+
 	Model string `yaml:"model,omitempty" json:"model,omitempty"`
 
 	HeaderFile string `yaml:"header_file,omitempty" json:"header_file,omitempty"`
@@ -6364,6 +7335,15 @@ type ResolvedInit struct {
 	Entrypoint []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
 
 	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty" json:"fallback_entrypoint,omitempty"`
+
+	// The container-venue runtime contract (#Init). RequiresRoot gates the
+	// build's final USER and the deploy overlay's USER restore; SystemdMode and
+	// StopSignal are the runtime argv/quadlet facts.
+	RequiresRoot bool `yaml:"requires_root,omitempty" json:"requires_root,omitempty"`
+
+	SystemdMode bool `yaml:"systemd_mode,omitempty" json:"systemd_mode,omitempty"`
+
+	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
 
 	ManagementTool string `yaml:"management_tool,omitempty" json:"management_tool,omitempty"`
 
@@ -6513,13 +7493,16 @@ type Kubernetes struct {
 	// May be empty (a cluster-policy-only template runs no workload itself).
 	Box string `yaml:"box,omitempty" json:"box"`
 
-	Replica *int `yaml:"replica,omitempty" json:"replica,omitempty"`
-
-	Resources *KubernetesResources `yaml:"resources,omitempty" json:"resources,omitempty"`
-
-	Hostnames []KubernetesHostname `yaml:"hostnames,omitempty" json:"hostnames,omitempty"`
-
 	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
+
+	// kubeconfig — the kubeconfig FILE this cluster is reached through. An
+	// externally-managed cluster (OVH / GKE / EKS / on-prem) is usually addressed
+	// by a per-cluster file rather than by the ambient `$KUBECONFIG` /
+	// `~/.kube/config`; without this field the only handle a deploy has is a
+	// context NAME, which cannot be resolved against a file charly was never
+	// told about. Empty keeps the ambient file that plain `kubectl` reads — what
+	// a charly-created k3s/kind cluster relies on.
+	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
 
 	AdmissionPolicy string `yaml:"admission_policy,omitempty" json:"admission_policy,omitempty"`
 
@@ -6529,47 +7512,17 @@ type Kubernetes struct {
 
 	Ingress KubernetesIngressDefaults `yaml:"ingress,omitempty" json:"ingress,omitempty"`
 
-	GatewayAPI KubernetesGatewayAPI `yaml:"gateway_api,omitempty" json:"gateway_api,omitempty"`
-
-	Secret KubernetesSecretsBackend `yaml:"secret,omitempty" json:"secret,omitempty"`
-
 	ImageDefault KubernetesImagesDefaults `yaml:"image_default,omitempty" json:"image_default,omitempty"`
 
 	PodDefault KubernetesPodDefaults `yaml:"pod_default,omitempty" json:"pod_default,omitempty"`
 
-	Observability KubernetesObservability `yaml:"observability,omitempty" json:"observability,omitempty"`
-
-	NetworkPolicy string `yaml:"network_policy,omitempty" json:"network_policy,omitempty"`
-
 	// kubevirt — cluster-specific KubeVirt knobs (the kind:kubevirt substrate's
-	// cluster side). Mirrors the storage/ingress/secret "one cluster template owns
-	// the cluster-specific policy" partition: a kind:kubevirt VM names its cluster
-	// by `cluster:` and these knobs apply.
+	// cluster side). Mirrors the storage/ingress "one cluster template owns the
+	// cluster-specific policy" partition: a kind:kubevirt VM names its cluster by
+	// `cluster:` and these knobs apply.
 	KubeVirt KubernetesKubeVirt `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
 
 	Defaults KubernetesResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-}
-
-type KubernetesResources struct {
-	Requests KubernetesResourceValues `yaml:"requests,omitempty" json:"requests,omitempty"`
-
-	Limits KubernetesResourceValues `yaml:"limits,omitempty" json:"limits,omitempty"`
-}
-
-type KubernetesResourceValues struct {
-	CPU string `yaml:"cpu,omitempty" json:"cpu,omitempty"`
-
-	Memory string `yaml:"memory,omitempty" json:"memory,omitempty"`
-}
-
-type KubernetesHostname struct {
-	Host string `yaml:"host,omitempty" json:"host"`
-
-	TLS bool `yaml:"tls,omitempty" json:"tls,omitempty"`
-
-	Path string `yaml:"path,omitempty" json:"path,omitempty"`
 }
 
 type KubernetesStorage struct {
@@ -6594,20 +7547,6 @@ type KubernetesIngressDefaults struct {
 	PathTypeDefault string `yaml:"path_type_default,omitempty" json:"path_type_default,omitempty"`
 }
 
-type KubernetesGatewayAPI struct {
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-
-	GatewayClass string `yaml:"gateway_class,omitempty" json:"gateway_class,omitempty"`
-}
-
-type KubernetesSecretsBackend struct {
-	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
-
-	Store string `yaml:"store,omitempty" json:"store,omitempty"`
-
-	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
-}
-
 type KubernetesImagesDefaults struct {
 	PullPolicy string `yaml:"pull_policy,omitempty" json:"pull_policy,omitempty"`
 
@@ -6622,12 +7561,6 @@ type KubernetesPodDefaults struct {
 	Tolerations []map[string]any/* CUE top */ `yaml:"tolerations,omitempty" json:"tolerations,omitempty"`
 
 	NodeSelector map[string]string `yaml:"node_selector,omitempty" json:"node_selector,omitempty"`
-}
-
-type KubernetesObservability struct {
-	ServiceMonitor bool `yaml:"service_monitor,omitempty" json:"service_monitor,omitempty"`
-
-	ServiceMonitorInterval string `yaml:"service_monitor_interval,omitempty" json:"service_monitor_interval,omitempty"`
 }
 
 // #KubernetesKubeVirt — the KubeVirt platform knobs a cluster template carries.
@@ -6696,9 +7629,10 @@ type Kindcluster struct {
 	Box string `yaml:"box,omitempty" json:"box"`
 
 	// engine selects the container engine kind provisions its node containers with.
-	// It maps 1:1 to kind's KIND_EXPERIMENTAL_PROVIDER (podman/docker/nerdctl), so
-	// the authored #EngineName vocabulary is used directly — no separate selector.
-	// Absent → the resolved runtime engine (engine.run).
+	// The authored field is the charly #EngineName vocabulary (podman/docker/
+	// containerd); the plugin maps `containerd` to kind's own provider word
+	// (KIND_EXPERIMENTAL_PROVIDER=nerdctl) at the edge. Absent → the resolved
+	// runtime engine (engine.run).
 	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
 
 	// node_image is the digest-pinned kind node image (kindest/node:vX@sha256:…).
@@ -6778,6 +7712,23 @@ type KubeVirt struct {
 	// source — the boot medium. Exactly one arm (enforced in OpValidate).
 	Source KubevirtSource `yaml:"source,omitempty" json:"source"`
 
+	// distro / ssh_user — the GUEST identity of the boot medium: the same pair
+	// #VmBoxMetadata carries for a containerDisk's OCI label (same Go field names,
+	// one vocabulary). A `container_disk` source reads them from the VM box's
+	// labels (deploykit.VmCapabilitiesFromLabels); every OTHER arm (data_volume /
+	// pvc / clone) is a bare disk with no metadata to read, so it MUST declare them
+	// here. An explicit value always wins over box metadata.
+	//
+	// Both are plain `string`, deliberately, exactly as #VmBoxMetadata.distro is:
+	// the #DistroID vocabulary def is `@go(-)` (it generates no Go type), so a field
+	// that references it emits an undefined Go identifier. The id is validated
+	// against #DistroID — and required for every non-containerDisk arm — by
+	// candy/plugin-kubevirt's OpValidate, beside the exactly-one-boot-arm and
+	// GPU/instancetype XOR rules this file's header documents as its home.
+	Distro string `yaml:"distro,omitempty" json:"distro,omitempty"`
+
+	SSHUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+
 	// --- domain shape ---
 	Memory VmSize `yaml:"memory,omitempty" json:"memory,omitempty"`
 
@@ -6854,9 +7805,25 @@ type KubevirtDevices struct {
 	// disks/filesystems are the extra (non-boot) volumes, typed-open passthrough.
 	Disks []map[string]any/* CUE top */ `yaml:"disks,omitempty" json:"disks,omitempty"`
 
+	// host_devices is KubeVirt host-device passthrough (spec.domain.devices.hostDevices).
+	// It is the ONLY way a guest gets its own /dev/kvm, which is what nested virtualisation
+	// needs; a CPU feature alone is not enough. The device vocabulary belongs to the
+	// cluster's device plugin — on quant-dev it advertises `devices.kubevirt.io/kvm`, so the
+	// entry is `{device_name: "kvm", name: "kvm"}`.
+	Host_devices []KubevirtHostDevice `yaml:"host_devices,omitempty" json:"host_devices,omitempty"`
+
 	Inputs []KubevirtInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 
 	Watchdog *KubevirtWatchdog `yaml:"watchdog,omitempty" json:"watchdog,omitempty"`
+}
+
+type KubevirtHostDevice struct {
+	// device_name is the resource the cluster's device plugin advertises, without its
+	// `devices.kubevirt.io/` prefix — `kvm`, `nvidia.com/gpu`, …
+	Device_name string `yaml:"device_name,omitempty" json:"device_name"`
+
+	// name is the device's label inside the guest; KubeVirt defaults it to device_name.
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 }
 
 type KubevirtInput struct {
@@ -6875,83 +7842,6 @@ type KubevirtGPU struct {
 	ResourceName string `yaml:"resource_name,omitempty" json:"resource_name,omitempty"`
 
 	DeviceName string `yaml:"device_name,omitempty" json:"device_name,omitempty"`
-}
-
-// ---------------------------------------------------------------------------
-// cloud_init: VmCloudInit. CLOSED. Genuine passthroughs:
-// extra (raw cloud-config string) and network.ethernets (network-config v2,
-// map[string]map[string]any → {[string]: {[string]: _}}).
-// ---------------------------------------------------------------------------
-type VmCloudInit struct {
-	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-
-	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
-
-	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
-
-	Users []VmCloudInitUser `yaml:"users,omitempty" json:"users,omitempty"`
-
-	Package []string `yaml:"package,omitempty" json:"package,omitempty"`
-
-	RunCmd []string `yaml:"runcmd,omitempty" json:"runcmd,omitempty"`
-
-	BootCmd []string `yaml:"bootcmd,omitempty" json:"bootcmd,omitempty"`
-
-	WriteFiles []VmCloudInitFile `yaml:"write_files,omitempty" json:"write_files,omitempty"`
-
-	Network *VmCloudInitNetwork `yaml:"network,omitempty" json:"network,omitempty"`
-
-	Mirrors *VmCloudInitMirrors `yaml:"mirrors,omitempty" json:"mirrors,omitempty"`
-
-	CharlyInstall *VmCharlyInstall `yaml:"charly_install,omitempty" json:"charly_install,omitempty"`
-
-	Extra string `yaml:"extra,omitempty" json:"extra,omitempty"`
-}
-
-type VmCloudInitUser struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Sudo bool `yaml:"sudo,omitempty" json:"sudo,omitempty"`
-
-	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
-
-	Shell string `yaml:"shell,omitempty" json:"shell,omitempty"`
-
-	LockPasswd *bool `yaml:"lock_passwd,omitempty" json:"lock_passwd,omitempty"`
-}
-
-type VmCloudInitFile struct {
-	Path string `yaml:"path,omitempty" json:"path"`
-
-	Content string `yaml:"content,omitempty" json:"content,omitempty"`
-
-	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
-
-	Perms string `yaml:"perms,omitempty" json:"perms,omitempty"`
-
-	Encoding string `yaml:"encoding,omitempty" json:"encoding,omitempty"`
-}
-
-type VmCloudInitNetwork struct {
-	Version int `yaml:"version,omitempty" json:"version,omitempty"`
-
-	// network-config v2 map[string]map[string]any — typed-open passthrough.
-	Ethernets map[string]map[string]any/* CUE top */ `yaml:"ethernets,omitempty" json:"ethernets,omitempty"`
-}
-
-type VmCloudInitMirrors struct {
-	APT []string `yaml:"apt,omitempty" json:"apt,omitempty"`
-
-	DNF []string `yaml:"dnf,omitempty" json:"dnf,omitempty"`
-
-	Pacman []string `yaml:"pacman,omitempty" json:"pacman,omitempty"`
-}
-
-type VmCharlyInstall struct {
-	// VmCharlyInstall has ONLY `strategy` (the vm-spec skill's url/checksum are
-	// STALE — the Go struct dropped them). auto: scp host binary post-boot;
-	// scp: explicit form; skip: user-managed.
-	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
 }
 
 type KubevirtNetwork struct {
@@ -7504,41 +8394,164 @@ type CacheTransferReply struct {
 	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
 }
 
-// #ContainerDiskEmitRequest — the verb:oci container-disk-emit wire input: a
-// materialized guest disk, the in-layer path it is stored at, the OCI config
-// labels to carry, and the registry reference to push. Single-sourced here (R3)
-// so candy/plugin-oci's emit leg and its callers (`charly vm box publish`, the
-// Cua Fleet surface) share ONE decoded type instead of two hand-written copies.
-// disk_path is the host path of the disk; in_image_path defaults to the KubeVirt
-// containerDisk contract /disk/disk.img; layout_dir optionally also writes a
-// local OCI Image Layout (oci:<dir>).
-type ContainerDiskEmitRequest struct {
-	DiskPath string `yaml:"disk_path,omitempty" json:"disk_path"`
-
-	InImagePath string `yaml:"in_image_path,omitempty" json:"in_image_path,omitempty"`
-
-	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+// #PluginArtifactTransferRequest — the verb:oci plugin-push / plugin-pull wire
+// input: the OCI Image Layout directory the plugin artifact is emitted to or
+// materialized in, and the registry reference it moves to/from. ONE pair for both
+// legs, exactly the #CacheTransferRequest/#CacheTransferReply precedent (R3):
+// plugin-oci's transport legs and their consumers decode ONE type instead of two
+// hand-written copies that can drift.
+//
+// The transport is REF-AGNOSTIC: `ref` is any distribution-spec reference, so it
+// also addresses a registry charly itself serves — nothing here assumes who runs it.
+// `platform` selects which per-platform manifest to emit or consume; empty means the
+// runtime's own GOOS/GOARCH. A request naming a platform the artifact does not carry
+// is an ERROR naming what WAS available (#PluginArtifactTransferReply.platforms) —
+// never a fall-through to whichever platform happens to be there.
+type PluginArtifactTransferRequest struct {
+	Dir string `yaml:"dir,omitempty" json:"dir"`
 
 	Ref string `yaml:"ref,omitempty" json:"ref"`
 
 	Insecure bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
 
-	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
+	Platform string `yaml:"platform,omitempty" json:"platform,omitempty"`
 }
 
-// #ContainerDiskEmitReply — the emit result: the pushed digest, the media type
-// actually written (the caller asserts the +gzip containerDisk contract), the
-// layer byte size, and the layout dir when one was requested.
-type ContainerDiskEmitReply struct {
-	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
-
+// #PluginArtifactTransferReply — the transport result: the resolved digest of what
+// was moved (the index for a push, the SELECTED per-platform manifest for a pull —
+// the digest the consumer verifies and keys its store by, D-STORE-3/4), the platform
+// actually selected, the canonicalised ref, and every platform the artifact
+// advertises, so a caller that could not be served can name the alternatives.
+type PluginArtifactTransferReply struct {
 	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
 
-	MediaType string `yaml:"media_type,omitempty" json:"media_type,omitempty"`
+	Ref string `yaml:"ref,omitempty" json:"ref,omitempty"`
 
-	LayerSize int64 `yaml:"layer_size,omitempty" json:"layer_size,omitempty"`
+	Platform string `yaml:"platform,omitempty" json:"platform,omitempty"`
 
-	LayoutDir string `yaml:"layout_dir,omitempty" json:"layout_dir,omitempty"`
+	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty"`
+}
+
+// #PluginArtifactMetadata — the CONTENT of a plugin artifact's `config` blob (the
+// image-spec artifact decision-tree case 3: content blobs + JSON configuration), i.e.
+// everything a consumer must know to decide whether the pulled binary may run here.
+//
+// It is the D-STORE-4 key, spelled out: "a plugin binary's key covers its module source,
+// go.sum, the toolchain and the platform". The store keys on it, so two builds that differ
+// in ANY of those are two entries, never one entry that silently serves the wrong bytes.
+//
+// VERIFY HARD (a mismatch is a hard error before the binary is served):
+//   - platform — restated from the index descriptor the consumer SELECTED. The two must
+//     agree: a manifest whose config claims a different platform than the descriptor that
+//     pointed at it is an integrity failure, not a redundancy;
+//   - platform.libc — a glibc binary does not run on a musl host, and image-spec's
+//     `platform` object CANNOT express libc (its Platform Variants table maps variant to
+//     GOARM/GOARM64/GOPPC64/GORISCV64/GOAMD64 only). MEASURED: two `linux/amd64`
+//     descriptors with byte-identical platform objects but different libc, under the
+//     spec's "first matching entry SHOULD be used", make the second UNREACHABLE — so libc
+//     is a charly field beside the platform facts it qualifies, never a `variant` value;
+//   - protocol — the go-plugin transport family (spec/transport.Handshake.ProtocolVersion).
+//     Declared so a mismatch fails HERE, clearly, instead of as a handshake refusal; the
+//     value must come from the ONE constant, never a transcribed copy.
+//
+// RECORD AND REPORT (never hard-gated): calver, served_schema_digest, revision, toolchain.
+// The authoritative wireframe check is the CUE schema the binary serves over Describe —
+// spliced and gated by the host — so a stale calver whose schema still splices is harmless,
+// and gating on it would refuse working plugins. Reporting it is what makes the skew visible.
+//
+// ONE RULE OVER EVERY DECLARED IDENTITY FACT: it must be RECOMPUTABLE by the consumer from
+// the artifact or from the running binary. A digest that reproduces from nothing is worse
+// than no digest at all — it looks like a pin and checks nothing (measured: an earlier
+// candidate field reproduced from no file, no served body, no concat of the layer digests).
+type PluginArtifactMetadata struct {
+	// module: the provider's Go module path (e.g. github.com/opencharly/plugin-bpf/candy/plugin-bpf).
+	Module string `yaml:"module,omitempty" json:"module"`
+
+	// revision: the source-control revision the binary was built from. DECLARED, not
+	// verifiable: the same source built from a different path yields a different binary,
+	// so a consumer can only compare this against what it was told, never re-derive it.
+	// (Publish with `-trimpath` to at least make the build path-independent.)
+	Revision string `yaml:"revision,omitempty" json:"revision"`
+
+	// go_sum: the digest of the module's go.sum at build time (D-STORE-4's second component).
+	Go_sum string `yaml:"go_sum,omitempty" json:"go_sum"`
+
+	// toolchain: the Go toolchain that produced the binary (e.g. go1.26.0).
+	Toolchain string `yaml:"toolchain,omitempty" json:"toolchain"`
+
+	// platform: the build's own identity, in the image-spec `platform` vocabulary the
+	// index descriptor also uses — plus the one fact that vocabulary cannot carry.
+	Platform struct {
+		Os string `yaml:"os,omitempty" json:"os"`
+
+		Architecture string `yaml:"architecture,omitempty" json:"architecture"`
+
+		Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
+
+		// libc: the C library the binary links against. See the header: image-spec
+		// cannot express this, and a musl host must refuse a glibc binary by name.
+		Libc string `yaml:"libc,omitempty" json:"libc"`
+	} `yaml:"platform,omitempty" json:"platform"`
+
+	// protocol: the transport family the binary was built against. OPTIONAL DIAGNOSTIC, not
+	// a gate: DESIGN §8 says "There is no version negotiation. Compatibility is the
+	// validation of every message (D-PROTO-6)" — so this fact may be REPORTED by a consumer
+	// and is never the thing that keeps a wrong binary out. A required field here would
+	// over-constrain every artifact for no safety gain.
+	Protocol int64 `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+
+	// calver: the charly release the plugin was built against. OPTIONAL DIAGNOSTIC, same
+	// reason as protocol — reported, never gated.
+	Calver string `yaml:"calver,omitempty" json:"calver,omitempty"`
+
+	// served_schema_digest: TRANSITIONAL — a current-mechanism fact, not the design's answer.
+	// DESIGN §8.1 publishes a plugin release's CUE module as DATA, addressed by digest, and
+	// DESIGN §4 has core read schemas "without starting the plugin"; until that leg lands,
+	// the schema a binary SERVES over Describe is the only identity a consumer can verify, so
+	// this field declares it. It is kept — and labelled transitional rather than presented as
+	// the target — because removing it before the CUE-module leg exists would leave NOTHING
+	// checkable.
+	//
+	// sha256 of the CUE schema body the binary SERVES over Describe —
+	// the concatenated per-file body `registerPluginUnitSchema` actually splices, NOT a
+	// digest over a `schema/` directory listing. MEASURED: the two differ, and the file-set
+	// value is unrecomputable where only the binary exists (a deployed container has no
+	// schema dir), so the SERVED value is the one that can be checked at all. It lets a
+	// consumer say WHICH schema it is about to splice before it splices it.
+	Served_schema_digest string `yaml:"served_schema_digest,omitempty" json:"served_schema_digest"`
+
+	// runtime_requires: the OS packages / host tools this provider NEEDS AT RUNTIME,
+	// projected from the plugin candy's OWN `package:` / `distro:` declaration — the one
+	// declaration TODO 6.9 names ("each plugin candy declares the OS packages it needs to
+	// run"). This is NOT a second declaration surface: the candy is the source, and these
+	// are the same facts travelling with the artifact.
+	//
+	// REQUIRED, and an empty list is a CLAIM ("this provider shells out to nothing"), not a
+	// placeholder — because the harm is silence. MEASURED: a provider that runs
+	// `exec.Command("zcat", "/proc/config.gz")` whose report prints `N/A` for two kernel
+	// features when `zcat` is absent, and `y` when it is present, declared nothing — so an
+	// artifact could not say what was missing, and the consumer could not say it either.
+	// The consumer reports a MISSING listed tool; it never reads an absent list as "needs
+	// nothing".
+	//
+	// The PUBLISHER projects this set from the candy's declaration and HARD-ERRORS when the
+	// plugin candy declares no package set at all — an explicit empty declaration
+	// (`package: []`) is the only way to say "no runtime tools". A projection that cannot
+	// find a declaration must never quietly become an empty list; that is precisely the
+	// silent-N/A failure the field exists to prevent.
+	Runtime_requires []string `yaml:"runtime_requires,omitempty" json:"runtime_requires"`
+
+	// providers: the "<class>:<word>[:<parent>]" words this binary serves — the same set
+	// its `.providers` layer carries and its Describe advertises. Three copies of one fact
+	// on purpose: the layer is what makes a source-less PRESCAN possible, this is what the
+	// consumer can check before connecting, and Describe is the authority afterwards.
+	Providers []PluginCapability `yaml:"providers,omitempty" json:"providers"`
+
+	// layers: layer ROLE → the descriptor digest the manifest carries for it. Roles are
+	// "binary" | "manifest" | "providers" (the media types below identify the same three;
+	// the map lets a consumer assert "the binary blob I verified is the one this metadata
+	// names" without re-deriving which layer is which). Recomputed from the manifest.
+	Layers map[string]string `yaml:"layers,omitempty" json:"layers"`
 }
 
 // #PipelineRetry — lobster `retry`: retry the failed step up to `max` attempts.
@@ -7598,15 +8611,23 @@ type PipelineArms struct {
 
 	Workflow string `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 
-	WorkflowArgs map[string]string `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
+	// workflow_args — the sub-workflow invocation's RUNTIME arg values, so the SAME
+	// admission as `#WorkflowRunRequest.args` (`#WorkflowArgVal`). The lowered step's
+	// `workflow_args` is the engine's own `{[string]: _}` (lobster.cue) and lands in the
+	// same `resolveWorkflowArgs(map[string]any)` the run request does, so a scalar-only
+	// spelling here would be a SECOND rule for one question — "what may a workflow arg
+	// value be" — and a lane that works at the top level would fail one step down.
+	WorkflowArgs map[string]any `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
 
 	Parallel PipelineParallel `yaml:"parallel,omitempty" json:"parallel,omitempty"`
 
 	ForEach string `yaml:"for_each,omitempty" json:"for_each,omitempty"`
 
+	Lanes string `yaml:"lanes,omitempty" json:"lanes,omitempty"`
+
 	Input PipelineInput `yaml:"input,omitempty" json:"input,omitempty"`
 
-	// --- for_each companions (meaningful only alongside for_each) ---
+	// --- for_each / lanes companions (meaningful only alongside for_each or lanes) ---
 	ItemVar string `yaml:"item_var,omitempty" json:"item_var,omitempty"`
 
 	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
@@ -7702,15 +8723,23 @@ type PipelineStepBase struct {
 
 	Workflow string `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 
-	WorkflowArgs map[string]string `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
+	// workflow_args — the sub-workflow invocation's RUNTIME arg values, so the SAME
+	// admission as `#WorkflowRunRequest.args` (`#WorkflowArgVal`). The lowered step's
+	// `workflow_args` is the engine's own `{[string]: _}` (lobster.cue) and lands in the
+	// same `resolveWorkflowArgs(map[string]any)` the run request does, so a scalar-only
+	// spelling here would be a SECOND rule for one question — "what may a workflow arg
+	// value be" — and a lane that works at the top level would fail one step down.
+	WorkflowArgs map[string]any `yaml:"workflow_args,omitempty" json:"workflow_args,omitempty"`
 
 	Parallel PipelineParallel `yaml:"parallel,omitempty" json:"parallel,omitempty"`
 
 	ForEach string `yaml:"for_each,omitempty" json:"for_each,omitempty"`
 
+	Lanes string `yaml:"lanes,omitempty" json:"lanes,omitempty"`
+
 	Input PipelineInput `yaml:"input,omitempty" json:"input,omitempty"`
 
-	// --- for_each companions (meaningful only alongside for_each) ---
+	// --- for_each / lanes companions (meaningful only alongside for_each or lanes) ---
 	ItemVar string `yaml:"item_var,omitempty" json:"item_var,omitempty"`
 
 	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
@@ -7736,12 +8765,18 @@ type PipelineStep PipelineStepBase
 // deploy.schedule, a k8s CronJob and GitHub Actions `on.schedule` use, so one
 // authored schedule lowers to every consumer; the lobster engine converts it to a
 // systemd `OnCalendar` (validated with `systemd-analyze calendar`).
+//
+// `args` is the scheduled run's RUNTIME arg values — the same field, and therefore
+// the same `#WorkflowArgVal` admission, as `#WorkflowRunRequest.args`. It is
+// normalized into `#WorkflowSchedule.args` verbatim, so a lane that works on a
+// manual run works on a scheduled one; a scalar-only schedule would be the silent
+// half-fix that this def and its engine twin are one mechanism to prevent.
 type PipelineSchedule struct {
 	Cron string `yaml:"cron,omitempty" json:"cron"`
 
 	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
 
-	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+	Args map[string]any `yaml:"args,omitempty" json:"args,omitempty"`
 
 	Persistent bool `yaml:"persistent,omitempty" json:"persistent,omitempty"`
 }
@@ -9768,6 +10803,8 @@ type ResolvedVm struct {
 
 	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 
+	Krun *VmKrun `yaml:"krun,omitempty" json:"krun,omitempty"`
+
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
 	Snapshots []VmSnapshot `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
@@ -9789,6 +10826,38 @@ type VmNetwork struct {
 	// auto-allocates a free host port at vm-create (persisted in vm_state,
 	// reused across the create→deploy-add sequence), the sibling of ssh.port_auto.
 	PortForwards []string `yaml:"port_forwards,omitempty" json:"port_forwards,omitempty"`
+}
+
+// #VmKrun — the krun backend's knobs. The BLOCK is optional, and meaningful
+// only when the resolved backend is krun. A krun guest's root is a containerd
+// snapshot, so the libvirt/qemu-only fields are rejected by the cross-rule on
+// #Vm below.
+//
+// The fields are required-WITH-DEFAULT, not optional: `krun: {}` must yield the
+// measured defaults (that is what makes them DATA rather than a consumer-side
+// literal). A consumer applies the same defaults when the whole block is absent.
+type VmKrun struct {
+	// network: tsi (the default) or passt. passt is required for in-guest CRIU
+	// and for an image whose krun.network label asks for it; tsi collapses the
+	// pod netns.
+	Network string `yaml:"network,omitempty" json:"network"`
+
+	// kernel: stock (libkrunfw) or image (a custom kernel baked for the guest).
+	Kernel string `yaml:"kernel,omitempty" json:"kernel"`
+
+	NestedVirt bool `yaml:"nested_virt,omitempty" json:"nested_virt"`
+
+	GPU string `yaml:"gpu,omitempty" json:"gpu"`
+
+	// gpu_flags is libkrun's virtio-gpu feature bitmask. 962 is the measured
+	// default (venus + the working feature set), 1410 is the GL-only override,
+	// and 1283 is known-broken — the data default is the working one.
+	GPUFlags int `yaml:"gpu_flags,omitempty" json:"gpu_flags"`
+
+	// ram_headroom_mib is subtracted from the guest RAM for the krun host
+	// overhead. 256 is the measured default; a GPU guest needs the caller to
+	// raise RAM, not lower this.
+	RAMHeadroomMiB int `yaml:"ram_headroom_mib,omitempty" json:"ram_headroom_mib"`
 }
 
 type VmSnapshot struct {
@@ -9965,29 +11034,47 @@ type ResolvedSidecarVolume struct {
 // candy's charly.yml (ParseDoc iterates every top-level node, each with its own single kind
 // discriminator), so a candy file stacks its `candy:` node plus the `skill:` nodes it owns.
 //
-// The FULL skill definition is INLINE: every metadata field plus the markdown content as a block
-// scalar — nothing is fetched from elsewhere. The marketplace generator (candy/plugin-marketplace,
-// command:marketplace) synthesizes plugins/<family>/skills/<name>/SKILL.md + references/*.md from
-// these entities; CollectSkills (sdk/deploykit) projects the composed candies' skills into the
-// `ai.opencharly.skill` OCI label so a built image is self-describing (readable via
-// `charly box labels` / `charly deploy from-box`, no external fetch).
+// The skill's BODY lives in a FILE (the `.agents/skills` relocation). A skill is authored at
+// <tree>/<name>/SKILL.md plus references/<stem>.md, where <tree> is the owning candy's `skills:`
+// list (default `.agents/skills`) and <name> is this node's `name:` — or the NODE NAME when
+// `name:` is omitted.
+//
+// An `agent`-type node is a SUB-AGENT DEFINITION, not a skill: it does NOT live under the skills
+// tree, and `skills:` does not move it. Its body is authored at `.agents/agents/<name>.md` — the
+// Agent-Skills location for agent definitions. An `agent` node with neither an in-line `content:`
+// nor that file is a hard error in the generator, never an empty projection.
+//
+// This node therefore carries the ROUTING the consumers need — family (which corpus family the
+// skill lands in), owner (the OCI-label association), triggers (the R0 dispatcher rows), category —
+// while `description:`/`content:`/`references:` are the TRANSITIONAL in-line form: an entity still
+// carrying them is read from here; once its body has moved to the file they are OMITTED and the
+// file is the source of record. A repo mid-move may carry both, and the read order while both
+// exist is the generator's contract (`/charly-internals:marketplace`), not this schema's. The
+// in-line form is deleted outright by the relocation's final leg.
+//
+// The marketplace generator (candy/plugin-marketplace, command:marketplace) synthesizes
+// <family>/skills/<name>/SKILL.md + references/*.md — or <family>/agents/<name>.md for an
+// `agent`-type node, from the same file shapes; CollectSkills (sdk/deploykit) projects the
+// composed candies' skills into the `ai.opencharly.skill` OCI label so a built image is
+// self-describing (readable via `charly box labels` / `charly deploy from-box`, no external fetch).
 //
 // owner is the candy/concept-candy entity name that owns this skill — the build-time association
 // that decides which images carry it (CollectSkills filters by owner ∈ composed candy chain).
-// family is the marketplace family (the plugins/ directory name) the generator groups by.
+// family is the marketplace family (the corpus directory name) the generator groups by.
 //
-// type: "agent" marks a sub-agent definition (the former plugins/<family>/agents/*.md) — one
-// unified doc kind, same lifecycle; model/tools carry the agent frontmatter fields.
+// type: "agent" marks a sub-agent definition (the former <family>/agents/*.md) — one
+// unified doc kind, same lifecycle; model/tools carry the agent frontmatter fields. It is the one
+// type whose body is NOT under a `skills:` tree: see `.agents/agents/<name>.md` above.
 type Skill struct {
-	Name string `yaml:"name,omitempty" json:"name"`
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
 	Family string `yaml:"family,omitempty" json:"family"`
 
 	Owner string `yaml:"owner,omitempty" json:"owner"`
 
-	Description string `yaml:"description,omitempty" json:"description"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
-	Content string `yaml:"content,omitempty" json:"content"`
+	Content string `yaml:"content,omitempty" json:"content,omitempty"`
 
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 
@@ -10034,7 +11121,8 @@ type ToolStatus struct {
 }
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
-// deployment substrate (pod / vm / kubernetes / local / android / kindcluster). kind discriminates the
+// deployment substrate (pod / vm / kubernetes / local / android / kindcluster /
+// kubevirt / firecracker). kind discriminates the
 // substrate; nested carries multi-hop children (RECURSIVE self-reference, populated
 // by the nested overlay); source records provenance (libvirt|ledger|adb|tree|podman).
 type DeploymentStatus struct {
@@ -10225,11 +11313,18 @@ type PodResolveReply struct {
 }
 
 // #ResolvedKubernetes is the resolve-to-envelope form of a `kubernetes:` cluster
-// template. The kernel reads only KubeconfigContext (the deploy preresolver); the
-// full cluster model rides opaquely in Raw and is decoded by candy/plugin-k8sgen,
-// never the kernel.
+// template. The kernel reads only KubeconfigContext / Kubeconfig (the deploy
+// preresolver); the full cluster model rides opaquely in Raw and is decoded by
+// candy/plugin-k8sgen, never the kernel.
 type ResolvedKubernetes struct {
 	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
+
+	// kubeconfig is the kubeconfig FILE the cluster template named (empty → the
+	// ambient `$KUBECONFIG` / `~/.kube/config`). It rides the resolve envelope
+	// beside the context so a consumer that must reach the cluster WITHOUT the
+	// ambient file — an externally-managed cluster's per-cluster kubeconfig —
+	// honours the same file the template declared.
+	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
 
 	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
@@ -10288,6 +11383,29 @@ type KubeVirtResolveReply struct {
 	Resolved *ResolvedKubeVirt `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
+// #ResolvedFirecracker is the resolve-to-envelope form of a `firecracker:` template
+// (a microVM: a rootfs artefact + a kernel booted directly under KVM). The kernel
+// reads only the venue hint — the host the microVMs run on, which the deploy
+// preresolver resolves like the vm/kubevirt substrates do; the full microVM model
+// rides opaquely in Raw and is decoded by candy/plugin-firecracker, never the kernel.
+type ResolvedFirecracker struct {
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
+
+	SSHUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
+
+	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
+}
+
+// #FirecrackerResolveInput carries one opaque kind:firecracker template body to project.
+type FirecrackerResolveInput struct {
+	Firecracker RawBody `yaml:"firecracker,omitempty" json:"firecracker"`
+}
+
+// #FirecrackerResolveReply wraps the resolved firecracker template.
+type FirecrackerResolveReply struct {
+	Resolved *ResolvedFirecracker `yaml:"resolved,omitempty" json:"resolved,omitempty"`
+}
+
 // #LocalResolveInput / #AndroidResolveInput carry one opaque template body to
 // project.
 type LocalResolveInput struct {
@@ -10323,6 +11441,8 @@ type SubstrateTemplateResolveRequest struct {
 	Vm *VmResolveInput `yaml:"vm,omitempty" json:"vm,omitempty"`
 
 	KubeVirt *KubeVirtResolveInput `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+
+	Firecracker *FirecrackerResolveInput `yaml:"firecracker,omitempty" json:"firecracker,omitempty"`
 }
 
 // #VmResolveInput carries one opaque vm template body to project (Cutover L).
@@ -10478,6 +11598,13 @@ type ValidateWordSetsReply struct {
 	ActCapableVerbs []string `yaml:"act_capable_verbs,omitempty" json:"act_capable_verbs,omitempty"`
 }
 
+// #VmBackendName — the CLOSED VM-backend PROVIDER vocabulary, with no
+// resolution selector. `charly task cue-gen` emits it as spec.VmBackends, so a
+// resolver validates `--backend` / `CHARLY_VM_BACKEND` / `vm.backend` against the
+// schema's own word list instead of carrying literals. `auto` is NOT a member:
+// it is a resolution selector, never a provider word.
+type VmBackendName string
+
 type Vm struct {
 	Source VmSource `yaml:"source,omitempty" json:"source"`
 
@@ -10501,10 +11628,18 @@ type Vm struct {
 
 	Autostart bool `yaml:"autostart,omitempty" json:"autostart"`
 
+	// krun carries the krun backend's knobs. Optional and ignored by the other
+	// backends; the consumer applies its defaults when the resolved backend is
+	// krun and the block is absent.
+	Krun *VmKrun `yaml:"krun,omitempty" json:"krun,omitempty"`
+
 	Network *VmNetwork `yaml:"network,omitempty" json:"network,omitempty"`
 
 	SSH *VmSsh `yaml:"ssh,omitempty" json:"ssh,omitempty"`
 
+	// The explicit pointer type keeps the generated Go field as *VmCloudInit even
+	// though the krun guard above adds the `null` arm (a bare `optional=nillable`
+	// degrades to an anonymous struct in that case).
 	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
 
 	// mcp_provide: a kind:vm entity declares its MCP servers (e.g. the
@@ -11401,6 +12536,16 @@ type VmBoxMetadata struct {
 	// existing primitive from this record.
 	Source VmBoxSource `yaml:"source,omitempty" json:"source,omitempty"`
 
+	// artifacts — WHERE the files this box delivers live INSIDE the image, for a box
+	// that carries more than one. A disk-only VM box needs no such record: its single
+	// file's location is the shipped path convention (/disk.qcow2, or /disk/disk.img
+	// for the KubeVirt containerDisk shape) and stays a constant in the reader. A
+	// microVM box carries a ROOT DRIVE and a KERNEL together, so the reader must be
+	// told where each one is and the emitter must be able to name more than one file.
+	// What each artefact IS lives on #VmBoxSource (one fact, one place); this record
+	// carries only the layout.
+	Artifacts VmBoxArtifacts `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
+
 	// description — human-facing description of the box.
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
@@ -11410,13 +12555,16 @@ type VmBoxMetadata struct {
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 }
 
-// #VmBoxSource — provenance of a VM box's disk artifact: the source kind that produced
-// it plus the kind-specific origin reference. The kind space is the arms a VM BOX can be
-// built from — (cloud_image | bootc | clone | bootstrap | iso | container_disk) — so every
-// arm that emits a box leaves a resolvable provenance record; one arm's fields are
-// populated per kind. A #VmSource arm that emits NO box is deliberately absent: `imported`
-// tracks an externally-managed disk for lifecycle only (`charly vm build` is a no-op), so
-// it can never produce the artifact this record describes.
+// #VmBoxSource — provenance of a VM box's artifact: the source kind that produced it
+// plus the kind-specific origin reference. The kind space is the arms a VM BOX can be
+// built from — (cloud_image | bootc | clone | bootstrap | iso | container_disk | rootfs
+// | kernel) — so every arm that emits a box leaves a resolvable provenance record; one
+// arm's fields are populated per kind. A #VmSource arm that emits NO box is deliberately
+// absent: `imported` tracks an externally-managed disk for lifecycle only
+// (`charly vm build` is a no-op), so it can never produce the artifact this record
+// describes. The last two arms are the MICROVM pair — a root drive and the kernel booted
+// with it — which the VMM attaches as two separate files (the substrate contract is
+// `kind: firecracker`, spec#227).
 type VmBoxSource struct {
 	Kind string `yaml:"kind,omitempty" json:"kind"`
 
@@ -11432,8 +12580,54 @@ type VmBoxSource struct {
 	// cloud_image | iso: the artifact url the disk was fetched from.
 	URL string `yaml:"url,omitempty" json:"url,omitempty"`
 
-	// container_disk: the OCI artifact ref the disk was pulled from.
+	// container_disk | rootfs | kernel: the OCI artifact ref the file was pulled from (or,
+	// for a rootfs, the image whose tree was materialized into the ext4 file).
 	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+
+	// rootfs | kernel: what the delivered file IS — the fact the layout record
+	// deliberately does not repeat.
+	//
+	// rootfs is a microVM ROOT DRIVE: the file the VMM attaches directly. It is built
+	// from an OCI image's tree (`mke2fs -t ext4 -d <tree> <file>`), the one producer
+	// that works on a host with no loop device, no device-mapper and no privileged
+	// container (umbrella ledger probe P3).
+	// kernel is the uncompressed vmlinux the VMM loads alongside it.
+	Format string `yaml:"format,omitempty" json:"format,omitempty"`
+
+	// rootfs: the size the rootfs was built at, in MiB. The deploy needs it to decide
+	// whether the delivered filesystem has to GROW before the guest boots — a truncated
+	// file alone does not grow the filesystem inside it.
+	DiskMiB int `yaml:"disk_mib,omitempty" json:"disk_mib,omitempty"`
+
+	// kernel: the digest of the delivered kernel, so a boot can name exactly the kernel
+	// it ran without re-reading the source artefact.
+	SHA256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
+
+	// kernel: the kernel RELEASE the artefact carries (the version the guest reports),
+	// distinct from the artefact's own version.
+	Release string `yaml:"release,omitempty" json:"release,omitempty"`
+
+	// kernel: the command line to boot it with. For a TAP network this is where the
+	// guest's address is delivered (`ip=<guest>::<host>:<mask>::<iface>:off`), which is
+	// why it belongs to the artefact rather than to each deploy that boots it.
+	Cmdline string `yaml:"cmdline,omitempty" json:"cmdline,omitempty"`
+}
+
+// #VmBoxArtifacts — the IN-IMAGE layout of a box that delivers more than one file.
+// Absent for the disk-only shapes. Present for the microVM shape, which delivers a root
+// drive AND a kernel and hands the VMM both paths.
+//
+// Every field is optional: an image published before this record existed carries none,
+// and a future shape may deliver a different subset. The paths are container-absolute
+// and are validated at the emitter's boundary (sdk/deploykit.validInImagePath) — they
+// are written UNQUOTED into the generated Containerfile, so an unvalidated value would
+// be a build-instruction injection surface.
+type VmBoxArtifacts struct {
+	// rootfs_path — where the root drive file lives in the image.
+	RootfsPath string `yaml:"rootfs_path,omitempty" json:"rootfs_path,omitempty"`
+
+	// kernel_path — where the kernel file lives in the image.
+	KernelPath string `yaml:"kernel_path,omitempty" json:"kernel_path,omitempty"`
 }
 
 // #VmSnapshotCreateOpts parameterizes the creation of a snapshot — the host-resolved payload for
@@ -11580,7 +12774,7 @@ type WorkflowSchedule struct {
 
 	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
 
-	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+	Args map[string]any `yaml:"args,omitempty" json:"args,omitempty"`
 
 	Persistent bool `yaml:"persistent,omitempty" json:"persistent,omitempty"`
 }
@@ -11618,10 +12812,20 @@ type WorkflowStepResult struct {
 }
 
 // #WorkflowRunRequest — start a workflow.
+//
+// `args` carries the run's RUNTIME arg values, so it admits `#WorkflowArgVal` (a
+// scalar, or a flat sequence of scalars) rather than the scalar-only `#StrVal`: a
+// workflow that operates on a list — the retired lane model's `--prs a b c` — has
+// no other channel to receive one. The WIRE is unchanged: still one JSON object
+// mapping arg name to value, and every payload that validated before still
+// validates, because the admitted value set only GREW. What changes is the
+// generated Go field, `map[string]string` → `map[string]any`, which is a
+// compile-time change for a Go caller that BUILDS the request and no change at all
+// for anything that only reads the JSON.
 type WorkflowRunRequest struct {
 	Pipeline string `yaml:"pipeline,omitempty" json:"pipeline"`
 
-	Args map[string]string `yaml:"args,omitempty" json:"args,omitempty"`
+	Args map[string]any `yaml:"args,omitempty" json:"args,omitempty"`
 
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
 

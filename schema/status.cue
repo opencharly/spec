@@ -30,10 +30,15 @@
 // the wire boundary; @go(-) suppresses a (degraded) generated Go type — the named
 // Go type + typed consts are hand-written in spec/status_types.go and referenced by
 // #DeploymentStatus.kind via @go(Kind,type=SubstrateKind).
-#SubstrateKind: "pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" @go(-)
+//
+// kubevirt was missing here while spec/status_types.go already carried
+// SubstrateKubevirt; firecracker joins both in the same change, so the CUE enum and
+// the hand-written Go consts name the same substrates again.
+#SubstrateKind: "pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" | "kubevirt" | "firecracker" @go(-)
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
-// deployment substrate (pod / vm / kubernetes / local / android / kindcluster). kind discriminates the
+// deployment substrate (pod / vm / kubernetes / local / android / kindcluster /
+// kubevirt / firecracker). kind discriminates the
 // substrate; nested carries multi-hop children (RECURSIVE self-reference, populated
 // by the nested overlay); source records provenance (libvirt|ledger|adb|tree|podman).
 #DeploymentStatus: {

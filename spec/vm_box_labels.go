@@ -36,6 +36,11 @@ var VmBoxLabelMap = map[string]string{
 	// Disk provenance + the baked check plan.
 	"Source": LabelVmBox,
 	"Plan":   LabelVmBox,
+
+	// The in-image layout of a box that delivers MORE than one file — the microVM
+	// shape, which carries a root drive and a kernel together. It rides the same
+	// whole-struct label as every other VM-box field.
+	"Artifacts": LabelVmBox,
 }
 
 // CheckVmBoxLabelCompleteness returns an error listing any spec.VmBoxMetadata exported

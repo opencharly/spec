@@ -57,7 +57,7 @@ type JumpKind int
 
 const (
 	// JumpContainerExec enters a container with `<engine> exec -i <name>`, where
-	// <engine> is NestedJump.Engine (podman / docker / nerdctl). The transport is
+	// <engine> is NestedJump.Engine (podman / docker / containerd). The transport is
 	// identical across engines — only the binary differs — so the engine is DATA
 	// on the jump (NestedJump.Engine), not one enum arm per engine. This is why a
 	// new engine needs no new JumpKind: it sets Engine.
@@ -77,7 +77,7 @@ const (
 // NestedJump describes one hop into a nested environment. The Target
 // string's meaning depends on Kind:
 //
-//	JumpContainerExec: container name (Engine holds the CLI: podman/docker/nerdctl).
+//	JumpContainerExec: container name (Engine holds the CLI: podman/docker/containerd).
 //	JumpSSH:           "[user@]host[:port]" or an
 //	                   ssh-config alias (e.g.
 //	                   "charly-<vmname>"). ssh(1) reads
@@ -90,7 +90,7 @@ type NestedJump struct {
 	Target string
 
 	// Engine is the container-engine CLI for a JumpContainerExec hop — one of
-	// the CUE-owned engine words (podman / docker / nerdctl). Empty defaults to
+	// the CUE-owned engine words (podman / docker / containerd). Empty defaults to
 	// podman (the historical default). The engine is DATA here so
 	// the exec argv is built from the engine vocabulary, never an enum arm.
 	Engine string
@@ -168,10 +168,16 @@ const defaultContainerEngine = spec.DefaultContainerEngine
 // engineBinary returns the container-engine CLI for a container-exec jump:
 // NestedJump.Engine, defaulting to podman when unset.
 func (j NestedJump) engineBinary() string {
-	if j.Engine != "" {
-		return j.Engine
+	// Engine is an engine WORD (#EngineName), not a binary: containerd is driven
+	// through nerdctl. Resolve it through the CUE-owned #EngineBinaries table so
+	// the jump never invokes a non-existent `containerd exec`, without importing
+	// spec/container (which imports THIS package — an import cycle). The
+	// empty/unknown word resolves to the ONE default engine, preserving the
+	// historical fallback.
+	if binary, ok := spec.EngineBinaries[j.Engine]; ok {
+		return binary
 	}
-	return defaultContainerEngine
+	return spec.EngineBinaries[spec.DefaultContainerEngine]
 }
 
 // isContainerKind reports whether a JumpKind enters a container. One transport
@@ -743,13 +749,16 @@ func buildContainerEnvFlags() string {
 // `--env HOME=` values an exec hop should pass. Returns ("", "") when the
 // container is not found or carries neither.
 //
+// binary is the CLI BINARY, not the engine word: every caller passes
+// NestedJump.engineBinary(), which resolves containerd → nerdctl.
+//
 // The values come from the container's own runtime config (.Config.User /
 // .Config.Env), which is authoritative: the exec-resolution race (issue #149)
 // breaks the DERIVED session env (uid=1000 gid=0, empty HOME) for containers
 // created during a concurrent bed window, NOT the spec. Reading the spec and
 // passing it back explicitly makes the session env deterministic.
-func containerExecUserHome(engine, containerName string) (user, home string) {
-	out, _, _, err := RunCaptureCmd(exec.Command(engine, "inspect", "--format", "{{.Config.User}}|{{range .Config.Env}}{{.}}\n{{end}}", containerName))
+func containerExecUserHome(binary, containerName string) (user, home string) {
+	out, _, _, err := RunCaptureCmd(exec.Command(binary, "inspect", "--format", "{{.Config.User}}|{{range .Config.Env}}{{.}}\n{{end}}", containerName))
 	if err != nil {
 		return "", ""
 	}

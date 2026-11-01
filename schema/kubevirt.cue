@@ -29,6 +29,22 @@
 	// source — the boot medium. Exactly one arm (enforced in OpValidate).
 	source: #KubevirtSource @go(Source,type=KubevirtSource)
 
+	// distro / ssh_user — the GUEST identity of the boot medium: the same pair
+	// #VmBoxMetadata carries for a containerDisk's OCI label (same Go field names,
+	// one vocabulary). A `container_disk` source reads them from the VM box's
+	// labels (deploykit.VmCapabilitiesFromLabels); every OTHER arm (data_volume /
+	// pvc / clone) is a bare disk with no metadata to read, so it MUST declare them
+	// here. An explicit value always wins over box metadata.
+	//
+	// Both are plain `string`, deliberately, exactly as #VmBoxMetadata.distro is:
+	// the #DistroID vocabulary def is `@go(-)` (it generates no Go type), so a field
+	// that references it emits an undefined Go identifier. The id is validated
+	// against #DistroID — and required for every non-containerDisk arm — by
+	// candy/plugin-kubevirt's OpValidate, beside the exactly-one-boot-arm and
+	// GPU/instancetype XOR rules this file's header documents as its home.
+	distro?:   string @go(Distro)
+	ssh_user?: string @go(SSHUser)
+
 	// --- domain shape ---
 	memory?: #VmSize @go(Memory)
 	cpu?:    #KubevirtCPU @go(CPU,optional=nillable)
@@ -144,6 +160,12 @@
 	rng?: bool
 	// disks/filesystems are the extra (non-boot) volumes, typed-open passthrough.
 	disks?: [...{[string]: _}]
+	// host_devices is KubeVirt host-device passthrough (spec.domain.devices.hostDevices).
+	// It is the ONLY way a guest gets its own /dev/kvm, which is what nested virtualisation
+	// needs; a CPU feature alone is not enough. The device vocabulary belongs to the
+	// cluster's device plugin — on quant-dev it advertises `devices.kubevirt.io/kvm`, so the
+	// entry is `{device_name: "kvm", name: "kvm"}`.
+	host_devices?: [...#KubevirtHostDevice]
 	inputs?: [...#KubevirtInput]
 	watchdog?: #KubevirtWatchdog @go(Watchdog,optional=nillable)
 }
@@ -151,6 +173,14 @@
 #KubevirtInput: {
 	type: "tablet" | "mouse" | "keyboard"
 	bus?: "virtio" | "usb" | "ps2"
+}
+
+#KubevirtHostDevice: {
+	// device_name is the resource the cluster's device plugin advertises, without its
+	// `devices.kubevirt.io/` prefix — `kvm`, `nvidia.com/gpu`, …
+	device_name: string
+	// name is the device's label inside the guest; KubeVirt defaults it to device_name.
+	name?: string
 }
 
 #KubevirtWatchdog: {

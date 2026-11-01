@@ -45,17 +45,39 @@ func TestVmBoxMetadataLabelRoundTrip(t *testing.T) {
 		},
 	}
 
-	wire, err := json.Marshal(&in)
-	if err != nil {
-		t.Fatalf("marshal VmBoxMetadata: %v", err)
+	// The MICROVM shape — a root drive AND the kernel booted with it — must survive the
+	// same trip: the provenance arm, the artefact facts it carries, and the in-image
+	// layout that tells a reader where each file is.
+	microVM := VmBoxMetadata{
+		Distro: "ubuntu",
+		Arch:   "x86_64",
+		Init:   "systemd",
+		Source: VmBoxSource{
+			Kind:    "rootfs",
+			Image:   "ghcr.io/opencharly/fireactions-runner:v0.1",
+			Format:  "ext4",
+			DiskMiB: 6144,
+		},
+		Artifacts: VmBoxArtifacts{
+			RootfsPath: "/rootfs.ext4",
+			KernelPath: "/vmlinux",
+		},
+		Description: "ubuntu 24.04 fireactions runner rootfs + kernel",
 	}
 
-	var out VmBoxMetadata
-	if err := json.Unmarshal(wire, &out); err != nil {
-		t.Fatalf("unmarshal VmBoxMetadata: %v\nwire: %s", err, wire)
-	}
+	for _, in := range []VmBoxMetadata{in, microVM} {
+		wire, err := json.Marshal(&in)
+		if err != nil {
+			t.Fatalf("marshal VmBoxMetadata: %v", err)
+		}
 
-	if !reflect.DeepEqual(in, out) {
-		t.Errorf("VmBoxMetadata did not round-trip through JSON:\n in: %+v\nout: %+v", in, out)
+		var out VmBoxMetadata
+		if err := json.Unmarshal(wire, &out); err != nil {
+			t.Fatalf("unmarshal VmBoxMetadata: %v\nwire: %s", err, wire)
+		}
+
+		if !reflect.DeepEqual(in, out) {
+			t.Errorf("VmBoxMetadata did not round-trip through JSON:\n in: %+v\nout: %+v", in, out)
+		}
 	}
 }

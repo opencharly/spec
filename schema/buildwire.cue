@@ -109,8 +109,8 @@
 	platform?:         string @go(Platform)         // --platform (build only)
 	cache?:            string @go(Cache)            // --cache mode (build only)
 	no_cache?:         bool   @go(NoCache)           // --no-cache (build only)
-	jobs?:             int    @go(Jobs,type=int)        // --jobs outer concurrency (build only)
-	podman_jobs?:      int    @go(PodmanJobs,type=int)  // --podman-jobs inner concurrency (build only)
+	jobs?:              int    @go(Jobs,type=int)             // --jobs outer concurrency: images per DAG level (build only)
+	stage_parallelism?: int    @go(StageParallelism,type=int) // --stage-parallelism inner concurrency: stages of ONE build (build only)
 }
 
 // #BuildReply is what a build:box / build:generate plugin echoes back from
@@ -255,14 +255,20 @@
 }
 
 // #BuildEnsureRequest / #BuildEnsureReply — the build:ensure word's Invoke
-// envelope: ensure an image is present in local podman storage, falling back
-// to a local (or remote-cached) build when the identifier maps to a project
-// charly.yml entry.
+// envelope: ensure an image is present in the LOCAL RUN ENGINE's storage,
+// falling back to a local (or remote-cached) build when the identifier maps to
+// a project charly.yml entry.
+//
+// There is no build_engine here. Ensured presence is a property of the RUN
+// engine's store, and the builder is BuildKit — not an engine — so a
+// build_engine field could only ever have described a cross-engine transfer
+// (docker save | podman load) between two engines, a shape that cannot exist
+// once there is one builder. A stale build_engine on the wire is rejected by
+// the closed schema; the producing call site drops it in the same cutover.
 #BuildEnsureRequest: {
-	image!:        string @go(Image)
-	dir?:          string @go(Dir)
-	build_engine?: string @go(BuildEngine)
-	run_engine?:   string @go(RunEngine)
+	image!:      string @go(Image)
+	dir?:        string @go(Dir)
+	run_engine?: string @go(RunEngine)
 }
 
 #BuildEnsureReply: {

@@ -48,9 +48,16 @@ import (
 // command's combined stdout+stderr on success; on failure, returns the
 // output plus the exec error.
 func BuilderRun(ctx context.Context, opts spec.BuilderRunOpts) ([]byte, error) {
-	engine := opts.Engine
-	if engine == "" {
-		engine = defaultContainerEngine
+	// opts.Engine is the engine WORD (#EngineName), not a binary: containerd is
+	// driven through nerdctl. Resolve it through the CUE-owned #EngineBinaries
+	// table, with the same default/unknown fallback as the rest of the exec slice.
+	engineWord := opts.Engine
+	if engineWord == "" {
+		engineWord = defaultContainerEngine
+	}
+	engine, ok := spec.EngineBinaries[engineWord]
+	if !ok {
+		engine = spec.EngineBinaries[defaultContainerEngine]
 	}
 
 	// `podman run` needs the CONCRETE storage key, not a namespace-qualified or

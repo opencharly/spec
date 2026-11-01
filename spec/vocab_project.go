@@ -46,5 +46,9 @@ func ProjectInitConfig(uf *UnifiedFile, resolveInit func(json.RawMessage) (*Reso
 	if len(inits) == 0 {
 		return nil
 	}
+	// Resolve every `extends:` chain BEFORE any consumer reads the map, so a
+	// variant entry (systemd-container → systemd) arrives fully merged with the
+	// ONE authored service_template. See init_extends.go.
+	ApplyInitExtends(inits)
 	return &InitConfig{Init: inits}
 }

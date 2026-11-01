@@ -3,6 +3,8 @@ package exec
 import (
 	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 
@@ -36,22 +38,51 @@ func WaitForVmSshReady(domainID string) {
 	if err := gate.WaitForSSH(ctx); err != nil {
 		return
 	}
-	_ = gate.WaitForCloudInit(ctx)
+	// Timeouts stay silent (the downstream deploy-add surfaces those); an OBSERVED cloud-init error
+	// does not. cloud-init settling in its error state means guest provisioning FAILED, and the
+	// assumption this comment used to carry — that downstream would notice — is exactly what
+	// opencharly/spec#209 falsifies: the guest looks ready, so nothing downstream has anything to
+	// notice. Not fatal here (this function is best-effort by design and its callers live outside
+	// this repo), but never silent.
+	if err := gate.WaitForCloudInit(ctx); err != nil {
+		if warn, ok := cloudInitWarning(err); ok {
+			slog.Warn(warn, "domain", domainID, "err", err)
+		}
+	}
 }
 
-// readinessEngine returns the container engine to probe a deployment with.
-// The run engine is a host/deploy fact surfaced as the CHARLY_RUN_ENGINE
-// environment variable: `charly settings engine.run` reads it (hostenv.ResolveRuntime's
-// twin in candy/plugin-settings), and the container-nesting layer sets it to
-// "podman" for the nested-pod posture. So the probe uses the SAME engine the
-// deploy ran under. When unset (a bare host or a project-unaware caller) it falls
-// back to defaultContainerEngine (podman) — the same default the rest of the exec
-// slice uses. Pure so it is unit-tested.
-func readinessEngine(envValue string) string {
-	if envValue != "" {
-		return envValue
+// cloudInitWarning decides what, if anything, to warn about when the readiness wait returned an error.
+// Extracted so the PR's headline behaviour — an OBSERVED cloud-init failure is no longer silent, while
+// timeouts stay silent — is unit-testable; the gate functions themselves drive ssh and cannot be
+// exercised without a guest. PURE.
+func cloudInitWarning(err error) (string, bool) {
+	if errors.Is(err, ErrCloudInitFailed) {
+		return "guest cloud-init provisioning FAILED; proceeding best-effort", true
 	}
-	return defaultContainerEngine
+	return "", false
+}
+
+// readinessEngine returns the CLI BINARY to probe a deployment with. The run
+// engine is a host/deploy fact surfaced as the CHARLY_RUN_ENGINE environment
+// variable: `charly settings engine.run` reads it (hostenv.ResolveRuntime's twin
+// in candy/plugin-settings), and the container-nesting layer sets it to "podman"
+// for the nested-pod posture. The value is an engine WORD (podman/docker/
+// containerd), and the probe needs the BINARY — they are not interchangeable
+// (containerd is driven through nerdctl). Resolve it through the CUE-owned
+// #EngineBinaries table. When unset (a bare host or a project-unaware caller) it
+// falls back to defaultContainerEngine (podman) — the same default the rest of
+// the exec slice uses. Pure so it is unit-tested.
+func readinessEngine(envValue string) string {
+	word := envValue
+	if word == "" {
+		word = defaultContainerEngine
+	}
+	if binary, ok := spec.EngineBinaries[word]; ok {
+		return binary
+	}
+	// An unknown non-empty word resolves to the ONE default engine's binary,
+	// matching engineBinary() and the rest of the exec slice.
+	return spec.EngineBinaries[defaultContainerEngine]
 }
 
 // WaitForContainerReady gates on the container being exec-able AND its supervisord-managed
@@ -67,9 +98,10 @@ func readinessEngine(envValue string) string {
 // caller falls back to the built-in defaults).
 func WaitForContainerReady(bed string) {
 	containerName := "charly-" + bed
-	// Probe with the engine the deployment actually runs under
-	// (CHARLY_RUN_ENGINE), not a literal: a docker/nerdctl host must use its
-	// own binary. See readinessEngine for the contract + fallback.
+	// Probe with the BINARY of the engine the deployment actually runs under
+	// (CHARLY_RUN_ENGINE), not a literal and not the engine word: a containerd
+	// host must invoke nerdctl, never `containerd exec`. See readinessEngine for
+	// the word→binary resolution + fallback.
 	engine := readinessEngine(os.Getenv("CHARLY_RUN_ENGINE"))
 	// supervisorStatus reports __NOSUP__ when the image has no supervisorctl, so
 	// "no supervisord" is distinguishable from "socket not up yet".
