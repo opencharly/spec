@@ -30,10 +30,18 @@ package refs
 //     the in-process cache (1h) is the batch-dedupe layer. A fresh process with a
 //     reachable network ALWAYS re-probes, so a fresh run never serves a stale tag
 //     list (the former 1h persisted-TTL reuse was the stale-latest-tag bug).
-//   - default-branch: the branch NAME is stable → a TTL (24h) is safe.
-//   - resolve-ref (the DownloadRepo freshness check): a mutable branch can move, so
-//     this is cached with a SHORT TTL (5m) — the freshness contract requires seeing
-//     the live commit of a mutable branch, but not on every single invocation.
+//   - default-branch: the branch NAME is stable → a TTL (24h is safe; the shared
+//     batch-dedupe default is used) is safe.
+//   - download (the DownloadRepo freshness check): NOT persisted and NOT time-validated. The
+//     answer to "which commit does this ref name NOW" is CONTENT that a mutable branch can move,
+//     so it is re-taken from upstream (`GitResolveRef`) per process, deduped in-process for the
+//     batch. A resolved ref's DURABLE record is the export's own v2 provenance sidecar
+//     (RepoCacheProvenance), which names the commit it was cloned from — its content identity.
+//
+// CONTENT, NOT PRESENCE. No entry in this file is served because a path exists. Every cached
+// export is certified on the read path (refs.IsCertifiedExport: directory + v2 provenance naming
+// the commit + submodules populated) — the ONE predicate the immutable-ref fast path uses too —
+// and no entry claims a resolution it did not take from upstream.
 
 import (
 	"fmt"
@@ -42,6 +50,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/opencharly/spec/lock"
@@ -49,17 +58,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Cache TTLs (see the freshness policy above). One default — the eval-batch reality:
-// a 16-lane, multi-phase check run re-resolves the same refs hundreds of times, so a
-// shorter TTL re-probes mid-batch (measured: 152 concurrent git ls-remote -> GitHub
-// throttling -> the deploy-add stall). LatestTagTTL bounds ONLY the in-process
-// batch-dedupe cache; the persisted latest_tags entries are the offline fallback
-// (served on fetch failure only), never TTL-fresh data.
+// Cache TTLs. ONE default — the eval-batch reality: a 16-lane, multi-phase check run re-resolves
+// the same refs hundreds of times, so a shorter window re-probes mid-batch (spec CHANGELOG
+// 0.2026247.2350: the former 5-minute window re-probed GitHub mid-batch — measured 152 concurrent
+// `git ls-remote` -> throttling -> the deploy-add phase stalled at 493s+ with zero CPU/RAM
+// pressure).
+//
+// It bounds ONLY the two questions whose answer is a NAME (a tag list; a default branch name) and,
+// for latest_tags, only the IN-PROCESS half: the persisted latest_tags entries are the OFFLINE
+// FALLBACK (served on fetch failure only), never TTL-fresh data.
+//
+// The question whose answer is CONTENT that can move upstream — which commit does this ref name
+// NOW — is not bounded by a clock at all: see the struct's `downloads` field.
 const (
 	DefaultRefsCacheTTL = time.Hour
 	LatestTagTTL        = DefaultRefsCacheTTL
 	DefaultBranchTTL    = DefaultRefsCacheTTL
-	ResolveRefTTL       = DefaultRefsCacheTTL
 )
 
 // GitClient is the centralized git layer. Construct once per process (or per
@@ -70,6 +84,14 @@ type GitClient struct {
 	bypass    bool   // the PERSISTED bypass flag (SetBypass) — honored by a fresh client at construction
 
 	mu sync.Mutex
+	// suppressSave coalesces the prefetch's writes: WarmUp's worker pool calls LatestTag and
+	// DefaultBranch once per repo, and each of those otherwise pays a FULL per-host YAML
+	// read-modify-write under an advisory file lock. For a 194-repo corpus that is ~388 whole-file
+	// rewrites to record 388 small answers; the pool now defers them to ONE save at the end.
+	//
+	// An ATOMIC, not a plain bool under mu: save() is itself called from LatestTag/DefaultBranch
+	// while they HOLD mu, so a lock inside save() would deadlock. save() must stay lock-free.
+	suppressSave atomic.Bool
 	// latestTags is the IN-PROCESS fresh-data cache: only entries this process
 	// fetched live here (the batch-dedupe layer). Persisted entries from disk
 	// NEVER land here — see persistedTags.
@@ -83,8 +105,30 @@ type GitClient struct {
 	// tag push served the still-cached old tag.
 	persistedTags   map[string]gitCacheEntry
 	defaultBranches map[string]gitCacheEntry
-	resolvedRefs    map[string]gitCacheEntry
-	downloads       map[string]gitCacheEntry
+	// downloads is the IN-PROCESS memo of resolved repo-export paths
+	// (repoPath@version -> path): the batch-dedupe layer for the resolution question,
+	// so one command (and every child of one wave) pays a given ref's re-resolution
+	// once. It is deliberately NOT persisted.
+	//
+	// WHY NOT PERSISTED. A resolution's durable record is the export's OWN v2
+	// provenance sidecar (RepoCacheProvenance), which names the commit the export was
+	// cloned from — a resolved ref's CONTENT identity. Persisting a path beside a time
+	// validity instead made the resolution a SECOND and weaker authority on the same
+	// question: `os.Stat().IsDir()` answered "is this ref resolved?" ahead of
+	// downloadRepoFrom's content check (`GitResolveRef` → `repoCacheFresh(path, commit)`
+	// → re-clone on mismatch). A persisted entry could therefore serve an export that
+	// no longer certified anything, with zero upstream contact, for a whole TTL —
+	// measured live 2026-10-07: 0 `git ls-remote` calls and the deleted provenance
+	// sidecar never restored (opencharly/charly#715, #530).
+	//
+	// The cost of dropping the durable half is one `git ls-remote` per (repo, mutable
+	// ref) per PROCESS — paid only for MUTABLE refs, since an immutable tag or SHA
+	// short-circuits network-free on IsRepoCached. The measured harm the former 1h
+	// window bought (spec CHANGELOG 0.2026247.2350: 152 concurrent `git ls-remote`
+	// mid-batch) is the WITHIN-batch re-probing this memo already removes; the
+	// cross-process half is what a persisted entry could only ever deliver by not
+	// asking upstream at all.
+	downloads map[string]string
 }
 
 type gitCacheEntry struct {
@@ -105,8 +149,7 @@ func NewGitClient(cacheFile string) *GitClient {
 		latestTags:      map[string]gitCacheEntry{},
 		persistedTags:   map[string]gitCacheEntry{},
 		defaultBranches: map[string]gitCacheEntry{},
-		resolvedRefs:    map[string]gitCacheEntry{},
-		downloads:       map[string]gitCacheEntry{},
+		downloads:       map[string]string{},
 	}
 	g.load() // read the persisted cache so a warm cache is honored across invocations
 	return g
@@ -131,8 +174,6 @@ func (g *GitClient) load() {
 				Bypass          bool                     `yaml:"bypass"`
 				LatestTags      map[string]gitCacheEntry `yaml:"latest_tags"`
 				DefaultBranches map[string]gitCacheEntry `yaml:"default_branches"`
-				ResolvedRefs    map[string]gitCacheEntry `yaml:"resolved_refs"`
-				Downloads       map[string]gitCacheEntry `yaml:"downloads"`
 			} `yaml:"git"`
 		} `yaml:"cache"`
 	}
@@ -149,12 +190,6 @@ func (g *GitClient) load() {
 	}
 	if doc.Cache.Git.DefaultBranches != nil {
 		g.defaultBranches = doc.Cache.Git.DefaultBranches
-	}
-	if doc.Cache.Git.ResolvedRefs != nil {
-		g.resolvedRefs = doc.Cache.Git.ResolvedRefs
-	}
-	if doc.Cache.Git.Downloads != nil {
-		g.downloads = doc.Cache.Git.Downloads
 	}
 	if doc.Cache.Git.Bypass {
 		g.disabled = true
@@ -195,7 +230,7 @@ func (g *GitClient) SetBypass(on bool) error {
 func (g *GitClient) CacheStatus() (string, int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.cacheFile, len(g.mergedLatestTags()) + len(g.defaultBranches) + len(g.resolvedRefs) + len(g.downloads)
+	return g.cacheFile, len(g.mergedLatestTags()) + len(g.defaultBranches)
 }
 
 // ClearCache drops every cached git answer (the in-memory entries and the persisted
@@ -205,8 +240,7 @@ func (g *GitClient) ClearCache() error {
 	g.latestTags = map[string]gitCacheEntry{}
 	g.persistedTags = map[string]gitCacheEntry{}
 	g.defaultBranches = map[string]gitCacheEntry{}
-	g.resolvedRefs = map[string]gitCacheEntry{}
-	g.downloads = map[string]gitCacheEntry{}
+	g.downloads = map[string]string{}
 	file := g.cacheFile
 	g.mu.Unlock()
 	if file != "" {
@@ -218,6 +252,11 @@ func (g *GitClient) ClearCache() error {
 }
 
 func (g *GitClient) save() {
+	if g.suppressSave.Load() {
+		return
+	}
+	// Counted only when the write actually happens, so the seam measures WRITES, not calls.
+	warmUpSaveFn()
 	unlock, err := lock.AcquireFileLock(g.cacheLockPath(), true)
 	if err != nil {
 		return
@@ -258,7 +297,10 @@ func (g *GitClient) save() {
 		cacheVal = root.Content[len(root.Content)-1]
 	}
 
-	// Build the cache: git: {bypass, latest_tags, default_branches, resolved_refs, downloads}.
+	// Build the cache: git: {bypass, latest_tags, default_branches}. The former
+	// resolved_refs/downloads keys are GONE: a resolved ref's durable record is the
+	// export's own v2 provenance sidecar, not a path beside a timestamp (see the
+	// `downloads` field's doc).
 	gitVal := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
 		{Kind: yaml.ScalarNode, Value: "bypass"},
 		{Kind: yaml.ScalarNode, Value: strconv.FormatBool(g.bypass)},
@@ -266,10 +308,6 @@ func (g *GitClient) save() {
 		entryMapNode(g.mergedLatestTags()),
 		{Kind: yaml.ScalarNode, Value: "default_branches"},
 		entryMapNode(g.defaultBranches),
-		{Kind: yaml.ScalarNode, Value: "resolved_refs"},
-		entryMapNode(g.resolvedRefs),
-		{Kind: yaml.ScalarNode, Value: "downloads"},
-		entryMapNode(g.downloads),
 	}}
 	cacheVal.Kind = yaml.MappingNode
 	cacheVal.Tag = "!!map"
@@ -330,22 +368,10 @@ func entryMapNode(entries map[string]gitCacheEntry) *yaml.Node {
 	return n
 }
 
-// dirUsable reports whether a cached DOWNLOAD path still holds its materialized export
-// (a directory). The downloads cache serves PATHS from a persisted map; a wiped or evicted
-// repo-cache dir would otherwise be served for the whole TTL — a cache result is only valid
-// while its CONTENT is valid (the same principle the materialized-tree cache's component
-// drift-detection enforces). A missing or non-directory path is a miss, so the downloader
-// repopulates it. Only the download path-map carries dirs; the tag/branch caches hold
-// non-path values and keep the plain freshness check.
-func dirUsable(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && st.IsDir()
-}
-
 // cached returns the cached value for key if fresh, or "".
 //
 // DefaultRefsCacheTTL (the const block above documents the one-default reality), but a
-// future per-ref freshness divergence splits the constants without touching this function.
+// future per-question freshness divergence splits the constants without touching this function.
 //
 //nolint:unparam // ttl stays a parameter BY DESIGN: every TTL currently aliases
 func cached(entries map[string]gitCacheEntry, key string, ttl time.Duration) string {
@@ -377,6 +403,22 @@ func (g *GitClient) mergedLatestTags() map[string]gitCacheEntry {
 // gitLatestTagFetch is the network fetch seam LatestTag drives (package var so the
 // offline-fallback tests inject fetch outcomes without shelling git).
 var gitLatestTagFetch = GitLatestTag
+
+// gitDefaultBranchFn is DefaultBranch's network seam, the sibling of gitLatestTagFetch (a var so
+// the prefetch tests drive the whole WarmUp pool hermetically).
+var gitDefaultBranchFn = GitDefaultBranch
+
+// warmUpTotalTimeout bounds the WHOLE prefetch, not one fetch. Per-fetch bounds already exist
+// (gitOpMetadataTimeout / gitOpTransferTimeout in git.go), so a single stalled repo cannot hang
+// forever — but a pool that dispatches N repos with no total ceiling can still run for N/workers ×
+// bound, and the phase reports nothing while it does. That is the observed shape: the process was
+// seen parked at "fetching git metadata for 194 repo(s)" with no way to tell progress from a hang.
+// A var, not a const, so tests shorten it.
+var warmUpTotalTimeout = 2 * time.Minute
+
+// warmUpSaveFn is called once per save() so tests can prove the prefetch COALESCES its writes
+// (package var, like the other injectable seams here).
+var warmUpSaveFn = func() {}
 
 // LatestTag returns the highest semver tag of repoURL.
 //
@@ -427,7 +469,7 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 	}
 	g.mu.Unlock()
 
-	branch, err := GitDefaultBranch(repoURL)
+	branch, err := gitDefaultBranchFn(repoURL)
 	if err != nil {
 		return "", err
 	}
@@ -437,27 +479,33 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 	g.mu.Unlock()
 	return branch, nil
 }
-func (g *GitClient) ResolveRef(repoURL, ref string) (string, error) {
-	key := repoURL + " " + ref
-	g.mu.Lock()
-	if !g.disabled {
-		if v := cached(g.resolvedRefs, key, ResolveRefTTL); v != "" {
-			g.mu.Unlock()
-			return v, nil
-		}
-	}
-	g.mu.Unlock()
 
-	sha, err := GitResolveRef(repoURL, ref)
-	if err != nil {
-		return "", err
-	}
-	g.mu.Lock()
-	g.resolvedRefs[key] = gitCacheEntry{Value: sha, Resolved: time.Now()}
-	g.save()
-	g.mu.Unlock()
-	return sha, nil
-}
+// (ResolveRef was DELETED here: it produced no result any caller consumed — org-wide, no
+// production call site existed, only the unrelated spec.WalkSeams.ResolveRef seam and
+// net/url's ResolveReference — while carrying a second persisted, time-validated map over the
+// same "which commit does this ref name" question. The live answer is GitResolveRef, which
+// downloadRepoFrom already runs on every mutable-ref access; a persisted duplicate of it is
+// precisely the content-blind authority this cutover removes (R3/R5).)
+
+// WarmUp prefetches the git metadata (latest tag + default branch) for a batch of repos so the
+// first project load does not pay every `git ls-remote` on its critical path.
+//
+// FOUR BOUNDS, because "bounded per fetch" is not "bounded".
+//   - PER FETCH: `git ls-remote` carries its own deadline (gitOpMetadataTimeout in git.go), so one
+//     stalled repo cannot hang forever.
+//   - TOTAL: this phase carries its OWN ceiling (warmUpTotalTimeout). Without it the phase can run
+//     for (len(repos)/workers) x per-fetch-bound, which is unbounded in the corpus size — and the
+//     process was observed parked at "fetching git metadata for 194 repo(s)" with no way for a
+//     reader to tell progress from a hang.
+//   - PROGRESS: the phase reports how many repos it warmed and says how many it did not reach, so
+//     "still working" and "gave up" are distinguishable in the log.
+//   - WRITES: ONE cache write for the whole batch. Each LatestTag/DefaultBranch would otherwise pay
+//     a full per-host YAML read-modify-write under an advisory file lock — ~388 whole-file rewrites
+//     for a 194-repo corpus, to record 388 small answers. The pool defers them.
+//
+// A repo the TOTAL bound cuts off is NOT silently dropped: the on-demand path re-probes it (that is
+// the offline-fallback contract — a fresh process always re-probes a tag list), so the only cost is
+// that the first load pays it, which is exactly what is reported.
 func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 	var cold []string
 	for _, u := range repoURLs {
@@ -472,7 +520,7 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		// tags never fires at all). Without this, a fresh process with a fully
 		// persisted cache reported EVERY repo cold and re-probed the entire corpus
 		// on every project load — the observed 194-repo warm-up hang under the
-		// multi-bed wave (the pre-#108 model served the persisted entry as fresh,
+		// multi-batch wave (the pre-#108 model served the persisted entry as fresh,
 		// so the prefetch found one cold repo and returned instantly).
 		have := (cached(g.latestTags, u, LatestTagTTL) != "" || g.persistedTags[u].Value != "") &&
 			cached(g.defaultBranches, u, DefaultBranchTTL) != ""
@@ -485,13 +533,27 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		return
 	}
 	fmt.Fprintf(stderr, "charly: fetching git metadata for %d repo(s) (first run — may take a moment)...\n", len(cold))
+
+	// The batch defers its writes: ONE cache write at the end, not one per answer.
+	g.suppressSave.Store(true)
+	defer func() {
+		g.suppressSave.Store(false)
+		g.mu.Lock()
+		g.save()
+		g.mu.Unlock()
+	}()
+
 	// Parallelize the fetch with a bounded worker pool: each repo is an
 	// independent `git ls-remote` (network-bound), so a sequential loop pays the
 	// round-trip latency once per repo — 200 repos × ~1.5s ≈ 5 minutes on a cold
 	// cache. 10 workers collapse that to ~30s. The GitClient methods are
-	// mutex-guarded, so concurrent warm-up is safe; the advisory file lock
-	// serializes the cache writes.
+	// mutex-guarded, so concurrent warm-up is safe.
 	const warmUpWorkers = 10
+
+	deadline := time.Now().Add(warmUpTotalTimeout)
+	var reached atomic.Int64
+	var timedOut atomic.Bool
+
 	jobs := make(chan string)
 	var wg sync.WaitGroup
 	for range warmUpWorkers {
@@ -499,35 +561,67 @@ func (g *GitClient) WarmUp(repoURLs []string, stderr *os.File) {
 		go func() {
 			defer wg.Done()
 			for u := range jobs {
+				if time.Now().After(deadline) {
+					timedOut.Store(true)
+					return
+				}
 				_, _ = g.LatestTag(u)
 				_, _ = g.DefaultBranch(u)
+				reached.Add(1)
 			}
 		}()
 	}
 	for _, u := range cold {
+		if time.Now().After(deadline) {
+			timedOut.Store(true)
+			break
+		}
 		jobs <- u
 	}
 	close(jobs)
 	wg.Wait()
-	fmt.Fprintf(stderr, "charly: git metadata cached.\n")
+
+	warmed := int(reached.Load())
+	if timedOut.Load() {
+		fmt.Fprintf(stderr, "charly: git metadata prefetch bound (%s) reached after %d of %d repo(s); the remaining %d will be fetched on demand\n",
+			warmUpTotalTimeout, warmed, len(cold), len(cold)-warmed)
+		return
+	}
+	fmt.Fprintf(stderr, "charly: git metadata cached (%d repo(s)).\n", warmed)
 }
 
-// Download fetches repoPath@version into the repo cache and returns the cache path,
-// CACHED with a short TTL (ResolveRefTTL — aliasing DefaultRefsCacheTTL today, the
-// const block above documents the one-default reality and the future-divergence seam).
-// A mutable ref (a branch or the default branch) can move, so the freshness contract
-// requires re-resolving eventually — but not on every invocation: the TTL means a command
-// run twice in quick succession (e.g. the status fan-out resolving the envelope multiple
-// times) pays the download once. The cached PATH is additionally validated against its
-// CONTENT (dirUsable): a wiped or evicted repo-cache dir must never be served for the
-// TTL (the content-validity principle — the same class the materialized-tree cache
-// fixed with component drift detection).
+// Download fetches repoPath@version into the repo cache and returns the cache path, deduped only
+// by the IN-PROCESS memo below. There is no freshness WINDOW and no persisted entry: the
+// mutable-ref question ("has this branch moved upstream?") is inherently a NETWORK question, and
+// the only honest answers are "ask upstream" or "guess" — so this asks, once per process, rather
+// than trading a measured staleness window for a saved round trip.
+//
+// A mutable ref (a branch or the default branch) can move, so the freshness contract requires
+// re-resolving it: the miss path below IS `downloadRepoFrom`, which resolves the ref's CURRENT
+// commit (`GitResolveRef`), refuses a stale export (`repoCacheFresh(cachePath, commit)`), re-clones
+// it and re-stamps the provenance. Within one process the memo means a command run twice in quick
+// succession (e.g. the status fan-out resolving the envelope multiple times) pays that resolution
+// once — the batch dedupe this layer exists for, which needs no time validity because a process is
+// one moment in time. Across processes there is NO memo: a durable entry could only ever answer
+// "has this ref moved upstream?" by not asking, which is the defect this cutover removes
+// (opencharly/charly#715, #530).
+//
+// The memoised path is further validated against its CONTENT (IsCertifiedExport): an export that
+// can no longer certify what it holds — a wiped, evicted, half-populated or provenance-less
+// repo-cache dir — is never served (the content-validity principle — the same class the
+// materialized-tree cache fixed with component drift detection, and the same predicate the
+// immutable-ref fast path uses).
 func (g *GitClient) Download(repoPath, version string, download func(repoPath, version string) (string, error)) (string, error) {
 	key := repoPath + "@" + version
 	g.mu.Lock()
-	if v := cached(g.downloads, key, ResolveRefTTL); v != "" && dirUsable(v) {
-		g.mu.Unlock()
-		return v, nil
+	// The bypass is honored here as everywhere else: it is documented as "disables every cached
+	// lookup" AND as the operator's on-demand truth for "a moved branch", and this is precisely the
+	// moved-branch cache. It read the flag on no arm before this cutover.
+	if !g.disabled {
+		if v, ok := g.downloads[key]; ok && IsCertifiedExport(v) {
+			g.mu.Unlock()
+			return v, nil
+		}
 	}
 	g.mu.Unlock()
 
@@ -536,8 +630,7 @@ func (g *GitClient) Download(repoPath, version string, download func(repoPath, v
 		return "", err
 	}
 	g.mu.Lock()
-	g.downloads[key] = gitCacheEntry{Value: path, Resolved: time.Now()}
-	g.save()
+	g.downloads[key] = path
 	g.mu.Unlock()
 	return path, nil
 }
