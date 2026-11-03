@@ -1535,6 +1535,17 @@
 	combined?:    bool @go(Combined)
 	best_effort?: bool @go(BestEffort)
 	env?: {[string]: string} @go(Env,type=map[string]string)
+	// dir is the child's WORKING DIRECTORY. Empty inherits the caller's cwd, which is what every
+	// caller got before this field existed — so it is additive and opt-in.
+	//
+	// It exists because "the current project" is not a stable referent in this codebase: a
+	// consumer that runs `charly …` on behalf of an IMPORTED project needs the child to read THAT
+	// project, while its own process cwd is the importer's. Measured: a `kind: local` bed invoked
+	// QUALIFIED (`charly.check-task` from the umbrella) ran `${CHARLY_BIN} task list` in the
+	// umbrella and asserted against the umbrella's tasks, so the check passed vacuously instead of
+	// testing the bed's own project (opencharly/charly#819). The same shape would hit any host
+	// seam that shells out for a project other than the one it is standing in.
+	dir?: string @go(Dir)
 }
 
 // #CliReply is the "cli" host-builder reply: captured stdout (Capture=true),
