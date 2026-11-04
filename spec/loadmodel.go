@@ -241,7 +241,12 @@ func (uf *UnifiedFile) collectDeploys(prefix string, out map[string]DeployNode, 
 	defer delete(ancestors, uf)
 	for name, node := range uf.Deploy {
 		key := name
-		if prefix != "" {
+		// A FOLDED deploy-level member (MemberOf set) is a top-level addressable entry addressed
+		// by its BARE name — the Cutover C law (sdk/loaderkit.FoldMembers). The namespace prefix
+		// qualifies namespace-scoped entities, but a member's bare address is GLOBAL by
+		// construction (the fold rejects cross-scope collisions), so it must not be prefixed.
+		// Its `from:` IS namespace-local, so it is still qualified below.
+		if prefix != "" && node.MemberOf == "" {
 			key = prefix + "." + name
 		}
 		// Qualify the node's namespace-LOCAL `from:` cross-ref so a merged-root consumer
