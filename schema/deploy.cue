@@ -997,6 +997,16 @@
 	// build, persisted by PrepareVenue so config/start deploy EXACTLY that overlay.
 	resolved_image?: string @go(ResolvedImage)
 
+	// engine is the deploy node's authored container-engine selector, carried through the
+	// PrepareVenue state patch so the per-host entry remembers the engine the deploy was added
+	// for. `charly config` / `charly start` resolve their run mode from the per-host entry, so a
+	// selector that never reaches it is silently replaced by the host-wide engine.run
+	// (opencharly/charly#1109: a `pod:` deploy authored `engine: containerd` persisted only
+	// resolved_image, then config emitted a podman quadlet and start ran /usr/bin/podman).
+	// Empty means the deploy selected no engine at its own level; the write is skipped, never a
+	// clear, so an operator-added selector is preserved.
+	engine?: #EngineName @go(Engine)
+
 	// vm_state + vm_cross_ref — the vm substrate's persisted runtime state + the kind:vm cross-ref,
 	// shipped by the externalized vm plugin's PrepareVenue reply as the generic State patch.
 	vm_state?:     #VmDeployState @go(VmState,type=*VmDeployState)
