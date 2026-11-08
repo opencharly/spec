@@ -32,9 +32,12 @@ are the single source of truth for these consumers:
 
 ## The package form
 
-```sh
-./bin/cue eval ./schema     # bootstrap-cue provisions the pinned CLI
-```
+`schema/` is one CUE package in the module `github.com/opencharly/spec` (declared by
+`cue.mod/module.cue`), so it loads as a package rather than as a pile of package-less
+files; a consumer's own CUE module imports `github.com/opencharly/spec/schema`. The
+repo's supported command stays `charly task cue-gen`, which compiles these same files
+through the pinned toolchain it provisions and gates the result with
+`TestGenReproducible`.
 
 `cue.mod/module.cue` pins language version `v0.16.1` — the version spec's own
 `cuetoolchain` pins for `cue exp gengotypes`. It is not incidental: the schema's
