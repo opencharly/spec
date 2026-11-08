@@ -1,3 +1,5 @@
+package schema
+
 // doctor.cue — wire types for the externalized `charly doctor` command plugin
 // (candy/plugin-doctor; SDD conversion, per the standing operator directive: a
 // hand-written wire struct not yet CUE-sourced is conversion-in-progress, never a

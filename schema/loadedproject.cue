@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the unified-config LOADER's WALK result (K1). #LoadedProject is the generic,
 // sdk-expressible output of WALKING a whole project — the orchestration half of LoadUnified
 // (import queue + discover walk + namespace mount) relocated to sdk/loaderkit as a kind-blind
@@ -7,7 +9,7 @@
 // (root-wins) itself, because the materialize is the registry-coupled kind-decode the kernel
 // keeps (boundary law). So #LoadedProject is the PARSED, un-materialized stage — strictly
 // UPSTREAM of the resolved-project envelope (post-materialize+resolve). It reuses #ParsedProject
-// / #ParsedNode verbatim (see parsedproject.cue). Package-less; concatenated into the spec
+// / #ParsedNode verbatim (see parsedproject.cue). `package schema`; concatenated into the spec
 // compilation unit. NOT an authoring kind (never in #Node/#Op) — a pure generated wire type
 // (it becomes candy/plugin-loader's OpLoad reply at the K5 envelope unit), single-sourced here
 // so `charly task cue-gen` produces the Go struct.

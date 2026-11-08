@@ -1,3 +1,5 @@
+package schema
+
 // k8sgen.cue — the Kustomize-GENERATOR wire types shared between charly's core
 // and the compiled-in candy/plugin-k8sgen (C8/M13; SDD conversion, per the
 // standing operator directive: a hand-written wire struct not yet CUE-sourced is

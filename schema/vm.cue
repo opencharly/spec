@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `vm` kind. #Vm validates ONE value of the `vm:` map
 // (VmSpec). FULLY MODELED + CLOSED: every VmSpec field, the 7-arm #VmSource
 // union, the structured #VmCloudInit and the ~54-subtype
@@ -9,7 +11,7 @@
 //
 // Cross-rules (CUE-owned): firmware:uefi-secure ⇒ machine≠i440fx,
 // ssh.port ⊕ ssh.port_auto, cpu.mode:custom ⇒ model required, hostdev pci ⇒ hex
-// source domain/bus/slot/function. Shared #Step from _common.cue (R3).
+// source domain/bus/slot/function. Shared #Step from 00_common.cue (R3).
 
 // #VmBackendName — the CLOSED VM-backend PROVIDER vocabulary, with no
 // resolution selector. `charly task cue-gen` emits it as spec.VmBackends, so a

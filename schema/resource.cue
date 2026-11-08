@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `resource` kind. #Resource validates ONE value of the
 // `resource:` map (ResourceDef — exclusive host-resource tokens for GPU
 // arbitration). CLOSED. Both shapes valid: `{}` (bare arbitration token) and

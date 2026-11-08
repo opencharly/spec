@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire/render struct, single-sourced
 // here so `charly task cue-gen` produces the Go struct charly core's registry-coupled floor files

@@ -10,8 +10,8 @@ program so core depends only on the contract, never on a mechanism kit.
 
 | Package | Role |
 |---|---|
-| `schema/` | The single-source CUE schema (`*.cue`, package-less) — embedded as `schema.FS` |
-| `spec/` | The generated + hand-written config/wire/IR types (`cue_types_gen.go`, `vocab_gen.go`, `version_gen.go`, `union_types.go`, …) — the module's core |
+| `schema/` | The single-source CUE schema — ONE `package schema` in this module, embedded as `schema.FS`, and loadable by `cue eval ./schema` |
+| `spec/` | The generated + hand-written config/wire/IR types (`cue_types_gen.go`, `vocab_gen.go`, `union_types.go`, …) — the module's core |
 | `proto/` | The generated gRPC plugin transport (`plugin.proto` + `*.pb.go`) |
 | `protocol/` | The CUE protocol model that `charly task wire-gen` renders into `proto/` |
 | `schemaconcat/` | The one concatenation contract (`ConcatSchema`) shared by runtime validation and the gen pipeline |

@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the fully-resolved BOX render-context data-carrier (#55 step3 unit 3a).
 // #ResolvedBox is the wire-clean, in-process VALUE half of a box's resolved configuration —
 // shared by charly core (the "resolved-project" envelope projector, the render-seam floor)

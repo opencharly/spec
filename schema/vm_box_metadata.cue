@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the VM-box metadata contract — the VM-specific half of the OCI-label
 // metadata a VM box image carries (cutover plan §2.1: "a VM box is an OCI image whose
 // labels carry the VM metadata contract and whose layers carry the disk artifact").
@@ -7,7 +9,7 @@
 // disk provenance). Runtime-relevant the same way #BoxMetadata is: the box emitter
 // bakes it at build time (sdk/deploykit EmitVmBox) and the source-less VM deploy
 // (VmCapabilitiesFromLabels) reads it back. CUE-sourced here so the whole VM-box
-// resolution reads ONE spec-owned type. Package-less; concatenated into spec.
+// resolution reads ONE spec-owned type. `package schema`; concatenated into spec.
 //
 // R8 (the byte-freeze gate): #VmBoxMetadata IS whole-struct-marshaled into ONE label
 // (ai.opencharly.vm.box, spec.LabelVmBox) — like #CapabilityService →

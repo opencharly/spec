@@ -1,3 +1,5 @@
+package schema
+
 // arbiter.cue — the RESOURCE-ARBITER wire + persisted-state types (FLOOR-SLIM-proper Unit-8B
 // SDD conversion, per the standing operator directive: a wire type not previously CUE-sourced is
 // no excuse to keep it hand-written in freshly committed code — WIRE TYPES ARE CUE-SOURCED

@@ -1,3 +1,5 @@
+package schema
+
 // CLI reflection is a wire contract between command plugins, the Charly host,
 // and MCP. It is CUE-owned like every other authored or transported shape.
 #CLIArg: {

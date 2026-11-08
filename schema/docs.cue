@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `docs` KIND — the ONE docs-site generation CONFIG entity per repo
 // (everything `charly docs generate` needs, declared in the repo's charly.yml).
 // A `docs:` node is a top-level entity carrying the `docs` kind discriminator —

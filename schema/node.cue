@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the UNIFIED `#Node` model — ONE name-first node shape for ALL of
 // charly.yml: `<name>: {<kind>: <FULL BODY>, <member-name>: <entity>…}`.
 //

@@ -1,3 +1,5 @@
+package schema
+
 // substrate_template.cue — the OpResolve envelopes for the local + android +
 // pod + kubernetes + vm substrate-template de-type (Cutover I; SDD conversion, per the
 // standing operator directive: a hand-written wire struct not yet CUE-sourced is

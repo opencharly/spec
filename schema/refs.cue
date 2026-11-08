@@ -1,3 +1,5 @@
+package schema
+
 // refs.cue — the remote-repo FETCH-BACKEND wire types shared between the loader plugin
 // (candy/plugin-loader, which owns the fetch ORCHESTRATION since K-wave 2 cone R1) and the swappable
 // backend that serves it (candy/plugin-refs by default). They live in package spec — the ONE

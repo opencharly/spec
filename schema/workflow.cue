@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the workflow-ENGINE WIRE: the op envelopes a pipeline engine is
 // invoked with, plus the approval / schedule / trigger value objects those envelopes
 // and an engine's own replies are built from.

@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `kubernetes` kind. #Kubernetes validates ONE value of the
 // `kubernetes:` map (KubernetesSpec; absorbed the former ClusterProfile). CLOSED —
 // every KubernetesSpec field is
@@ -5,7 +7,7 @@
 // shapes are constrained. ONE exception: `pod_default.tolerations` stays OPEN —
 // it is a genuine passthrough of raw Kubernetes Toleration objects
 // ([]map[string]any). Plural field names that mirror Kubernetes output keys are
-// preserved verbatim. Shared #Step from _common.cue.
+// preserved verbatim. Shared #Step from 00_common.cue.
 
 #Kubernetes: {
 	// May be empty (a cluster-policy-only template runs no workload itself).

@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the two `charly box validate` wire channels.
 //
 // #ValidateProjectRequest / #ValidateProjectReply are the ENVELOPE channel: candy/plugin-box's
@@ -15,7 +17,7 @@
 // re-derivation R-pattern. Now the plugin SENDS its own inventory and the host answers
 // registry-only, with no load, no scan, and no host-side diagnostics.
 //
-// Package-less; concatenated into the spec compilation unit. #Diagnostics is the shared wire type
+// `package schema`; concatenated into the spec compilation unit. #Diagnostics is the shared wire type
 // (deploy.cue), referenced by @go so the reply carries it without redefining it.
 
 // #ValidateProjectRequest — which project dir to validate (empty = the host's cwd) + whether to

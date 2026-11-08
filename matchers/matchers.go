@@ -48,7 +48,7 @@ func MatchAll(value string, matchers []spec.Matcher) error {
 }
 
 // matchOne evaluates a single matcher. The operator set here must stay in
-// lockstep with #MatchOpMap (the CUE matcher-operator authority in _common.cue)
+// lockstep with #MatchOpMap (the CUE matcher-operator authority in 00_common.cue)
 // — if the schema accepts an op, the runner must handle it.
 func matchOne(value string, m spec.Matcher) error {
 	switch m.Op {

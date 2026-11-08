@@ -1,3 +1,5 @@
+package schema
+
 // gpu.cue — the GPU/VFIO HOST-DETECTION + DRIVER-SWITCH wire types shared between
 // charly's core and the compiled-in candy/plugin-gpu (cutover C11 + the driver-switch
 // conversion; SDD: CUE is the single source of truth for every wire-shaped type —

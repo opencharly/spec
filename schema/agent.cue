@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `agent` kind. #Agent validates ONE value of the `agent:`
 // map (AgentConfig — the AI-CLI grader catalog). CLOSED (AgentConfig is fully
 // enumerated; an unknown key is a typo). No #Step (an agent has no plan).
@@ -23,7 +25,7 @@
 	optional?: bool
 }
 
-// #Duration now lives in _common.cue (shared by agent + deploy + #Op).
+// #Duration now lives in 00_common.cue (shared by agent + deploy + #Op).
 
 // --- resolve-to-envelope wire types (Cutover E; SDD conversion, per the
 // standing operator directive: a hand-written wire struct not yet CUE-sourced

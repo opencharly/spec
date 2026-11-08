@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `engine` provider class — the container-engine contract
 // served by the compiled-in engine:podman / engine:docker providers and the
 // out-of-tree engine:containerd plugin.

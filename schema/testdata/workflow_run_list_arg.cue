@@ -17,8 +17,9 @@
 // not see it at all. A fixture that both consumers must address has to be addressable
 // by both.
 //
-// No package clause, exactly like every `schema/*.cue` file: the concatenation supplies
-// the package, and a clause here would start a second one.
+// No package clause: this fixture is concatenated BESIDE the schema (whose files carry
+// `package schema`, stripped by the concatenator), and a clause here would start a
+// second one.
 
 // The input document: a run request carrying a list arg. `prs` is the retired lane
 // model's `--prs a b c`; `who` is the scalar control that must keep working unchanged.

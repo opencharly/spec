@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `hook` KIND — a first-class HARNESS hook entity (the migration of the
 // superproject's .claude/hooks/* gate scripts into candy config). A `hook:` node is a sibling
 // top-level entity in candy/charly-hooks/charly.yml, carrying the script CONTENT inline.

@@ -1,3 +1,5 @@
+package schema
+
 // DESKTOP-SURFACE KINDS — theme, session, displaymanager, desktopentry.
 //
 // These four describe a graphical session the way `init:`/`service:` describes a supervised

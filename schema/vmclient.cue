@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the VM-CLIENT wire family (Cutover B unit 2, R-E4) — the host↔plugin-vm
 // internal-op RPC types charly-core's thin dispatch wrapper (invokeVmPluginEnv,
 // charly/vm_plugin_client.go) sends to candy/plugin-vm's verb:libvirt provider for
@@ -8,7 +10,7 @@
 // shape by field name). Single-sourcing here closes both: charly-core's decode structs AND
 // candy/plugin-vm's DisplayEndpoint retype onto these generated defs.
 //
-// Package-less; concatenated into the spec compilation unit.
+// `package schema`; concatenated into the spec compilation unit.
 
 // #VmSnapshotCreateOpts parameterizes the creation of a snapshot — the host-resolved payload for
 // the snapshot-internal "create"/"create-external" ops.

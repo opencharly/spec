@@ -1,3 +1,5 @@
+package schema
+
 // distro_vocab.cue — the SINGLE source for the distro id space and each id's traits.
 //
 // Everything that used to be a hand-written Go table or a hardcoded switch on a distro

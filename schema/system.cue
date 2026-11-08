@@ -1,3 +1,5 @@
+package schema
+
 // system.cue — the `system:` kind: the per-host LOCAL SYSTEM INFO.
 //
 // The host's identity snapshot (hostname, distro, kernel, arch, GPU, …) lives in

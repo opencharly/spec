@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the "retention" verb wire types behind the externalized `charly
 // clean` command plugin (candy/plugin-clean), which now OWNS the shared retention
 // ENGINE too (image-tag / build-candy / check-run / deep dangling-image pruning +

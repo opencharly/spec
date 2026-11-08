@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `firecracker` kind — a Firecracker microVM on a KVM host.
 // #Firecracker validates ONE kind:firecracker definition: the HOST surface (how
 // this KVM host runs microVMs: the VMM binary, the guest kernel, the network path,

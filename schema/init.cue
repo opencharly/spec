@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `init` kind. #Init validates ONE value of the `init:` map
 // (InitDef — supervisord/systemd). CLOSED: every authored key is modeled (an
 // unknown key is a typo). *_template fields are Go text/template (plain

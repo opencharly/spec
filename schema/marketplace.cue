@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `marketplace` KIND — the single harness/marketplace config entity per repo
 // (the migration of plugins/.claude-plugin/marketplace.json + profiles.json + the harness wiring
 // into candy config). A `marketplace:` node is a top-level entity in a candy-dir file (e.g.

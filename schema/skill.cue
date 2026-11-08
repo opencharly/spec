@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `skill` KIND — a first-class harness skill entity (the migration of the
 // plugins/ skill corpus into candy configs). A `skill:` node is a sibling top-level entity in a
 // candy's charly.yml (ParseDoc iterates every top-level node, each with its own single kind

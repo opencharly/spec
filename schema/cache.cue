@@ -1,3 +1,5 @@
+package schema
+
 // cache.cue — the `cache:` kind: LOCAL cache status persisted in the per-host
 // charly.yml (~/.config/charly/charly.yml).
 //

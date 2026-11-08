@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the generic `task` kind. A task is a named, host-native,
 // REUSABLE plan — the SAME #Step grammar a candy's `plan:` uses, plus
 // task-level execution config (workdir, env, vars, incremental staleness,

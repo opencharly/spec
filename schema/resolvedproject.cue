@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the RESOLVED-project envelope (K5, the S-K5 keystone). #ResolvedProject is the
 // generic, sdk-expressible RESOLVED/MATERIALIZED projection of a whole project — the third and
 // final member of the envelope SPINE (spec.ParsedProject → #LoadedProject → #ResolvedProject).
@@ -12,10 +14,10 @@
 // DeploymentStatus, ResolvedKubernetes/Android); this file adds exactly TWO new views — #ResolvedBoxView +
 // #CandyView — composed with the existing #Deploy tree.
 //
-// Package-less; concatenated into the spec compilation unit. NOT an authoring kind (never in
+// `package schema`; concatenated into the spec compilation unit. NOT an authoring kind (never in
 // #Node/#Op) — pure generated wire/projection types, single-sourced here so `charly task cue-gen` produces
 // the Go structs (charly aliases them via vmshared/spec_aliases.go). Shared defs (#BoxMerge,
-// #CandyRef, #CandyMCPProvide, #Deploy) come from box.cue / _common.cue / candy.cue / deploy.cue.
+// #CandyRef, #CandyMCPProvide, #Deploy) come from box.cue / 00_common.cue / candy.cue / deploy.cue.
 
 // #ResolvedBoxView — the resolved box METADATA a consumer reads: EXACTLY the non-json:"-" fields of
 // buildkit.ResolvedBox, in declaration order, so this view is the wire-safe half of what

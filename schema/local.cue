@@ -1,7 +1,9 @@
+package schema
+
 // CUE schema for the `local` kind (kind:local templates — target:local candy
 // stacks). #Local validates ONE entry of the `local:` map. CLOSED (the Go
 // loader decodes with KnownFields(true), so unknown keys are an error). Shared
-// #Step from _common.cue.
+// #Step from 00_common.cue.
 
 #Local: {
 	// Ordered candy stack applied to the host. Required (empty list permitted —
@@ -13,5 +15,5 @@
 	plan?: [...#Step]
 }
 
-// #CandyRef / #InstallOpts now live in _common.cue (shared with
+// #CandyRef / #InstallOpts now live in 00_common.cue (shared with
 // deploy + pod + candy).

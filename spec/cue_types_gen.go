@@ -803,7 +803,7 @@ type TerminalExit struct {
 // CUE schema for the `android` kind. #Android validates ONE kind:android entity
 // (a device). A device is EITHER an in-pod emulator hosted by a kind:box (box)
 // XOR a remote/physical adb endpoint (adb) — never both, never neither. Shared
-// #Step from _common.cue.
+// #Step from 00_common.cue.
 //
 // CLOSED: the base struct (no trailing `...`) models every authored key, so an
 // unknown key is still a typo. The box⊻adb exactly-one mutual-exclusion is
@@ -4974,7 +4974,7 @@ type Instrument struct {
 // `pipeline: [{transcode: {to: mp4}}]` shape — a map whose single key is the
 // verb and whose value is that verb's own input) and desugared at parse time
 // into the internal plugin/plugin_input pair below — the EXACT desugar
-// contract plan steps use (see #Op's pair in _common.cue). CLOSED: the
+// contract plan steps use (see #Op's pair in 00_common.cue). CLOSED: the
 // desugar consumed the OPEN verb word, so the desugared entry validates
 // against just the pair; a two-verb-key entry is at-most-one-verb-violating
 // and cannot reach this def (the parse-time desugar hard-errors it — the same
@@ -12516,7 +12516,7 @@ type LibvirtPCIHex string
 // disk provenance). Runtime-relevant the same way #BoxMetadata is: the box emitter
 // bakes it at build time (sdk/deploykit EmitVmBox) and the source-less VM deploy
 // (VmCapabilitiesFromLabels) reads it back. CUE-sourced here so the whole VM-box
-// resolution reads ONE spec-owned type. Package-less; concatenated into spec.
+// resolution reads ONE spec-owned type. `package schema`; concatenated into spec.
 //
 // R8 (the byte-freeze gate): #VmBoxMetadata IS whole-struct-marshaled into ONE label
 // (ai.opencharly.vm.box, spec.LabelVmBox) — like #CapabilityService →

@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `sidecar` kind. #Sidecar validates ONE sidecar-template
 // entity (a value of the `sidecar:` map, e.g. the embedded default library, or
 // a per-deploy override). Mirrors Go SidecarDef. CLOSED (an unknown key is a
@@ -28,7 +30,7 @@
 	path: string & =~"^/"
 }
 
-// #Security + #Size now live in _common.cue (shared by box/candy/deploy/sidecar).
+// #Security + #Size now live in 00_common.cue (shared by box/candy/deploy/sidecar).
 
 // ---------------------------------------------------------------------------
 // Resolve-to-envelope wire types (Cutover D; SDD conversion, per the standing

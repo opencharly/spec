@@ -1,7 +1,15 @@
+package schema
 
 // Shared CUE definitions referenced by multiple kinds. R3: define each shared
-// shape ONCE here, not per-kind. All schema/*.cue files compile into one
-// instance (no package clauses), so any kind def can reference these directly.
+// shape ONCE here, not per-kind. Every schema/*.cue file is one member of the
+// `schema` CUE package in this module, and `schemaconcat` strips the clause and
+// joins them into the ONE compilation unit the runtime and the generator share
+// — so any kind def can reference these directly, from its own file.
+//
+// The `00_` prefix is a SORT KEY, not a version: CUE excludes a schema file whose
+// name starts with `_` from a package load, so the shared-definitions file must
+// not carry that prefix; sorting first keeps the concatenation's body order —
+// and therefore the generated Go — byte-identical to the pre-package one.
 
 // Execution context for a plan step.
 #Context: ("build" | "deploy" | "runtime") @go(-)

@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `pipeline` KIND — the AUTHORED body of a workflow.
 //
 // A pipeline is authored in LOBSTER syntax: `steps:` carrying `id:` plus one exec
@@ -17,7 +19,7 @@
 // change here.
 //
 // CLOSED (an unknown key is a typo). Shared defs (#Step/#StrVal/#Duration) come from
-// _common.cue; #TaskParamSpec from task.cue; #WorkflowArgVal from workflow.cue (the
+// 00_common.cue; #TaskParamSpec from task.cue; #WorkflowArgVal from workflow.cue (the
 // same runtime arg VALUE the engine wire carries, so an authored trigger and the
 // request it later becomes cannot disagree about what a value may be).
 // #PipelineValue is the HOST value gate:

@@ -1,3 +1,5 @@
+package schema
+
 // Run-scoped observation instruments + the machine-written evidence envelope
 // (Cutover A of the nested-capture architecture). `instrument:` entries sit on
 // any deployable substrate-node body (deploy.cue, beside disposable:/lifecycle:)
@@ -6,13 +8,13 @@
 // pipeline. The bed runner owns instruments across run phases; evidence rows
 // land in ONE manifest (evidence.yml) and pipelines are blind word dispatches —
 // core and the runner never branch on capture kind. Shared defs REFERENCED, not
-// redefined (R3): #Context/#Duration live in _common.cue.
+// redefined (R3): #Context/#Duration live in 00_common.cue.
 
 // #Phase — the RUN-PHASE bracket enum: which check-run phase brackets an
 // instrument's capture segment (build = the image/domain build steps; live =
 // the check-live pass; update = the update/rebuild/re-verify step; teardown =
 // the cleanup steps). DISTINCT from #Context ("build"|"deploy"|"runtime",
-// _common.cue — a step-EXECUTION-legality enum) and from the build-vocabulary
+// 00_common.cue — a step-EXECUTION-legality enum) and from the build-vocabulary
 // #PhaseSet/#PhaseTemplates (the prepare/install/cleanup template set): this
 // is the RUN lifecycle, never a build phase nor an exec context. @go(-): NO
 // Go alias is emitted for the def name — `Phase` is already TAKEN in the spec
@@ -27,7 +29,7 @@
 // `pipeline: [{transcode: {to: mp4}}]` shape — a map whose single key is the
 // verb and whose value is that verb's own input) and desugared at parse time
 // into the internal plugin/plugin_input pair below — the EXACT desugar
-// contract plan steps use (see #Op's pair in _common.cue). CLOSED: the
+// contract plan steps use (see #Op's pair in 00_common.cue). CLOSED: the
 // desugar consumed the OPEN verb word, so the desugared entry validates
 // against just the pair; a two-verb-key entry is at-most-one-verb-violating
 // and cannot reach this def (the parse-time desugar hard-errors it — the same

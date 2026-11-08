@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the `kubevirt` kind — the 6th deploy substrate. #KubeVirt validates
 // ONE kind:kubevirt VM definition: a KubeVirt VirtualMachine on a Kubernetes cluster.
 // The kind is BOTH a standalone TEMPLATE (→ the typed uf.Kubevirt map) and a deploy
