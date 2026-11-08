@@ -1,8 +1,10 @@
+package schema
+
 // CUE schema for the `distro` kind. #Distro validates ONE value of the `distro:`
 // map (DistroDef) — the build vocabulary. CLOSED: every authored key is modeled
 // (an unknown key is a typo). TEXT/TEMPLATE fields are Go text/template — plain
 // `string`, never parsed. #CacheMount / #PhaseSet / #PhaseTemplates are shared
-// (_common.cue).
+// (00_common.cue).
 
 #Distro: {
 	inherits?:         string & =~"^[a-z0-9]+(-[a-z0-9]+)*$"

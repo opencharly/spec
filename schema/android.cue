@@ -1,7 +1,9 @@
+package schema
+
 // CUE schema for the `android` kind. #Android validates ONE kind:android entity
 // (a device). A device is EITHER an in-pod emulator hosted by a kind:box (box)
 // XOR a remote/physical adb endpoint (adb) — never both, never neither. Shared
-// #Step from _common.cue.
+// #Step from 00_common.cue.
 //
 // CLOSED: the base struct (no trailing `...`) models every authored key, so an
 // unknown key is still a typo. The box⊻adb exactly-one mutual-exclusion is

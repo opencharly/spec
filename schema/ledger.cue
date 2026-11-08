@@ -1,3 +1,5 @@
+package schema
+
 // ledger.cue — the `ledger:` kind: the per-host INSTALL LEDGER.
 //
 // What is installed on this host (deploy records + per-candy artifact records)

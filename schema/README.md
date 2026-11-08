@@ -1,8 +1,9 @@
 # spec/schema — the single-source CUE schema
 
 Every `charly.yml` shape (box / candy / vm / kubernetes / deploy / …) is defined
-ONCE here, in package-less `*.cue` files. These files are the single source of
-truth for two consumers:
+ONCE here, in the one CUE package `schema` (the module
+`github.com/opencharly/spec` is declared in `cue.mod/module.cue`). These files
+are the single source of truth for these consumers:
 
 1. **Runtime validation (ingress).** The schema travels WITH this module as
    `schema.FS` (package `github.com/opencharly/spec/schema`). charly core
@@ -14,11 +15,35 @@ truth for two consumers:
    turns these same files into the committed `spec/*_gen.go` — so the Go
    structs the loader decodes into, and the kind/verb/method word lists the CLI
    dispatches on, can never drift from what the schema validates.
+3. **The package itself.** `cue eval ./schema` loads the directory as the
+   `schema` package and evaluates the same value the concatenation compiles;
+   that is the form a consumer's own CUE module imports (a plugin schema
+   importing `github.com/opencharly/spec/schema` instead of holding a copy).
 
-> The package-less files MUST stay package-less — `ConcatSchema` concatenates
-> them into one scope. The `package spec` clause + the file-level `@go(spec)`
-> attribute that `cue exp gengotypes` needs are injected by the gen pipeline
-> (`internal/schemagen -mode=concat`), NEVER written into the source.
+> Every file carries exactly ONE package-level clause — `package schema` — and
+> `ConcatSchema` strips it, so the runtime and the generator still compile the
+> same package-less body they always have. (CUE excludes a file whose name
+> starts with `_` from a package load, which is why the shared definitions live
+> in `00_common.cue`: the `00_` sorts first, keeping the concatenation's order —
+> and so the generated Go — byte-identical.) The `package spec` clause + the
+> file-level `@go(spec)` attribute that `cue exp gengotypes` needs are injected
+> by the gen pipeline (`internal/schemagen -mode=params`), NEVER written into
+> the source.
+
+## The package form
+
+`schema/` is one CUE package in the module `github.com/opencharly/spec` (declared by
+`cue.mod/module.cue`), so it loads as a package rather than as a pile of package-less
+files; a consumer's own CUE module imports `github.com/opencharly/spec/schema`. The
+repo's supported command stays `charly task cue-gen`, which compiles these same files
+through the pinned toolchain it provisions and gates the result with
+`TestGenReproducible`.
+
+`cue.mod/module.cue` pins language version `v0.16.1` — the version spec's own
+`cuetoolchain` pins for `cue exp gengotypes`. It is not incidental: the schema's
+`close()` + embedded-definition idiom (`#Step`'s arms embedding the closed `#Op`)
+is legal through v0.17 and rejected by v0.18's semantics with `field not allowed`.
+Raising the language version is the §10.1 pattern rewrite (TODO 2.16), not a bump.
 
 ## Regenerating `spec` — `charly task cue-gen`
 
@@ -37,16 +62,15 @@ depends on `bootstrap-cue` + `wire-gen` (which in turn depends on
    runs `gengotypes` matches the library that compiles the schema. It downloads
    the checksum-pinned release tarball (a no-op once `./bin/cue` is at the
    pinned version).
-2. **Concatenates** `schema/*.cue` via `internal/schemagen -mode=concat`
+2. **Concatenates** `schema/*.cue` via `internal/schemagen -mode=params`
    (the SAME `schemaconcat.ConcatSchema` contract as the runtime
-   `sharedCueSchema` — one concatenation contract), headed `package spec` +
-   `@go(spec)`.
+   `sharedCueSchema` — one concatenation contract; the per-file `package
+   schema` clause is stripped), headed `package spec` + `@go(spec)`.
 3. **`cue exp gengotypes`** → `spec/cue_types_gen.go` (the Go param structs).
 4. **`internal/schemagen -mode=vocab`** → `spec/vocab_gen.go`
    (`KindWords`, `DocDirectives`, `StepKeywords`, `ContextWords`, `OpFields`,
    `OpVerbs`, `AuthoringVerbs`, … — all read straight from the compiled schema
-   via the cue API), and `-mode=version` → `spec/version_gen.go` (the
-   schema-version consts from `schema/version.cue`).
+   via the cue API).
 5. **`gofmt`** the committed generated files.
 
 `wire-gen` (chained first) additionally renders `protocol/schema/*.cue` into

@@ -1,3 +1,5 @@
+package schema
+
 // buildwire.cue — the out-of-proc BUILD-TIME wire (SDD conversion of the
 // former deploy_wire.go's build-time section, per the standing operator
 // directive: a hand-written wire struct not yet CUE-sourced is

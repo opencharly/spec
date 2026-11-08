@@ -1,8 +1,10 @@
+package schema
+
 // CUE schema for the `kindcluster` kind. #Kindcluster validates ONE value of the
 // `kindcluster:` map — a local Kubernetes-in-Docker cluster provisioned by the
 // upstream `kind` tool (kubernetes-sigs/kind), the local-cluster sibling of the
 // `kubernetes:` cluster template. CLOSED — every Kindcluster field is modeled, so
-// an unknown key is a typo. Shared #Step from _common.cue; the cluster-policy
+// an unknown key is a typo. Shared #Step from 00_common.cue; the cluster-policy
 // sub-blocks (storage/ingress/image_default/pod_default/defaults) are the SAME
 // defs the `kubernetes:` template uses (R3 — one policy surface for both).
 //

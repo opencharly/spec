@@ -30,7 +30,7 @@ const (
 )
 
 // RefKind classifies a ref by WHAT MUST BE FETCHED — the program-side twin of the CUE
-// ref arms (#CandyRef in schema/_common.cue, #PluginSource in schema/candy.cue).
+// ref arms (#CandyRef in schema/00_common.cue, #PluginSource in schema/candy.cue).
 //
 // The CUE pattern is the gate for an AUTHORED document: it rejects an unsupported scheme
 // at its file:line, quoting the pattern. This classifier is for a ref that arrives as a
@@ -51,7 +51,7 @@ const (
 	RefKindOci RefKind = "oci"
 )
 
-// bareCandyNameRe is the bare-name arm of every candy ref site (schema/_common.cue's
+// bareCandyNameRe is the bare-name arm of every candy ref site (schema/00_common.cue's
 // `#CandyRef` third arm and `#EntityRef`): a lowercase-hyphenated name.
 var bareCandyNameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 

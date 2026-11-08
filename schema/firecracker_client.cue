@@ -1,9 +1,11 @@
+package schema
+
 // CUE schema for the FIRECRACKER-CLIENT wire family — the host↔plugin-firecracker
 // internal-op RPC types (NOT authored config — never in #Node/#Op), mirroring the
 // kubevirt_client.cue and vmclient.cue families (R3: the same SDD treatment for the
 // 8th substrate). These are the payloads the `command:firecracker` CLI dispatches to
 // candy/plugin-firecracker's internal ops (machine-state / list / resolve-console /
-// mmds / snapshot / pools / doctor). Package-less; concatenated into the spec
+// mmds / snapshot / pools / doctor). `package schema`; concatenated into the spec
 // compilation unit.
 //
 // Written out explicitly rather than embedding #Firecracker — the wire env carries

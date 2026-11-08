@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the RESOLVED tunnel WIRE type — the host-side carrier
 // spec.TunnelConfig / spec.TunnelPort that the pod-lifecycle plugins (candy/plugin-deploy-pod's
 // podTunnelOp for start/stop, candy/plugin-pod's podTunnelStop for remove) marshal directly over

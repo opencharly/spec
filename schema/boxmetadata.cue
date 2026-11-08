@@ -1,9 +1,11 @@
+package schema
+
 // CUE schema for the OCI-label metadata hub (P2B: BoxMetadata → spec, task #60).
 // #BoxMetadata is the runtime-relevant config a deploy extracts from an image's OCI
 // labels (ExtractMetadata) — CUE-sourced here so the whole deploy resolution reads ONE
 // spec-owned type instead of a hand struct in charly core. The charly home + the sub-shape
 // homes (labels.go/alias_collect.go/secrets.go) alias onto these (SDD: wire types are
-// CUE-sourced; the P8b-followup/P14a precedent). Package-less; concatenated into spec.
+// CUE-sourced; the P8b-followup/P14a precedent). `package schema`; concatenated into spec.
 //
 // R8 (the byte-freeze gate): #BoxMetadata itself is NEVER whole-struct-marshaled — a deploy
 // builds it FIELD-BY-FIELD from ~45 individual labels (ExtractMetadata), so ITS tags are

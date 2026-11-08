@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the serializable candy BUILD model (S-CM, Collection A). #CandyModel is the
 // wire form of a runtime candy's build model — the plan steps + resolved package/service/env/route
 // sections a plugin (validate, check-include, the K3-D deploy-plan compiler) reads WITHOUT holding
@@ -10,7 +12,7 @@
 // hand structs in sdk/deploykit (layer_model.go) + sdk/kit (env.go); they are CUE-sourced here and
 // those homes alias onto spec (SDD: wire types are CUE-sourced). Composed sub-defs #Step/#Op/
 // #CandyService/#CandyExtract/#CandyData/#CandyVolume/#CandyAlias/#Shell/#EnvDependency/#CandyApk
-// come from _common.cue / candy.cue. Package-less; concatenated into the spec compilation unit.
+// come from 00_common.cue / candy.cue. `package schema`; concatenated into the spec compilation unit.
 // S-CM spike PROVEN live (scratchpad/k5-scm-spike-verdict.md + k5a-buildvocab-spike-verdict.md).
 
 // #PackageSection — a generic format-specific package section (rpm/deb/pac/aur). Raw carries the

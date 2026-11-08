@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the COMMAND-time host↔plugin seam wire types (P10). A
 // compiled-in command plugin (candy/plugin-vm's command:vm leg) owns its CLI
 // handlers but cannot LoadUnified, hold the deploy ledger, or run the VM-disk
@@ -9,7 +11,7 @@
 // Each action noun is CLASS-GENERIC (never a substrate word — the F11 uniform-API
 // gate); pod (P11) + deploy (P13) reuse the same seams.
 //
-// Package-less; concatenated into the spec compilation unit. NOT authoring kinds
+// `package schema`; concatenated into the spec compilation unit. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire types, single-sourced here so
 // `charly task cue-gen` produces the Go structs (WIRE TYPES ARE CUE-SOURCED WITHOUT
 // EXCEPTION, CLAUDE.md SDD). Fields that carry a hand-written runtime type with

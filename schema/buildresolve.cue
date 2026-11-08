@@ -1,3 +1,5 @@
+package schema
+
 // CUE schema for the BUILD-time host↔plugin seam wire types (P8b). The box-build
 // engine's DRIVE — the podman build/push loop, per-image build lock, and the
 // merge/retention orchestration — lives in candy/plugin-build (a compiled-in
@@ -20,7 +22,7 @@
 // OCITarget / intermediates / layers stay core PINNED BY the loader Mechanism +
 // the P2 runtime-Candy decision — re-judged at P15/P16 after the loader fold.
 //
-// Package-less; concatenated into the spec compilation unit. NOT authoring kinds
+// `package schema`; concatenated into the spec compilation unit. NOT authoring kinds
 // (never in #Node/#Op) — pure generated wire types, single-sourced here so
 // `charly task cue-gen` produces the Go structs (WIRE TYPES ARE CUE-SOURCED WITHOUT
 // EXCEPTION, CLAUDE.md SDD). All fields are plain scalars/lists/nested structs

@@ -1,3 +1,5 @@
+package schema
+
 // Generic agent-control, target, and terminal contracts. These definitions own
 // the JSON payloads carried inside protocol.ChannelFrame; protobuf owns only the
 // transport envelope. Runtime names and transport combinations are data.

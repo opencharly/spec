@@ -50,7 +50,7 @@ func TestDeployShapeOverrideAcceptsCpuSingular(t *testing.T) {
 
 // TestDeployShapeOverrideRejectsPluralCpus pins the cutover: the old `cpus:`
 // spelling is GONE from the #Deploy arm. It survives only on #Security (a
-// CPU-quota string, schema/_common.cue) and the libvirt #LibvirtNUMACell
+// CPU-quota string, schema/00_common.cue) and the libvirt #LibvirtNUMACell
 // (schema/vm.cue) — different defs entirely. If a future edit reintroduces
 // `cpus:` as an accepted #Deploy key, this fails.
 func TestDeployShapeOverrideRejectsPluralCpus(t *testing.T) {

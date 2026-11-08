@@ -1,6 +1,8 @@
+package schema
+
 // CUE schema for the OCI-plugin wire types — the host<->plugin envelopes the OCI
 // plugin (registry.go + merge.go logic; go-containerregistry lives in the candy, not
-// core) serves. Package-less; concatenated into the spec compilation unit. NOT
+// core) serves. `package schema`; concatenated into the spec compilation unit. NOT
 // authoring kinds (never in #Node/#Op) — pure host<->plugin wire structs, single-
 // sourced here so `charly task cue-gen` produces the Go structs. @go names match the Go
 // field names; JSON tags drive the marshalled wire envelope.

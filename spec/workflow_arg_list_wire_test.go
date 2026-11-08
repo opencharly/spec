@@ -41,8 +41,9 @@ var (
 
 // loadSchemaWithFixture compiles the shipped schema concatenation TOGETHER with one
 // concrete document from schema/testdata, which is how the fixture is validated: the
-// document is concatenated (no package clause, like every schema/*.cue file) so the defs
-// it asserts against are the real ones.
+// document is concatenated BESIDE the schema (the fixture carries no package clause; the
+// schema files' `package schema` clauses are stripped) so the defs it asserts against
+// are the real ones.
 func loadSchemaWithFixture(t *testing.T, fixture string) cue.Value {
 	t.Helper()
 	src, _, err := schemaconcat.ConcatSchema(os.DirFS(".."), "schema", nil)

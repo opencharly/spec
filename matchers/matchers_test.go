@@ -8,7 +8,7 @@ import (
 )
 
 // Sync guard: every operator allowed by #MatchOpMap (the CUE matcher-operator
-// authority in _common.cue) must be implemented by matchOne — a new allow-listed
+// authority in 00_common.cue) must be implemented by matchOne — a new allow-listed
 // op without a runner branch would crash at runtime. Keep this list in sync with
 // #MatchOpMap.
 //

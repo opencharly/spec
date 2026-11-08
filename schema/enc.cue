@@ -1,3 +1,5 @@
+package schema
+
 // enc.cue — the encrypted-volume (gocryptfs) EXECUTION wire types shared
 // between charly's core and the compiled-in candy/plugin-enc (C16a; SDD
 // conversion, per the standing operator directive: a hand-written wire struct

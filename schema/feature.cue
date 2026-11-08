@@ -1,3 +1,5 @@
+package schema
+
 // feature.cue — wire types for the externalized `charly feature` command plugin
 // (candy/plugin-feature; SDD conversion, per the standing operator directive: a
 // hand-written wire struct not yet CUE-sourced is conversion-in-progress, never a

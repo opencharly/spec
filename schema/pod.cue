@@ -1,8 +1,10 @@
+package schema
+
 // CUE schema for the `pod` kind. #Pod validates ONE entry of the `pod:` map
 // (PodSpec). Most projects declare no kind:pod entries (the real corpus is all
 // `pod: {}`); the schema is modeled directly from the struct. CLOSED — every
 // PodSpec field is modeled, so an unknown key is a typo. Shared defs REFERENCED,
-// not redefined (R3): #Step/#CandyRef from _common.cue,
+// not redefined (R3): #Step/#CandyRef from 00_common.cue,
 // #DeploySecret from deploy.cue, #Sidecar from sidecar.cue.
 
 #Pod: {

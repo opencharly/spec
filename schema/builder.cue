@@ -1,7 +1,9 @@
+package schema
+
 // CUE schema for the `builder` kind. #Builder validates ONE value of the
 // `builder:` map (BuilderDef). CLOSED: every authored key is modeled (an unknown
 // key is a typo). Template/script bodies are Go text/template (plain `string`).
-// #CacheMount / #PhaseSet / #PhaseTemplates are shared (_common.cue). No #Step
+// #CacheMount / #PhaseSet / #PhaseTemplates are shared (00_common.cue). No #Step
 // (builder has no plan).
 
 #Builder: {

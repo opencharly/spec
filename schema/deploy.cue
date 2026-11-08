@@ -1,9 +1,11 @@
+package schema
+
 // CUE schema for the `deploy` AND `check` kinds. Both validate ONE
 // DeployNode (charly/deploy.go): a `deploy:` map entry, or a `kind: check`
 // bed (disposable:true + usually iterate:/plan:). #Deploy is the base node;
 // #Check narrows it to the bed invariants. CLOSED. Shared defs REFERENCED, not
 // redefined (R3): #Step/#Op/#Security/#InstallOpts/#Duration/
-// #EntityRef/#PortPin/#VmSize/#Sidecar/#ShellSpec live in _common.cue / sidecar.cue.
+// #EntityRef/#PortPin/#VmSize/#Sidecar/#ShellSpec live in 00_common.cue / sidecar.cue.
 
 // #DeployTraits is a SUBSTRATE kind's DECLARED deploy behaviour (P9): a substrate plugin
 // advertises it per word over Describe (ProvidedCapability.deploy_traits), and kit.StampDescent

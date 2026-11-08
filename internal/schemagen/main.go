@@ -2,7 +2,7 @@
 // package. It is invoked ONLY by `charly task cue-gen` (never at runtime) and has two
 // modes:
 //
-//	-mode=concat -out=<file>   Concatenate schema/*.cue into one file
+//	-mode=params -out=<file>   Concatenate schema/*.cue into one file
 //	                           headed `package spec` + the file-level `@go(spec)`
 //	                           attribute, ready for `cue exp gengotypes`.
 //	-mode=vocab  -out=<file>   Compile the concatenation via the embedded
@@ -13,8 +13,9 @@
 //	                           method allowlists).
 //
 // CONCATENATION CONTRACT (R3): concatSchema replicates EXACTLY the mechanism the
-// runtime uses in charly core (cue_schema.go) `sharedCueSchema` — every package-less
-// schema/*.cue file, sorted by name, joined with a trailing newline. The runtime
+// runtime uses in charly core (cue_schema.go) `sharedCueSchema` — every schema/*.cue
+// file (its `package schema` clause normalized away by `schemaconcat`), sorted by
+// name, joined with a trailing newline. The runtime
 // reads the files from `//go:embed`; this tool reads them from disk (it runs at
 // dev time with the working tree present). If you change the runtime
 // concatenation order, change it here too — the two MUST stay byte-identical or
@@ -23,7 +24,7 @@
 // PARAM-GEN SCOPE (the two modes diverge by INPUT, not by mechanism): the
 // `vocab` mode reads the FULL schema (every schema/*.cue) — it needs #Node's
 // arms (node.cue) to derive KindWords, so its concatenation stays byte-identical
-// to the runtime `sharedCueSchema`. The `concat` mode (which feeds `cue exp
+// to the runtime `sharedCueSchema`. The `params` mode (which feeds `cue exp
 // gengotypes` → the Go param structs) reads the schema MINUS node.cue: it
 // defines the node-disjunction wrappers (#Node/#NodeDoc/#*Arm/#*Value), which
 // gengotypes degrades to `map[string]any` and which are NOT charly param structs.

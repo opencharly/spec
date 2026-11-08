@@ -1,3 +1,5 @@
+package schema
+
 // llm.cue — the SHARED OpenAI-compatible LLM vocabulary: the endpoint/connection
 // config (#LLMSpec) and the general chat-completions request-parameter block
 // (#LLMParams), plus the structured-output / reasoning / streaming / tool-choice

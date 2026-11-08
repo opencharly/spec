@@ -1,9 +1,11 @@
+package schema
+
 // CUE schema for the KUBEVIRT-CLIENT wire family — the host↔plugin-kubevirt
 // internal-op RPC types (NOT authored config — never in #Node/#Op), mirroring
 // the vmclient.cue family (R3: the same SDD treatment for the 6th substrate).
 // These are the payloads the `command:kubevirt` CLI dispatches to
 // candy/plugin-kubevirt's internal ops (domain-state / list / resolve-console /
-// snapshot / migrate). Package-less; concatenated into the spec compilation
+// snapshot / migrate). `package schema`; concatenated into the spec compilation
 // unit.
 //
 // Written out explicitly rather than embedding #KubeVirt — the wire env carries
