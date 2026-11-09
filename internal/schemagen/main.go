@@ -4,7 +4,8 @@
 //
 //	-mode=params -out=<file>   Concatenate schema/*.cue into one file
 //	                           headed `package spec` + the file-level `@go(spec)`
-//	                           attribute, ready for `cue exp gengotypes`.
+//	                           attribute, and generate the Go types in-process
+//	                           through schemaparams (CUE Go API).
 //	-mode=vocab  -out=<file>   Compile the concatenation via the embedded
 //	                           cuelang.org/go API and emit spec/vocab_gen.go
 //	                           — the single-source vocabulary lists (kind keywords,
@@ -24,10 +25,10 @@
 // PARAM-GEN SCOPE (the two modes diverge by INPUT, not by mechanism): the
 // `vocab` mode reads the FULL schema (every schema/*.cue) — it needs #Node's
 // arms (node.cue) to derive KindWords, so its concatenation stays byte-identical
-// to the runtime `sharedCueSchema`. The `params` mode (which feeds `cue exp
-// gengotypes` → the Go param structs) reads the schema MINUS node.cue: it
+// to the runtime `sharedCueSchema`. The `params` mode (which feeds the in-process
+// Go generator → the Go param structs) reads the schema MINUS node.cue: it
 // defines the node-disjunction wrappers (#Node/#NodeDoc/#*Arm/#*Value), which
-// gengotypes degrades to `map[string]any` and which are NOT charly param structs.
+// the generator degrades to `map[string]any` and which are NOT charly param structs.
 // (The egress validation schemas moved to candy/plugin-egress in M16, so they no
 // longer live here to exclude.) The entity defs (#Box/#Deploy/#Op/#Vm/…) do not
 // reference node.cue, so the exclusion is compile-clean. Both modes share the ONE concatSchema helper
@@ -82,9 +83,9 @@ func fatal(format string, a ...any) {
 }
 
 // excludeParamGen reports whether a schema/*.cue file is EXCLUDED from the
-// param-gen concatenation (the gengotypes input). node.cue defines the
-// node-disjunction wrappers — not a charly param struct, and gengotypes degrades
-// it to `map[string]any`. See the package doc PARAM-GEN SCOPE note. The vocab
+// param-gen concatenation (the generator input). node.cue defines the
+// node-disjunction wrappers — not a charly param struct, and the generator
+// degrades it to `map[string]any`. See the package doc PARAM-GEN SCOPE note. The vocab
 // mode passes `nil` (no exclusion) so #Node's arms are present for KindWords.
 // (The egress validation schemas moved to candy/plugin-egress in M16, so there
 // are no egress_*.cue files here to exclude.)
@@ -106,8 +107,8 @@ func concatSchema(dir string, exclude func(name string) bool) (string, []string,
 }
 
 // specSource returns the concatenation headed with the `package <pkg>` clause and
-// the file-level `@go(<pkg>)` attribute — what `cue exp gengotypes` consumes to
-// emit that Go package. pkg is "spec" for the core schema and "params" for a
+// the file-level `@go(<pkg>)` attribute — what the generator reads to name the
+// Go package it emits. pkg is "spec" for the core schema and "params" for a
 // plugin's self-contained schema (same one concatenation contract — R3). The cue
 // API (vocab mode) compiles the same string. The exclude filter scopes the
 // param-gen input (see excludeParamGen).
@@ -120,18 +121,19 @@ func specSource(dir, pkg string, exclude func(name string) bool) (string, error)
 }
 
 // ----------------------------------------------------------------------------
-// retag mode — the Go-native yaml-tag doubling (replaces the former cue:gen sed)
+// params mode — the ONE schema→Go pipeline (concatenation, module-aware compose,
+// in-process generation, tag normalization)
 // ----------------------------------------------------------------------------
 
 // writeParams emits the GENERATED Go params file by calling the ONE pipeline
 // (schemaparams): concatenate the param-gen schema subset under the `package <pkg>` +
-// `@go(<pkg>)` header, run the pinned cue gengotypes (provisioned through
-// cuetoolchain.Ensure into ./bin), normalize the struct tags. None of those steps is
-// implemented here any more — that is what makes the pipeline ONE thing rather than a
-// copy per caller. `excludeParamGen` (node.cue) is this caller's only difference, and
-// it is a parameter.
+// `@go(<pkg>)` header, compose it as a CUE module instance, generate the Go types
+// in-process (CUE Go API, no `cue` CLI), normalize the struct tags. None of those steps
+// is implemented here any more — that is what makes the pipeline ONE thing rather than
+// a copy per caller. `excludeParamGen` (node.cue) is this caller's only difference,
+// and it is a parameter.
 func writeParams(dir, out, pkg string) error {
-	src, err := schemaparams.GenerateExcluding(dir, pkg, "bin", excludeParamGen)
+	src, err := schemaparams.GenerateExcluding(dir, pkg, excludeParamGen)
 	if err != nil {
 		return err
 	}

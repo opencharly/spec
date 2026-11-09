@@ -28,8 +28,8 @@ are the single source of truth for these consumers:
 > package load, which is why the shared definitions live in `00_common.cue`: the
 > `00_` sorts first, keeping the concatenation's order — and so the generated
 > Go — byte-identical.) The `package spec` clause + the file-level `@go(spec)`
-> attribute that `cue exp gengotypes` needs are injected by the gen pipeline
-> (`internal/schemagen -mode=params`), NEVER written into the source.
+> attribute that the generator reads are injected by the gen pipeline
+> (`internal/schemagen -mode=params` → `schemaparams`), NEVER written into the source.
 
 ## The package form
 
@@ -47,11 +47,13 @@ the module that owns it is `specmodule.FS` (package `github.com/opencharly/spec`
 Composing with only the files would evaluate them under the consumer's toolchain default
 instead of the pinned version above.
 
-`cue.mod/module.cue` pins language version `v0.16.1` — the version spec's own
-`cuetoolchain` pins for `cue exp gengotypes`. It is not incidental: the schema's
-`close()` + embedded-definition idiom (`#Step`'s arms embedding the closed `#Op`)
-is legal through v0.17 and rejected by v0.18's semantics with `field not allowed`.
-Raising the language version is the §10.1 pattern rewrite (TODO 2.16), not a bump.
+`cue.mod/module.cue` pins language version `v0.16.1` — the version the embedded
+`cuelang.org/go` library is pinned to in `go.mod`, and the ONE declaration both the
+in-process generator and every composing consumer evaluate under. It is not
+incidental: the schema's `close()` + embedded-definition idiom (`#Step`'s arms
+embedding the closed `#Op`) is legal through v0.17 and rejected by v0.18's semantics
+with `field not allowed`. Raising the language version is the §10.1 pattern rewrite
+(TODO 2.16), not a bump.
 
 ## Regenerating `spec` — `charly task cue-gen`
 
@@ -62,31 +64,32 @@ charly task cue-gen
 ```
 
 The task is `cue-gen` in this repo's `charly.yml` (the `kind: task` surface). It
-depends on `bootstrap-cue` + `wire-gen` (which in turn depends on
-`bootstrap-protoc`):
+depends on `wire-gen` (which in turn depends on `bootstrap-protoc`):
 
-1. **Bootstraps the pinned cue CLI** into `./bin/cue` (gitignored) — `v0.16.1`,
-   the SAME version as charly's embedded `cuelang.org/go` library, so the CLI that
-   runs `gengotypes` matches the library that compiles the schema. It downloads
-   the checksum-pinned release tarball (a no-op once `./bin/cue` is at the
-   pinned version).
-2. **Concatenates** `schema/*.cue` via `internal/schemagen -mode=params`
+1. **Concatenates** `schema/*.cue` via `internal/schemagen -mode=params`
    (the SAME `schemaconcat.ConcatSchema` contract as the runtime
    `sharedCueSchema` — one concatenation contract; the per-file `package
    schema` clause is stripped), headed `package spec` + `@go(spec)`.
-3. **`cue exp gengotypes`** → `spec/cue_types_gen.go` (the Go param structs).
-4. **`internal/schemagen -mode=vocab`** → `spec/vocab_gen.go`
+2. **Composes and generates in-process** (`schemaparams`): the concatenation is
+   loaded as ONE CUE module instance through `schemacompose` (the same offline
+   resolution a plugin's served schema uses), and the Go param structs are
+   generated from the CUE Go API → `spec/cue_types_gen.go`. No `cue` CLI is
+   provisioned or executed.
+3. **`internal/schemagen -mode=vocab`** → `spec/vocab_gen.go`
    (`KindWords`, `DocDirectives`, `StepKeywords`, `ContextWords`, `OpFields`,
    `OpVerbs`, `AuthoringVerbs`, … — all read straight from the compiled schema
    via the cue API).
-5. **`gofmt`** the committed generated files.
+4. **`gofmt`** the committed generated files.
 
 `wire-gen` (chained first) additionally renders `protocol/schema/*.cue` into
 `proto/plugin.proto` and compiles the Go gRPC stubs.
 
-Each plugin's OWN `params/cue_types_gen.go` is generated from its self-contained
+Each plugin's OWN `params/cue_types_gen.go` is generated from its own
 `candy/plugin-*/schema/*.cue` in the plugin's OWN repository, via the SAME
-`internal/schemagen` + pinned cue pipeline (R3). The former superproject
+`schemaparams` pipeline (R3) — including a schema that imports
+`github.com/opencharly/spec/schema`, which resolves through the same offline
+compose and emits the type through the Go package that owns it
+(`github.com/opencharly/spec/spec`). The former superproject
 `taskfiles/Cue.yml` wrapper — which chained this repo's `cue:gen` and then looped
 over each plugin — was removed with the candy de-submodule work (charly#452,
 merged 2026-08-29); plugin param generation now lives with the plugin.
@@ -103,11 +106,13 @@ the `*_gen.go` files** — change the `*.cue` source and regenerate.
 
 ## The `@go(...)` annotations
 
-`cue exp gengotypes` is lossy: every CUE disjunction degrades to `any` /
+The params generator is lossy: every CUE disjunction degrades to `any` /
 `map[string]any` / an empty struct (Go cannot express a disjunction), and field
 names get a naive `leadingCap + underscores-preserved` mapping. Two annotation
 classes in the `*.cue` source fix this — both are **inert for runtime validation**
-(CUE attributes never participate in unification):
+(CUE attributes never participate in unification). Schema comments that name
+`gengotypes` describe this mapping: the generator is a faithful in-process port of
+`cue exp gengotypes` v0.16.1 (`schemaparams/gotypes.go`), so each statement still holds:
 
 - **Field renames** — `@go(<GoName>)` makes the generated Go field name match the
   hand-written charly param struct (`http` → `HTTP`, `cap_add` → `CapAdd`,

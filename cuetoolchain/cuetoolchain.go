@@ -1,19 +1,19 @@
 // Package cuetoolchain is THE single home for the pinned `cue` CLI (R3).
 //
-// The schema→Go pipeline runs `cue exp gengotypes`, and that generator lives in
-// `cuelang.org/go`'s INTERNAL tree (`internal/encoding/gotypes`), so no other
-// module can call it in-process. The CLI is therefore a toolchain the pipeline
-// provisions itself — checksum-verified, from a pinned release — so a reader who
-// is told to run a `charly` command never sees `cue`, a checkout path, or a `cd`.
+// The schema→Go params pipeline no longer runs this CLI: `schemaparams` composes and
+// generates in-process through the CUE Go API (opencharly/spec#271), so generation and
+// composition share one offline resolution path and no binary is provisioned. The CLI
+// remains the pinned tool for AUTHORING the schema as a module — `cue eval ./schema`,
+// `cue vet`, a scratch `cue exp` — provisioned checksum-verified from a pinned release
+// by the `bootstrap-cue` task and by the charly-side cache directory helper.
 //
-// The pin AND the provisioning live here, once: the `charly`-side generation verb
-// calls Ensure to obtain the toolchain, and spec's own `bootstrap-cue` task is
-// re-keyed onto it too (it used to carry the same version, URL and checksum inline
-// in shell — two declarations of one toolchain, which is exactly what this package
-// removes). One pin, one home, one fetcher.
+// The pin AND the provisioning live here, once: `cuetoolchain.Ensure` is what every
+// caller uses to obtain the toolchain (the `bootstrap-cue` task used to carry the same
+// version, URL and checksum inline in shell — two declarations of one toolchain, which
+// is exactly what this package removes). One pin, one home, one fetcher.
 //
 // STANDALONE: stdlib only, so both callers can import it without pulling in the
-// packages they regenerate.
+// packages they generate.
 package cuetoolchain
 
 import (
@@ -97,7 +97,7 @@ func Ensure(dir string) (string, error) {
 	}
 	sum, ok := SHA256(runtime.GOARCH)
 	if !ok {
-		return "", fmt.Errorf("the pinned cue %s is not checksum-pinned for %s/%s (only linux/amd64 is) — pin it in github.com/opencharly/spec/cuetoolchain, or run the pipeline in a container",
+		return "", fmt.Errorf("the pinned cue %s is not checksum-pinned for %s/%s (only linux/amd64 is) — pin it in github.com/opencharly/spec/cuetoolchain, or use a linux/amd64 environment",
 			Version, runtime.GOOS, runtime.GOARCH)
 	}
 	url := URL(runtime.GOARCH)

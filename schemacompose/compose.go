@@ -10,8 +10,8 @@ package schemacompose
 // contract — the serve side and the host gate — must judge the same schema with the same
 // code, so the ONE composer has to live where both of them may reach it. This module also
 // already owns the family it belongs to: schemaconcat (the concatenation contract),
-// schemaparams and cuetoolchain (the generation pipeline), and the embedded schema source
-// plus the module declaration (`schema.FS`, `FS`).
+// schemaparams (the generation pipeline), cuetoolchain (the pinned authoring CLI), and the
+// embedded schema source plus the module declaration (`schema.FS`, `FS`).
 //
 // A plugin's served schema used to be TEXT all the way down: `CompileString` on the
 // concatenated `schema/*.cue` body, in a context with no CUE module in scope. That made
@@ -28,12 +28,14 @@ package schemacompose
 // no `cue.mod/pkg` vendoring, and no local `replace` (which the pinned modfile schema does
 // not have).
 //
-// TWO entry points, ONE compose. `ServedSchema` composes the plugin's schema FS (the
-// serve side, `BuildCapabilitiesWithRequires`), and `ServedText` composes the
-// package-less body that reaches the host over the wire (`Capabilities.schema_cue`, the
-// host gate). Both funnel into composeServedBody, so the two halves of the contract judge
-// the same schema with the same code — which is the property sdk#490 asks for: a builtin
-// and an out-of-process plugin, and the serve side and the host, agree byte for byte.
+// THREE entry points, ONE compose. `ServedSchema` composes the plugin's schema FS (the
+// serve side, `BuildCapabilitiesWithRequires`), `ServedText` composes the package-less body
+// that reaches the host over the wire (`Capabilities.schema_cue`, the host gate), and
+// `ComposeText` hands the same loaded instance to the Go projection (`schemaparams`), so a
+// plugin's params are generated from the schema text both halves of the contract judge.
+// All three funnel into composeServedBody, so the two halves of the contract judge the same
+// schema with the same code — which is the property sdk#490 asks for: a builtin and an
+// out-of-process plugin, and the serve side and the host, agree byte for byte.
 //
 // THREE measured constraints decide the shape (sdk#490, measured live):
 //   - the loader requires a dependency's source FS to implement `module.OSRootFS`, because
@@ -61,6 +63,7 @@ import (
 	"sync"
 
 	"cuelang.org/go/cue"
+	"cuelang.org/go/cue/build"
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/mod/modfile"
@@ -112,6 +115,16 @@ const (
 	derivedDepVersion = "v0.0.0"
 )
 
+// Instance is ONE composed CUE module instance: the context its value belongs to, the
+// loader's build instance and the built value. The two halves of the contract read the
+// VALUE; the Go projection reads the build instance as well, because the import graph and
+// the package attributes live there and not in the value.
+type Instance struct {
+	Ctx   *cue.Context
+	Build *build.Instance
+	Value cue.Value
+}
+
 // ServedSchema composes a plugin's embedded schema as one CUE module instance: the
 // concatenated `schema/*.cue` body of schemaFS under dir, evaluated inside the plugin's own
 // module declaration when its FS ships `cue.mod/module.cue`, and under the derived
@@ -126,7 +139,11 @@ func ServedSchema(ctx *cue.Context, schemaFS fs.FS, dir string) (cue.Value, erro
 	if err != nil {
 		return cue.Value{}, err
 	}
-	return composeServedBody(ctx, body, decl)
+	inst, err := composeServedBody(ctx, body, pluginPackage, decl)
+	if err != nil {
+		return cue.Value{}, err
+	}
+	return inst.Value, nil
 }
 
 // ServedText composes the package-less body a plugin serves on
@@ -137,27 +154,45 @@ func ServedSchema(ctx *cue.Context, schemaFS fs.FS, dir string) (cue.Value, erro
 // derive. For a plugin that ships no declaration — every plugin today — the two entry
 // points are byte-for-byte the same compose.
 func ServedText(ctx *cue.Context, body string) (cue.Value, error) {
-	decl, err := derivedPluginModuleDecl()
+	inst, err := ComposeText(ctx, body, pluginPackage)
 	if err != nil {
 		return cue.Value{}, err
 	}
-	return composeServedBody(ctx, body, decl)
+	return inst.Value, nil
+}
+
+// ComposeText composes a package-less schema body under `package pkg`, in the virtual
+// plugin module, under the DERIVED declaration, with spec served by the offline registry.
+// It is the same compose as ServedText and is exported for the Go projection
+// (schemaparams): a plugin's params are generated from the SAME source text the two halves
+// of the contract judge, which is what lets that source carry
+// `import "github.com/opencharly/spec/schema"` — the import resolves against the same
+// offline registry, with no published CUE module and no `cue` CLI in the loop.
+func ComposeText(ctx *cue.Context, body, pkg string) (*Instance, error) {
+	decl, err := derivedPluginModuleDecl()
+	if err != nil {
+		return nil, err
+	}
+	return composeServedBody(ctx, body, pkg, decl)
 }
 
 // composeServedBody is the ONE compose: the package-less schema body plus the module
 // declaration it is evaluated under, loaded as ./schema out of the virtual plugin module,
 // with spec served by the offline registry.
-func composeServedBody(ctx *cue.Context, body string, decl []byte) (cue.Value, error) {
+func composeServedBody(ctx *cue.Context, body, pkg string, decl []byte) (*Instance, error) {
 	if ctx == nil {
 		ctx = cuecontext.New()
 	}
 	loc, err := specModuleLoc()
 	if err != nil {
-		return cue.Value{}, err
+		return nil, err
+	}
+	if pkg == "" {
+		return nil, fmt.Errorf("compose: the synthesized package name is empty")
 	}
 	overlay := map[string]load.Source{
 		filepath.Join(pluginModuleRoot, filepath.FromSlash(pluginModuleFile)): load.FromBytes(decl),
-		filepath.Join(pluginModuleRoot, pluginSchemaDir, "plugin.cue"):        load.FromBytes([]byte("package " + pluginPackage + "\n\n" + body)),
+		filepath.Join(pluginModuleRoot, pluginSchemaDir, "plugin.cue"):        load.FromBytes([]byte("package " + pkg + "\n\n" + body)),
 	}
 	instances := load.Instances([]string{"./" + pluginSchemaDir}, &load.Config{
 		Dir:      pluginModuleRoot,
@@ -165,17 +200,20 @@ func composeServedBody(ctx *cue.Context, body string, decl []byte) (cue.Value, e
 		Registry: specRegistry{loc: loc},
 	})
 	if len(instances) != 1 {
-		return cue.Value{}, fmt.Errorf("composing ./%s from a plugin module produced %d instances, want 1", pluginSchemaDir, len(instances))
+		return nil, fmt.Errorf("composing ./%s from a plugin module produced %d instances, want 1", pluginSchemaDir, len(instances))
 	}
 	inst := instances[0]
 	if err := inst.Err; err != nil {
-		return cue.Value{}, err
+		return nil, err
 	}
 	if inst.Module == "" || inst.ModuleFile == nil {
-		return cue.Value{}, fmt.Errorf("the plugin's ./%s loaded OUTSIDE its CUE module (module %q): the module's language.version must govern evaluation", pluginSchemaDir, inst.Module)
+		return nil, fmt.Errorf("the plugin's ./%s loaded OUTSIDE its CUE module (module %q): the module's language.version must govern evaluation", pluginSchemaDir, inst.Module)
 	}
 	v := ctx.BuildInstance(inst)
-	return v, v.Err()
+	if err := v.Err(); err != nil {
+		return nil, err
+	}
+	return &Instance{Ctx: ctx, Build: inst, Value: v}, nil
 }
 
 // pluginModuleDecl returns the declaration a plugin's schema is composed under. A plugin
