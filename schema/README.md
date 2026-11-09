@@ -10,9 +10,9 @@ are the single source of truth for these consumers:
    module that owns it as `specmodule.FS` (package `github.com/opencharly/spec`).
    charly core (`charly/cue_schema.go` `sharedCueSchema`) composes it into ONE
    compiled `cue.Value` and validates every loaded entity against its `#<Kind>`
-   def. HOW the consumer composes it is the consumer's business; the module
-   declaration it composes with is this module's, so it is exported rather than
-   restated. See `/charly-build:validate`.
+   def. The composition is the consumer's business; the declaration it composes
+   with is this module's, so it is exported here for any consumer that composes
+   the module by import. See `/charly-build:validate`.
 2. **Generated Go param types + vocabulary (`spec`).** `charly task cue-gen`
    turns these same files into the committed `spec/*_gen.go` — so the Go
    structs the loader decodes into, and the kind/verb/method word lists the CLI
@@ -23,8 +23,8 @@ are the single source of truth for these consumers:
    importing `github.com/opencharly/spec/schema` instead of holding a copy).
 
 > Every file carries exactly ONE package-level clause — `package schema` — and
-> `ConcatSchema` strips it, so the generator still compiles the package-less
-> body it always has. (CUE excludes a file whose name starts with `_` from a
+> `ConcatSchema` strips it, so the body it returns stays byte-identical to the
+> pre-package one. (CUE excludes a file whose name starts with `_` from a
 > package load, which is why the shared definitions live in `00_common.cue`: the
 > `00_` sorts first, keeping the concatenation's order — and so the generated
 > Go — byte-identical.) The `package spec` clause + the file-level `@go(spec)`
@@ -40,12 +40,12 @@ repo's supported command stays `charly task cue-gen`, which compiles these same 
 through the pinned toolchain it provisions and gates the result with
 `TestGenReproducible`.
 
-A consumer that composes the module itself — charly core does, from the embedded trees
-rather than a checkout — needs BOTH halves, because the declaration sits at this
-module's root, outside `schema/`'s `//go:embed *.cue` tree: the package source is
-`schema.FS`, and the module that owns it is `specmodule.FS` (package
-`github.com/opencharly/spec`). Composing with only the files would evaluate them under
-the consumer's toolchain default instead of the pinned version above.
+A consumer that composes the module itself — one that embeds the schema's source instead
+of reading a checkout — needs BOTH halves, because the declaration sits at this module's
+root, outside `schema/`'s `//go:embed *.cue` tree: the package source is `schema.FS`, and
+the module that owns it is `specmodule.FS` (package `github.com/opencharly/spec`).
+Composing with only the files would evaluate them under the consumer's toolchain default
+instead of the pinned version above.
 
 `cue.mod/module.cue` pins language version `v0.16.1` — the version spec's own
 `cuetoolchain` pins for `cue exp gengotypes`. It is not incidental: the schema's
