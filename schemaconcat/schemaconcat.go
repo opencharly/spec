@@ -5,7 +5,7 @@
 // file into ONE package-less compilation unit. They used to carry two
 // byte-identical-by-comment copies of the same loop; this is the ONE copy they
 // both call, so the compiled schema (what the runtime validates against) and
-// the generated Go types (`cue exp gengotypes`) can never drift.
+// the generated Go types (`schemaparams`) can never drift.
 //
 // The schema files are ALSO a real CUE package in the `github.com/opencharly/spec`
 // module (`cue.mod/module.cue`; `package schema`, loaded by `cue eval ./schema`).

@@ -5,8 +5,9 @@
 // The language version is PINNED, not incidental: the schema's `close()` +
 // embedded-definition idiom (schema/00_common.cue's #Op arms) is legal through
 // v0.17 and rejected by v0.18.0's semantics ("field not allowed"), so v0.16.1 —
-// the version spec's own cuetoolchain pins for `cue exp gengotypes` — is the
-// version that keeps the package's VALUE identical to the concatenation's.
+// the CUE library version this module pins in go.mod, which both the in-process
+// params generator and every composing consumer evaluate under — is the version
+// that keeps the package's VALUE identical to the concatenation's.
 // Raising it is the §10.1 pattern rewrite (TODO 2.16), not a bump.
 module: "github.com/opencharly/spec"
 

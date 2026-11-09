@@ -23,6 +23,9 @@ repo: github.com/opencharly/spec
 # -----------------------------------------------------------------------------
 # bootstrap-cue — ensure ./bin/cue is the pinned cue CLI (checksum-verified).
 # Idempotent: a present, correct bin/cue short-circuits without a download.
+# NOT part of cue-gen: generation is in-process. The CLI is the pinned tool for
+# AUTHORING the schema as a module (`cue eval ./schema`, `cue vet`, a scratch
+# `cue exp`), so it stays available without being on the generation leg.
 # -----------------------------------------------------------------------------
 bootstrap-cue:
   task:
@@ -33,8 +36,8 @@ bootstrap-cue:
         command: |
           set -euo pipefail
           # The version, URL, checksum and arch rules live in ONE place —
-          # internal/cuesetup -> cuetoolchain — shared with the charly-side generation
-          # verb, so this task and that verb can never run different toolchains.
+          # internal/cuesetup -> cuetoolchain — so this task and any other consumer
+          # of the pinned CLI can never run different toolchains.
           GOWORK=off go run ./internal/cuesetup bin
         context: [deploy]
 
@@ -112,25 +115,29 @@ proto-gen:
 # -----------------------------------------------------------------------------
 # cue-gen — regenerate every CUE-owned artifact.
 #
-#   spec/cue_types_gen.go  (cue exp gengotypes — the Go param structs)
+#   spec/cue_types_gen.go  (schemaparams — the Go param structs, generated in-process
+#                           from the CUE Go API; no `cue` CLI in the loop)
 #   spec/vocab_gen.go      (internal/schemagen — the vocab lists)
 #
 # Reproducible: two consecutive runs produce no diff (TestGenReproducible).
+# No bootstrap-cue dependency: the params generator is in-process, so the pinned
+# CUE CLI is not part of this task (bootstrap-cue remains for `cue eval ./schema`).
 # -----------------------------------------------------------------------------
 cue-gen:
   task:
     description: Regenerate all CUE-owned artifacts, including the protobuf wire contract
     dir: .
-    depends_on: [bootstrap-cue, wire-gen]
+    depends_on: [wire-gen]
     plan:
-      - run: gengotypes + schemagen the generated Go
+      - run: generate the Go params in-process + schemagen the vocab lists
         command: |
           set -euo pipefail
           # 1) The params file comes from the ONE pipeline (schemaparams): concatenate
-          #    schema/*.cue under `package spec` + `@go(spec)`, run the pinned cue
-          #    gengotypes (provisioned checksum-verified into ./bin), normalize the
-          #    struct tags. No step of it is re-implemented here or in schemagen, and
-          #    the charly-side verb calls the same function.
+          #    schema/*.cue under `package spec` + `@go(spec)`, compose them as a CUE
+          #    module instance, generate the Go types in-process with the CUE Go API,
+          #    normalize the struct tags. No step of it is re-implemented here or in
+          #    schemagen, the charly-side verb calls the same function, and no `cue`
+          #    CLI is provisioned: composition and generation share ONE resolution path.
           GOWORK=off go run ./internal/schemagen -mode=params -schema=schema -pkg=spec -out=spec/cue_types_gen.go
           # 2) Companion generator -> the vocab lists.
           GOWORK=off go run ./internal/schemagen -mode=vocab -schema=schema -out=spec/vocab_gen.go
