@@ -2,7 +2,7 @@ package schemacompose
 
 // compose_test.go — the acceptance tests for the ONE composer (opencharly/sdk#490).
 //
-// WHAT THIS FILE PROVES, and why each arm would pass without the fix:
+// WHAT THIS FILE PROVES, and why the first arm FAILS without the fix:
 //
 //   - TestServedSchemaEnforcesAnImportedSpecDefinition — a plugin whose schema
 //     IMPORTS `github.com/opencharly/spec/schema` composes, and the imported definition is
