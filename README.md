@@ -10,11 +10,11 @@ program so core depends only on the contract, never on a mechanism kit.
 
 | Package | Role |
 |---|---|
-| `schema/` | The single-source CUE schema — ONE `package schema` in this module, embedded as `schema.FS`, and loadable by `cue eval ./schema` |
+| `schema/` | The single-source CUE schema — ONE `package schema` in this module, embedded as `schema.FS`, and loadable by `cue eval ./schema`; the module that owns it is embedded as `specmodule.FS` (`cue.mod/module.cue`) so a Go consumer can compose it as a module instance |
 | `spec/` | The generated + hand-written config/wire/IR types (`cue_types_gen.go`, `vocab_gen.go`, `union_types.go`, …) — the module's core |
 | `proto/` | The generated gRPC plugin transport (`plugin.proto` + `*.pb.go`) |
 | `protocol/` | The CUE protocol model that `charly task wire-gen` renders into `proto/` |
-| `schemaconcat/` | The one concatenation contract (`ConcatSchema`) shared by runtime validation and the gen pipeline |
+| `schemaconcat/` | The one concatenation contract (`ConcatSchema`) — the gen pipeline's path, and the package-less form the module-import cutover is judged against |
 | `capability/` | The SDK-facing authoring surface (`ProvidedCapability`, `CLISubcommand`, …) that `BuildCapabilities` marshals into the proto wire forms |
 | `calver/` | CalVer parse/compare + the schema-version gates (`ParseCalVer`, `CompareCalVer`, `LatestSchemaCalVer`) — sliced out of `spec/` |
 | `merge/` | Pure `UnifiedFile` map/struct merges (`MergeUnified`, `MergePluginKindsMap`) — sliced out of `spec/` |
