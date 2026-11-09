@@ -80,6 +80,22 @@ func TestGenerateImportCompiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The temp module mirrors THIS module's declaration: the same go directive and the
+	// same requirement set, with only the module path rewritten and the contract module
+	// added as a local replace. A minimal `require spec` makes `go build` EXPAND the
+	// module graph, which asks the proxy for go.mod files the repo's own build never
+	// needs — measured in CI, where gopkg.in/check.v1's go.mod was absent from the cache
+	// and GOPROXY=off refused the lookup. A complete declaration is also what a real
+	// consumer of this contract module has.
+	mod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatalf("read the module's go.mod: %v", err)
+	}
+	gomod := strings.Replace(string(mod), "module github.com/opencharly/spec", "module example.com/pluginparams", 1)
+	if gomod == string(mod) {
+		t.Fatalf("the contract module's go.mod does not start with its module path")
+	}
+	gomod += "\nrequire github.com/opencharly/spec v0.0.0\n\nreplace github.com/opencharly/spec => " + root + "\n"
 	sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 	if err != nil {
 		t.Fatalf("read the module's go.sum (needed by the temp module's build): %v", err)
@@ -91,16 +107,17 @@ func TestGenerateImportCompiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "params", "cue_types_gen.go"), out, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	gomod := "module example.com/pluginparams\n\ngo 1.26.0\n\nrequire github.com/opencharly/spec v0.0.0\n\nreplace github.com/opencharly/spec => " + root + "\n"
 	if err := os.WriteFile(filepath.Join(tmp, "go.mod"), []byte(gomod), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(tmp, "go.sum"), sum, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// No GOFLAGS: the default readonly mode uses the complete declaration above and
+	// never tries to rewrite it (a rewrite is what needed the proxy).
 	cmd := exec.Command("go", "build", "./params")
 	cmd.Dir = tmp
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod", "GOPROXY=off")
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GOPROXY=off")
 	if buildOut, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("the generated params do not compile against the contract module: %v\n%s\n--- generated ---\n%s", err, buildOut, out)
 	}
