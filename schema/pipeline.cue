@@ -61,7 +61,7 @@ package schema
 	cwd?:        string & !=""
 	stdin?:      string & !=""
 	timeout_ms?: int & >0 @go(TimeoutMs)
-	on_error?:   "fail" | "continue" | "skip_rest" @go(OnError)
+	on_error?:   or(_onErrorWord) @go(OnError)
 	retry?:      #PipelineRetry
 }
 
@@ -233,3 +233,16 @@ package schema
 	"agent-runtime": "plan: — the agent-run:/agent-check: intents"
 	"terminal":      "charly: [shell|tui, …] reaches the terminal providers"
 } @go(-)
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #PipelineFlow.on_error
+_onError: {fail: {}, continue: {}, skip_rest: {}} @vocab(spec)
+_onErrorWord: [for w, _ in _onError {w}]

@@ -108,7 +108,7 @@ package schema
 // live wire an engine's reply is built from.
 #WorkflowStepResult: {
 	id!:         string & !=""
-	status!:     "ok" | "skipped" | "failed" | "cancelled" | "needs_approval" | "needs_input"
+	status!:     or(_workflowStepResultStatusWord)
 	exit_code?:  int @go(ExitCode,type=*int)
 	stdout?:     string
 	stderr?:     string
@@ -161,7 +161,7 @@ package schema
 // #WorkflowRunReply — lobster envelope v1. `resume_token` is present exactly when
 // status is needs_approval/needs_input and is wire-compatible with upstream lobster.
 #WorkflowRunReply: {
-	status!:            "ok" | "needs_approval" | "needs_input" | "cancelled" | "error"
+	status!:            or(_workflowRunReplyStatusWord)
 	output?:            string
 	requires_approval?: #WorkflowApproval @go(RequiresApproval)
 	requires_input?:    #WorkflowInputRequest @go(RequiresInput)
@@ -210,7 +210,7 @@ package schema
 
 // #WorkflowScheduleRequest — the systemd-user-timer scheduler surface.
 #WorkflowScheduleRequest: {
-	op!:       "apply" | "list" | "remove" | "run-now"
+	op!:       or(_workflowScheduleRequestOpWord)
 	pipeline?: string & !=""
 }
 
@@ -235,7 +235,7 @@ package schema
 // `github-actions` is the designed-but-unbuilt consumer.
 #WorkflowEmitRequest: {
 	pipeline!: string & !=""
-	format!:   [...("lobster" | "charly-yml" | "github-actions")] @go(Format)
+	format!:   [...or(_workflowEmitRequestFormatWord)] @go(Format)
 	out_dir?:  string & !="" @go(OutDir)
 }
 
@@ -255,3 +255,38 @@ package schema
 	schedule!:     bool
 	emit_formats!: [...string] @go(EmitFormats)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #WorkflowStepResult.status
+_workflowStepResultStatus: {
+	ok: {}
+	skipped: {}
+	failed: {}
+	cancelled: {}
+	needs_approval: {}
+	needs_input: {}
+} @vocab(spec)
+_workflowStepResultStatusWord: [for w, _ in _workflowStepResultStatus {w}]
+// #WorkflowRunReply.status
+_workflowRunReplyStatus: {
+	ok: {}
+	needs_approval: {}
+	needs_input: {}
+	cancelled: {}
+	error: {}
+} @vocab(spec)
+_workflowRunReplyStatusWord: [for w, _ in _workflowRunReplyStatus {w}]
+// #WorkflowScheduleRequest.op
+_workflowScheduleRequestOp: {apply: {}, list: {}, remove: {}, "run-now": {}} @vocab(spec)
+_workflowScheduleRequestOpWord: [for w, _ in _workflowScheduleRequestOp {w}]
+// #WorkflowEmitRequest.format
+_workflowEmitRequestFormat: {lobster: {}, "charly-yml": {}, "github-actions": {}} @vocab(spec)
+_workflowEmitRequestFormatWord: [for w, _ in _workflowEmitRequestFormat {w}]

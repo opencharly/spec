@@ -143,7 +143,7 @@ package schema
 // forwarding the substrate controls.
 #FirecrackerForwarding: {
 	ip_forward: *true | false @go(IPForward,type=bool)
-	policy?: *"append-accept" | "netns" | "deny" @go(Policy)
+	policy?: *"append-accept" | or(_firecrackerForwardingPolicyWord) @go(Policy)
 }
 
 // #FirecrackerMachine is the microVM shape. vcpu_count and mem_size_mib mirror
@@ -153,10 +153,10 @@ package schema
 	vcpu_count?: int & >=1 & <=32 @go(VCPUCount,type=int)
 	mem_size_mib?: int & >=128 @go(MemSizeMiB,type=int)
 	smt?: bool
-	huge_pages?: *"None" | "Transparent" | "2M" @go(HugePages)
+	huge_pages?: *"None" | or(_hugePagesWord) @go(HugePages)
 	// cpu_template mirrors Firecracker's (deprecated) CpuTemplate enum; it exists
 	// for snapshot/clone portability across hosts.
-	cpu_template?: *"None" | "C3" | "T2" | "T2S" | "T2CL" | "T2A" | "V1N1" @go(CPUTemplate)
+	cpu_template?: *"None" | or(_cpuTemplateWord) @go(CPUTemplate)
 	drives?: [...#FirecrackerDrive] @go(Drives)
 	// rate_limits bound the interfaces and the root drive; an omitted bucket is
 	// unlimited (Firecracker's own semantics).
@@ -235,7 +235,7 @@ package schema
 	serial_out_path?: string @go(SerialOutPath)
 	rate_limiter?: #FirecrackerRateLimiter @go(RateLimiter,optional=nillable)
 	log_path?: string @go(LogPath)
-	log_level?: *"Info" | "Error" | "Warning" | "Debug" | "Trace" | "Off" @go(LogLevel)
+	log_level?: *"Info" | or(_firecrackerConsoleLogLevelWord) @go(LogLevel)
 	metrics_path?: string @go(MetricsPath)
 }
 
@@ -261,7 +261,7 @@ package schema
 	// manage says how charly treats an existing /etc/containerd/config.toml:
 	// `merge` (default) keeps every setting it does not model, `full` takes the
 	// file over, `adopt` changes nothing and only reports.
-	manage?: *"merge" | "full" | "adopt" @go(Manage)
+	manage?: *"merge" | or(_manageWord) @go(Manage)
 	version?: int & >=2 & <=3 @go(Version,type=int)
 	root?: string @go(Root)
 	state?: string @go(State)
@@ -325,7 +325,7 @@ package schema
 	// unauthenticated upstream, so naming a wider address is a deliberate act.
 	bind_address?: *"127.0.0.1:8080" | string @go(BindAddress)
 	metrics?: #FirecrackerFireactionsMetrics @go(Metrics,optional=nillable)
-	log_level?: *"info" | "debug" | "warn" | "error" @go(LogLevel)
+	log_level?: *"info" | or(_firecrackerFireactionsLogLevelWord) @go(LogLevel)
 	github?: #FirecrackerFireactionsGitHub @go(GitHub,optional=nillable)
 	pools: [...#FirecrackerPool] @go(Pools)
 }
@@ -365,7 +365,7 @@ package schema
 	// image is a runner guest image: charly's own (a box built into a rootfs
 	// artefact) or an upstream-compatible one.
 	image: string & !="" @go(Image)
-	image_pull_policy?: *"IfNotPresent" | "Always" | "Never" @go(ImagePullPolicy)
+	image_pull_policy?: *"IfNotPresent" | or(_imagePullPolicyWord) @go(ImagePullPolicy)
 	// organization is ORGANISATION-scoped: the orchestrator's GitHub calls are
 	// org-level only (a repository-scoped runner is not expressible).
 	organization?: string @go(Organization)
@@ -378,3 +378,49 @@ package schema
 	metadata?: {[string]: _} @go(Metadata)
 	rate_limits?: #FirecrackerRateLimits @go(RateLimits,optional=nillable)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #FirecrackerForwarding.policy
+_firecrackerForwardingPolicy: {"append-accept": {}, netns: {}, deny: {}} @vocab(spec)
+_firecrackerForwardingPolicyWord: [for w, _ in _firecrackerForwardingPolicy {w}]
+// #FirecrackerMachine.huge_pages
+_hugePages: {"None": {}, "Transparent": {}, "2M": {}} @vocab(spec)
+_hugePagesWord: [for w, _ in _hugePages {w}]
+// #FirecrackerMachine.cpu_template
+_cpuTemplate: {
+	"None": {}
+	"C3": {}
+	"T2": {}
+	"T2S": {}
+	"T2CL": {}
+	"T2A": {}
+	"V1N1": {}
+} @vocab(spec)
+_cpuTemplateWord: [for w, _ in _cpuTemplate {w}]
+// #FirecrackerConsole.log_level
+_firecrackerConsoleLogLevel: {
+	"Info": {}
+	"Error": {}
+	"Warning": {}
+	"Debug": {}
+	"Trace": {}
+	"Off": {}
+} @vocab(spec)
+_firecrackerConsoleLogLevelWord: [for w, _ in _firecrackerConsoleLogLevel {w}]
+// #FirecrackerContainerd.manage
+_manage: {merge: {}, full: {}, adopt: {}} @vocab(spec)
+_manageWord: [for w, _ in _manage {w}]
+// #FirecrackerFireactions.log_level
+_firecrackerFireactionsLogLevel: {info: {}, debug: {}, warn: {}, error: {}} @vocab(spec)
+_firecrackerFireactionsLogLevelWord: [for w, _ in _firecrackerFireactionsLogLevel {w}]
+// #FirecrackerRunner.image_pull_policy
+_imagePullPolicy: {"IfNotPresent": {}, "Always": {}, "Never": {}} @vocab(spec)
+_imagePullPolicyWord: [for w, _ in _imagePullPolicy {w}]

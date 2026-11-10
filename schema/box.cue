@@ -12,10 +12,10 @@ package schema
 
 // Package formats (BoxConfig.Build / BuildFormats). Named #BuildFormat to avoid
 // colliding with distro.cue's #Format (the package-format definition struct).
-#BuildFormat: "rpm" | "deb" | "pac" | "aur" | "apk" @go(-)
+#BuildFormat: or(_buildFormatWord) @go(-)
 
 // Builder build-type slots (BoxConfig.Produce + BoxConfig.Builder keys).
-#BuildType: "pixi" | "npm" | "cargo" | "aur" @go(-)
+#BuildType: or(_buildTypeWord) @go(-)
 
 // MergeConfig (config.go). CLOSED.
 #BoxMerge: {
@@ -86,7 +86,7 @@ package schema
 	user?:        string & !=""
 	uid?:         int & >=0 @go(UID,type=*int)
 	gid?:         int & >=0 @go(GID,type=*int)
-	user_policy?: *"auto" | "adopt" | "create" @go(UserPolicy)
+	user_policy?: *"auto" | or(_userPolicyWord) @go(UserPolicy)
 
 	builder?: {[string]: string & !=""}
 	produce?: [...#BuildType]
@@ -101,7 +101,7 @@ package schema
 	// omits is unselectable, which is what kept `openrc` out of reach despite being
 	// a first-class init with its own service_template, management commands and
 	// unit_path_template.
-	init?:       "supervisord" | "systemd" | "systemd-container" | "openrc"
+	init?:       or(_boxInitWord)
 	data_image?: bool @go(DataImage)
 	bootc?:      bool // image is bootc-bootable (for `charly vm build` → qcow2)
 	readiness?:  #Readiness @go(Readiness,optional=nillable)
@@ -122,7 +122,7 @@ package schema
 	stage_parallelism?:     int & >=0 @go(StageParallelism,type=*int)     // 0 = auto (min(NCPU, cap)) — stages of ONE build
 	stage_parallelism_cap?: int & >=1 @go(StageParallelismCap,type=*int)  // ceiling for the auto calc
 	context_ignore?:        [...(string & !="")] @go(ContextIgnore)
-	cache?:                 "image" | "registry" | "gha" | "none"
+	cache?:                 or(_cacheWord)
 	keep_images?:           int & >=0 @go(KeepImages,type=*int)
 	keep_check_runs?: int & >=0 @go(KeepCheckRuns,type=*int)
 
@@ -130,7 +130,35 @@ package schema
 	alias?: [...#BoxAlias]
 
 	plan?: [...#Step]
-	check_level?: *"noagent" | "none" | "build" | "agent" @go(CheckLevel)
+	check_level?: *"noagent" | or(_checkLevelWord) @go(CheckLevel)
 
 	shell?: #Shell @go(Shell,optional=nillable)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #BuildFormat
+_buildFormat: {rpm: {}, deb: {}, pac: {}, aur: {}, apk: {}} @vocab(spec)
+_buildFormatWord: [for w, _ in _buildFormat {w}]
+// #BuildType
+_buildType: {pixi: {}, npm: {}, cargo: {}, aur: {}} @vocab(spec)
+_buildTypeWord: [for w, _ in _buildType {w}]
+// #Box.user_policy
+_userPolicy: {auto: {}, adopt: {}, create: {}} @vocab(spec)
+_userPolicyWord: [for w, _ in _userPolicy {w}]
+// #Box.init
+_boxInit: {supervisord: {}, systemd: {}, "systemd-container": {}, openrc: {}} @vocab(spec)
+_boxInitWord: [for w, _ in _boxInit {w}]
+// #Box.cache
+_cache: {image: {}, registry: {}, gha: {}, none: {}} @vocab(spec)
+_cacheWord: [for w, _ in _cache {w}]
+// #Box.check_level
+_checkLevel: {noagent: {}, none: {}, build: {}, agent: {}} @vocab(spec)
+_checkLevelWord: [for w, _ in _checkLevel {w}]

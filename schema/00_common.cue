@@ -12,7 +12,7 @@ package schema
 // and therefore the generated Go — byte-identical to the pre-package one.
 
 // Execution context for a plan step.
-#Context: ("build" | "deploy" | "runtime") @go(-)
+#Context: or(_contextWord) @go(-)
 
 // #OpVerb — the verb DISCRIMINATOR vocabulary: the subset of #Op fields that are
 // VERBS (exactly-one-set discriminators), as opposed to the shared modifiers
@@ -24,8 +24,7 @@ package schema
 // field (the schemagen gate "OpVerbs ⊆ AuthoringVerbs" proves it) and MUST have a
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
-#OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" | "config" |
-	"plugin") @go(-)
+#OpVerb: or(_opVerbWord) @go(-)
 
 // ---------------------------------------------------------------------------
 // Plan steps: the unified run/check/agent-run/agent-check/include vocabulary.
@@ -236,7 +235,7 @@ package schema
 // the BuildKit sharing mode; owned renders a uid/gid-owned cache.
 #CacheMount: {
 	dst:      string & =~"^/"
-	sharing?: *"locked" | "shared" | "private"
+	sharing?: *"locked" | or(_sharingWord)
 	owned?:   bool
 }
 
@@ -401,3 +400,32 @@ package schema
 	// time, not about being unstuck.
 	force_stop?:         bool @go(ForceStop)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #Context
+_context: {build: {}, deploy: {}, runtime: {}} @vocab(spec)
+_contextWord: [for w, _ in _context {w}]
+// #OpVerb
+_opVerb: {
+	mkdir: {}
+	copy: {}
+	write: {}
+	link: {}
+	download: {}
+	setcap: {}
+	build: {}
+	config: {}
+	plugin: {}
+} @vocab(spec)
+_opVerbWord: [for w, _ in _opVerb {w}]
+// #CacheMount.sharing
+_sharing: {locked: {}, shared: {}, private: {}} @vocab(spec)
+_sharingWord: [for w, _ in _sharing {w}]

@@ -22,11 +22,11 @@ package schema
 	settings?: #MarketplaceSettings                  // the harness wiring data (settings.json plugin-owned keys)
 })
 #MarketplaceFamily: close({
-	category?:    *"images" | "commands" | "kind" | "development" // the README four-bucket classification
+	category?:    *"images" | or(_marketplaceFamilyCategoryWord) // the README four-bucket classification
 	description?: string & !=""                                    // plugin.json + marketplace.json description
 	keywords?:    [...(string & !="")]                             // marketplace.json keywords
 	version?:     string & =~"^[0-9]+[.][0-9]+[.][0-9]+$"          // plugin.json version (default: family candy CalVer)
-	profiles?:    [...("developer" | "user" | "container")]        // profiles.json membership
+	profiles?:    [...or(_profilesWord)]        // profiles.json membership
 	mcp_servers?: [...#MarketplaceMCPServer] @go(McpServers,type=[]MarketplaceMCPServer) // plugins/<family>/.mcp.json entries
 })
 #MarketplaceMCPServer: close({
@@ -45,3 +45,19 @@ package schema
 	// hooks — the hook entity names to wire into settings.json hooks.<trigger>.
 	hooks?: [...string] @go(Hooks,type=[]string)
 })
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #MarketplaceFamily.category
+_marketplaceFamilyCategory: {images: {}, commands: {}, kind: {}, development: {}} @vocab(spec)
+_marketplaceFamilyCategoryWord: [for w, _ in _marketplaceFamilyCategory {w}]
+// #MarketplaceFamily.profiles
+_profiles: {developer: {}, user: {}, container: {}} @vocab(spec)
+_profilesWord: [for w, _ in _profiles {w}]

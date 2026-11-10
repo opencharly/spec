@@ -21,7 +21,7 @@ package schema
 #CredentialMount: {
 	src:       string & !=""
 	dst:       string & !=""
-	mode?:     "copy" | "bind"
+	mode?:     or(_credentialMountModeWord)
 	optional?: bool
 }
 
@@ -70,3 +70,16 @@ package schema
 	progress_no_improvement_timeout?: #Duration @go(ProgressNoImprovementTimeout)
 	output_format?:                   string    @go(OutputFormat)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #CredentialMount.mode
+_credentialMountMode: {copy: {}, bind: {}} @vocab(spec)
+_credentialMountModeWord: [for w, _ in _credentialMountMode {w}]

@@ -22,7 +22,7 @@ package schema
 // PhasePrepare/PhaseInstall/PhaseCleanup), so the two referencing fields carry
 // explicit @go(type=) pins (`[]string` / `string`) instead — the scalar-collapse
 // contract of scalar_aliases.go (hand-written, never generated).
-#Phase: ("build" | "live" | "update" | "teardown") @go(-)
+#Phase: or(_phaseWord) @go(-)
 
 // #PipelineWord — ONE post-run pipeline stage: a single plugin-VERB dispatch,
 // authored in its sugar form `<word>: <input>` (the plan's
@@ -86,7 +86,7 @@ package schema
 	// origin — where the capture came from: a background SESSION the runner
 	// owned, a plan STEP that recorded inline, or a structured SUB-RUN
 	// (aggregate include).
-	origin!: "session" | "step" | "sub-run"
+	origin!: or(_originWord)
 	// verb — the capture verb word that produced the artifacts ("spice",
 	// "record", "wl", "vnc", "transcode", ...). OPEN — it names a dispatched
 	// word, never a closed enum.
@@ -135,3 +135,19 @@ package schema
 	kind!:       string & !=""
 	validators?: {...}
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #Phase
+_phase: {build: {}, live: {}, update: {}, teardown: {}} @vocab(spec)
+_phaseWord: [for w, _ in _phase {w}]
+// #EvidenceRow.origin
+_origin: {session: {}, step: {}, "sub-run": {}} @vocab(spec)
+_originWord: [for w, _ in _origin {w}]

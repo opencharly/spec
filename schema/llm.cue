@@ -92,7 +92,7 @@ package schema
 	response_format?: #LLMResponseFormat
 	// reasoning_effort: thinking control for reasoning models ("none" disables
 	// thinking where the server honours it).
-	reasoning_effort?: "high" | "medium" | "low" | "none" @go(Reasoning_effort,type=string)
+	reasoning_effort?: or(_reasoningEffortWord) @go(Reasoning_effort,type=string)
 	// reasoning: the object form of the same control (ollama accepts either).
 	reasoning?: #LLMReasoning
 	// stream_options: streaming response options.
@@ -119,7 +119,7 @@ package schema
 // #LLMResponseFormat — the structured-output contract. type "json_schema" requires
 // the json_schema block; the schema field is the JSON Schema itself.
 #LLMResponseFormat: close({
-	type: "text" | "json_object" | "json_schema" @go(Type,type=string)
+	type: or(_llmResponseFormatTypeWord) @go(Type,type=string)
 	json_schema?: close({
 		name:         string
 		description?: string
@@ -130,7 +130,7 @@ package schema
 
 // #LLMReasoning — the object form of the reasoning/thinking control.
 #LLMReasoning: close({
-	effort?: "high" | "medium" | "low" | "none" @go(Effort,type=string)
+	effort?: or(_effortWord) @go(Effort,type=string)
 })
 
 // #LLMStreamOptions — streaming response options.
@@ -142,3 +142,22 @@ package schema
 #LLMNamedToolChoice: close({
 	function: close({name: string})
 })
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #LLMParams.reasoning_effort
+_reasoningEffort: {high: {}, medium: {}, low: {}, none: {}} @vocab(spec)
+_reasoningEffortWord: [for w, _ in _reasoningEffort {w}]
+// #LLMResponseFormat.type
+_llmResponseFormatType: {text: {}, json_object: {}, json_schema: {}} @vocab(spec)
+_llmResponseFormatTypeWord: [for w, _ in _llmResponseFormatType {w}]
+// #LLMReasoning.effort
+_effort: {high: {}, medium: {}, low: {}, none: {}} @vocab(spec)
+_effortWord: [for w, _ in _effort {w}]

@@ -26,7 +26,7 @@ package schema
 	//               VirtualMachine), whose lifecycle an out-of-process plugin owns (NOT `charly vm`);
 	//               distinct from `ssh` so a venue test names the host-libvirt vm unambiguously.
 	//   none      — external-in-place (zero value).
-	venue?: ("container" | "ssh" | "shell" | "parent" | "kubevirt" | "none") @go(Venue, type=string)
+	venue?: or(_venueWord) @go(Venue, type=string)
 	// image_backed: the substrate runs a baked OCI image (pod).
 	image_backed?: bool @go(ImageBacked)
 	// image_context: the substrate composes over an image build context (pod overlay, kubernetes manifests).
@@ -62,7 +62,7 @@ package schema
 	// instead of switching on the substrate kind word: `engine:` on a substrate
 	// without "engine" is an error, and likewise `backend:`/`rootful:`. This is
 	// the DATA half of "engine: only on a pod deploy, backend: only on a vm deploy".
-	selectors?: [...("engine" | "backend" | "rootful")] @go(Selectors)
+	selectors?: [...or(_selectorsWord)] @go(Selectors)
 }
 
 // #DescentDescriptor is the loader-DERIVED venue-hop descriptor (Cutover H + P9).
@@ -78,7 +78,7 @@ package schema
 	//   container-exec — enter the container by name (pod; podman/docker per engine).
 	//   ssh            — an ssh hop into the guest (vm; kubevirt shares this transport).
 	//   reject         — unreachable via the deploy chain (kubernetes → use kubectl).
-	transport: "none" | "container-exec" | "ssh" | "reject"
+	transport: or(_descentDescriptorTransportWord)
 	// host_rooted: the substrate's own ROOT executor runs directly on the host
 	// (local), so the check runner uses rootExecutorForDeployNode, not a container chain.
 	host_rooted?: bool @go(HostRooted)
@@ -96,7 +96,7 @@ package schema
 	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
 	// classifyTarget supplies the empty→pod default). Generated as a plain Go
 	// `string` (the loader stamps it; the CUE enum still validates a pinned value).
-	target?: ("pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" | "kubevirt" | "firecracker") @go(Target,type=string) // loader-DERIVED (yaml:"-")
+	target?: or(_targetWord) @go(Target,type=string) // loader-DERIVED (yaml:"-")
 
 	// member_of is a loader-DERIVED runtime field (never authored; rejected by
 	// #DeployValue): it marks a folded deploy-level member entry registered as a
@@ -132,9 +132,9 @@ package schema
 	from?: string & =~"^[a-z0-9]+([.-][a-z0-9]+)*(:[a-zA-Z0-9._-]+)?$" // the same-kind template ref, or the unified NAME:TAG spelling (VM deploys: the loader splits the last colon into from + from_snapshot); the entity part allows the NAMESPACE-QUALIFIED form (ns.entity, a git-linked import ref)
 	image?: string & !=""
 
-	kind?:     "service" | "daemon" | "batch" | "scheduled" | "oneshot"
+	kind?:     or(_deployKindWord)
 	replica?:  int & >=0 @go(,type=int)
-	restart?:  "always" | "on-failure" | "never"
+	restart?:  or(_deployRestartWord)
 	schedule?: string & !=""
 
 	tunnel?:     #Tunnel       @go(Tunnel,type=*TunnelYAML)
@@ -280,7 +280,7 @@ package schema
 	//                            / --anchor still force skip structurally.
 	// In-place (local/external) beds have no restartable venue: restart-only
 	// leaves the gate step unchanged there (the in-place re-apply), same as full.
-	update_gate?: *"full" | "restart-only" | "skip" @go(UpdateGate)
+	update_gate?: *"full" | or(_updateGateWord) @go(UpdateGate)
 
 	disposable?:  bool @go(,type=*bool)
 	// keep_on_failure — whether a check bed that FAILS keeps its venue alive for
@@ -308,7 +308,7 @@ package schema
 	// through the verb's OWN served context rules (the runner never branches on
 	// capture kind).
 	instrument?: [...#Instrument]
-	lifecycle?:   "scratch" | "dev" | "test" | "qa" | "staging" | "prod" | "custom"
+	lifecycle?:   or(_lifecycleWord)
 	// RecordWrap is the whole-run recording wrap (deploy record: field).
 	#RecordWrap: {
 		terminal?:       bool
@@ -353,7 +353,7 @@ package schema
 	//                  up alongside its parent on the shared network.
 	//   in-substrate — an entity key inside the kind body: a NESTED member,
 	//                  deployed into the parent's venue.
-	position: ("deploy-level" | "in-substrate") @go(Position,type=string)
+	position: or(_positionWord) @go(Position,type=string)
 	// node is the member's own deploy node (the recursive tree edge).
 	node: #Deploy
 }
@@ -373,7 +373,7 @@ package schema
 #Check: #Deploy
 
 #Tunnel: (("tailscale" | "cloudflare") | {
-		provider: "tailscale" | "cloudflare"
+		provider: or(_providerWord)
 		tunnel?:  string & !=""
 		public?:  #PortScope
 		private?: #PortScope
@@ -406,7 +406,7 @@ package schema
 	ssh_user?:                   string
 	backend?:                    #VmBackend // "auto" persisted pre-resolution (the vm deploy lifecycle hook); krun is a resolved/selected backend
 	cloud_init_rendered_digest?: string
-	charly_install_strategy?:    "auto" | "scp" | "url" | "skip"
+	charly_install_strategy?:    or(_charlyInstallStrategyWord)
 	// port_forwards persists the auto-allocated host ports for `auto:<guest>`
 	// network.port_forwards entries (guest-port → allocated host port), so the
 	// allocation is reused across the vm-create → deploy-add sequence — the
@@ -532,7 +532,7 @@ package schema
 
 #DeployVolume: {
 	name:         string & !=""
-	type?:        "volume" | "bind" | "encrypted"
+	type?:        or(_deployVolumeTypeWord)
 	host?:        string & !=""
 	path?:        string & =~"^/"
 	data_seeded?: bool          @go(DataSeeded)
@@ -555,13 +555,13 @@ package schema
 #DeployStorage: {
 	name:        string & !=""
 	size?:       string & !=""
-	class_hint?: "fast" | "cheap" | "encrypted" | "default" @go(ClassHint)
-	access?:     "single-writer" | "many-readers" | "many-writers"
+	class_hint?: or(_classHintWord) @go(ClassHint)
+	access?:     or(_accessWord)
 	path?:       string & =~"^/"
 }
 #KubernetesDeploy: {
 	namespace?: #EntityRef
-	workload?:  "Deployment" | "StatefulSet" | "DaemonSet" | "Pod" | "Job" | "CronJob"
+	workload?:  or(_workloadWord)
 	patches?: [...#KubernetesPatch]
 	raw?: [...string]
 	// helm_charts — chart releases the kustomize/helm venues install alongside the
@@ -597,7 +597,7 @@ package schema
 #Preemptible: ([...(string & !="")] | {
 	holds?: [...(string & !="")]
 		stop?:    "shutdown"
-		restore?: "always" | "on-success"
+		restore?: or(_restoreWord)
 }) @go(-) // gengotypes: hand PreemptibleConfig
 
 // ---------------------------------------------------------------------------
@@ -1033,3 +1033,85 @@ package schema
 	requires_exclusive?: [...string] @go(RequiresExclusive)
 	requires_shared?: [...string] @go(RequiresShared)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #DeployTraits.venue
+_venue: {container: {}, ssh: {}, shell: {}, parent: {}, kubevirt: {}, none: {}} @vocab(spec)
+_venueWord: [for w, _ in _venue {w}]
+// #DeployTraits.selectors
+_selectors: {engine: {}, backend: {}, rootful: {}} @vocab(spec)
+_selectorsWord: [for w, _ in _selectors {w}]
+// #DescentDescriptor.transport
+_descentDescriptorTransport: {none: {}, "container-exec": {}, ssh: {}, reject: {}} @vocab(spec)
+_descentDescriptorTransportWord: [for w, _ in _descentDescriptorTransport {w}]
+// #Deploy.target
+_target: {
+	pod: {}
+	vm: {}
+	kubernetes: {}
+	local: {}
+	android: {}
+	kindcluster: {}
+	kubevirt: {}
+	firecracker: {}
+} @vocab(spec)
+_targetWord: [for w, _ in _target {w}]
+// #Deploy.kind
+_deployKind: {service: {}, daemon: {}, batch: {}, scheduled: {}, oneshot: {}} @vocab(spec)
+_deployKindWord: [for w, _ in _deployKind {w}]
+// #Deploy.restart
+_deployRestart: {always: {}, "on-failure": {}, never: {}} @vocab(spec)
+_deployRestartWord: [for w, _ in _deployRestart {w}]
+// #Deploy.update_gate
+_updateGate: {full: {}, "restart-only": {}, skip: {}} @vocab(spec)
+_updateGateWord: [for w, _ in _updateGate {w}]
+// #Deploy.lifecycle
+_lifecycle: {
+	scratch: {}
+	dev: {}
+	test: {}
+	qa: {}
+	staging: {}
+	prod: {}
+	custom: {}
+} @vocab(spec)
+_lifecycleWord: [for w, _ in _lifecycle {w}]
+// #Member.position
+_position: {"deploy-level": {}, "in-substrate": {}} @vocab(spec)
+_positionWord: [for w, _ in _position {w}]
+// #Tunnel.provider
+_provider: {tailscale: {}, cloudflare: {}} @vocab(spec)
+_providerWord: [for w, _ in _provider {w}]
+// #VmDeployState.charly_install_strategy
+_charlyInstallStrategy: {auto: {}, scp: {}, url: {}, skip: {}} @vocab(spec)
+_charlyInstallStrategyWord: [for w, _ in _charlyInstallStrategy {w}]
+// #DeployVolume.type
+_deployVolumeType: {volume: {}, bind: {}, encrypted: {}} @vocab(spec)
+_deployVolumeTypeWord: [for w, _ in _deployVolumeType {w}]
+// #DeployStorage.class_hint
+_classHint: {fast: {}, cheap: {}, encrypted: {}, default: {}} @vocab(spec)
+_classHintWord: [for w, _ in _classHint {w}]
+// #DeployStorage.access
+_access: {"single-writer": {}, "many-readers": {}, "many-writers": {}} @vocab(spec)
+_accessWord: [for w, _ in _access {w}]
+// #KubernetesDeploy.workload
+_workload: {
+	"Deployment": {}
+	"StatefulSet": {}
+	"DaemonSet": {}
+	"Pod": {}
+	"Job": {}
+	"CronJob": {}
+} @vocab(spec)
+_workloadWord: [for w, _ in _workload {w}]
+// #Preemptible.restore
+_restore: {always: {}, "on-success": {}} @vocab(spec)
+_restoreWord: [for w, _ in _restore {w}]

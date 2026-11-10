@@ -55,6 +55,48 @@ embedding the closed `#Op`) is legal through v0.17 and rejected by v0.18's seman
 with `field not allowed`. Raising the language version is the §10.1 pattern rewrite
 (TODO 2.16), not a bump.
 
+## Vocabulary tables (S3)
+
+Every closed set of words in this schema is a **vocabulary table**, never a union
+spelled out alternative by alternative (DESIGN.md §10.1 S3, D-PAT-3):
+
+```cue
+_context: {build: {}, deploy: {}, runtime: {}} @vocab(spec)
+_contextWord: [for w, _ in _context {w}]
+
+#Context: or(_contextWord) @go(-)
+```
+
+- **The table is the ONE home.** A new word is ONE row there; the derived
+  `_xWord` list and the enum an author meets are recomputations of it, so the
+  three cannot disagree.
+- **`@vocab(<owner>)` names the owner** (§3.1). Every set in this module is
+  compiled into the `spec` contract module, so the owner is `spec`
+  (`scripts/design-consistency.sh` in the umbrella accepts `spec` as a
+  vocabulary owner beside `core` and the §3.1 plugin words).
+- **A field whose default is a word keeps that default inline**:
+  `sharing?: *"locked" | or(_sharingWord)`. The default is part of the surface
+  (omitting the key materializes it), and it is also a row of the table, so the
+  accepted set is unchanged.
+- **A two-value literal default stays as written** (`*false | bool`,
+  `mode?: *"internal" | "external"`): S3's one permitted inline enum is a
+  default with a single alternative.
+- **Naming.** A table is named after its word (`_sharing`) when that name is
+  unique in the schema, and `<definition><Field>` (`_vmNetworkMode`,
+  `_cacheMountSharing`) when two defs have a field of the same name. Two defs
+  with the SAME words keep two tables: a field name is not a vocabulary, and
+  merging them would couple two shapes that only coincide today.
+- **Tables live at the foot of the file that uses them**, one section per file,
+  each table preceded by a `// #Def.field` comment naming its site. The
+  concatenation is one compilation unit, so a table is visible to every file —
+  placing it beside its use keeps the pair findable.
+
+`schema/vocab_s3_test.go` is the gate: every table must carry its `@vocab`, its
+derived list must BE its rows, every table must be cited by a field and every
+citation must resolve — and the test **injects a row into every table** and
+asserts the derived list gains it, which is the only way to see that the list
+derives rather than restates.
+
 ## Regenerating `spec` — `charly task cue-gen`
 
 In THIS repository:
