@@ -418,7 +418,7 @@ package schema
 }
 
 #PodLifecyclePlan: {
-	mode!:           "quadlet" | "direct" @go(Mode)           // runQuadlet (systemctl) vs runDirect (podman run)
+	mode!:           or(_podLifecyclePlanModeWord) @go(Mode)           // runQuadlet (systemctl) vs runDirect (podman run)
 	svc_name?:       string               @go(SvcName)        // serviceNameInstance — quadlet unit
 	container_name!: string               @go(ContainerName)  // containerNameInstance — engine target
 	run_argv?: [...string] @go(RunArgv)                        // buildStartArgs output — direct mode `podman run -d`
@@ -1384,7 +1384,7 @@ package schema
 // field per opts type so a NEW deploy verb never needs a NEW CUE field, only a new decode
 // branch plugin-side.
 #DeployTargetDispatchRequest: {
-	op!:              "add" | "update" | "del" | "start" | "stop" | "status" | "logs" | "shell" | "attach" | "rebuild"
+	op!:              or(_deployTargetDispatchRequestOpWord)
 	name!:            string      @go(Name)
 	word!:            string      @go(Word)
 	has_lifecycle?:   bool        @go(HasLifecycle)
@@ -1595,3 +1595,30 @@ package schema
 #BoxFetchResolveReply: {
 	path?: string @go(Path)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #PodLifecyclePlan.mode
+_podLifecyclePlanMode: {quadlet: {}, direct: {}} @vocab(spec)
+_podLifecyclePlanModeWord: [for w, _ in _podLifecyclePlanMode {w}]
+// #DeployTargetDispatchRequest.op
+_deployTargetDispatchRequestOp: {
+	add: {}
+	update: {}
+	del: {}
+	start: {}
+	stop: {}
+	status: {}
+	logs: {}
+	shell: {}
+	attach: {}
+	rebuild: {}
+} @vocab(spec)
+_deployTargetDispatchRequestOpWord: [for w, _ in _deployTargetDispatchRequestOp {w}]

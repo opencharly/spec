@@ -18,7 +18,7 @@ package schema
 	plan?: [...#Step]
 
 	// --- maturity / engine ---
-	status?: *"testing" | "working" | "broken"
+	status?: *"testing" | or(_candyStatusWord)
 	// engine — a candy's required run engine; per-image resolution walks the
 	// candy chain (engine.go ResolveBoxEngine) and cross-candy conflicts are a
 	// validate error. RETAINED by the schema-compaction consumer audit.
@@ -222,10 +222,10 @@ package schema
 // with `systemctl start <name>` / `systemctl --user start <name>`.
 #PackagingSystemdUnit: {
 	name:        string & !=""
-	scope:       "system" | "user"
+	scope:       or(_packagingSystemdUnitScopeWord)
 	exec:        string & !=""
 	description?: string & !=""
-	restart?:    "no" | "on-failure" | "always" | "unless-stopped"
+	restart?:    or(_packagingSystemdUnitRestartWord)
 	after?:      [...(string & !="")]
 	wants?:      [...(string & !="")]
 	environment?: {[string]: string} @go(Environment,type=map[string]string)
@@ -250,7 +250,7 @@ package schema
 	// against the target distro tag chain (compileServiceSteps + generate.go).
 	distro?: [...(string & !="")]
 	env?:               #StrMap
-	restart?:           "no" | "on-failure" | "always" | "unless-stopped"
+	restart?:           or(_candyServiceRestartWord)
 	working_directory?: string & !="" @go(WorkingDirectory)
 	user?:              string & !=""
 	after?: [...(string & !="")]
@@ -258,7 +258,7 @@ package schema
 	wanted_by?: [...(string & !="")] @go(WantedBy)
 	stdout?:       string & !=""         // "journal" | "none" | "file:<path>"
 	stop_timeout?: (string & !="") | int @go(StopTimeout,type=string) // "20s" or an unquoted 20 (Go-coerced; Go field is string)
-	scope?:        "system" | "user"
+	scope?:        or(_candyServiceScopeWord)
 	enable?:       bool
 	// exec_start_pre / exec_start_post — ordered hook commands run around a CUSTOM
 	// (exec:) entry's own start, rendered by the init system's service_template
@@ -276,7 +276,7 @@ package schema
 	exec_start_pre?: [...(string & !="")] @go(ExecStartPre)
 	exec_start_post?: [...(string & !="")] @go(ExecStartPost)
 	overrides?: #CandyServiceOverrides @go(Overrides,optional=nillable)
-	kind?:         "program" | "eventlistener"
+	kind?:         or(_candyServiceKindWord)
 	event?:        string & !="" @go(Events)
 	auto_start?:   bool          @go(AutoStart,type=*bool)
 	start_retry?:  int & >=0     @go(StartRetries,type=int)
@@ -292,7 +292,7 @@ package schema
 	//
 	// type — systemd Type=; supervisord approximates oneshot with startsecs=0;
 	// OpenRC distinguishes forking via command_background.
-	type?: "simple" | "exec" | "forking" | "oneshot" | "notify" | "idle" @go(Type)
+	type?: or(_candyServiceTypeWord) @go(Type)
 	// requires — a HARD dependency, distinct from after:'s ordering. systemd
 	// Requires=; OpenRC depend(){ need … }, which its template already emits for
 	// localmount. supervisord has no equivalent and ignores it.
@@ -495,7 +495,7 @@ package schema
 #CandyApk: {
 									package?:     string & !=""
 									apk?:         string & !=""
-									source?:      *"apk-pure" | "google-play" | "f-droid" | "huawei-app-gallery"
+									source?:      *"apk-pure" | or(_sourceWord)
 									arch?:        string & !=""
 									app_version?: string & !=""
 									// exactly one of package/apk (disjunction keeps it CLOSED; matchN would open it).
@@ -653,3 +653,54 @@ package schema
 // plugin-box's validPluginClasses), which is the side that NAMES an undeclared class;
 // word and parent are lowercase-hyphenated.
 #PluginCapability: string & =~#PluginCapabilityPattern
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #Candy.status
+_candyStatus: {testing: {}, working: {}, broken: {}} @vocab(spec)
+_candyStatusWord: [for w, _ in _candyStatus {w}]
+// #PackagingSystemdUnit.scope
+_packagingSystemdUnitScope: {system: {}, user: {}} @vocab(spec)
+_packagingSystemdUnitScopeWord: [for w, _ in _packagingSystemdUnitScope {w}]
+// #PackagingSystemdUnit.restart
+_packagingSystemdUnitRestart: {
+	no: {}
+	"on-failure": {}
+	always: {}
+	"unless-stopped": {}
+} @vocab(spec)
+_packagingSystemdUnitRestartWord: [for w, _ in _packagingSystemdUnitRestart {w}]
+// #CandyService.restart
+_candyServiceRestart: {no: {}, "on-failure": {}, always: {}, "unless-stopped": {}} @vocab(spec)
+_candyServiceRestartWord: [for w, _ in _candyServiceRestart {w}]
+// #CandyService.scope
+_candyServiceScope: {system: {}, user: {}} @vocab(spec)
+_candyServiceScopeWord: [for w, _ in _candyServiceScope {w}]
+// #CandyService.kind
+_candyServiceKind: {program: {}, eventlistener: {}} @vocab(spec)
+_candyServiceKindWord: [for w, _ in _candyServiceKind {w}]
+// #CandyService.type
+_candyServiceType: {
+	simple: {}
+	exec: {}
+	forking: {}
+	oneshot: {}
+	notify: {}
+	idle: {}
+} @vocab(spec)
+_candyServiceTypeWord: [for w, _ in _candyServiceType {w}]
+// #CandyApk.source
+_source: {
+	"apk-pure": {}
+	"google-play": {}
+	"f-droid": {}
+	"huawei-app-gallery": {}
+} @vocab(spec)
+_sourceWord: [for w, _ in _source {w}]

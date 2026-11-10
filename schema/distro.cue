@@ -33,7 +33,7 @@ package schema
 
 #Format: {
 	cache_mount?: [...#CacheMount] @go(CacheMount)
-	section_field?: {[string]: "list" | "list_of_maps"} @go(SectionFields)
+	section_field?: {[string]: or(_sectionFieldWord)} @go(SectionFields)
 	uninstall_template?: string    @go(UninstallTemplate)
 	// present_template is a command rendered for this format whose stdout lists,
 	// one per line, the packages from the rendered set that the venue ALREADY has
@@ -283,3 +283,16 @@ package schema
 	// answer carries the vm entity's per-distro extras verbatim.
 	answer?: {[string]: string} @go(Answers)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #Format.section_field.[string]
+_sectionField: {list: {}, list_of_maps: {}} @vocab(spec)
+_sectionFieldWord: [for w, _ in _sectionField {w}]

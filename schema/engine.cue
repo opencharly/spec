@@ -54,7 +54,7 @@ package schema
 // The word `containerd` means "containerd, driven through the nerdctl CLI",
 // rootful OR rootless. `nerdctl` is the CLI binary, never an engine word: the
 // former `engine: nerdctl` spelling is deleted (R5, no alias, no dual path).
-#EngineName: ("podman" | "docker" | "containerd")
+#EngineName: or(_engineNameWord)
 
 // #EngineBinaries — the engine WORD → CLI BINARY mapping. The two are NOT the
 // same word: containerd is driven through nerdctl, while podman/docker use their
@@ -76,7 +76,7 @@ package schema
 //   direct       — an ephemeral argv launch with no unit (docker today).
 // `charly task cue-gen` emits this as spec.EngineRunModes; ValidateRunMode derives
 // from it, and container.IsRunMode reads it.
-#EngineRunMode: ("quadlet" | "systemd-unit" | "direct")
+#EngineRunMode: or(_engineRunModeWord)
 
 // #EngineUnitRunModes — the SUBSET of #EngineRunMode that is supervised by a
 // generated unit file (as opposed to an ephemeral argv launch). This is the
@@ -93,7 +93,7 @@ package schema
 // are explicit operator choices. `charly task cue-gen` emits it as
 // spec.RootfulModes, so a resolver validates a flag/env/settings value without a
 // hand-listed word set.
-#RootfulMode: ("auto" | "machine" | "sudo" | "native")
+#RootfulMode: or(_rootfulModeWord)
 
 // #EngineCapability — the static facts about an engine, answered by OpDescribe.
 // This is the PUBLISHED provider contract: the fields a provider fills and the
@@ -155,7 +155,7 @@ package schema
 	// gpu_arg_style — the vendor-GPU passthrough flag family.
 	//   cdi  — podman's `--device nvidia.com/gpu=all`
 	//   gpus — docker/containerd's `--gpus all`
-	gpu_arg_style!: ("cdi" | "gpus") @go(GPUArgStyle)
+	gpu_arg_style!: or(_gpuArgStyleWord) @go(GPUArgStyle)
 	// userns_keepid_arg — the per-container keep-id argv when supported (podman
 	// `--userns=keep-id`); empty otherwise.
 	userns_keepid_arg?: string @go(UsernsKeepIDArg)
@@ -184,7 +184,7 @@ package schema
 	// loader reads this instead of a word literal: containerd hosts ["pod"]; a
 	// kind:vm through the krun backend is reached by the VM-backend class, not by
 	// widening this list. An engine may host only these kinds and nothing else.
-	substrates!: [...("pod" | "vm")] @go(Substrates)
+	substrates!: [...or(_substratesWord)] @go(Substrates)
 	// runtime_handlers — the OCI runtime handlers this engine knows (containerd:
 	// crun/krun/runc/nvidia). A run plan selects `--runtime` from this set; the
 	// handler word is DATA, never a literal in the plan builder.
@@ -321,3 +321,28 @@ package schema
 	capability?: #EngineCapability @go(Capability,optional=nillable)
 	error?:      string            @go(Error)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #EngineName
+_engineName: {podman: {}, docker: {}, containerd: {}} @vocab(spec)
+_engineNameWord: [for w, _ in _engineName {w}]
+// #EngineRunMode
+_engineRunMode: {quadlet: {}, "systemd-unit": {}, direct: {}} @vocab(spec)
+_engineRunModeWord: [for w, _ in _engineRunMode {w}]
+// #RootfulMode
+_rootfulMode: {auto: {}, machine: {}, sudo: {}, native: {}} @vocab(spec)
+_rootfulModeWord: [for w, _ in _rootfulMode {w}]
+// #EngineCapability.gpu_arg_style
+_gpuArgStyle: {cdi: {}, gpus: {}} @vocab(spec)
+_gpuArgStyleWord: [for w, _ in _gpuArgStyle {w}]
+// #EngineCapability.substrates
+_substrates: {pod: {}, vm: {}} @vocab(spec)
+_substratesWord: [for w, _ in _substrates {w}]

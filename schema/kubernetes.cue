@@ -22,7 +22,7 @@ package schema
 	// told about. Empty keeps the ambient file that plain `kubectl` reads — what
 	// a charly-created k3s/kind cluster relies on.
 	kubeconfig?: string @go(Kubeconfig)
-	admission_policy?:   "restricted" | "baseline" | "privileged"                    @go(AdmissionPolicy)
+	admission_policy?:   or(_kubernetesAdmissionPolicyWord)                    @go(AdmissionPolicy)
 	default_namespace?:  *"default" | (string & =~"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$") @go(DefaultNamespace)
 
 	storage?:        #KubernetesStorage
@@ -65,16 +65,16 @@ package schema
 	class_cheap?:         string @go(ClassCheap)
 	class_encrypted?:     string @go(ClassEncrypted)
 	class_fast?:          string @go(ClassFast)
-	access_mode_default?: ("ReadWriteOnce" | "ReadWriteMany" | "ReadOnlyMany" | "ReadWriteOncePod") @go(AccessModeDefault)
+	access_mode_default?: or(_accessModeDefaultWord) @go(AccessModeDefault)
 }
 #KubernetesIngressDefaults: {
 	enabled?:           bool
 	class?:             string
 	cert_issuer?:       string                                                 @go(CertIssuer)
-	path_type_default?: ("Prefix" | "Exact" | "ImplementationSpecific") @go(PathTypeDefault)
+	path_type_default?: or(_pathTypeDefaultWord) @go(PathTypeDefault)
 }
 #KubernetesImagesDefaults: {
-	pull_policy?: ("IfNotPresent" | "Always" | "Never") @go(PullPolicy)
+	pull_policy?: or(_kubernetesImagesDefaultsPullPolicyWord) @go(PullPolicy)
 	pull_secrets?: [...string] @go(PullSecrets)
 }
 #KubernetesPodDefaults: {
@@ -88,3 +88,34 @@ package schema
 	labels?: [string]:      string
 	annotations?: [string]: string
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #Kubernetes.admission_policy
+_kubernetesAdmissionPolicy: {restricted: {}, baseline: {}, privileged: {}} @vocab(spec)
+_kubernetesAdmissionPolicyWord: [for w, _ in _kubernetesAdmissionPolicy {w}]
+// #KubernetesStorage.access_mode_default
+_accessModeDefault: {
+	"ReadWriteOnce": {}
+	"ReadWriteMany": {}
+	"ReadOnlyMany": {}
+	"ReadWriteOncePod": {}
+} @vocab(spec)
+_accessModeDefaultWord: [for w, _ in _accessModeDefault {w}]
+// #KubernetesIngressDefaults.path_type_default
+_pathTypeDefault: {"Prefix": {}, "Exact": {}, "ImplementationSpecific": {}} @vocab(spec)
+_pathTypeDefaultWord: [for w, _ in _pathTypeDefault {w}]
+// #KubernetesImagesDefaults.pull_policy
+_kubernetesImagesDefaultsPullPolicy: {
+	"IfNotPresent": {}
+	"Always": {}
+	"Never": {}
+} @vocab(spec)
+_kubernetesImagesDefaultsPullPolicyWord: [for w, _ in _kubernetesImagesDefaultsPullPolicy {w}]

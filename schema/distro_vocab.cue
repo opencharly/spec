@@ -26,13 +26,13 @@ package schema
 // would add exported contract-module API with zero callers.
 #DistroTrait: {
 	// format is the native package format. The four charly implements.
-	format: "rpm" | "deb" | "pac" | "apk"
+	format: or(_distroTraitFormatWord)
 	// ssh_unit is the service name OpenSSH installs. Debian-family ships `ssh`;
 	// everyone else ships `sshd`. Getting this wrong leaves a guest unreachable.
-	ssh_unit: "ssh" | "sshd"
+	ssh_unit: or(_sshUnitWord)
 	// init is the guest's service manager. It selects HOW a service is enabled and
 	// started, never a distro-specific command inline in Go.
-	init: "systemd" | "openrc"
+	init: or(_distroTraitInitWord)
 	// ovmf_family is which vendor's OVMF firmware layout a HOST of this distro ships,
 	// selecting where the edk2 images live. It is a property of the distro like the
 	// other three, and it lived in a hand-maintained `ovmf_distro_aliases:` map kept in
@@ -43,7 +43,7 @@ package schema
 	// exactly, where ovmfCandidatesForDistro tries the union of all families and the
 	// not-found error emits the generic install hint. archarm (aarch64 firmware paths
 	// differ) and alpine are unset for that reason, as they were before.
-	ovmf_family?: "fedora" | "arch" | "debian"
+	ovmf_family?: or(_ovmfFamilyWord)
 } @go(-)
 
 #Distros: [string]: #DistroTrait
@@ -83,3 +83,25 @@ package schema
 // #DistroID is the closed id vocabulary, DERIVED from #Distros' own keys so the two can
 // never disagree. A VM source's `distro:` is validated against this.
 #DistroID: or([for id, _ in #Distros {id}]) @go(-)
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #DistroTrait.format
+_distroTraitFormat: {rpm: {}, deb: {}, pac: {}, apk: {}} @vocab(spec)
+_distroTraitFormatWord: [for w, _ in _distroTraitFormat {w}]
+// #DistroTrait.ssh_unit
+_sshUnit: {ssh: {}, sshd: {}} @vocab(spec)
+_sshUnitWord: [for w, _ in _sshUnit {w}]
+// #DistroTrait.init
+_distroTraitInit: {systemd: {}, openrc: {}} @vocab(spec)
+_distroTraitInitWord: [for w, _ in _distroTraitInit {w}]
+// #DistroTrait.ovmf_family
+_ovmfFamily: {fedora: {}, arch: {}, debian: {}} @vocab(spec)
+_ovmfFamilyWord: [for w, _ in _ovmfFamily {w}]

@@ -31,7 +31,7 @@ package schema
 	// ssh_user — the ssh login user the deploy host connects as.
 	ssh_user?: string @go(SSHUser)
 	// firmware — the guest firmware mode the box boots under.
-	firmware?: "bios" | "uefi-insecure" | "uefi-secure" @go(Firmware)
+	firmware?: or(_vmBoxMetadataFirmwareWord) @go(Firmware)
 	// init — the guest init system (systemd | openrc).
 	init?: string @go(Init)
 	// charly_install — how the charly guest agent gets in: auto | scp | skip.
@@ -70,7 +70,7 @@ package schema
 // with it — which the VMM attaches as two separate files (the substrate contract is
 // `kind: firecracker`, spec#227).
 #VmBoxSource: {
-	kind!: "cloud_image" | "bootc" | "clone" | "bootstrap" | "iso" | "container_disk" | "rootfs" | "kernel" @go(Kind)
+	kind!: or(_vmBoxSourceKindWord) @go(Kind)
 	// clone: the source entity the box's disk was cloned from.
 	from_vm?: string @go(FromVm)
 	// clone: the base snapshot id the clone overlay was created from.
@@ -90,7 +90,7 @@ package schema
 	// that works on a host with no loop device, no device-mapper and no privileged
 	// container (umbrella ledger probe P3).
 	// kernel is the uncompressed vmlinux the VMM loads alongside it.
-	format?: "ext4" | "raw" | "vmlinux" @go(Format)
+	format?: or(_vmBoxSourceFormatWord) @go(Format)
 	// rootfs: the size the rootfs was built at, in MiB. The deploy needs it to decide
 	// whether the delivered filesystem has to GROW before the guest boots — a truncated
 	// file alone does not grow the filesystem inside it.
@@ -122,3 +122,31 @@ package schema
 	// kernel_path — where the kernel file lives in the image.
 	kernel_path?: string @go(KernelPath)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #VmBoxMetadata.firmware
+_vmBoxMetadataFirmware: {bios: {}, "uefi-insecure": {}, "uefi-secure": {}} @vocab(spec)
+_vmBoxMetadataFirmwareWord: [for w, _ in _vmBoxMetadataFirmware {w}]
+// #VmBoxSource.kind
+_vmBoxSourceKind: {
+	cloud_image: {}
+	bootc: {}
+	clone: {}
+	bootstrap: {}
+	iso: {}
+	container_disk: {}
+	rootfs: {}
+	kernel: {}
+} @vocab(spec)
+_vmBoxSourceKindWord: [for w, _ in _vmBoxSourceKind {w}]
+// #VmBoxSource.format
+_vmBoxSourceFormat: {ext4: {}, raw: {}, vmlinux: {}} @vocab(spec)
+_vmBoxSourceFormatWord: [for w, _ in _vmBoxSourceFormat {w}]

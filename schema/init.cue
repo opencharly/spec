@@ -24,7 +24,7 @@ package schema
 	extends?: string & !="" @go(Extends)
 
 	// The one mandatory field: the build model.
-	model: "fragment_assembly" | "file_copy"
+	model: or(_initModelWord)
 
 	header_file?:    string & !="" @go(HeaderFile)
 	fragment_dir?:   string & !="" @go(FragmentDir)
@@ -269,3 +269,16 @@ package schema
 	render?: #ServiceRenderInput @go(Render,optional=nillable)
 	config?: #InitResolveInput   @go(Config,optional=nillable)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #Init.model
+_initModel: {fragment_assembly: {}, file_copy: {}} @vocab(spec)
+_initModelWord: [for w, _ in _initModel {w}]

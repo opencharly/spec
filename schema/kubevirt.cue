@@ -67,8 +67,8 @@ package schema
 	instancetype?: string
 	preference?:   string
 
-	run_strategy?:      *"Always" | "Halted" | "Manual" | "RerunOnFailure" | "Once" @go(RunStrategy)
-	eviction_strategy?: "None" | "LiveMigrate" | "LiveMigrateIfPossible" | "External"  @go(EvictionStrategy)
+	run_strategy?:      *"Always" | or(_runStrategyWord) @go(RunStrategy)
+	eviction_strategy?: or(_evictionStrategyWord)  @go(EvictionStrategy)
 	termination_grace_period_seconds?: int & >=0 @go(TerminationGracePeriodSeconds,type=int)
 
 	node_selector?: {[string]: string} @go(NodeSelector)
@@ -87,7 +87,7 @@ package schema
 		// (its ai.opencharly.* labels carry the VM metadata contract) or any
 		// KubeVirt containerDisk image.
 		image: string & !=""
-		pull_policy?: "Always" | "IfNotPresent" | "Never" @go(PullPolicy)
+		pull_policy?: or(_kubevirtSourcePullPolicyWord) @go(PullPolicy)
 		pull_secret?: string @go(PullSecret)
 		// disk_path_in_image points KubeVirt at the disk's location INSIDE the image
 		// when it is NOT the scanned default (/disk/disk.img) — e.g. a charly VM box
@@ -106,7 +106,7 @@ package schema
 		data_volume: {[string]: _}
 		size: string & !=""
 		storage_class?: string @go(StorageClass)
-		content_type?: "kubevirt" | "archive" @go(ContentType)
+		content_type?: or(_contentTypeWord) @go(ContentType)
 		image?: _|_
 		pull_policy?: _|_
 		pull_secret?: _|_
@@ -173,8 +173,8 @@ package schema
 }
 
 #KubevirtInput: {
-	type: "tablet" | "mouse" | "keyboard"
-	bus?: "virtio" | "usb" | "ps2"
+	type: or(_kubevirtInputTypeWord)
+	bus?: or(_busWord)
 }
 
 #KubevirtHostDevice: {
@@ -186,8 +186,8 @@ package schema
 }
 
 #KubevirtWatchdog: {
-	model: "i6300esb" | "diag288"
-	action?: "poweroff" | "reset" | "shutdown"
+	model: or(_kubevirtWatchdogModelWord)
+	action?: or(_kubevirtWatchdogActionWord)
 }
 
 #KubevirtGPU: {
@@ -197,8 +197,8 @@ package schema
 
 #KubevirtNetwork: {
 	// pod is the default KubeVirt network (a masquerade interface over the pod net).
-	interface?: *"masquerade" | "bridge" | "pod" @go(Interface)
-	model?:     *"virtio" | "e1000" | "rtl8139" @go(Model)
+	interface?: *"masquerade" | or(_interfaceWord) @go(Interface)
+	model?:     *"virtio" | or(_kubevirtNetworkModelWord) @go(Model)
 	// ports declare named ports on the interface (informational for a Service).
 	ports?: [...#KubevirtPort]
 }
@@ -222,3 +222,54 @@ package schema
 	// snapshot_class names the VolumeSnapshotClass; empty → the cluster default.
 	snapshot_class?: string @go(SnapshotClass)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #KubeVirt.run_strategy
+_runStrategy: {
+	"Always": {}
+	"Halted": {}
+	"Manual": {}
+	"RerunOnFailure": {}
+	"Once": {}
+} @vocab(spec)
+_runStrategyWord: [for w, _ in _runStrategy {w}]
+// #KubeVirt.eviction_strategy
+_evictionStrategy: {
+	"None": {}
+	"LiveMigrate": {}
+	"LiveMigrateIfPossible": {}
+	"External": {}
+} @vocab(spec)
+_evictionStrategyWord: [for w, _ in _evictionStrategy {w}]
+// #KubevirtSource.pull_policy
+_kubevirtSourcePullPolicy: {"Always": {}, "IfNotPresent": {}, "Never": {}} @vocab(spec)
+_kubevirtSourcePullPolicyWord: [for w, _ in _kubevirtSourcePullPolicy {w}]
+// #KubevirtSource.content_type
+_contentType: {kubevirt: {}, archive: {}} @vocab(spec)
+_contentTypeWord: [for w, _ in _contentType {w}]
+// #KubevirtInput.type
+_kubevirtInputType: {tablet: {}, mouse: {}, keyboard: {}} @vocab(spec)
+_kubevirtInputTypeWord: [for w, _ in _kubevirtInputType {w}]
+// #KubevirtInput.bus
+_bus: {virtio: {}, usb: {}, ps2: {}} @vocab(spec)
+_busWord: [for w, _ in _bus {w}]
+// #KubevirtWatchdog.model
+_kubevirtWatchdogModel: {i6300esb: {}, diag288: {}} @vocab(spec)
+_kubevirtWatchdogModelWord: [for w, _ in _kubevirtWatchdogModel {w}]
+// #KubevirtWatchdog.action
+_kubevirtWatchdogAction: {poweroff: {}, reset: {}, shutdown: {}} @vocab(spec)
+_kubevirtWatchdogActionWord: [for w, _ in _kubevirtWatchdogAction {w}]
+// #KubevirtNetwork.interface
+_interface: {masquerade: {}, bridge: {}, pod: {}} @vocab(spec)
+_interfaceWord: [for w, _ in _interface {w}]
+// #KubevirtNetwork.model
+_kubevirtNetworkModel: {virtio: {}, e1000: {}, rtl8139: {}} @vocab(spec)
+_kubevirtNetworkModelWord: [for w, _ in _kubevirtNetworkModel {w}]

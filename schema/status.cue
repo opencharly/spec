@@ -36,7 +36,7 @@ package schema
 // kubevirt was missing here while spec/status_types.go already carried
 // SubstrateKubevirt; firecracker joins both in the same change, so the CUE enum and
 // the hand-written Go consts name the same substrates again.
-#SubstrateKind: "pod" | "vm" | "kubernetes" | "local" | "android" | "kindcluster" | "kubevirt" | "firecracker" @go(-)
+#SubstrateKind: or(_substrateKindWord) @go(-)
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
 // deployment substrate (pod / vm / kubernetes / local / android / kindcluster /
@@ -130,3 +130,25 @@ package schema
 	rows?:   [...#DeploymentStatus] @go(Rows)
 	single?: #DeploymentStatus      @go(Single)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #SubstrateKind
+_substrateKind: {
+	pod: {}
+	vm: {}
+	kubernetes: {}
+	local: {}
+	android: {}
+	kindcluster: {}
+	kubevirt: {}
+	firecracker: {}
+} @vocab(spec)
+_substrateKindWord: [for w, _ in _substrateKind {w}]

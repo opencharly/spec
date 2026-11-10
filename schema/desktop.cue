@@ -133,7 +133,7 @@ package schema
 	compositor!: string & !=""
 
 	// syntax is a label for diagnostics and for choosing an escaping strategy.
-	syntax?: *"lua" | "ini" | "sway" | "xml" | "yaml"
+	syntax?: *"lua" | or(_syntaxWord)
 
 	// config_path_template is where the rendered config lands, as a Go template so a
 	// compositor that keys off its own name does not need a second field.
@@ -186,13 +186,13 @@ package schema
 // nothing installed produces a black screen and an empty journal, which is the single worst
 // failure this surface has.
 #DisplayManager: {
-	manager: *"sddm" | "greetd" | "gdm" | "ly"
+	manager: *"sddm" | or(_managerWord)
 
 	// session is the #SessionDesktop.id to start. Cross-checked at load.
 	session!: string & =~"^[a-z0-9]+(-[a-z0-9]+)*$"
 
 	autologin?: #AutoLogin
-	numlock?:   *"none" | "on" | "off"
+	numlock?:   *"none" | or(_numlockWord)
 
 	// theme names a greeter theme package or directory. Free-form: every greeter spells
 	// this differently and none of them validate it either.
@@ -263,13 +263,50 @@ package schema
 
 // #DesktopWindow is the placement the session renderer turns into a window rule.
 #DesktopWindow: {
-	placement?: *"default" | "float" | "tile" | "fullscreen" | "maximize"
+	placement?: *"default" | or(_placementWord)
 	workspace?: string & !=""
 	size?:      string & =~"^[0-9]+x[0-9]+$"
 }
 
 // #DesktopCategory is the freedesktop registered MAIN categories, verbatim. Closed on
 // purpose — see the note on `categories`.
-#DesktopCategory: "AudioVideo" | "Audio" | "Video" | "Development" | "Education" |
-	"Game" | "Graphics" | "Network" | "Office" | "Science" | "Settings" |
-	"System" | "Utility"
+#DesktopCategory: or(_desktopCategoryWord)
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #Session.syntax
+_syntax: {lua: {}, ini: {}, sway: {}, xml: {}, yaml: {}} @vocab(spec)
+_syntaxWord: [for w, _ in _syntax {w}]
+// #DisplayManager.manager
+_manager: {sddm: {}, greetd: {}, gdm: {}, ly: {}} @vocab(spec)
+_managerWord: [for w, _ in _manager {w}]
+// #DisplayManager.numlock
+_numlock: {none: {}, on: {}, off: {}} @vocab(spec)
+_numlockWord: [for w, _ in _numlock {w}]
+// #DesktopWindow.placement
+_placement: {default: {}, "float": {}, tile: {}, fullscreen: {}, maximize: {}} @vocab(spec)
+_placementWord: [for w, _ in _placement {w}]
+// #DesktopCategory
+_desktopCategory: {
+	"AudioVideo": {}
+	"Audio": {}
+	"Video": {}
+	"Development": {}
+	"Education": {}
+	"Game": {}
+	"Graphics": {}
+	"Network": {}
+	"Office": {}
+	"Science": {}
+	"Settings": {}
+	"System": {}
+	"Utility": {}
+} @vocab(spec)
+_desktopCategoryWord: [for w, _ in _desktopCategory {w}]

@@ -18,7 +18,7 @@ package schema
 // resolver validates `--backend` / `CHARLY_VM_BACKEND` / `vm.backend` against the
 // schema's own word list instead of carrying literals. `auto` is NOT a member:
 // it is a resolution selector, never a provider word.
-#VmBackendName: ("libvirt" | "qemu" | "krun")
+#VmBackendName: or(_vmBackendNameWord)
 
 // #VmBackend — the authored/persisted VM-backend selector: the provider words
 // plus "auto", which resolves by detection (today: libvirt, then qemu) and is
@@ -60,20 +60,20 @@ package schema
 	disk_size?: string @go(DiskSize)
 	ram?:       string
 	cpu?:       int & >=1 @go(Cpus,type=int) // yaml key is singular `cpu` (VmSpec.Cpus yaml:"cpu")
-	machine?:   "q35" | "virt" | "i440fx" | "pc"
+	machine?:   or(_machineWord)
 	// firmware is REQUIRED-with-default (not optional): an if-guard can only
 	// reference a field that always resolves to a concrete value, and an
 	// OPTIONAL field — even one carrying a default — errors with "cannot
 	// reference optional field" when absent. Required-with-default materializes
 	// "bios" on omission (matching the Go empty→bios behavior) AND stays
 	// referenceable by the uefi-secure cross-rule below.
-	firmware: *"bios" | "uefi-insecure" | "uefi-secure"
+	firmware: *"bios" | or(_vmFirmwareWord)
 
 	backend:   #VmBackend
 	autostart: *false | true
 	// autostart:true requires the libvirt backend (qemu has no persistent daemon).
 	if autostart {
-		backend: "auto" | "libvirt"
+		backend: or(_backendWord)
 	}
 
 	// krun carries the krun backend's knobs. Optional and ignored by the other
@@ -90,7 +90,7 @@ package schema
 	// FIELD-named conflict (null for the struct-valued fields, a negated enum for
 	// machine) rather than a bare `_|_`, whose error names only #Vm.
 	if backend == "krun" {
-		source: #VmSource & {kind: "container_disk" | "bootc"}
+		source: #VmSource & {kind: or(_vmKindWord)}
 		libvirt?:   null
 		autostart:  false
 		firmware:   "bios"
@@ -165,8 +165,8 @@ package schema
 	} | {
 		kind:         "bootc"
 		box:          string & !=""
-		transport?:   "registry" | "containers-storage" | "oci" | "oci-archive"
-		rootfs?:      "ext4" | "xfs" | "btrfs"
+		transport?:   or(_vmSourceTransportWord)
+		rootfs?:      or(_rootfsWord)
 		root_size?:   string
 		kernel_args?: string
 		url?:         _|_
@@ -186,7 +186,7 @@ package schema
 		kind:            "imported"
 		libvirt_name:    string & !=""
 		disk_path:       string & !=""
-		disk_format:     "qcow2" | "raw"
+		disk_format:     or(_diskFormatWord)
 		adopted_at?:     string
 		last_synced_at?: string
 		url?:            _|_
@@ -201,7 +201,7 @@ package schema
 		// (candy_select.go), so an unrecognized id is a typo, not an extension point.
 		distro:         #DistroID
 		builder_image?: string
-		rootfs?:        "ext4" | "xfs" | "btrfs"
+		rootfs?:        or(_rootfsWord)
 		root_size?:     string
 		kernel_args?:   string
 		package?: [...string]
@@ -352,7 +352,7 @@ package schema
 
 #VmNetwork: {
 	model?:  string
-	mode:    *"user" | "bridge" | "nat" | "network"
+	mode:    *"user" | or(_vmNetworkModeWord)
 	bridge?: string
 	mac?:    string @go(MAC)
 	// Each entry is "<host>:<guest>". The host side may be a fixed port OR the
@@ -377,8 +377,8 @@ package schema
 } & ({port_auto?: false} | {port?: int & <=0}) @go(-) // gengotypes: hand VmSsh (spec/union_types.go)
 
 #VmKeyInjection: {
-	smbios?:     "auto" | "enabled" | "disabled" @go(SMBIOS)
-	cloud_init?: "auto" | "enabled" | "disabled" @go(CloudInit)
+	smbios?:     or(_smbiosWord) @go(SMBIOS)
+	cloud_init?: or(_cloudInitWord) @go(CloudInit)
 }
 
 #VmSnapshot: {
@@ -441,7 +441,7 @@ package schema
 	// VmCharlyInstall has ONLY `strategy` (the vm-spec skill's url/checksum are
 	// STALE — the Go struct dropped them). auto: scp host binary post-boot;
 	// scp: explicit form; skip: user-managed.
-	strategy?: *"auto" | "scp" | "skip"
+	strategy?: *"auto" | or(_strategyWord)
 }
 
 // ---------------------------------------------------------------------------
@@ -545,7 +545,7 @@ package schema
 	// mode is REQUIRED-with-default (renderer default host-passthrough) so the
 	// custom⇒model if-guard below can reference it (optional fields error when
 	// absent). #LibvirtCPU only instantiates when `cpu:` is present.
-	mode:        *"host-passthrough" | "host-model" | "custom"
+	mode:        *"host-passthrough" | or(_libvirtCPUModeWord)
 	model?:      string
 	check?:      string // none|partial|full — no Go validator, kept plain
 	migratable?: string // on|off — no Go validator, kept plain
@@ -567,7 +567,7 @@ package schema
 }
 
 #LibvirtCPUFeature: {
-	policy?: "force" | "require" | "optional" | "disable" | "forbid"
+	policy?: or(_libvirtCPUFeaturePolicyWord)
 	name:    string & !="" // LibvirtCPUFeature.Name yaml:"name" — required
 }
 
@@ -585,7 +585,7 @@ package schema
 }
 
 #LibvirtClock: {
-	offset?:     "utc" | "localtime" | "timezone" | "variable" | "absolute"
+	offset?:     or(_offsetWord)
 	timezone?:   string
 	adjustment?: string
 	basis?:      string
@@ -752,7 +752,7 @@ package schema
 }
 
 #LibvirtGraphics: {
-	type:      "vnc" | "spice" | "rdp" | "sdl" | "egl-headless" | "dbus" // required
+	type:      or(_libvirtGraphicsTypeWord) // required
 	port?:     int                                                       @go(,type=int)
 	autoport?: string                                                    @go(AutoPort)
 	listen?:   #LibvirtListen                                            @go(Listen,type=LibvirtGraphicsListeners,optional=nillable)
@@ -813,8 +813,7 @@ package schema
 	// The vocabulary is closed because libvirt's own RNG closes it (domaincommon.rng,
 	// the type='virtio' group): any other value is rejected at DEFINE time with an
 	// error that blames <devices>, not the attribute. Rejecting it here names the field.
-	device?: "virtio-vga" | "virtio-vga-gl" | "virtio-gpu" | "virtio-gpu-gl" |
-		"vhost-user-vga" | "vhost-user-gpu"
+	device?: or(_deviceWord)
 
 	ram?:    int @go(,type=int)
 	vram?:   int @go(VRAM,type=int)
@@ -861,8 +860,8 @@ package schema
 	// Both enums are closed by libvirt's RNG (domaincommon.rng, the video <driver>
 	// element). A name like "qxl" — the plausible guess, since it is a valid video
 	// MODEL — is not a valid driver name and fails at define time.
-	name?:    "qemu" | "vhostuser"
-	vgaconf?: "io" | "on" | "off" @go(VGAConf)
+	name?:    or(_nameWord)
+	vgaconf?: or(_vgaconfWord) @go(VGAConf)
 
 	// The virtioOptions toggles. libvirt spells these on/off, where the video model's
 	// own attributes beside them are yes/no — the renderer keeps the two apart.
@@ -900,9 +899,9 @@ package schema
 #LibvirtPCIHex: string & =~"^(0[xX][0-9a-fA-F]+|[0-9]+)$"
 
 #LibvirtHostdev: {
-	type:     "pci" | "usb" | "scsi" | "mdev" // required
+	type:     or(_libvirtHostdevTypeWord) // required
 	mode?:    string
-	managed?: "yes" | "no"
+	managed?: or(_managedWord)
 	source: {[string]: string} // LibvirtHostdev.Source yaml:"source" — required typed map
 	rom?: {[string]: string}
 	driver?: {[string]: string}
@@ -921,8 +920,8 @@ package schema
 
 #LibvirtFilesystem: {
 	type?:       string
-	driver?:     "virtiofs" | "9p" | "path"
-	accessmode?: "passthrough" | "mapped" | "squash" @go(AccessMode)
+	driver?:     or(_driverWord)
+	accessmode?: or(_accessmodeWord) @go(AccessMode)
 	source:      string & !=""                       // required (host path)
 	target:      string & !=""                       // required (guest mount tag)
 	readonly?:   bool                                @go(,type=*bool)
@@ -993,7 +992,7 @@ package schema
 }
 
 #LibvirtLaunchSecurity: {
-	type?:              "sev" | "sev-es" | "sev-snp" | "tdx"
+	type?:              or(_libvirtLaunchSecurityTypeWord)
 	cbitpos?:           int @go(CBitPos,type=int)
 	reduced_phys_bits?: int @go(ReducedPhysBits,type=int)
 	policy?:            string
@@ -1044,3 +1043,110 @@ package schema
 	snapshot?: [...#VmSnapshot] @go(Snapshots)
 	raw?: bytes @go(Raw,type=RawBody)
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #VmBackendName
+_vmBackendName: {libvirt: {}, qemu: {}, krun: {}} @vocab(spec)
+_vmBackendNameWord: [for w, _ in _vmBackendName {w}]
+// #Vm.machine
+_machine: {q35: {}, virt: {}, i440fx: {}, pc: {}} @vocab(spec)
+_machineWord: [for w, _ in _machine {w}]
+// #Vm.firmware
+_vmFirmware: {bios: {}, "uefi-insecure": {}, "uefi-secure": {}} @vocab(spec)
+_vmFirmwareWord: [for w, _ in _vmFirmware {w}]
+// #Vm.backend
+_backend: {auto: {}, libvirt: {}} @vocab(spec)
+_backendWord: [for w, _ in _backend {w}]
+// #Vm.source.kind
+_vmKind: {container_disk: {}, bootc: {}} @vocab(spec)
+_vmKindWord: [for w, _ in _vmKind {w}]
+// #VmSource.transport
+_vmSourceTransport: {
+	registry: {}
+	"containers-storage": {}
+	oci: {}
+	"oci-archive": {}
+} @vocab(spec)
+_vmSourceTransportWord: [for w, _ in _vmSourceTransport {w}]
+// #VmSource.rootfs
+_rootfs: {ext4: {}, xfs: {}, btrfs: {}} @vocab(spec)
+_rootfsWord: [for w, _ in _rootfs {w}]
+// #VmSource.disk_format
+_diskFormat: {qcow2: {}, raw: {}} @vocab(spec)
+_diskFormatWord: [for w, _ in _diskFormat {w}]
+// #VmNetwork.mode
+_vmNetworkMode: {user: {}, bridge: {}, nat: {}, network: {}} @vocab(spec)
+_vmNetworkModeWord: [for w, _ in _vmNetworkMode {w}]
+// #VmKeyInjection.smbios
+_smbios: {auto: {}, enabled: {}, disabled: {}} @vocab(spec)
+_smbiosWord: [for w, _ in _smbios {w}]
+// #VmKeyInjection.cloud_init
+_cloudInit: {auto: {}, enabled: {}, disabled: {}} @vocab(spec)
+_cloudInitWord: [for w, _ in _cloudInit {w}]
+// #VmCharlyInstall.strategy
+_strategy: {auto: {}, scp: {}, skip: {}} @vocab(spec)
+_strategyWord: [for w, _ in _strategy {w}]
+// #LibvirtCPU.mode
+_libvirtCPUMode: {"host-passthrough": {}, "host-model": {}, custom: {}} @vocab(spec)
+_libvirtCPUModeWord: [for w, _ in _libvirtCPUMode {w}]
+// #LibvirtCPUFeature.policy
+_libvirtCPUFeaturePolicy: {
+	force: {}
+	require: {}
+	optional: {}
+	disable: {}
+	forbid: {}
+} @vocab(spec)
+_libvirtCPUFeaturePolicyWord: [for w, _ in _libvirtCPUFeaturePolicy {w}]
+// #LibvirtClock.offset
+_offset: {utc: {}, localtime: {}, timezone: {}, variable: {}, absolute: {}} @vocab(spec)
+_offsetWord: [for w, _ in _offset {w}]
+// #LibvirtGraphics.type
+_libvirtGraphicsType: {
+	vnc: {}
+	spice: {}
+	rdp: {}
+	sdl: {}
+	"egl-headless": {}
+	dbus: {}
+} @vocab(spec)
+_libvirtGraphicsTypeWord: [for w, _ in _libvirtGraphicsType {w}]
+// #LibvirtVideo.device
+_device: {
+	"virtio-vga": {}
+	"virtio-vga-gl": {}
+	"virtio-gpu": {}
+	"virtio-gpu-gl": {}
+	"vhost-user-vga": {}
+	"vhost-user-gpu": {}
+} @vocab(spec)
+_deviceWord: [for w, _ in _device {w}]
+// #LibvirtVideoDriver.name
+_name: {qemu: {}, vhostuser: {}} @vocab(spec)
+_nameWord: [for w, _ in _name {w}]
+// #LibvirtVideoDriver.vgaconf
+_vgaconf: {io: {}, on: {}, off: {}} @vocab(spec)
+_vgaconfWord: [for w, _ in _vgaconf {w}]
+// #LibvirtHostdev.type
+_libvirtHostdevType: {pci: {}, usb: {}, scsi: {}, mdev: {}} @vocab(spec)
+_libvirtHostdevTypeWord: [for w, _ in _libvirtHostdevType {w}]
+// #LibvirtHostdev.managed
+_managed: {yes: {}, no: {}} @vocab(spec)
+_managedWord: [for w, _ in _managed {w}]
+// #LibvirtFilesystem.driver
+_driver: {virtiofs: {}, "9p": {}, path: {}} @vocab(spec)
+_driverWord: [for w, _ in _driver {w}]
+// #LibvirtFilesystem.accessmode
+_accessmode: {passthrough: {}, mapped: {}, squash: {}} @vocab(spec)
+_accessmodeWord: [for w, _ in _accessmode {w}]
+// #LibvirtLaunchSecurity.type
+_libvirtLaunchSecurityType: {sev: {}, "sev-es": {}, "sev-snp": {}, tdx: {}} @vocab(spec)
+_libvirtLaunchSecurityTypeWord: [for w, _ in _libvirtLaunchSecurityType {w}]

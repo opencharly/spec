@@ -150,7 +150,7 @@ package schema
 		variant?:     string
 		// libc: the C library the binary links against. See the header: image-spec
 		// cannot express this, and a musl host must refuse a glibc binary by name.
-		libc!: "glibc" | "musl"
+		libc!: or(_libcWord)
 	}
 	// protocol: the transport family the binary was built against. OPTIONAL DIAGNOSTIC, not
 	// a gate: DESIGN §8 says "There is no version negotiation. Compatibility is the
@@ -207,3 +207,16 @@ package schema
 	// names" without re-deriving which layer is which). Recomputed from the manifest.
 	layers!: {[string]: string}
 })
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #PluginArtifactMetadata.platform.libc
+_libc: {glibc: {}, musl: {}} @vocab(spec)
+_libcWord: [for w, _ in _libc {w}]

@@ -7,7 +7,7 @@ package schema
 #UUIDv7: string & =~"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 
 #TargetHop: {
-	transport:      "inproc" | "exec" | "ssh" | "grpc" | "tmux"
+	transport:      or(_targetHopTransportWord)
 	address?:       string
 	user?:          string
 	port?:          int & >0 & <=65535
@@ -41,8 +41,8 @@ package schema
 	protocol_version: int & >=1 @go(ProtocolVersion,type=int)
 	entrypoint?: [...string]
 	profiles?: [...string]
-	interaction_modes?: [...("structured" | "terminal")] @go(InteractionModes)
-	persistence?:         "none" | "session" | "required"
+	interaction_modes?: [...or(_interactionModesWord)] @go(InteractionModes)
+	persistence?:         or(_agentRuntimeCapabilityPersistenceWord)
 	semantic_completion?: bool @go(SemanticCompletion)
 }
 
@@ -50,7 +50,7 @@ package schema
 	id:           #UUIDv7 @go(ID)
 	runtime:      string & !=""
 	target:       #TargetSpec
-	state:        "new" | "active" | "detached" | "closed" | "failed"
+	state:        or(_agentSessionStateWord)
 	created_at:   string @go(CreatedAt)
 	updated_at:   string @go(UpdatedAt)
 	storage_ref?: string @go(StorageRef)
@@ -84,7 +84,7 @@ package schema
 #AgentEvent: {
 	run_id:   #UUIDv7 @go(RunID)
 	sequence: int & >=1
-	type:     "started" | "message" | "tool" | "delegation" | "settled" | "status" | "completed" | "aborted" | "failed"
+	type:     or(_agentEventTypeWord)
 	time:     string
 	payload?: {...} @go(Payload,type=map[string]any)
 }
@@ -109,7 +109,7 @@ package schema
 	edges?: [...#AgentDelegationEdge]
 	coordinator?:     string
 	concurrency?:     int & >=1
-	evidence_policy?: "target" | "coordinator" | "both" @go(EvidencePolicy)
+	evidence_policy?: or(_evidencePolicyWord) @go(EvidencePolicy)
 }
 
 // Durable control-plane projection of a declarative team. The authored graph
@@ -128,7 +128,7 @@ package schema
 	owner:     string & !=""
 	session_id?: #UUIDv7 @go(SessionID)
 	run_id?:     #UUIDv7 @go(RunID)
-	state:      "delegated" | "active" | "settled" | "failed"
+	state:      or(_agentFederationRecordStateWord)
 	updated_at: string @go(UpdatedAt)
 	metadata?: #StrMap
 }
@@ -136,7 +136,7 @@ package schema
 #Incident: {
 	id:         #UUIDv7 @go(ID)
 	run_id?:    #UUIDv7 @go(RunID)
-	state:      "needs_rca" | "rca_active" | "awaiting_recovery" | "resolved"
+	state:      or(_incidentStateWord)
 	summary:    string & !=""
 	created_at: string @go(CreatedAt)
 	evidence_refs?: [...string] @go(EvidenceRefs)
@@ -145,7 +145,7 @@ package schema
 #RCARecord: {
 	id:          #UUIDv7 @go(ID)
 	incident_id: #UUIDv7 @go(IncidentID)
-	state:       "active" | "complete"
+	state:       or(_rcaRecordStateWord)
 	findings?: [...string]
 	root_cause?:   string @go(RootCause)
 	completed_at?: string @go(CompletedAt)
@@ -167,10 +167,10 @@ package schema
 	id:                          #UUIDv7 @go(ID)
 	incident_id:                 #UUIDv7 @go(IncidentID)
 	rca_id?:                     #UUIDv7 @go(RCAID)
-	action:                      "reattach" | "resume" | "restart" | "rebuild-target" | "change-runtime" | "reassign" | "abort" | "operator"
+	action:                      or(_recoveryDecisionActionWord)
 	authorized_emergency_abort?: bool @go(AuthorizedEmergencyAbort)
 	params?:                     #RecoveryParams @go(Params,type=*RecoveryParams)
-	state:                       "planned" | "applied" | "failed"
+	state:                       or(_recoveryDecisionStateWord)
 	decided_at:                  string @go(DecidedAt)
 	applied_at?:                 string @go(AppliedAt)
 	error?:                      string
@@ -187,12 +187,12 @@ package schema
 	semantic_adapter?: string @go(SemanticAdapter)
 	keys?: [...string]
 	signals?: [...string]
-	persistence?: "none" | "detach" | "required"
-	transcript?:  "none" | "raw" | "screen" | "both"
+	persistence?: or(_terminalProfilePersistenceWord)
+	transcript?:  or(_transcriptWord)
 }
 
 #TerminalInput: {
-	kind:    "text" | "paste" | "command" | "key" | "resize" | "signal" | "close"
+	kind:    or(_terminalInputKindWord)
 	text?:   string
 	key?:    string
 	cols?:   int & >0 & <=1000
@@ -212,8 +212,8 @@ package schema
 #TerminalFrame: {
 	run_id:     #UUIDv7 @go(RunID)
 	sequence:   int & >=1
-	kind:       "raw" | "screen" | "status" | "exit" | "error" | "resync"
-	stream?:    "stdout" | "stderr" | "terminal"
+	kind:       or(_terminalFrameKindWord)
+	stream?:    or(_streamWord)
 	data?:      bytes
 	snapshot?:  string
 	status?:    string
@@ -237,3 +237,100 @@ package schema
 	reason?:   string
 	time:      string
 }
+
+// --- vocabulary tables (S3) --------------------------------------------------
+// Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
+// and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
+// disagree and a new word is ONE row here. `@vocab` names the owner (§3.1): these
+// sets are compiled into THIS contract module, so the owner is `spec`.
+//
+// Each table is named after its word when that name is unique in the schema, and
+// `<definition><Field>` when it is not; the comment above it names its site.
+
+// #TargetHop.transport
+_targetHopTransport: {inproc: {}, exec: {}, ssh: {}, grpc: {}, tmux: {}} @vocab(spec)
+_targetHopTransportWord: [for w, _ in _targetHopTransport {w}]
+// #AgentRuntimeCapability.interaction_modes
+_interactionModes: {structured: {}, terminal: {}} @vocab(spec)
+_interactionModesWord: [for w, _ in _interactionModes {w}]
+// #AgentRuntimeCapability.persistence
+_agentRuntimeCapabilityPersistence: {none: {}, session: {}, required: {}} @vocab(spec)
+_agentRuntimeCapabilityPersistenceWord: [for w, _ in _agentRuntimeCapabilityPersistence {w}]
+// #AgentSession.state
+_agentSessionState: {new: {}, active: {}, detached: {}, closed: {}, failed: {}} @vocab(spec)
+_agentSessionStateWord: [for w, _ in _agentSessionState {w}]
+// #AgentEvent.type
+_agentEventType: {
+	started: {}
+	message: {}
+	tool: {}
+	delegation: {}
+	settled: {}
+	status: {}
+	completed: {}
+	aborted: {}
+	failed: {}
+} @vocab(spec)
+_agentEventTypeWord: [for w, _ in _agentEventType {w}]
+// #AgentTeam.evidence_policy
+_evidencePolicy: {target: {}, coordinator: {}, both: {}} @vocab(spec)
+_evidencePolicyWord: [for w, _ in _evidencePolicy {w}]
+// #AgentFederationRecord.state
+_agentFederationRecordState: {delegated: {}, active: {}, settled: {}, failed: {}} @vocab(spec)
+_agentFederationRecordStateWord: [for w, _ in _agentFederationRecordState {w}]
+// #Incident.state
+_incidentState: {
+	needs_rca: {}
+	rca_active: {}
+	awaiting_recovery: {}
+	resolved: {}
+} @vocab(spec)
+_incidentStateWord: [for w, _ in _incidentState {w}]
+// #RCARecord.state
+_rcaRecordState: {active: {}, complete: {}} @vocab(spec)
+_rcaRecordStateWord: [for w, _ in _rcaRecordState {w}]
+// #RecoveryDecision.action
+_recoveryDecisionAction: {
+	reattach: {}
+	resume: {}
+	restart: {}
+	"rebuild-target": {}
+	"change-runtime": {}
+	reassign: {}
+	abort: {}
+	operator: {}
+} @vocab(spec)
+_recoveryDecisionActionWord: [for w, _ in _recoveryDecisionAction {w}]
+// #RecoveryDecision.state
+_recoveryDecisionState: {planned: {}, applied: {}, failed: {}} @vocab(spec)
+_recoveryDecisionStateWord: [for w, _ in _recoveryDecisionState {w}]
+// #TerminalProfile.persistence
+_terminalProfilePersistence: {none: {}, detach: {}, required: {}} @vocab(spec)
+_terminalProfilePersistenceWord: [for w, _ in _terminalProfilePersistence {w}]
+// #TerminalProfile.transcript
+_transcript: {none: {}, raw: {}, screen: {}, both: {}} @vocab(spec)
+_transcriptWord: [for w, _ in _transcript {w}]
+// #TerminalInput.kind
+_terminalInputKind: {
+	text: {}
+	paste: {}
+	command: {}
+	key: {}
+	resize: {}
+	signal: {}
+	"close": {}
+} @vocab(spec)
+_terminalInputKindWord: [for w, _ in _terminalInputKind {w}]
+// #TerminalFrame.kind
+_terminalFrameKind: {
+	raw: {}
+	screen: {}
+	status: {}
+	exit: {}
+	error: {}
+	resync: {}
+} @vocab(spec)
+_terminalFrameKindWord: [for w, _ in _terminalFrameKind {w}]
+// #TerminalFrame.stream
+_stream: {stdout: {}, stderr: {}, terminal: {}} @vocab(spec)
+_streamWord: [for w, _ in _stream {w}]
