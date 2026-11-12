@@ -17,7 +17,57 @@ package spec
 // Both gates below read the GENERATED Go vocabulary (`spec/vocab_gen.go`), so they fail
 // if the CUE table and the class set drift in either direction.
 
-import "testing"
+import (
+	"testing"
+
+	"cuelang.org/go/cue"
+)
+
+// TestPipelineBodyDefsAreNotInTheContract pins the DELETION itself: the `kind: pipeline`
+// body lives in plugin-pipeline's CUE module now, so the contract module must not declare
+// it. This is the one gate that FAILS if a body def is re-added — every other test in this
+// repo passes identically with the defs back, because they exercise surfaces this module
+// still owns (the class→route table, the vocabularies). Without it the deletion would be
+// unproven: a re-added `#PipelineValue` would silently re-register `pipeline` in
+// `KindValueDefs` and the host would gate the body against a def this module no longer owns.
+//
+// The positive control matters as much as the absence: a schema that failed to concatenate
+// (or a generator that stopped emitting) would make every absence below "pass" for the wrong
+// reason, so a def the base still keeps is asserted PRESENT in the same value.
+func TestPipelineBodyDefsAreNotInTheContract(t *testing.T) {
+	schema := loadPipelineSchema(t)
+
+	// Positive control: the concatenation and the generator both still work.
+	if d := schema.LookupPath(cue.ParsePath("#TaskValue")); d.Err() != nil {
+		t.Fatalf("the schema does not carry #TaskValue — the absence checks below would be vacuous: %v", d.Err())
+	}
+	if def, ok := KindValueDefs["task"]; !ok || def != "#TaskValue" {
+		t.Fatalf("KindValueDefs has no task entry (got %q, ok=%v) — the generator is not emitting", def, ok)
+	}
+
+	for _, def := range []string{
+		"#Pipeline",
+		"#PipelineValue",
+		"#PipelineRetry",
+		"#PipelineApproval",
+		"#PipelineFlow",
+		"#PipelineArms",
+		"#PipelineInput",
+		"#PipelineSubStep",
+		"#PipelineParallel",
+		"#PipelineStepBase",
+		"#PipelineStep",
+		"#PipelineSchedule",
+		"#PipelineTrigger",
+	} {
+		if d := schema.LookupPath(cue.ParsePath(def)); d.Err() == nil {
+			t.Errorf("the contract module STILL declares %s — the kind body belongs to plugin-pipeline, and a re-added def re-registers the kind in KindValueDefs", def)
+		}
+	}
+	if _, ok := KindValueDefs["pipeline"]; ok {
+		t.Errorf("KindValueDefs still carries %q — deleting #PipelineValue must drop it from the generated map", "pipeline")
+	}
+}
 
 // TestPipelineClassCoverage is the R2 gate: every provider class in the CLOSED vocabulary
 // must have a decided workflow route, and the route table must not name a class that does
