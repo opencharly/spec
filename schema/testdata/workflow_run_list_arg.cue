@@ -37,14 +37,11 @@ workflowRunListArg: {
 // accepting the document.
 workflowRunListArgRequest: #WorkflowRunRequest & workflowRunListArg
 
-// The same value must survive the schedule path, which normalizes an authored
-// `#PipelineSchedule.args` into `#WorkflowSchedule.args` verbatim. Both sides are
-// asserted so the two defs cannot drift into "the run accepts a list but the schedule
-// does not".
-workflowScheduleListArg: #PipelineSchedule & {
-	cron: "* * * * *"
-	args: workflowRunListArg.args
-}
+// The same value must survive the ENGINE's schedule path, which the authored schedule
+// (`#PipelineSchedule`, now plugin-pipeline's def) normalizes into verbatim. The authored
+// side of this pair is asserted beside its def, in that plugin's
+// `pipeline_schema_corpus_test.go`, so the two cannot drift into "the run accepts a list
+// but the schedule does not".
 workflowTriggerListArg: #WorkflowSchedule & {
 	cron: "* * * * *"
 	args: workflowRunListArg.args

@@ -30,13 +30,13 @@ import (
 )
 
 // The generated fields MUST be `map[string]any`. A `map[string]string` cannot hold a
-// list at all, and these three lines turn a reverted `@go(,type=...)` annotation into a
-// COMPILE error instead of a silent contract regression discovered by a consumer three
-// legs downstream.
+// list at all, and these lines turn a reverted `@go(,type=...)` annotation into a COMPILE
+// error instead of a silent contract regression discovered by a consumer three legs
+// downstream. The authored schedule's twin assertion moved with its def to
+// plugin-pipeline (`pipeline_schema_corpus_test.go`).
 var (
 	_ map[string]any = WorkflowRunRequest{}.Args
 	_ map[string]any = WorkflowSchedule{}.Args
-	_ map[string]any = PipelineSchedule{}.Args
 )
 
 // loadSchemaWithFixture compiles the shipped schema concatenation TOGETHER with one
@@ -63,15 +63,15 @@ func loadSchemaWithFixture(t *testing.T, fixture string) cue.Value {
 
 // TestWorkflowArgListFixtureValidates pins the document the chain's lane primitive
 // sends: `--prs a b c` as a LIST, alongside the scalar arg that must keep working, and
-// the same values through both schedule defs. Each field the fixture asserts is checked
-// as a FINAL concrete value, so a disjunction that stopped resolving (or a def that
-// started admitting nothing) fails here rather than at a consumer.
+// the same values through the ENGINE's schedule def. Each field the fixture asserts is
+// checked as a FINAL concrete value, so a disjunction that stopped resolving (or a def
+// that started admitting nothing) fails here rather than at a consumer. The authored
+// schedule's arm of the same pair lives with its def in plugin-pipeline's corpus.
 func TestWorkflowArgListFixtureValidates(t *testing.T) {
 	schema := loadSchemaWithFixture(t, "workflow_run_list_arg.cue")
 
 	for _, path := range []string{
 		"workflowRunListArgRequest",
-		"workflowScheduleListArg",
 		"workflowTriggerListArg",
 	} {
 		t.Run(path, func(t *testing.T) {

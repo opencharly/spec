@@ -287,7 +287,6 @@ var KindValueDefs = map[string]string{
 	"kubernetes":  "#KubernetesValue",
 	"kubevirt":    "#KubevirtValue",
 	"local":       "#LocalValue",
-	"pipeline":    "#PipelineValue",
 	"pod":         "#PodValue",
 	"task":        "#TaskValue",
 	"vm":          "#VmValue",
