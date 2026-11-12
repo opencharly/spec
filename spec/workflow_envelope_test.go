@@ -15,8 +15,9 @@ package spec
 // CLOSEDNESS, not a decode round-trip (R2, same reasoning as pipeline_test.go): the
 // closure lives ONLY in CUE, so this unifies concrete values into the defs and demands
 // the same judgement the host's value gate makes. The last case is the load-bearing
-// one — it holds the AUTHORED def (#PipelineApproval) to its UNCHANGED surface, which
-// is what makes the whole change IR-only: no authored wire key moved, so — the rule the
+// one — it holds the AUTHORED defs to their UNCHANGED surface (that half now lives with
+// the defs, in plugin-pipeline's corpus); that is what makes the change IR-only: no
+// authored wire key moved, so — the rule the
 // recipe states as "a schema-version bump ONLY on an authored wire-key change" — there
 // is no version STAMP to bump. The `#SchemaVersion` / `#SchemaFloor` CalVer, the
 // `charly.yml` `version:` stamp and the equality gate were DELETED
@@ -27,10 +28,28 @@ package spec
 // have is a stamp to bump. That distinction is the one this corpus pins.
 
 import (
+	"os"
 	"testing"
 
 	"cuelang.org/go/cue"
+	"cuelang.org/go/cue/cuecontext"
+
+	"github.com/opencharly/spec/schemaconcat"
 )
+
+// loadPipelineSchema compiles the runtime's own schema concatenation.
+func loadPipelineSchema(t *testing.T) cue.Value {
+	t.Helper()
+	src, _, err := schemaconcat.ConcatSchema(os.DirFS(".."), "schema", nil)
+	if err != nil {
+		t.Fatalf("concat schema: %v", err)
+	}
+	v := cuecontext.New().CompileString(src)
+	if err := v.Err(); err != nil {
+		t.Fatalf("compile schema: %v", err)
+	}
+	return v
+}
 
 // unifyDef unifies a concrete value into a named def in the runtime's own schema
 // concatenation and reports the resulting error (nil = accepted).
@@ -151,20 +170,10 @@ func TestWorkflowApprovalCarriesTheEngineEnvelope(t *testing.T) {
 			true,
 		},
 
-		// --- reject: the AUTHORED surface is unchanged (the IR-only proof) ---
-		{
-			// This case is the change's contract. The engine's envelope is IR-only — the
-			// authored `approval:` never gains these keys — so the authored def must NOT
-			// accept them. If someone later "conveniently" mirrors the enrichment here,
-			// that IS an authored wire-key change: every authored document carrying
-			// `approval:` stops unifying against the CLOSED schema, so it is a declared
-			// cutover with a `charly migrate` route for the consumers — and this test
-			// says so first, instead of letting the mirror ship as a "small addition".
-			"the authored approval def does not gain the engine fields",
-			"#PipelineApproval",
-			`{message: "ok?", items: [1], approval_id: "a1b2c3d4"}`,
-			true,
-		},
+		// The AUTHORED-def half of this corpus (`#PipelineApproval` must not gain the
+		// engine's fields) moved to plugin-pipeline with the def:
+		// `candy/plugin-pipeline/pipeline_schema_corpus_test.go`,
+		// `TestAuthoredSurfaceCarriesTheRuntimeArgList`. The bound it pins is unchanged.
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := unifyDef(t, schema, tc.def, tc.value)
@@ -195,10 +204,11 @@ func TestWorkflowApprovalCarriesTheEngineEnvelope(t *testing.T) {
 // cases below are as load-bearing as the accept cases: they stop a later "just use
 // `_`" from turning a loud schema error into a silent execution-time drop.
 //
-// The three defs move together because they are ONE mechanism: an authored
-// `#PipelineSchedule.args` is normalized into `#WorkflowSchedule.args`, which is what
-// a scheduled run's `#WorkflowRunRequest.args` is built from. A run that accepts a
-// list while its schedule does not is the half-fix this corpus exists to prevent.
+// The defs move together because they are ONE mechanism: the authored schedule's
+// `args` (now plugin-pipeline's `#PipelineSchedule`) is normalized into
+// `#WorkflowSchedule.args`, which is what a scheduled run's `#WorkflowRunRequest.args` is
+// built from. A run that accepts a list while its schedule does not is the half-fix this
+// corpus exists to prevent — the authored half of it is pinned beside the def.
 func TestWorkflowArgsCarryARuntimeList(t *testing.T) {
 	schema := loadPipelineSchema(t)
 
@@ -224,12 +234,6 @@ func TestWorkflowArgsCarryARuntimeList(t *testing.T) {
 		{
 			"the schedule on the engine wire carries a list arg",
 			"#WorkflowSchedule",
-			`{cron: "0 * * * *", args: {prs: ["101"]}}`,
-			false,
-		},
-		{
-			"the AUTHORED schedule carries a list arg too",
-			"#PipelineSchedule",
 			`{cron: "0 * * * *", args: {prs: ["101"]}}`,
 			false,
 		},
@@ -282,29 +286,12 @@ func TestWorkflowArgsCarryARuntimeList(t *testing.T) {
 			`{cron: "0 * * * *", args: {prs: {nested: "x"}}}`,
 			true,
 		},
-		{
-			"a nested map arg is rejected on the authored schedule too",
-			"#PipelineSchedule",
-			`{cron: "0 * * * *", args: {prs: {nested: "x"}}}`,
-			true,
-		},
 
-		// --- the sub-workflow step arm: the same mechanism one level down ---
-		{
-			// A `workflow:` step hands its args to the SAME resolveWorkflowArgs the run
-			// request does, so leaving this arm scalar-only would let a lane carry a list
-			// at the top level and fail one step down.
-			"a sub-workflow step carries a list arg",
-			"#PipelineStep",
-			`{id: "s1", workflow: "child", workflow_args: {prs: ["101", "102"]}}`,
-			false,
-		},
-		{
-			"a sub-workflow step still rejects a nested map arg",
-			"#PipelineStep",
-			`{id: "s1", workflow: "child", workflow_args: {prs: {nested: "x"}}}`,
-			true,
-		},
+		// The AUTHORED-def rows of this corpus (the schedule's `args`, a sub-workflow
+		// step's `workflow_args`, and the bound on a nested value) moved to
+		// plugin-pipeline with the defs:
+		// `candy/plugin-pipeline/pipeline_schema_corpus_test.go`,
+		// `TestAuthoredSurfaceCarriesTheRuntimeArgList`.
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := unifyDef(t, schema, tc.def, tc.value)
