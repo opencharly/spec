@@ -286,7 +286,6 @@ var KindValueDefs = map[string]string{
 	"kindcluster": "#KindclusterValue",
 	"kubernetes":  "#KubernetesValue",
 	"kubevirt":    "#KubevirtValue",
-	"local":       "#LocalValue",
 	"vm":          "#VmValue",
 }
 

@@ -8249,20 +8249,6 @@ type LoadedProject struct {
 	Namespaces []*NamespaceMount `yaml:"namespaces,omitempty" json:"namespaces,omitempty"`
 }
 
-type Local struct {
-	// Ordered candy stack applied to the host. Required (empty list permitted —
-	// a staged name-reservation stub; the loader warns, not errors).
-	Candy []CandyRef `yaml:"candy,omitempty" json:"candy"`
-
-	InstallOpts *InstallOpts `yaml:"install_opts,omitempty" json:"install_opts,omitempty"`
-
-	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
-
-	Description string `yaml:"description,omitempty" json:"description,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-}
-
 // CUE schema for the `marketplace` KIND — the single harness/marketplace config entity per repo
 // (the migration of plugins/.claude-plugin/marketplace.json + profiles.json + the harness wiring
 // into candy config). A `marketplace:` node is a top-level entity in a candy-dir file (e.g.
@@ -11009,7 +10995,8 @@ type SubstrateStatusReply struct {
 
 // #ResolvedLocal is the resolve-to-envelope form of a `local:` template — a
 // candy-stack applied to a host. The kernel reads it (candy stack / install
-// opts / plan), never spec.Local.
+// opts / plan), never the authored body type — which lives in the plugin that
+// serves the kind (opencharly/spec#304 unit 4).
 type ResolvedLocal struct {
 	Candy []CandyRef `yaml:"candy,omitempty" json:"candy,omitempty"`
 

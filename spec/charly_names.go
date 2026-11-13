@@ -25,7 +25,6 @@ type (
 	CandyYAML      = Candy
 	VmSpec         = Vm
 	DeployNode     = Deploy
-	LocalSpec      = Local
 	KubernetesSpec = Kubernetes
 	AndroidSpec    = Android
 	SidecarDef     = Sidecar

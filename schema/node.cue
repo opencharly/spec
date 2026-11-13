@@ -82,9 +82,9 @@ package schema
 // `#Template | #Deploy`, routed by SHAPE in the loader (a template carries its own
 // config — source:/composition; a deploy carries from:/image: + the deploy config).
 // The RDD spike proved `cue vet` resolves this disjunction unambiguously even with
-// overlapping fields. @go(-): the Go types come from #Local/#Vm/#Kubernetes/#Android +
-// #Deploy directly (a substrate whose body has moved, `pod`, contributes none here); this
-// value def is validation-only.
+// overlapping fields. @go(-): the Go types come from #Vm/#Kubernetes/#Android + #Deploy
+// directly (the substrates whose bodies have moved — `pod` and `local` — contribute none
+// here); this value def is validation-only.
 //
 // C2-substrate: these substrate kinds have NO #Node arm anymore (externalized to
 // candy/plugin-substrate). They are KEPT here as the HOST-SIDE value
@@ -94,12 +94,12 @@ package schema
 // defs stay REACHABLE from Go (via runPluginKind's kindValueDef lookup) while contributing
 // NO #Node arm (KindWords drops the 6). #CandyValue above is the C2-candy analogue.
 //
-// `pod` HAS MOVED OUT (spec#304 unit 3): its body and its gate def `#PodValue` live in
-// `plugin-substrate`'s own CUE module, and the plugin's `kind` capability DECLARES
-// `InputDef: "#PodValue"`, so `kindValueDefPath` resolves the def from the provider's
-// declaration and finds it in the COMPOSED unit instead of this map. So `pod` has no entry
-// below, and the defs that remain are the kinds whose body this module still owns.
-#LocalValue:   (#Local | #DeployValue) @go(-)
+// `pod` HAS MOVED OUT (spec#304 unit 3) and `local` HAS MOVED OUT (unit 4): each body and
+// its gate def (`#PodValue`, `#LocalValue`) live in `plugin-substrate`'s own CUE module, and
+// the plugin's `kind` capability DECLARES `InputDef: "#<Word>Value"`, so `kindValueDefPath`
+// resolves the def from the provider's declaration and finds it in the COMPOSED unit instead
+// of this map. So neither has an entry below, and the defs that remain are the kinds whose
+// body this module still owns.
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #KubernetesValue: (#Kubernetes | #DeployValue) @go(-)
 #KindclusterValue: (#Kindcluster | #DeployValue) @go(-)
@@ -130,10 +130,10 @@ package schema
 // (#Vm/#Deploy/#LibvirtDomain/#Candy/#Box/…) and so cannot be a self-contained plugin schema, are
 // validated HOST-SIDE against the KEPT #<Kind>Value / #CandyValue defs above (runPluginKind →
 // validateKindValueCUE). The core #Distro / #Builder / #Init / #Resource / #Agent /
-// #Sidecar / #Vm / #KubeVirt / #Kubernetes / #Local / #Android / #Deploy / #Candy / #Box defs
+// #Sidecar / #Vm / #KubeVirt / #Kubernetes / #Android / #Deploy / #Candy / #Box defs
 // (schema/*.cue) are KEPT — they still generate spec.Distro / spec.Vm / spec.Candy / spec.Box /
-// … (the canonical types the plugins' Invoke and the host decode into); `#Pod` is the one that
-// has moved (to plugin-substrate's CUE module), and only its shared `#PodSidecar` stays here
+// … (the canonical types the plugins' Invoke and the host decode into); `#Pod` and `#Local` are
+// the two that have moved (to plugin-substrate's CUE module), and only `#Pod`'s shared `#PodSidecar` stays here
 // because the contract's own `#ResolvedPod` cites it. For the substrates
 // candy/plugin-substrate ECHOES the host-pre-decoded canonical node (deploy DeployNode or
 // per-substrate template), and candy/plugin-candy ECHOES the host-pre-decoded box⊻layer node
