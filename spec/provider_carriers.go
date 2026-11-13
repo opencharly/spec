@@ -28,7 +28,22 @@ type StepContract struct {
 	// Advisory for the DEPLOY leg (executeExternalStep ignores it); load-bearing for the BUILD
 	// leg (ociEmitStep).
 	Emits bool
+	// PluginPaths is the STEP-PLUGIN-PATHS opt-in (opencharly/charly#1131): the host hands this
+	// step the CONNECTED PLUGIN SET it resolved — as PATHS — under ConnectedPluginsInputKey in the
+	// step's input, so the step acts on a path it was TOLD instead of re-deriving "which binary is
+	// this plugin" from a name afterwards. It is opt-IN rather than unconditional because a step's
+	// input is validated against the plugin's own (usually closed) CUE schema, where an injected
+	// key is a hard "field not allowed" unless that schema declares it; a step that does not set
+	// this flag receives its AUTHORED input untouched.
+	PluginPaths bool
 }
+
+// ConnectedPluginsInputKey is the step-input key the host injects for a class:step whose declared
+// StepContract sets PluginPaths: the connected plugin set, as a []DeployConnectedPlugin (one entry
+// per served plugin candy: key, leaf, view_path, src_dir). ONE spelling for both sides of the
+// wire — the host that injects it and the plugin that reads it — so neither can drift on a string
+// literal (opencharly/charly#1131).
+const ConnectedPluginsInputKey = "plugin_paths"
 
 // StepContractCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider
 // compiled-in) that carries a class:step capability's declared StepContract. A false return

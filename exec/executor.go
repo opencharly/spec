@@ -333,7 +333,13 @@ func (e *Executor) DescribeProvider(ctx context.Context, class, word string) (fo
 		return false, nil, nil
 	}
 	if sc := r.GetStepContract(); sc != nil {
-		contract = &spec.StepContract{Scope: spec.ScopeFromName(sc.GetScope()), Venue: spec.Venue(sc.GetVenue()), Gate: spec.Gate(sc.GetGate()), Emits: sc.GetEmits()}
+		contract = &spec.StepContract{
+			Scope:       spec.ScopeFromName(sc.GetScope()),
+			Venue:       spec.Venue(sc.GetVenue()),
+			Gate:        spec.Gate(sc.GetGate()),
+			Emits:       sc.GetEmits(),
+			PluginPaths: sc.GetPluginPaths(),
+		}
 	}
 	return true, contract, nil
 }
