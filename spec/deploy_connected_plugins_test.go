@@ -16,10 +16,11 @@ func TestDeployPluginsConnectReplyCarriesTheConnectedSet(t *testing.T) {
 		Dir: "/project",
 		Plugins: []DeployConnectedPlugin{
 			{
-				Key:      "plugin-deploy-firecracker",
-				Leaf:     "plugin-deploy-firecracker",
-				ViewPath: "/home/op/.cache/charly/plugin-build/views/plugin-deploy-firecracker-4acc8316daba136b",
-				SrcDir:   "/project/candy/plugin-deploy-firecracker",
+				Key:       "plugin-deploy-firecracker",
+				Leaf:      "plugin-deploy-firecracker",
+				ViewPath:  "/home/op/.cache/charly/plugin-build/views/plugin-deploy-firecracker-4acc8316daba136b",
+				SrcDir:    "/project/candy/plugin-deploy-firecracker",
+				Providers: []string{"step:plugin-tree", "deploy:firecracker"},
 			},
 			{
 				// A source-less baked plugin: src_dir is absent, and stays absent on the wire.
@@ -42,10 +43,15 @@ func TestDeployPluginsConnectReplyCarriesTheConnectedSet(t *testing.T) {
 		t.Fatalf("wire reply does not carry a 2-entry \"plugins\" list: %s", raw)
 	}
 	first, _ := plugins[0].(map[string]any)
-	for _, key := range []string{"key", "leaf", "view_path", "src_dir"} {
+	for _, key := range []string{"key", "leaf", "view_path", "src_dir", "providers"} {
 		if _, ok := first[key]; !ok {
 			t.Errorf("connected-plugin entry is missing the wire key %q: %s", key, raw)
 		}
+	}
+	// The WORDS the unit serves ride the set, because a delivered tree cannot serve a command/verb
+	// without a `<leaf>.providers` manifest built from them (opencharly/charly#1131).
+	if providers, ok := first["providers"].([]any); !ok || len(providers) != 2 || providers[0] != "step:plugin-tree" {
+		t.Errorf("providers = %v, want the unit's declared words", first["providers"])
 	}
 	second, _ := plugins[1].(map[string]any)
 	if _, ok := second["src_dir"]; ok {
@@ -56,7 +62,7 @@ func TestDeployPluginsConnectReplyCarriesTheConnectedSet(t *testing.T) {
 	if err := json.Unmarshal(raw, &back); err != nil {
 		t.Fatalf("round-trip unmarshal: %v", err)
 	}
-	if len(back.Plugins) != 2 || back.Plugins[0].ViewPath != in.Plugins[0].ViewPath || back.Plugins[0].Leaf != "plugin-deploy-firecracker" {
+	if len(back.Plugins) != 2 || back.Plugins[0].ViewPath != in.Plugins[0].ViewPath || back.Plugins[0].Leaf != "plugin-deploy-firecracker" || len(back.Plugins[0].Providers) != 2 {
 		t.Fatalf("round-trip lost the connected set: %+v", back.Plugins)
 	}
 }
