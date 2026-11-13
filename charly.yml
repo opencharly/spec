@@ -216,8 +216,10 @@ install-plan-skill:
 # `owner:` names the shelf candy above. What each skill documents is a def in
 # `schema/` whose generated Go types live in `spec/cue_types_gen.go`
 # (`box.cue`/`candy.cue` → the image and layer authoring shapes, `pod.cue` →
-# `PodSpec` + the deploy node, `vm.cue` → `VmSpec`, `local.cue` → the
-# `kind: local` template) — the contract this repo is. `family:` is the
+# the `#PodSidecar` keeper plus the `#ResolvedPod` envelope the kernel reads
+# (`pod`'s AUTHORED body is plugin-substrate's since spec#304 unit 3), `vm.cue`
+# → `VmSpec`, `local.cue` → the `kind: local` template) — the contract this
+# repo is. `family:` is the
 # marketplace family each skill was authored under, kept so every existing
 # `/charly-image:*`, `/charly-pod:*`, `/charly-vm:*` and `/charly-local:*`
 # address still resolves; it is a registry namespace, never a repo class.

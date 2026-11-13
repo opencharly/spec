@@ -17,8 +17,9 @@ A host/remote deploy MUST use the `host:` FIELD on a `local:` (or `pod:`) deploy
 
 Schema sources (read these for the canonical truth):
 
+- `plugin-substrate`'s own CUE module (`candy/plugin-substrate/schema/pod.cue`) — `#Pod`, the AUTHORED `kind: pod` body, and `#PodValue`, the closed value def a `pod:` body is gated against. The plugin that serves the kind owns the body (opencharly/spec#304 unit 3) and declares `InputDef: "#PodValue"`, so the host resolves the gate def from the declaration instead of this module's map.
+- `spec/schema/substrate_template.cue` → `spec/spec/cue_types_gen.go` (generated) — `#ResolvedPod`, the resolve-to-envelope form the KERNEL reads (the authored body's fields plus the resolved-only `raw`), with `#PodSidecar` (in `schema/pod.cue`) as the sidecar keeper that envelope cites.
 - `spec/spec/cue_types_gen.go` (generated) — `Deploy` (the deploy node — the former `charly/deploy.go`'s `FleetNode` is DELETED, K-wave 2) + `DeployConfig`, the deploy entry shape, target discriminator.
-- `spec/spec/cue_types_gen.go` (generated) — the `PodSpec` Go type / `kind: pod` shape.
 - `/charly-core:deploy` — the verb-level skill covering `charly deploy add` / `charly deploy del` / `charly update`.
 
 ## Nesting & membership (tree position)

@@ -23,9 +23,11 @@ package schema
 // (C2-candy externalized the LAST one, `candy`, to candy/plugin-candy, after C2-group +
 // C2-substrate). Each kind is recognized dynamically by the loader via a registered ClassKind
 // provider (classifyDisc → providerRegistry.ResolveKind → recognizedKind), and its VALUE is
-// validated HOST-SIDE against the KEPT core value defs (#CandyValue / #PodValue / #VmValue / …
+// validated HOST-SIDE against the KEPT core value defs (#CandyValue / #VmValue / …
 // below) in runPluginKind (foldCandyKind / foldSubstrateKind) — a self-contained plugin schema
 // cannot carry these rich core-referencing values (#Candy/#Box/#Deploy/#Vm/#LibvirtDomain/…).
+// A kind whose body HAS moved to its plugin (`pod`, then the kinds still to come) is gated by
+// the def that plugin's capability DECLARES (`InputDef`), resolved from the composed unit.
 // The substrate kinds keep their
 // #ResourceKind membership (so the loader still nests their members); candy is decoded by the
 // BOOTSTRAP-CRITICAL core candyIsImage + buildCandy (which the discovered-candy pre-check calls
@@ -80,8 +82,9 @@ package schema
 // `#Template | #Deploy`, routed by SHAPE in the loader (a template carries its own
 // config — source:/composition; a deploy carries from:/image: + the deploy config).
 // The RDD spike proved `cue vet` resolves this disjunction unambiguously even with
-// overlapping fields. @go(-): the Go types come from #Local/#Pod/#Vm/#Kubernetes/#Android +
-// #Deploy directly; this value def is validation-only.
+// overlapping fields. @go(-): the Go types come from #Local/#Vm/#Kubernetes/#Android +
+// #Deploy directly (a substrate whose body has moved, `pod`, contributes none here); this
+// value def is validation-only.
 //
 // C2-substrate: these substrate kinds have NO #Node arm anymore (externalized to
 // candy/plugin-substrate). They are KEPT here as the HOST-SIDE value
@@ -90,8 +93,13 @@ package schema
 // self-contained plugin schema cannot carry these rich core-referencing values. So these
 // defs stay REACHABLE from Go (via runPluginKind's kindValueDef lookup) while contributing
 // NO #Node arm (KindWords drops the 6). #CandyValue above is the C2-candy analogue.
+//
+// `pod` HAS MOVED OUT (spec#304 unit 3): its body and its gate def `#PodValue` live in
+// `plugin-substrate`'s own CUE module, and the plugin's `kind` capability DECLARES
+// `InputDef: "#PodValue"`, so `kindValueDefPath` resolves the def from the provider's
+// declaration and finds it in the COMPOSED unit instead of this map. So `pod` has no entry
+// below, and the defs that remain are the kinds whose body this module still owns.
 #LocalValue:   (#Local | #DeployValue) @go(-)
-#PodValue:     (#Pod | #DeployValue) @go(-)
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #KubernetesValue: (#Kubernetes | #DeployValue) @go(-)
 #KindclusterValue: (#Kindcluster | #DeployValue) @go(-)
@@ -122,9 +130,11 @@ package schema
 // (#Vm/#Deploy/#LibvirtDomain/#Candy/#Box/…) and so cannot be a self-contained plugin schema, are
 // validated HOST-SIDE against the KEPT #<Kind>Value / #CandyValue defs above (runPluginKind →
 // validateKindValueCUE). The core #Distro / #Builder / #Init / #Resource / #Agent /
-// #Sidecar / #Pod / #Vm / #KubeVirt / #Kubernetes / #Local / #Android / #Deploy / #Candy / #Box defs
+// #Sidecar / #Vm / #KubeVirt / #Kubernetes / #Local / #Android / #Deploy / #Candy / #Box defs
 // (schema/*.cue) are KEPT — they still generate spec.Distro / spec.Vm / spec.Candy / spec.Box /
-// … (the canonical types the plugins' Invoke and the host decode into). For the substrates
+// … (the canonical types the plugins' Invoke and the host decode into); `#Pod` is the one that
+// has moved (to plugin-substrate's CUE module), and only its shared `#PodSidecar` stays here
+// because the contract's own `#ResolvedPod` cites it. For the substrates
 // candy/plugin-substrate ECHOES the host-pre-decoded canonical node (deploy DeployNode or
 // per-substrate template), and candy/plugin-candy ECHOES the host-pre-decoded box⊻layer node
 // (candyIsImage + buildCandy → spec.Box / spec.Candy) — the host folds into uf.Deploy /

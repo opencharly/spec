@@ -2870,7 +2870,7 @@ type CandySecret struct {
 
 // #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android:/kindcluster: template maps carried as OPAQUE payloads
 // (the uf.Pod/VM/Local/Kubernetes/Android/Kindcluster raw bytes, verbatim). The host projector stays KIND-BLIND — it
-// copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Pod/…
+// copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Vm/…
 // would violate the boundary law + trip TestNoConcreteKindInKernel). The CONSUMING PLUGINS
 // (validate localtemplates, check-include pod/vm arms, status kubernetes/adb) decode a RawBody into the
 // concrete spec kind type themselves — a plugin MAY know kinds, the kernel may not.
@@ -8564,22 +8564,6 @@ type PluginArtifactMetadata struct {
 	Layers map[string]string `yaml:"layers,omitempty" json:"layers"`
 }
 
-type Pod struct {
-	// References a kind:box (bare lowercase-hyphenated name or remote ref).
-	// Optional: the Go field has no non-empty validator.
-	Box CandyRef `yaml:"box,omitempty" json:"box,omitempty"`
-
-	// Each entry is a SidecarConfig wrapper: a single-key map of named
-	// sidecar templates (PodSpec.Sidecar []SidecarConfig).
-	Sidecar []PodSidecar `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
-
-	Secret []DeploySecret `yaml:"secret,omitempty" json:"secret,omitempty"`
-
-	EnvDefaults map[string]string `yaml:"env_default,omitempty" json:"env_default,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-}
-
 // #PodSidecar mirrors Go SidecarConfig: a single-key wrapper around a map of
 // named sidecar templates. CLOSED (the struct has exactly one field).
 type PodSidecar struct {
@@ -11027,7 +11011,8 @@ type ResolvedAndroid struct {
 
 // #ResolvedPod is the resolve-to-envelope form of a `pod:` template — a box +
 // sidecar + plan deploy. The kernel reads it (currently the include-spliced
-// Plan), never spec.Pod.
+// Plan), never the authoring body — which lives in plugin-substrate's CUE module
+// since spec#304 unit 3, so there is no spec.Pod to read either.
 type ResolvedPod struct {
 	Box CandyRef `yaml:"box,omitempty" json:"box,omitempty"`
 

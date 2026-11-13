@@ -350,7 +350,7 @@ func nodeDiscriminators(schema cue.Value) ([]string, error) {
 // substrate/candy node's authored VALUE (validateKindValueCUE). It is DERIVED from
 // the #<Kind>Value defs themselves — the single source (clause D of the kernel/plugin
 // boundary law): every top-level `#<X>Value` definition EXCEPT the shared #DeployValue
-// disjunct. The word is strings.ToLower(X): #PodValue→pod, #KubernetesValue→kubernetes,
+// disjunct. The word is strings.ToLower(X): #KubevirtValue→kubevirt, #KubernetesValue→kubernetes,
 // #CandyValue→candy. Adding a value-gated kind (a new #<Kind>Value def) needs no
 // hand-maintained map.
 func kindValueDefs(schema cue.Value) (map[string]string, error) {
