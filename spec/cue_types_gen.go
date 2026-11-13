@@ -8985,6 +8985,16 @@ type DeployConnectedPlugin struct {
 	ViewPath string `yaml:"view_path,omitempty" json:"view_path"`
 
 	SrcDir string `yaml:"src_dir,omitempty" json:"src_dir,omitempty"`
+
+	// providers is the WORDS the connected unit serves (`verb:firecracker`, `command:firecracker`, …)
+	// exactly as the unit declared them over Describe. A delivered plugin TREE is not usable without
+	// them: the loader resolves a bare command/verb WORD through a `<leaf>.providers` manifest beside
+	// the binary (bakedPluginDirs + the manifest scan), so a tree of binaries alone answers every
+	// invocation with charly's usage text. MEASURED 2026-11-13 on a disposable guest: the tree was
+	// delivered, `CHARLY_PLUGIN_DIR` pointed at it, and `charly firecracker --help` still printed the
+	// usage text until the manifest existed. The engine has these words at connect time
+	// (`unit.Providers`), which is why they ride the set rather than being re-derived from the plugin.
+	Providers []string `yaml:"providers,omitempty" json:"providers,omitempty"`
 }
 
 type DeployPluginsConnectReply struct {

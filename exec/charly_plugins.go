@@ -83,7 +83,11 @@ func stablePluginsPath(injected string) string {
 // ManifestSuffix is the per-provider manifest the loader reads to learn which words a binary
 // answers. A directory without at least one of these is not a plugin tree, and delivering it would
 // be the same as delivering nothing while looking like progress.
-const ManifestSuffix = ".providers"
+//
+// The VALUE lives in the contract module (spec.ManifestSuffix) beside PluginManifest — the ONE
+// serializer that both writers of this layout (the SDK's baked-image emitter and a class:step that
+// delivers a tree) call. This alias keeps this package's existing readers and its wire-free API.
+const ManifestSuffix = spec.ManifestSuffix
 
 // replicatedPluginsPath mirrors replicatedCharlyPath: the same content-addressed /tmp discipline,
 // keyed by the tree's digest so an unchanged tree is reused and a changed one is re-delivered.

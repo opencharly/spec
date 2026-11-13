@@ -158,6 +158,15 @@ package schema
 	leaf!:      string @go(Leaf)
 	view_path!: string @go(ViewPath)
 	src_dir?:   string @go(SrcDir)
+	// providers is the WORDS the connected unit serves (`verb:firecracker`, `command:firecracker`, …)
+	// exactly as the unit declared them over Describe. A delivered plugin TREE is not usable without
+	// them: the loader resolves a bare command/verb WORD through a `<leaf>.providers` manifest beside
+	// the binary (bakedPluginDirs + the manifest scan), so a tree of binaries alone answers every
+	// invocation with charly's usage text. MEASURED 2026-11-13 on a disposable guest: the tree was
+	// delivered, `CHARLY_PLUGIN_DIR` pointed at it, and `charly firecracker --help` still printed the
+	// usage text until the manifest existed. The engine has these words at connect time
+	// (`unit.Providers`), which is why they ride the set rather than being re-derived from the plugin.
+	providers?: [...string] @go(Providers)
 }
 
 #DeployPluginsConnectReply: {
