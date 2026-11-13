@@ -617,7 +617,9 @@ type StepContract struct {
 	// "" | "allow-repo-changes" | "allow-root-tasks" | "with-services"
 	Gate string `protobuf:"bytes,3,opt,name=gate,proto3" json:"gate,omitempty"`
 	// F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false => deploy-only step (no build fragment; OCITarget skips it, like apk on an image build)
-	Emits         bool `protobuf:"varint,4,opt,name=emits,proto3" json:"emits,omitempty"`
+	Emits bool `protobuf:"varint,4,opt,name=emits,proto3" json:"emits,omitempty"`
+	// STEP-PLUGIN-PATHS (opencharly/charly#1131): the host hands this step the CONNECTED PLUGIN SET it resolved, as PATHS, in the step input under spec.ConnectedPluginsInputKey. Opt-IN because the input is validated against the plugin's own (usually closed) schema, so the key must be declared there too. false => the payload is the authored input, untouched.
+	PluginPaths   bool `protobuf:"varint,5,opt,name=plugin_paths,json=pluginPaths,proto3" json:"plugin_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -676,6 +678,13 @@ func (x *StepContract) GetGate() string {
 func (x *StepContract) GetEmits() bool {
 	if x != nil {
 		return x.Emits
+	}
+	return false
+}
+
+func (x *StepContract) GetPluginPaths() bool {
+	if x != nil {
+		return x.PluginPaths
 	}
 	return false
 }
@@ -2604,12 +2613,13 @@ const file_plugin_proto_rawDesc = "" +
 	"bed_target\x18\b \x01(\bR\tbedTarget\x12-\n" +
 	"\x12supports_ephemeral\x18\t \x01(\bR\x11supportsEphemeral\x124\n" +
 	"\x16supports_from_snapshot\x18\n" +
-	" \x01(\bR\x14supportsFromSnapshot\"d\n" +
+	" \x01(\bR\x14supportsFromSnapshot\"\x87\x01\n" +
 	"\fStepContract\x12\x14\n" +
 	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05venue\x18\x02 \x01(\x05R\x05venue\x12\x12\n" +
 	"\x04gate\x18\x03 \x01(\tR\x04gate\x12\x14\n" +
-	"\x05emits\x18\x04 \x01(\bR\x05emits\"\xe2\x01\n" +
+	"\x05emits\x18\x04 \x01(\bR\x05emits\x12!\n" +
+	"\fplugin_paths\x18\x05 \x01(\bR\vpluginPaths\"\xe2\x01\n" +
 	"\rInvokeRequest\x12\x1a\n" +
 	"\breserved\x18\x01 \x01(\tR\breserved\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x1f\n" +

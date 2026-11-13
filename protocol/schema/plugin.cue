@@ -334,6 +334,12 @@ protocol: {
 					"number": 4
 					"doc":    "F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false =\u003e deploy-only step (no build fragment; OCITarget skips it, like apk on an image build)"
 				},
+				{
+					"name":   "plugin_paths"
+					"type":   "bool"
+					"number": 5
+					"doc":    "STEP-PLUGIN-PATHS (opencharly/charly#1131): the host hands this step the CONNECTED PLUGIN SET it resolved, as PATHS, in the step input under spec.ConnectedPluginsInputKey. Opt-IN because the input is validated against the plugin's own (usually closed) schema, so the key must be declared there too. false =\u003e the payload is the authored input, untouched."
+				},
 			]
 		},
 		{

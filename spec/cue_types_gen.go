@@ -8966,8 +8966,35 @@ type DeployPluginsConnectRequest struct {
 	AddCandy []string `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
 }
 
+// #DeployConnectedPlugin is ONE plugin the connect seam resolved. The loader knows all four
+// values at the moment it connects a unit; carrying them out is what lets a later step act on
+// PATHS IT WAS TOLD rather than re-deriving "which binary is this plugin" from a name afterwards
+// (opencharly/charly#1131 — the newest-wins directory scan that question used to need is the
+// defect, not the answer).
+//
+//	key       — the candy key the scan produced (the loader's own identity for the unit)
+//	leaf      — the last path segment, the FILENAME the loader opens a baked binary by
+//	view_path — the provider binary the connect actually served (override / baked / build-cache view)
+//	src_dir   — the plugin candy's source dir the binary was built from; ABSENT when the served
+//	            binary has no source (a source-less baked plugin)
+type DeployConnectedPlugin struct {
+	Key string `yaml:"key,omitempty" json:"key"`
+
+	Leaf string `yaml:"leaf,omitempty" json:"leaf"`
+
+	ViewPath string `yaml:"view_path,omitempty" json:"view_path"`
+
+	SrcDir string `yaml:"src_dir,omitempty" json:"src_dir,omitempty"`
+}
+
 type DeployPluginsConnectReply struct {
 	Dir string `yaml:"dir,omitempty" json:"dir"`
+
+	// plugins is the CONNECTED SET: every out-of-tree plugin candy this connect actually served,
+	// in load order. Absent when the deploy referenced no out-of-tree plugin. The SAME set is what
+	// a class:step whose StepContract declares plugin_paths receives in its input under
+	// spec.ConnectedPluginsInputKey — the connect seam is the one place that knows it.
+	Plugins []DeployConnectedPlugin `yaml:"plugins,omitempty" json:"plugins,omitempty"`
 }
 
 // #ConstructStepRequest/#ConstructStepReply — the "construct-step" HostBuild seam (K5-A item 1,
