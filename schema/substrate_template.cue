@@ -6,8 +6,10 @@ package schema
 // conversion-in-progress, never a sanctioned exception). candy/plugin-substrate
 // projects an authored local:/android:/pod:/kubernetes:/vm: TEMPLATE into a Resolved*
 // envelope the kernel consumes without importing the concrete spec.Local /
-// spec.Android / spec.Pod / spec.Kubernetes / spec.Vm. Written out explicitly (not
-// embedding the authoring kind schemas #Local/#Android/#Pod/#Kubernetes, whose
+// spec.Android / spec.Kubernetes / spec.Vm. Written out explicitly (not
+// embedding the authoring kind schemas #Local/#Android/#Kubernetes (`#Pod` — and the
+// `spec.Pod` type it used to generate — are plugin-substrate's since spec#304 unit 3),
+// whose
 // required/optional field sets differ from the resolved envelope's — e.g.
 // #Local's `candy` is REQUIRED, ResolvedLocal's is OPTIONAL) so every field's
 // state is independently auditable against the former hand type. Plain
@@ -46,7 +48,8 @@ package schema
 
 // #ResolvedPod is the resolve-to-envelope form of a `pod:` template — a box +
 // sidecar + plan deploy. The kernel reads it (currently the include-spliced
-// Plan), never spec.Pod.
+// Plan), never the authoring body — which lives in plugin-substrate's CUE module
+// since spec#304 unit 3, so there is no spec.Pod to read either.
 #ResolvedPod: {
 	box?: #CandyRef @go(Box)
 	sidecar?: [...#PodSidecar] @go(Sidecar)

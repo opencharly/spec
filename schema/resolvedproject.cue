@@ -296,7 +296,7 @@ package schema
 
 // #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android:/kindcluster: template maps carried as OPAQUE payloads
 // (the uf.Pod/VM/Local/Kubernetes/Android/Kindcluster raw bytes, verbatim). The host projector stays KIND-BLIND — it
-// copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Pod/…
+// copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Vm/…
 // would violate the boundary law + trip TestNoConcreteKindInKernel). The CONSUMING PLUGINS
 // (validate localtemplates, check-include pod/vm arms, status kubernetes/adb) decode a RawBody into the
 // concrete spec kind type themselves — a plugin MAY know kinds, the kernel may not.

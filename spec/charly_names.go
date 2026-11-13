@@ -26,7 +26,6 @@ type (
 	VmSpec         = Vm
 	DeployNode     = Deploy
 	LocalSpec      = Local
-	PodSpec        = Pod
 	KubernetesSpec = Kubernetes
 	AndroidSpec    = Android
 	SidecarDef     = Sidecar
