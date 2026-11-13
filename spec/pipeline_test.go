@@ -37,12 +37,14 @@ import (
 func TestPipelineBodyDefsAreNotInTheContract(t *testing.T) {
 	schema := loadPipelineSchema(t)
 
-	// Positive control: the concatenation and the generator both still work.
-	if d := schema.LookupPath(cue.ParsePath("#TaskValue")); d.Err() != nil {
-		t.Fatalf("the schema does not carry #TaskValue — the absence checks below would be vacuous: %v", d.Err())
+	// Positive control: the concatenation and the generator both still work. (It used to
+	// assert `#TaskValue`; opencharly/spec#304 unit 2 moved the `task` body to its plugin
+	// too, so the control is now `#CandyValue` — a def this module OWNS and keeps.)
+	if d := schema.LookupPath(cue.ParsePath("#CandyValue")); d.Err() != nil {
+		t.Fatalf("the schema does not carry #CandyValue — the absence checks below would be vacuous: %v", d.Err())
 	}
-	if def, ok := KindValueDefs["task"]; !ok || def != "#TaskValue" {
-		t.Fatalf("KindValueDefs has no task entry (got %q, ok=%v) — the generator is not emitting", def, ok)
+	if def, ok := KindValueDefs["candy"]; !ok || def != "#CandyValue" {
+		t.Fatalf("KindValueDefs has no candy entry (got %q, ok=%v) — the generator is not emitting", def, ok)
 	}
 
 	for _, def := range []string{
