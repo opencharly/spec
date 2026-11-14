@@ -850,21 +850,22 @@ package schema
 
 // #StructuralKindLoadEnv is the OpLoad invocation context (op.Env) the host
 // threads to a STRUCTURAL class:kind plugin (F5 authored-member input-threading).
+//
+// BOTH channels are OPAQUE BYTES (D-SCH-7): a wire shape never carries an authored body
+// type. A plugin that needs a field decodes the bytes into its own CUE-declared value or
+// the contract's projection; it never receives the authored node itself.
 #StructuralKindLoadEnv: {
-	members?: {[string]: #Deploy} @go(Members,type=map[string]*Deploy)
+	members?: {[string]: bytes} @go(Members,type=map[string]RawBody)
 	// standalone is the host-pre-decoded CANONICAL node channel (candy/plugin-substrate,
 	// candy/plugin-candy).
 	standalone?: #StandaloneLoad @go(Standalone,optional=nillable)
 }
 
-// #StandaloneLoad carries a structural kind's host-pre-decoded canonical node.
-// Exactly one of Deploy / Template / Box / Candy is set, matching Shape.
+// #StandaloneLoad carries a structural kind's host-pre-decoded canonical node AS BYTES.
+// Shape names which body the bytes are; every arm rides the ONE opaque carrier.
 #StandaloneLoad: {
 	shape!: string @go(Shape) // "deploy" | "template" | "candy-image" | "candy-layer"
-	deploy?:   #Deploy @go(Deploy,optional=nillable)   // Shape=="deploy": the full pre-decoded DeployNode
-	template?: bytes   @go(Template,type=RawBody)      // Shape=="template": the pre-decoded typed template value's JSON
-	box?:      #Box    @go(Box,optional=nillable)      // Shape=="candy-image": the pre-decoded IMAGE (spec.Box)
-	candy?:    #Candy  @go(Candy,optional=nillable)    // Shape=="candy-layer": the pre-decoded LAYER (spec.Candy)
+	body?:  bytes  @go(Body,type=RawBody)
 }
 
 // #AndroidDeployVenue is the preresolved deploy:android substrate payload the
