@@ -91,64 +91,6 @@ func TestEngineNameVocabIsContainerdNotNerdctl(t *testing.T) {
 // is a containerd snapshot, so `source` must be an OCI-image arm (container_disk
 // or bootc) and the libvirt/qemu-only fields are rejected. The libvirt control at
 // the end proves the rejection is krun-specific, not the fields being invalid.
-func TestVmBackendKrunCrossRules(t *testing.T) {
-	def, ctx := defValue(t, "#Vm")
-	check := checker(def, ctx)
-
-	const containerDisk = `source: {kind: "container_disk", image: "registry.example/disk@sha256:0000000000000000000000000000000000000000000000000000000000000000"}`
-
-	accepted := []string{
-		`{backend: "krun", ` + containerDisk + `}`,
-		`{backend: "krun", ` + containerDisk + `, krun: {network: "passt", kernel: "image", nested_virt: true, gpu: "virtio", gpu_flags: 962, ram_headroom_mib: 256}}`,
-		`{backend: "krun", source: {kind: "bootc", box: "pod-crabbox-systemd"}}`,
-	}
-	for _, body := range accepted {
-		if err := check(body); err != nil {
-			t.Errorf("#Vm rejects an accepted krun shape %s: %v", body, err)
-		}
-	}
-
-	// Every libvirt/qemu-only field must be rejected WITH backend: krun.
-	libvirtOnly := []string{
-		`libvirt: {}`,
-		`autostart: true`,
-		`firmware: "uefi-insecure"`,
-		`machine: "q35"`,
-		`cloud_init: {hostname: "guest"}`,
-	}
-	for _, field := range libvirtOnly {
-		err := check(`{backend: "krun", ` + field + `, ` + containerDisk + `}`)
-		if err == nil {
-			t.Errorf("#Vm accepts backend: krun with the libvirt-only %s; a krun guest has no libvirt domain", field)
-			continue
-		}
-		// The rejection must NAME the authored field (or, for autostart, the
-		// backend rule it violates), not collapse into an anonymous "no arm
-		// matches" union error.
-		want := strings.SplitN(field, ":", 2)[0]
-		if want == "autostart" {
-			// The pre-existing autostart:true ⇒ backend auto|libvirt rule fires
-			// first and reports at #Vm.backend; the krun conflict is the same
-			// rejection, named at the rule that owns it.
-			want = "backend"
-		}
-		if text := allErrors(err); !strings.Contains(text, want) {
-			t.Errorf("the krun rejection of %s does not name %q in its error: %s", field, want, text)
-		}
-	}
-
-	// A non-OCI source arm is rejected too: krun cannot boot a cloud image URL.
-	if err := check(`{backend: "krun", source: {kind: "cloud_image", url: "https://example.com/disk.qcow2"}}`); err == nil {
-		t.Error("#Vm accepts backend: krun with a cloud_image source; krun requires an OCI-image source")
-	}
-
-	// Positive control: the SAME fields are legal with the libvirt backend, so
-	// the rejections above are about the backend, not about the fields.
-	control := `{backend: "libvirt", libvirt: {}, autostart: true, firmware: "uefi-insecure", machine: "q35", cloud_init: {hostname: "guest"}, ` + containerDisk + `}`
-	if err := check(control); err != nil {
-		t.Errorf("#Vm rejects the same fields under backend: libvirt (the krun rejection is not backend-specific): %v", err)
-	}
-}
 
 // TestVmDeployStateBackendVocabulary pins the persisted-state arm: the recorded
 // backend may be any selector/backend word, and krun is now one of them.
@@ -235,49 +177,6 @@ func TestVmBackendNameIsProviderWordsOnly(t *testing.T) {
 // required-with-default inside the optional block, so `krun: {}` is a complete
 // set of measured values; a consumer applies the same defaults when the block
 // itself is absent.
-func TestVmKrunDefaultsMaterialize(t *testing.T) {
-	def, ctx := defValue(t, "#Vm")
-	const body = `{backend: "krun", source: {kind: "container_disk", image: "registry.example/disk@sha256:0000000000000000000000000000000000000000000000000000000000000000"}, krun: {}}`
-	v := def.Unify(ctx.CompileString(body))
-	if err := v.Validate(cue.Concrete(true)); err != nil {
-		t.Fatalf("the krun defaults do not materialize under a concrete validation: %v", err)
-	}
-	// The fields are required-with-default, so an empty krun block carries the
-	// measured values in the value itself — not a consumer-side literal.
-	for _, tc := range []struct {
-		path string
-		want int64
-	}{
-		{"krun.gpu_flags", 962},
-		{"krun.ram_headroom_mib", 256},
-	} {
-		got, err := v.LookupPath(cue.ParsePath(tc.path)).Int64()
-		if err != nil {
-			t.Fatalf("%s: %v", tc.path, err)
-		}
-		if got != tc.want {
-			t.Errorf("%s = %d, want %d", tc.path, got, tc.want)
-		}
-	}
-	for _, tc := range []struct {
-		path, want string
-	}{
-		{"krun.network", "tsi"},
-		{"krun.kernel", "stock"},
-		{"krun.gpu", "off"},
-	} {
-		got, err := v.LookupPath(cue.ParsePath(tc.path)).String()
-		if err != nil {
-			t.Fatalf("%s: %v", tc.path, err)
-		}
-		if got != tc.want {
-			t.Errorf("%s = %q, want %q", tc.path, got, tc.want)
-		}
-	}
-	if got, err := v.LookupPath(cue.ParsePath("krun.nested_virt")).Bool(); err != nil || got {
-		t.Errorf("krun.nested_virt = %v, %v; want false", got, err)
-	}
-}
 
 // TestDeployTraitsSelectorData pins the DATA half of the hosting rule: a
 // substrate declares which deploy selectors it accepts, so a loader can reject

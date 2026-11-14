@@ -22,13 +22,9 @@ func TestVmVocabularyReExports(t *testing.T) {
 	// cleanly, so membership is what proves the pointer, not a non-empty decode.
 	expect := map[string]string{
 		"#VmBackendNameWord": "libvirt",
-		"#VmBackendWord":     "auto",
-		"#VmMachineWord":     "q35",
 		"#VmCloudInitWord":   "enabled",
 		"#VmSmbiosWord":      "disabled",
 		"#VmStrategyWord":    "scp",
-		"#VmFirmwareWord":    "uefi-secure",
-		"#VmKindWord":        "container_disk",
 	}
 	for name, mustContain := range expect {
 		def := v.LookupPath(cue.ParsePath(name))

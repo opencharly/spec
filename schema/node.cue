@@ -77,31 +77,6 @@ package schema
 // candyIsImage + buildCandy (core, unchanged) and folds plugin-candy's echo into uf.Box/uf.Candy.
 #Image:      #Box & ({base: string & !=""} | {from: string & !=""})
 #CandyValue: (*#Candy | #Image) @go(-)
-// EDGE-INHERIT cutover B: a substrate kind is BOTH the template entity AND the deploy
-// (the eliminated `deploy:` role folds in). The value is the disjunction
-// `#Template | #Deploy`, routed by SHAPE in the loader (a template carries its own
-// config — source:/composition; a deploy carries from:/image: + the deploy config).
-// The RDD spike proved `cue vet` resolves this disjunction unambiguously even with
-// overlapping fields. @go(-): the Go types come from #Vm/#Android + #Deploy directly (the
-// substrates whose bodies have moved — `pod`, `local`, `kubernetes`, `kindcluster`, `kubevirt` and `firecracker` —
-// contribute none here); this value def is validation-only.
-//
-// C2-substrate: these substrate kinds have NO #Node arm anymore (externalized to
-// candy/plugin-substrate). They are KEPT here as the HOST-SIDE value
-// gate: runPluginKind validates a substrate node's authored value against #<Kind>Value
-// (validateKindValueCUE) — the SAME closedness the #Node arm gave — because a
-// self-contained plugin schema cannot carry these rich core-referencing values. So these
-// defs stay REACHABLE from Go (via runPluginKind's kindValueDef lookup) while contributing
-// NO #Node arm (KindWords drops the 6). #CandyValue above is the C2-candy analogue.
-//
-// `pod` (spec#304 unit 3), `local` (unit 4), `kubernetes` + `kindcluster` (unit 5),
-// `kubevirt` (unit 6) and `firecracker` (unit 7) have MOVED OUT: each body and its gate def (`#PodValue`, `#LocalValue`,
-// `#KubernetesValue`, `#KindclusterValue`, `#KubevirtValue`, `#FirecrackerValue`) live in `plugin-substrate`'s own CUE module, and
-// the plugin's `kind` capability DECLARES `InputDef: "#<Word>Value"`, so `kindValueDefPath`
-// resolves the def from the provider's declaration and finds it in the COMPOSED unit instead
-// of this map. So neither has an entry below, and the defs that remain are the kinds whose
-// body this module still owns.
-#VmValue:      (#Vm | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
 // EVERY authoring kind is externalized to a plugin unit — the build-vocabulary kinds
 // (`distro:`/`builder:`/`init:`/`resource:`), the AI-CLI grader `agent:`, the sidecar

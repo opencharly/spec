@@ -54,79 +54,6 @@ package schema
 	ram_headroom_mib: *256 | int @go(RAMHeadroomMiB,type=int)
 }
 
-#Vm: {
-	source: #VmSource @go(Source,type=VmSource)
-
-	disk_size?: string @go(DiskSize)
-	ram?:       string
-	cpu?:       int & >=1 @go(Cpus,type=int) // yaml key is singular `cpu` (VmSpec.Cpus yaml:"cpu")
-	machine?:   or(_machineWord)
-	// firmware is REQUIRED-with-default (not optional): an if-guard can only
-	// reference a field that always resolves to a concrete value, and an
-	// OPTIONAL field — even one carrying a default — errors with "cannot
-	// reference optional field" when absent. Required-with-default materializes
-	// "bios" on omission (matching the Go empty→bios behavior) AND stays
-	// referenceable by the uefi-secure cross-rule below.
-	firmware: *"bios" | or(_vmFirmwareWord)
-
-	backend:   #VmBackend
-	autostart: *false | true
-	// autostart:true requires the libvirt backend (qemu has no persistent daemon).
-	if autostart {
-		backend: or(_backendWord)
-	}
-
-	// krun carries the krun backend's knobs. Optional and ignored by the other
-	// backends; the consumer applies its defaults when the resolved backend is
-	// krun and the block is absent.
-	krun?: #VmKrun @go(Krun,optional=nillable)
-
-	// A krun guest's root is a containerd snapshot, not a libvirt domain: its
-	// source must be an OCI-image arm (`container_disk` / `bootc`), and the
-	// libvirt/qemu-only fields are rejected. `firmware` and `autostart` are
-	// required-with-default in this def, so they are VALUE-pinned to their
-	// defaults here: an authored uefi-* firmware or autostart:true conflicts,
-	// while the materialized defaults pass. Each rejection is deliberately a
-	// FIELD-named conflict (null for the struct-valued fields, a negated enum for
-	// machine) rather than a bare `_|_`, whose error names only #Vm.
-	if backend == "krun" {
-		source: #VmSource & {kind: or(_vmKindWord)}
-		libvirt?:   null
-		autostart:  false
-		firmware:   "bios"
-		machine?:   !~"^(q35|virt|i440fx|pc)$"
-		cloud_init?: null
-	}
-
-	// Secure Boot needs Q35 SMM — i440fx can't supply it.
-	// machine stays OPTIONAL (Go allows empty machine with uefi-secure), so the
-	// constraint is `machine?: !=…`, not `machine: !=…` (the latter would force
-	// machine present and false-reject the common omit-machine uefi-secure case).
-	if firmware == "uefi-secure" {
-		machine?: !="i440fx"
-		// Secure Boot requires SMM: the renderer does NOT
-		// auto-enable SMM for uefi-secure (buildDomainFeatures only sets it from an
-		// explicit libvirt.features.smm), so the user MUST declare it. The `!`
-		// required-field markers force libvirt/features/smm to be EXPLICITLY present
-		// (a plain `smm: true` would auto-fill and silently pass) and pinned true.
-		libvirt!: features!: smm!: true
-	}
-
-	network?:    #VmNetwork    @go(Network,optional=nillable)
-	ssh?:        #VmSsh        @go(SSH,type=*VmSsh)
-	// The explicit pointer type keeps the generated Go field as *VmCloudInit even
-	// though the krun guard above adds the `null` arm (a bare `optional=nillable`
-	// degrades to an anonymous struct in that case).
-	cloud_init?: #VmCloudInit  @go(CloudInit,type=*VmCloudInit)
-	// mcp_provide: a kind:vm entity declares its MCP servers (e.g. the
-	// systemd-started charly mcp server) exactly like a box does — the P4
-	// substrate-neutral surface.
-	mcp_provide?: [...#CandyMCPProvide] @go(MCPProvide)
-	libvirt?:    #LibvirtDomain @go(Libvirt,type=*LibvirtDomain)
-
-	plan?: [...#Step]
-	snapshot?: [...#VmSnapshot] @go(Snapshots)
-}
 
 // 7-way discriminated union on source.kind — cloud_image, bootc, clone, imported,
 // bootstrap, iso, container_disk; each arm pins kind, requires its
@@ -1050,13 +977,9 @@ package schema
 // tables and their `_<x>Word` derivations stay PRIVATE (the S3 shape is unchanged); each
 // public def below is the same list, named for the sibling that needs it.
 #VmBackendNameWord: _vmBackendNameWord
-#VmBackendWord: _backendWord
-#VmMachineWord: _machineWord
 #VmCloudInitWord: _cloudInitWord
 #VmSmbiosWord: _smbiosWord
 #VmStrategyWord: _strategyWord
-#VmFirmwareWord: _vmFirmwareWord
-#VmKindWord: _vmKindWord
 
 // --- vocabulary tables (S3) --------------------------------------------------
 // Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
@@ -1070,18 +993,6 @@ package schema
 // #VmBackendName
 _vmBackendName: {libvirt: {}, qemu: {}, krun: {}} @vocab(spec)
 _vmBackendNameWord: [for w, _ in _vmBackendName {w}]
-// #Vm.machine
-_machine: {q35: {}, virt: {}, i440fx: {}, pc: {}} @vocab(spec)
-_machineWord: [for w, _ in _machine {w}]
-// #Vm.firmware
-_vmFirmware: {bios: {}, "uefi-insecure": {}, "uefi-secure": {}} @vocab(spec)
-_vmFirmwareWord: [for w, _ in _vmFirmware {w}]
-// #Vm.backend
-_backend: {auto: {}, libvirt: {}} @vocab(spec)
-_backendWord: [for w, _ in _backend {w}]
-// #Vm.source.kind
-_vmKind: {container_disk: {}, bootc: {}} @vocab(spec)
-_vmKindWord: [for w, _ in _vmKind {w}]
 // #VmSource.transport
 _vmSourceTransport: {
 	registry: {}

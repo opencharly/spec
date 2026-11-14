@@ -10479,55 +10479,6 @@ type ValidateWordSetsReply struct {
 // it is a resolution selector, never a provider word.
 type VmBackendName string
 
-type Vm struct {
-	Source VmSource `yaml:"source,omitempty" json:"source"`
-
-	DiskSize string `yaml:"disk_size,omitempty" json:"disk_size,omitempty"`
-
-	Ram string `yaml:"ram,omitempty" json:"ram,omitempty"`
-
-	Cpus int `yaml:"cpu,omitempty" json:"cpu,omitempty"`
-
-	Machine string `yaml:"machine,omitempty" json:"machine,omitempty"`
-
-	// firmware is REQUIRED-with-default (not optional): an if-guard can only
-	// reference a field that always resolves to a concrete value, and an
-	// OPTIONAL field — even one carrying a default — errors with "cannot
-	// reference optional field" when absent. Required-with-default materializes
-	// "bios" on omission (matching the Go empty→bios behavior) AND stays
-	// referenceable by the uefi-secure cross-rule below.
-	Firmware string `yaml:"firmware,omitempty" json:"firmware"`
-
-	Backend string `yaml:"backend,omitempty" json:"backend"`
-
-	Autostart bool `yaml:"autostart,omitempty" json:"autostart"`
-
-	// krun carries the krun backend's knobs. Optional and ignored by the other
-	// backends; the consumer applies its defaults when the resolved backend is
-	// krun and the block is absent.
-	Krun *VmKrun `yaml:"krun,omitempty" json:"krun,omitempty"`
-
-	Network *VmNetwork `yaml:"network,omitempty" json:"network,omitempty"`
-
-	SSH *VmSsh `yaml:"ssh,omitempty" json:"ssh,omitempty"`
-
-	// The explicit pointer type keeps the generated Go field as *VmCloudInit even
-	// though the krun guard above adds the `null` arm (a bare `optional=nillable`
-	// degrades to an anonymous struct in that case).
-	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty" json:"cloud_init,omitempty"`
-
-	// mcp_provide: a kind:vm entity declares its MCP servers (e.g. the
-	// systemd-started charly mcp server) exactly like a box does — the P4
-	// substrate-neutral surface.
-	MCPProvide []CandyMCPProvide `yaml:"mcp_provide,omitempty" json:"mcp_provide,omitempty"`
-
-	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-
-	Snapshots []VmSnapshot `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
-}
-
 type VmChecksum struct {
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 
@@ -11366,19 +11317,11 @@ type LibvirtPCIHex string
 // public def below is the same list, named for the sibling that needs it.
 type VmBackendNameWord []any /* CUE closed list */
 
-type VmBackendWord []any /* CUE closed list */
-
-type VmMachineWord []any /* CUE closed list */
-
 type VmCloudInitWord []any /* CUE closed list */
 
 type VmSmbiosWord []any /* CUE closed list */
 
 type VmStrategyWord []any /* CUE closed list */
-
-type VmFirmwareWord []any /* CUE closed list */
-
-type VmKindWord []any /* CUE closed list */
 
 // CUE schema for the VM-box metadata contract — the VM-specific half of the OCI-label
 // metadata a VM box image carries (cutover plan §2.1: "a VM box is an OCI image whose
