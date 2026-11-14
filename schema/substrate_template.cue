@@ -6,7 +6,7 @@ package schema
 // conversion-in-progress, never a sanctioned exception). candy/plugin-substrate
 // projects an authored local:/android:/pod:/kubernetes:/vm: TEMPLATE into a Resolved*
 // envelope the kernel consumes without importing a concrete authored body type.
-// Written out explicitly (not embedding the authoring kind schemas #Android/#Kubernetes —
+// Written out explicitly (not embedding the authoring kind schemas —
 // `#Pod` and `#Local`, with the `spec.Pod` / `spec.Local` types they used to generate, are
 // plugin-substrate's since spec#304 units 3 and 4 — whose required/optional field sets
 // differ from the resolved envelope's — e.g. the authored `local` body's `candy` is

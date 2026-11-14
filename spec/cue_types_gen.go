@@ -7482,12 +7482,10 @@ type KubernetesGenInput struct {
 
 	Deploy Deploy `yaml:"deploy,omitempty" json:"deploy"`
 
-	// cluster is the decoded kind:kubernetes cluster template. After the kubernetes
-	// substrate-value de-type (Cutover K) the KERNEL no longer sets it — it
-	// ships the opaque body in ClusterRaw and the plugin decodes ClusterRaw
-	// into Cluster before generating, so the kernel never types spec.Kubernetes.
-	Cluster Kubernetes `yaml:"cluster,omitempty" json:"cluster,omitempty"`
-
+	// cluster_raw is the opaque kind:kubernetes cluster body (Cutover K): the kernel ships
+	// it and the generating plugin decodes it into its OWN view — spec#304 unit 5 moved the
+	// authored #Kubernetes body out of this contract, so there is no typed `cluster` field
+	// to carry it any more.
 	ClusterRaw RawBody `yaml:"cluster_raw,omitempty" json:"cluster_raw,omitempty"`
 
 	Ports []string `yaml:"ports,omitempty" json:"ports"`
@@ -7497,118 +7495,6 @@ type KubernetesGenInput struct {
 	GID int `yaml:"gid,omitempty" json:"gid"`
 
 	OutputDir string `yaml:"output_dir,omitempty" json:"output_dir"`
-}
-
-type Kubernetes struct {
-	// May be empty (a cluster-policy-only template runs no workload itself).
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
-
-	// kubeconfig — the kubeconfig FILE this cluster is reached through. An
-	// externally-managed cluster (OVH / GKE / EKS / on-prem) is usually addressed
-	// by a per-cluster file rather than by the ambient `$KUBECONFIG` /
-	// `~/.kube/config`; without this field the only handle a deploy has is a
-	// context NAME, which cannot be resolved against a file charly was never
-	// told about. Empty keeps the ambient file that plain `kubectl` reads — what
-	// a charly-created k3s/kind cluster relies on.
-	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
-
-	AdmissionPolicy string `yaml:"admission_policy,omitempty" json:"admission_policy,omitempty"`
-
-	DefaultNamespace string `yaml:"default_namespace,omitempty" json:"default_namespace,omitempty"`
-
-	Storage KubernetesStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
-
-	Ingress KubernetesIngressDefaults `yaml:"ingress,omitempty" json:"ingress,omitempty"`
-
-	ImageDefault KubernetesImagesDefaults `yaml:"image_default,omitempty" json:"image_default,omitempty"`
-
-	PodDefault KubernetesPodDefaults `yaml:"pod_default,omitempty" json:"pod_default,omitempty"`
-
-	// kubevirt — cluster-specific KubeVirt knobs (the kind:kubevirt substrate's
-	// cluster side). Mirrors the storage/ingress "one cluster template owns the
-	// cluster-specific policy" partition: a kind:kubevirt VM names its cluster by
-	// `cluster:` and these knobs apply.
-	KubeVirt KubernetesKubeVirt `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
-
-	Defaults KubernetesResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-}
-
-type KubernetesStorage struct {
-	ClassDefault string `yaml:"class_default,omitempty" json:"class_default,omitempty"`
-
-	ClassCheap string `yaml:"class_cheap,omitempty" json:"class_cheap,omitempty"`
-
-	ClassEncrypted string `yaml:"class_encrypted,omitempty" json:"class_encrypted,omitempty"`
-
-	ClassFast string `yaml:"class_fast,omitempty" json:"class_fast,omitempty"`
-
-	AccessModeDefault string `yaml:"access_mode_default,omitempty" json:"access_mode_default,omitempty"`
-}
-
-type KubernetesIngressDefaults struct {
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-
-	Class string `yaml:"class,omitempty" json:"class,omitempty"`
-
-	CertIssuer string `yaml:"cert_issuer,omitempty" json:"cert_issuer,omitempty"`
-
-	PathTypeDefault string `yaml:"path_type_default,omitempty" json:"path_type_default,omitempty"`
-}
-
-type KubernetesImagesDefaults struct {
-	PullPolicy string `yaml:"pull_policy,omitempty" json:"pull_policy,omitempty"`
-
-	PullSecrets []string `yaml:"pull_secrets,omitempty" json:"pull_secrets,omitempty"`
-}
-
-type KubernetesPodDefaults struct {
-	PriorityClass string `yaml:"priority_class,omitempty" json:"priority_class,omitempty"`
-
-	// Raw Kubernetes Toleration objects (Go []map[string]any) — genuine
-	// passthrough, so each element stays OPEN.
-	Tolerations []map[string]any/* CUE top */ `yaml:"tolerations,omitempty" json:"tolerations,omitempty"`
-
-	NodeSelector map[string]string `yaml:"node_selector,omitempty" json:"node_selector,omitempty"`
-}
-
-// #KubernetesKubeVirt — the KubeVirt platform knobs a cluster template carries.
-// The kubevirt-operator install + the kind:kubevirt substrate's defaults resolve
-// from here.
-type KubernetesKubeVirt struct {
-	// enabled — whether this cluster has KubeVirt available (informational;
-	// the operator candy owns the actual install).
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-
-	// cdi_enabled — whether CDI is installed (needed for a data_volume boot).
-	CDIEnabled bool `yaml:"cdi_enabled,omitempty" json:"cdi_enabled,omitempty"`
-
-	CDINamespace string `yaml:"cdi_namespace,omitempty" json:"cdi_namespace,omitempty"`
-
-	// use_emulation runs KubeVirt's software emulation (no /dev/kvm on the node).
-	// The R10 bed uses REAL KVM, so this defaults false.
-	UseEmulation bool `yaml:"use_emulation,omitempty" json:"use_emulation,omitempty"`
-
-	DefaultStorageClass string `yaml:"default_storage_class,omitempty" json:"default_storage_class,omitempty"`
-
-	DefaultInstancetype string `yaml:"default_instancetype,omitempty" json:"default_instancetype,omitempty"`
-
-	DefaultPreference string `yaml:"default_preference,omitempty" json:"default_preference,omitempty"`
-
-	// snapshot_class names the VolumeSnapshotClass a VirtualMachineSnapshot uses.
-	SnapshotClass string `yaml:"snapshot_class,omitempty" json:"snapshot_class,omitempty"`
-
-	// virtctl_version pins the virtctl CLI release the operator candy installs.
-	VirtctlVersion string `yaml:"virtctl_version,omitempty" json:"virtctl_version,omitempty"`
-
-	FeatureGates []string `yaml:"feature_gates,omitempty" json:"feature_gates,omitempty"`
-}
-
-type KubernetesResourceDefaults struct {
-	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
-
-	Annotations map[string]string `yaml:"annotations,omitempty" json:"annotations,omitempty"`
 }
 
 // #KubernetesGenFile is one generated manifest the plugin returns: its RELATIVE path
@@ -7632,75 +7518,6 @@ type KubernetesGenReply struct {
 	OverlayRelPath string `yaml:"overlay_rel_path,omitempty" json:"overlay_rel_path"`
 
 	Files []KubernetesGenFile `yaml:"files,omitempty" json:"files"`
-}
-
-type Kindcluster struct {
-	// May be empty (a cluster-policy-only template runs no workload itself).
-	Box string `yaml:"box,omitempty" json:"box"`
-
-	// engine selects the container engine kind provisions its node containers with.
-	// The authored field is the charly #EngineName vocabulary (podman/docker/
-	// containerd); the plugin maps `containerd` to kind's own provider word
-	// (KIND_EXPERIMENTAL_PROVIDER=nerdctl) at the edge. Absent → the resolved
-	// runtime engine (engine.run).
-	Engine EngineName `yaml:"engine,omitempty" json:"engine,omitempty"`
-
-	// node_image is the digest-pinned kind node image (kindest/node:vX@sha256:…).
-	// Empty → the plugin's pinned default (the kind release's default node image).
-	// A digest pin is required for reproducibility (kind's own guidance).
-	NodeImage string `yaml:"node_image,omitempty" json:"node_image,omitempty"`
-
-	// nodes is the cluster topology. Absent → a single control-plane node.
-	Nodes []KindclusterNode `yaml:"nodes,omitempty" json:"nodes,omitempty"`
-
-	// kubeconfig_context is the kubeconfig context this cluster deploys to. kind
-	// writes the context named after the cluster; a deploy may override it.
-	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
-
-	// default_namespace mirrors the kubernetes template's default namespace.
-	DefaultNamespace string `yaml:"default_namespace,omitempty" json:"default_namespace,omitempty"`
-
-	// admission_policy mirrors the kubernetes template's admission policy (read by
-	// candy/plugin-k8sgen to set the pod security context).
-	AdmissionPolicy string `yaml:"admission_policy,omitempty" json:"admission_policy,omitempty"`
-
-	// Cluster policy — the SAME defs the `kubernetes:` template uses (R3).
-	Storage *KubernetesStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
-
-	Ingress *KubernetesIngressDefaults `yaml:"ingress,omitempty" json:"ingress,omitempty"`
-
-	ImageDefault *KubernetesImagesDefaults `yaml:"image_default,omitempty" json:"image_default,omitempty"`
-
-	PodDefault *KubernetesPodDefaults `yaml:"pod_default,omitempty" json:"pod_default,omitempty"`
-
-	Defaults KubernetesResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-}
-
-// #KindclusterNode — one node in the cluster topology. role discriminates the
-// control plane from workers; kind names control-plane nodes `<cluster>-control-plane`
-// and workers `<cluster>-worker`, `<cluster>-worker2`, …
-type KindclusterNode struct {
-	Role string `yaml:"role,omitempty" json:"role"`
-
-	// image overrides the cluster-level node_image for this node.
-	Image string `yaml:"image,omitempty" json:"image,omitempty"`
-
-	// extra_port_mappings maps node ports to host ports (kind extraPortMappings) —
-	// the ingress/NodePort reach path. Bind a high host port to avoid needing
-	// net.ipv4.ip_unprivileged_port_start lowered for 80/443.
-	ExtraPortMappings []KindclusterPortMapping `yaml:"extra_port_mappings,omitempty" json:"extra_port_mappings,omitempty"`
-}
-
-type KindclusterPortMapping struct {
-	ContainerPort int `yaml:"container_port,omitempty" json:"container_port"`
-
-	HostPort int `yaml:"host_port,omitempty" json:"host_port"`
-
-	ListenAddress string `yaml:"listen_address,omitempty" json:"listen_address"`
-
-	Protocol string `yaml:"protocol,omitempty" json:"protocol"`
 }
 
 type KubeVirt struct {
