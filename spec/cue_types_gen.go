@@ -11359,6 +11359,27 @@ type LibvirtListenOne struct {
 // PCI source address component: 0x-hex OR bare decimal (hexUintPtr accepts both).
 type LibvirtPCIHex string
 
+// --- PUBLIC vocabulary re-exports (opencharly/spec#304 unit 8) ------------------
+// EIGHT word lists are re-exported PUBLICLY so a plugin can cite them: a plugin's CUE
+// module imports only the contract, and a private def cannot cross that boundary. The
+// tables and their `_<x>Word` derivations stay PRIVATE (the S3 shape is unchanged); each
+// public def below is the same list, named for the sibling that needs it.
+type VmBackendNameWord []any /* CUE closed list */
+
+type VmBackendWord []any /* CUE closed list */
+
+type VmMachineWord []any /* CUE closed list */
+
+type VmCloudInitWord []any /* CUE closed list */
+
+type VmSmbiosWord []any /* CUE closed list */
+
+type VmStrategyWord []any /* CUE closed list */
+
+type VmFirmwareWord []any /* CUE closed list */
+
+type VmKindWord []any /* CUE closed list */
+
 // CUE schema for the VM-box metadata contract — the VM-specific half of the OCI-label
 // metadata a VM box image carries (cutover plan §2.1: "a VM box is an OCI image whose
 // labels carry the VM metadata contract and whose layers carry the disk artifact").
