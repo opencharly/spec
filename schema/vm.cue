@@ -1044,6 +1044,20 @@ package schema
 	raw?: bytes @go(Raw,type=RawBody)
 }
 
+// --- PUBLIC vocabulary re-exports (opencharly/spec#304 unit 8) ------------------
+// EIGHT word lists are re-exported PUBLICLY so a plugin can cite them: a plugin's CUE
+// module imports only the contract, and a private def cannot cross that boundary. The
+// tables and their `_<x>Word` derivations stay PRIVATE (the S3 shape is unchanged); each
+// public def below is the same list, named for the sibling that needs it.
+#VmBackendNameWord: _vmBackendNameWord
+#VmBackendWord: _backendWord
+#VmMachineWord: _machineWord
+#VmCloudInitWord: _cloudInitWord
+#VmSmbiosWord: _smbiosWord
+#VmStrategyWord: _strategyWord
+#VmFirmwareWord: _vmFirmwareWord
+#VmKindWord: _vmKindWord
+
 // --- vocabulary tables (S3) --------------------------------------------------
 // Every closed set of words is a table keyed by word, `<x>Word` is derived from it,
 // and the enum an author meets is `or(<x>Word)` — so the table and the enum cannot
