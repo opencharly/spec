@@ -21,11 +21,6 @@ import (
 // ProjectWalker seam below, and the per-node MATERIALIZE exclusively through Materializer, both
 // resolved from the registered compiled-in loader plugin (mirroring DocParser/Threaded for PARSE).
 
-// Threaded is the host-computed, registry-derived DATA the per-document parse consults instead of
-// querying the provider registry (boundary law clause D): which words are recognized kinds /
-// deploy substrates, which external kinds may nest sub-entity members, and each plugin verb's
-// scalar-sugar primary field. The host snapshots it before the parse; the parse never touches the
-// registry.
 // KindGate is one kind's declared gate: the CUE definition path (e.g. "#CandyValue") and the
 // SERVED CUE source text that declares it. Both ride spec.Threaded as data; the receiving process
 // compiles Source locally, so a gate declared by a plugin is reachable from a process that holds
@@ -35,6 +30,11 @@ type KindGate struct {
 	Source string `yaml:"source" json:"source"`
 }
 
+// Threaded is the host-computed, registry-derived DATA the per-document parse consults instead of
+// querying the provider registry (boundary law clause D): which words are recognized kinds /
+// deploy substrates, which external kinds may nest sub-entity members, and each plugin verb's
+// scalar-sugar primary field. The host snapshots it before the parse; the parse never touches the
+// registry.
 type Threaded struct {
 	Kinds            map[string]bool   // recognizedKind
 	DeploySubstrates map[string]bool   // recognizedDeploySubstrate
