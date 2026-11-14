@@ -103,10 +103,6 @@ package schema
 // body this module still owns.
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
-// kubevirt is the 6th substrate kind (a KubeVirt VM: a cluster-scheduled VM whose
-// plan walks in the guest over SSH, like vm). Its kind/deploy/verb/command surface is
-// served by the external plugin-kubevirt; the value gate below is derived by schemagen
-// (kindValueDefs) from this def, so no hand map entry is needed.
 // firecracker is the 8th substrate kind (a microVM the substrate boots directly under
 // KVM: a rootfs artefact + a kernel, no libvirt, no domain, no host arbiter lease).
 // Its kind/deploy/verb/command surface is served by the external plugin-firecracker;
