@@ -127,7 +127,7 @@ package schema
 // #Sidecar / #Vm / #Android / #Deploy / #Candy / #Box defs
 // (schema/*.cue) are KEPT — they still generate spec.Distro / spec.Vm / spec.Candy / spec.Box /
 // … (the canonical types the plugins' Invoke and the host decode into); `#Pod` and `#Local` are
-// the four that have moved (`pod`, `local`, `kubernetes`, `kindcluster` — to plugin-substrate's
+// the five that have moved (`pod`, `local`, `kubernetes`, `kindcluster`, `kubevirt` — to plugin-substrate's
 // CUE module), and only `#Pod`'s shared `#PodSidecar` stays here
 // because the contract's own `#ResolvedPod` cites it. For the substrates
 // candy/plugin-substrate ECHOES the host-pre-decoded canonical node (deploy DeployNode or
