@@ -83,7 +83,7 @@ package schema
 // config — source:/composition; a deploy carries from:/image: + the deploy config).
 // The RDD spike proved `cue vet` resolves this disjunction unambiguously even with
 // overlapping fields. @go(-): the Go types come from #Vm/#Android + #Deploy directly (the
-// substrates whose bodies have moved — `pod`, `local`, `kubernetes` and `kindcluster` —
+// substrates whose bodies have moved — `pod`, `local`, `kubernetes`, `kindcluster` and `kubevirt` —
 // contribute none here); this value def is validation-only.
 //
 // C2-substrate: these substrate kinds have NO #Node arm anymore (externalized to
