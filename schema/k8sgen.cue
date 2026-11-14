@@ -25,11 +25,10 @@ package schema
 	instance!:        string @go(Instance)
 	image_ref!:       string @go(ImageRef)
 	deploy!:          #Deploy @go(Deploy) // = the former DeployNode
-	// cluster is the decoded kind:kubernetes cluster template. After the kubernetes
-	// substrate-value de-type (Cutover K) the KERNEL no longer sets it — it
-	// ships the opaque body in ClusterRaw and the plugin decodes ClusterRaw
-	// into Cluster before generating, so the kernel never types spec.Kubernetes.
-	cluster?:     #Kubernetes @go(Cluster)
+	// cluster_raw is the opaque kind:kubernetes cluster body (Cutover K): the kernel ships
+	// it and the generating plugin decodes it into its OWN view — spec#304 unit 5 moved the
+	// authored #Kubernetes body out of this contract, so there is no typed `cluster` field
+	// to carry it any more.
 	cluster_raw?: bytes @go(ClusterRaw,type=RawBody) // opaque kubernetes cluster body (Cutover K)
 	ports!: [...string] @go(Ports) // from BoxMetadata.Port
 	uid!:        int    @go(UID,type=int) // from BoxMetadata.UID
