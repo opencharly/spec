@@ -312,7 +312,6 @@ type VmSsh struct {
 	KeyInjection *VmKeyInjection `yaml:"key_injection,omitempty" json:"key_injection,omitempty"`
 }
 
-
 // ---------------------------------------------------------------------------
 // ApkPackageSpec — #CandyApk (android_spec.go). package XOR apk.
 // ---------------------------------------------------------------------------
