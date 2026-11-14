@@ -17,22 +17,20 @@ import (
 
 func TestVmVocabularyReExports(t *testing.T) {
 	v := compileShipped(t)
-	// The eight public names a sibling plugin cites. Each must RESOLVE and decode to a
-	// non-empty string list: a removed or misspelled name fails the lookup, and an alias
-	// pointing at a non-list fails the decode. (The private derivations cannot be looked up
-	// by path — hidden labels are not addressable — so this pins the surface the sibling
-	// actually uses rather than comparing to an unaddressable value.)
-	public := []string{
-		"#VmBackendNameWord",
-		"#VmBackendWord",
-		"#VmMachineWord",
-		"#VmCloudInitWord",
-		"#VmSmbiosWord",
-		"#VmStrategyWord",
-		"#VmFirmwareWord",
-		"#VmKindWord",
+	// The eight public names a sibling plugin cites, each with ONE word only its own list
+	// carries: a wrong pointer (an alias aimed at a sibling's list) resolves and decodes
+	// cleanly, so membership is what proves the pointer, not a non-empty decode.
+	expect := map[string]string{
+		"#VmBackendNameWord": "libvirt",
+		"#VmBackendWord":     "auto",
+		"#VmMachineWord":     "q35",
+		"#VmCloudInitWord":   "enabled",
+		"#VmSmbiosWord":      "disabled",
+		"#VmStrategyWord":    "scp",
+		"#VmFirmwareWord":    "uefi-secure",
+		"#VmKindWord":        "container_disk",
 	}
-	for _, name := range public {
+	for name, mustContain := range expect {
 		def := v.LookupPath(cue.ParsePath(name))
 		if !def.Exists() {
 			t.Fatalf("%s does not resolve in the shipped schema — a sibling plugin cites it, so it must", name)
@@ -41,8 +39,14 @@ func TestVmVocabularyReExports(t *testing.T) {
 		if err := def.Decode(&words); err != nil {
 			t.Fatalf("%s does not decode to a word list: %v", name, err)
 		}
-		if len(words) < 2 {
-			t.Fatalf("%s = %v — a vocabulary list carries at least two rows", name, words)
+		found := false
+		for _, w := range words {
+			if w == mustContain {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s = %v — its own list must contain %q, so the alias points at the RIGHT table", name, words, mustContain)
 		}
 	}
 }
