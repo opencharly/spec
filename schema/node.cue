@@ -103,11 +103,6 @@ package schema
 // body this module still owns.
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
-// firecracker is the 8th substrate kind (a microVM the substrate boots directly under
-// KVM: a rootfs artefact + a kernel, no libvirt, no domain, no host arbiter lease).
-// Its kind/deploy/verb/command surface is served by the external plugin-firecracker;
-// the value gate below is derived by schemagen (kindValueDefs) from this def, so no
-// hand map entry is needed.
 // EVERY authoring kind is externalized to a plugin unit — the build-vocabulary kinds
 // (`distro:`/`builder:`/`init:`/`resource:`), the AI-CLI grader `agent:`, the sidecar
 // `sidecar:`, the substrate kinds
