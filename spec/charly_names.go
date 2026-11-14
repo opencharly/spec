@@ -21,9 +21,11 @@ package spec
 
 // --- top-level entity types ---
 type (
-	BoxConfig   = Box
-	CandyYAML   = Candy
-	VmSpec      = Vm
+	BoxConfig = Box
+	CandyYAML = Candy
+	// VmSpec is the charly name for the vm entity: the authored #Vm moved into plugin-substrate
+	// (opencharly/spec#304 unit 8), so the surviving spec type is the resolve envelope.
+	VmSpec      = ResolvedVm
 	DeployNode  = Deploy
 	AndroidSpec = Android
 	SidecarDef  = Sidecar

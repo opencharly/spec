@@ -282,7 +282,6 @@ var AuthoringVerbs = []string{
 var KindValueDefs = map[string]string{
 	"android": "#AndroidValue",
 	"candy":   "#CandyValue",
-	"vm":      "#VmValue",
 }
 
 // EngineNames is the CLOSED container-engine vocabulary (#EngineName) — podman/docker/containerd. The authored candy.engine/deploy.engine union and IsEngineName derive from it; EngineBinary/EngineCapabilityFor answer from the capability table keyed by these same words. Adding an engine is one edit to #EngineName plus one table row, then charly task cue-gen.
