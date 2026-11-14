@@ -5,14 +5,13 @@ package schema
 // standing operator directive: a hand-written wire struct not yet CUE-sourced is
 // conversion-in-progress, never a sanctioned exception). candy/plugin-substrate
 // projects an authored local:/android:/pod:/kubernetes:/vm: TEMPLATE into a Resolved*
-// envelope the kernel consumes without importing the concrete spec.Local /
-// spec.Android / spec.Kubernetes / spec.Vm. Written out explicitly (not
-// embedding the authoring kind schemas #Local/#Android/#Kubernetes (`#Pod` — and the
-// `spec.Pod` type it used to generate — are plugin-substrate's since spec#304 unit 3),
-// whose
-// required/optional field sets differ from the resolved envelope's — e.g.
-// #Local's `candy` is REQUIRED, ResolvedLocal's is OPTIONAL) so every field's
-// state is independently auditable against the former hand type. Plain
+// envelope the kernel consumes without importing a concrete authored body type.
+// Written out explicitly (not embedding the authoring kind schemas #Android/#Kubernetes —
+// `#Pod` and `#Local`, with the `spec.Pod` / `spec.Local` types they used to generate, are
+// plugin-substrate's since spec#304 units 3 and 4 — whose required/optional field sets
+// differ from the resolved envelope's — e.g. the authored `local` body's `candy` is
+// REQUIRED while ResolvedLocal's is OPTIONAL) so every field's state is independently
+// auditable against the former hand type. Plain
 // structs — gengotypes generates them faithfully, no disjunction needed.
 // IsEndpoint()/EffectiveSerial() are pure Go METHODS on ResolvedAndroid — CUE
 // cannot express them — and stay hand-written in
@@ -21,7 +20,8 @@ package schema
 
 // #ResolvedLocal is the resolve-to-envelope form of a `local:` template — a
 // candy-stack applied to a host. The kernel reads it (candy stack / install
-// opts / plan), never spec.Local.
+// opts / plan), never the authored body type — which lives in the plugin that
+// serves the kind (opencharly/spec#304 unit 4).
 #ResolvedLocal: {
 	candy?: [...#CandyRef] @go(Candy)
 	install_opts?: #InstallOpts @go(InstallOpts,optional=nillable)
