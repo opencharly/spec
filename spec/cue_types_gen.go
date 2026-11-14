@@ -5106,26 +5106,24 @@ type Diagnostics struct {
 
 // #StructuralKindLoadEnv is the OpLoad invocation context (op.Env) the host
 // threads to a STRUCTURAL class:kind plugin (F5 authored-member input-threading).
+//
+// BOTH channels are OPAQUE BYTES (D-SCH-7): a wire shape never carries an authored body
+// type. A plugin that needs a field decodes the bytes into its own CUE-declared value or
+// the contract's projection; it never receives the authored node itself.
 type StructuralKindLoadEnv struct {
-	Members map[string]*Deploy `yaml:"members,omitempty" json:"members,omitempty"`
+	Members map[string]RawBody `yaml:"members,omitempty" json:"members,omitempty"`
 
 	// standalone is the host-pre-decoded CANONICAL node channel (candy/plugin-substrate,
 	// candy/plugin-candy).
 	Standalone *StandaloneLoad `yaml:"standalone,omitempty" json:"standalone,omitempty"`
 }
 
-// #StandaloneLoad carries a structural kind's host-pre-decoded canonical node.
-// Exactly one of Deploy / Template / Box / Candy is set, matching Shape.
+// #StandaloneLoad carries a structural kind's host-pre-decoded canonical node AS BYTES.
+// Shape names which body the bytes are; every arm rides the ONE opaque carrier.
 type StandaloneLoad struct {
 	Shape string `yaml:"shape,omitempty" json:"shape"`
 
-	Deploy *Deploy `yaml:"deploy,omitempty" json:"deploy,omitempty"`
-
-	Template RawBody `yaml:"template,omitempty" json:"template,omitempty"`
-
-	Box *Box `yaml:"box,omitempty" json:"box,omitempty"`
-
-	Candy *Candy `yaml:"candy,omitempty" json:"candy,omitempty"`
+	Body RawBody `yaml:"body,omitempty" json:"body,omitempty"`
 }
 
 // #AndroidDeployVenue is the preresolved deploy:android substrate payload the
