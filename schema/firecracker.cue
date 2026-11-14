@@ -21,7 +21,7 @@ package schema
 //
 // CLOSED: an unknown key is a typo (the same strictness every kind def carries).
 // CUE closes the field set and the enums; what it cannot express without degrading
-// gengotypes is enforced by the plugin's deep OpValidate, the split #KubeVirt and
+// gengotypes is enforced by the plugin's deep OpValidate, the split the kubevirt body taught and
 // #Android document:
 //   * exactly one of kernel.from / kernel.path;
 //   * a DEPLOY needs image as well as kernel — #Firecracker itself keeps image

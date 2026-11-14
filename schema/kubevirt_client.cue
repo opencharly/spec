@@ -8,8 +8,8 @@ package schema
 // snapshot / migrate). `package schema`; concatenated into the spec compilation
 // unit.
 //
-// Written out explicitly rather than embedding #KubeVirt — the wire env carries
-// PLAIN post-default scalars, not #KubeVirt's own enum/default machinery.
+// Written out explicitly rather than embedding the authored kubevirt body — the wire env carries
+// PLAIN post-default scalars, not the authored body's own enum/default machinery.
 
 // #KubeVirtPluginEnv is the host→plugin env for an internal KubeVirt-resolution
 // RPC. vm_op selects the operation: list / vm-state / resolve-vnc / resolve-console

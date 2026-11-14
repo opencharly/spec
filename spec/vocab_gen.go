@@ -283,7 +283,6 @@ var KindValueDefs = map[string]string{
 	"android":     "#AndroidValue",
 	"candy":       "#CandyValue",
 	"firecracker": "#FirecrackerValue",
-	"kubevirt":    "#KubevirtValue",
 	"vm":          "#VmValue",
 }
 
