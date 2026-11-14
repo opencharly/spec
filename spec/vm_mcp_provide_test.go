@@ -2,32 +2,9 @@ package spec
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
-
-	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/cuecontext"
-
-	"github.com/opencharly/spec/schemaconcat"
 )
-
-// loadSchema compiles the SAME concatenation the runtime and `charly task cue-gen` use
-// (schemaconcat.ConcatSchema — R3: one concatenation contract), so the CUE-level
-// assertions below exercise the schema as it actually ships, not a hand-written
-// excerpt (same helper as libvirt_gpu_vocab_cue_test.go).
-func loadSchema(t *testing.T) cue.Value {
-	t.Helper()
-	src, _, err := schemaconcat.ConcatSchema(os.DirFS(".."), "schema", nil)
-	if err != nil {
-		t.Fatalf("concat schema: %v", err)
-	}
-	v := cuecontext.New().CompileString(src)
-	if err := v.Err(); err != nil {
-		t.Fatalf("compile schema: %v", err)
-	}
-	return v
-}
 
 // TestCheckEnv_MCPProvideJSONRoundTrip is the P4 host-threading gate: the check env's
 // mcp_provide must survive a JSON round trip so the out-of-process mcp: check verb can

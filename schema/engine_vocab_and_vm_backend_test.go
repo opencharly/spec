@@ -1,13 +1,10 @@
 package schema_test
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
-	"cuelang.org/go/cue/errors"
 
 	"github.com/opencharly/spec/schema"
 	"github.com/opencharly/spec/schemaconcat"
@@ -32,17 +29,6 @@ func defValue(t *testing.T, name string) (cue.Value, *cue.Context) {
 		t.Fatalf("%s is not defined in the shipped schema", name)
 	}
 	return def, ctx
-}
-
-// allErrors flattens CUE's error tree. The top-level Error() truncates to
-// "(and N more errors)", so a field-named conflict can be invisible unless every
-// node is printed.
-func allErrors(err error) string {
-	var b strings.Builder
-	for _, e := range errors.Errors(err) {
-		fmt.Fprintf(&b, "%v | path=%v | ", e.Error(), e.Path())
-	}
-	return b.String()
 }
 
 // checker builds an accept/reject predicate over one definition.
