@@ -99,13 +99,19 @@ func TestKindGateCarriesTheAuthoredAndWireShapesApart(t *testing.T) {
 // to compile. Its behaviour belongs to the implementor (opencharly/sdk#527 exercises the gated
 // resolution and its nil-gates control); what a contract PR owes is that the declaration itself is
 // the one the caller binds.
+// gatedValidationSignature is the COMPILE-TIME pin: it binds the interface method's exact
+// signature and is never called. A test body could not do this — taking a method value off a nil
+// interface panics at run time — and an `if loader != nil` guard is a dead arm pretending to be
+// coverage. An uncalled declaration type-checks without evaluating anything.
+func gatedValidationSignature(l ProjectLoader) func(string, string, cue.Value, map[string]KindGate) error {
+	return l.ValidateEntityCUEWithGates
+}
+
+// TestProjectLoaderExposesTheGatedEntityValidation states the contract: the pin is
+// gatedValidationSignature above, which fails to compile if the method is removed, renamed or
+// re-shaped. Its BEHAVIOUR belongs to the implementor (opencharly/sdk#527 exercises the gated
+// resolution and its nil-gates control); what a declaration owes is that it is the one the caller
+// binds.
 func TestProjectLoaderExposesTheGatedEntityValidation(t *testing.T) {
-	var loader ProjectLoader
-	var gated func(string, string, cue.Value, map[string]KindGate) error
-	if loader != nil {
-		gated = loader.ValidateEntityCUEWithGates
-	}
-	// A nil loader yields a nil method value; assigning it above is what compiles the signature
-	// against the interface. The assertion is the assignment itself.
-	_ = gated
+	t.Log("the signature pin is the uncalled gatedValidationSignature helper in this file")
 }
