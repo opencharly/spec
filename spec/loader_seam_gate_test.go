@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"cuelang.org/go/cue"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -90,4 +91,32 @@ func TestKindGateCarriesTheAuthoredAndWireShapesApart(t *testing.T) {
 	if !strings.Contains(string(out), `"wire_def":"#VmValue"`) {
 		t.Fatalf("a set WireDef must ride the wire, got %s", out)
 	}
+}
+
+// TestProjectLoaderExposesTheGatedEntityValidation is the compile-time assertion this declaration
+// needs: it pins that ProjectLoader carries ValidateEntityCUEWithGates with EXACTLY the signature
+// the host calls, so the method cannot be removed, renamed or re-shaped without this test failing
+// to compile. Its behaviour belongs to the implementor (opencharly/sdk#527 exercises the gated
+// resolution and its nil-gates control); what a contract PR owes is that the declaration itself is
+// the one the caller binds.
+// gatedValidationSignature is the COMPILE-TIME pin: it binds the interface method's exact
+// signature and is never called. A test body could not do this — taking a method value off a nil
+// interface panics at run time — and an `if loader != nil` guard is a dead arm pretending to be
+// coverage. An uncalled declaration type-checks without evaluating anything.
+func gatedValidationSignature(l ProjectLoader) func(string, string, cue.Value, map[string]KindGate) error {
+	return l.ValidateEntityCUEWithGates
+}
+
+// The pin is BOUND here, without being called: a package-level reference to the function VALUE
+// binds its signature at compile time and gives the linter the use it needs, while evaluating
+// nothing (calling it would dereference a nil interface).
+var _ = gatedValidationSignature
+
+// TestProjectLoaderExposesTheGatedEntityValidation states the contract: the pin is
+// gatedValidationSignature above, which fails to compile if the method is removed, renamed or
+// re-shaped. Its BEHAVIOUR belongs to the implementor (opencharly/sdk#527 exercises the gated
+// resolution and its nil-gates control); what a declaration owes is that it is the one the caller
+// binds.
+func TestProjectLoaderExposesTheGatedEntityValidation(t *testing.T) {
+	t.Log("the signature pin is the uncalled gatedValidationSignature helper in this file")
 }
