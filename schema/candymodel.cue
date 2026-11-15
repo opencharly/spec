@@ -77,7 +77,10 @@ package schema
 
 	// --- services / extract / data / apk ---
 	service?: [...#CandyService] @go(Service)
-	extract?: [...#CandyExtract] @go(Extract)
+	// extract — the candy's file extractions as OPAQUE BYTES, the same shape as hook above: the
+	// authored #CandyExtract stays in spec (it is #Candy's own field), and the IR carries the JSON
+	// bytes rather than importing the shape, so the def can move to the plugin that owns the body.
+	extract?: bytes @go(Extract,type=RawBody)
 	data?: [...#CandyData] @go(Data)
 	apk?: [...#CandyApk] @go(Apk,type=[]ApkPackageSpec)
 

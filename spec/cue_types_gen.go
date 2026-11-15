@@ -2475,7 +2475,10 @@ type CandyModel struct {
 	// --- services / extract / data / apk ---
 	Service []CandyService `yaml:"service,omitempty" json:"service,omitempty"`
 
-	Extract []CandyExtract `yaml:"extract,omitempty" json:"extract,omitempty"`
+	// extract — the candy's file extractions as OPAQUE BYTES, the same shape as hook above: the
+	// authored #CandyExtract stays in spec (it is #Candy's own field), and the IR carries the JSON
+	// bytes rather than importing the shape, so the def can move to the plugin that owns the body.
+	Extract RawBody `yaml:"extract,omitempty" json:"extract,omitempty"`
 
 	Data []CandyData `yaml:"data,omitempty" json:"data,omitempty"`
 
@@ -2743,17 +2746,6 @@ type ServiceWaitFor struct {
 	// timeout — how long to wait before failing the start. "30s" or a bare 30,
 	// matching stop_timeout's shape. Absent means the init's own default.
 	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-}
-
-// ExtractYAML — copy a path out of another OCI image into this one. source is
-// an image ref; path (in the source image) and dest (in this image) are
-// absolute (validateCandyContents).
-type CandyExtract struct {
-	Source string `yaml:"source,omitempty" json:"source"`
-
-	Path string `yaml:"path,omitempty" json:"path"`
-
-	Dest string `yaml:"dest,omitempty" json:"dest"`
 }
 
 // DataYAML — stage candy-dir data into a volume at build, provision at deploy.
@@ -3796,6 +3788,17 @@ type CandyRoute struct {
 	Host string `yaml:"host,omitempty" json:"host"`
 
 	Port int `yaml:"port,omitempty" json:"port"`
+}
+
+// ExtractYAML — copy a path out of another OCI image into this one. source is
+// an image ref; path (in the source image) and dest (in this image) are
+// absolute (validateCandyContents).
+type CandyExtract struct {
+	Source string `yaml:"source,omitempty" json:"source"`
+
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	Dest string `yaml:"dest,omitempty" json:"dest"`
 }
 
 // #PackagingVariant — one named plugin-set variant.
