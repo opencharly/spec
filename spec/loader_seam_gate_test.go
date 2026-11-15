@@ -2,6 +2,7 @@ package spec
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -80,5 +81,13 @@ func TestKindGateCarriesTheAuthoredAndWireShapesApart(t *testing.T) {
 	}
 	if pod := back.KindGates["pod"]; pod.Def != "#Pod" || pod.WireDef != "" {
 		t.Fatalf("a kind whose shapes match carries no WireDef, got Def=%q WireDef=%q", pod.Def, pod.WireDef)
+	}
+	// omitempty is a claim about the MARSHALED bytes: an absent key and a `"wire_def":""` key both
+	// unmarshal to "", so asserting the round-trip alone cannot prove the field is omitted.
+	if strings.Contains(string(out), `"wire_def":""`) {
+		t.Fatalf("an empty WireDef must be OMITTED from the wire, got %s", out)
+	}
+	if !strings.Contains(string(out), `"wire_def":"#VmValue"`) {
+		t.Fatalf("a set WireDef must ride the wire, got %s", out)
 	}
 }
