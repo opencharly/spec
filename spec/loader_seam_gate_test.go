@@ -107,6 +107,11 @@ func gatedValidationSignature(l ProjectLoader) func(string, string, cue.Value, m
 	return l.ValidateEntityCUEWithGates
 }
 
+// The pin is BOUND here, without being called: a package-level reference to the function VALUE
+// binds its signature at compile time and gives the linter the use it needs, while evaluating
+// nothing (calling it would dereference a nil interface).
+var _ = gatedValidationSignature
+
 // TestProjectLoaderExposesTheGatedEntityValidation states the contract: the pin is
 // gatedValidationSignature above, which fails to compile if the method is removed, renamed or
 // re-shaped. Its BEHAVIOUR belongs to the implementor (opencharly/sdk#527 exercises the gated
