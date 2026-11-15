@@ -26,8 +26,17 @@ import (
 // compiles Source locally, so a gate declared by a plugin is reachable from a process that holds
 // no plugin registry (the box-validate path).
 type KindGate struct {
-	Def    string `yaml:"def" json:"def"`
-	Source string `yaml:"source" json:"source"`
+	// Def is the def a kind's AUTHORED body is written against — the shape the host validates
+	// and fills defaults through. A plugin whose wire value is a DIFFERENT shape (a value union
+	// that also admits the substrate/deploy arm) declares that one separately in WireDef, so the
+	// two shapes a kind actually has never have to share a name: resolving the wire union for an
+	// authored body refuses fixtures for a field the OTHER arm requires
+	// (opencharly/opencharly#1048).
+	Def string `yaml:"def" json:"def"`
+	// WireDef is the def the plugin's WIRE value takes, when it differs from Def. Empty means the
+	// authored and the wire shape are the same def.
+	WireDef string `yaml:"wire_def,omitempty" json:"wire_def,omitempty"`
+	Source  string `yaml:"source" json:"source"`
 }
 
 // Threaded is the host-computed, registry-derived DATA the per-document parse consults instead of
