@@ -112,6 +112,12 @@ package schema
 	// seam (render-prep → projectResolvedProject with caches). Empty for the
 	// generate-only path that writes Containerfiles host-side (transitional).
 	resolved_project?: #ResolvedProject @go(ResolvedProject,optional=nillable)
+	// diagnostics carries every diagnostic-grade finding the resolve emitted, so the CALLER can
+	// count what the resolve printed. Until this field existed the only channel was inherited
+	// stderr: `charly box validate` printed the init-dependency warning and then reported
+	// "0 warnings", because the namespaced-box fill happens under THIS reply (OpResolve) while the
+	// summary is built from OpValidate's own diagnostics (opencharly/sdk#519).
+	diagnostics?: #Diagnostics @go(Diagnostics)
 	error?: string @go(Error)
 }
 
