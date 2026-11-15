@@ -53,3 +53,29 @@ func TestCandyModelHookIsOpaqueRawJSON(t *testing.T) {
 		t.Fatalf("hook marshalled as a JSON STRING (%s) — the field lost its RawBody type and became []byte, which encoding/json base64-encodes", hook)
 	}
 }
+
+// TestCandyModelExtractIsOpaqueRawJSON is the same pair of claims for the SECOND field to go
+// opaque: the model must not carry `[]CandyExtract` (or the def could not leave the contract), and
+// the bytes must marshal INLINE as the authored JSON array — not a quoted string, not base64.
+func TestCandyModelExtractIsOpaqueRawJSON(t *testing.T) {
+	field, ok := reflect.TypeOf(CandyModel{}).FieldByName("Extract")
+	if !ok {
+		t.Fatal("CandyModel has no Extract field")
+	}
+	if got, want := field.Type, reflect.TypeOf(RawBody(nil)); got != want {
+		t.Fatalf("CandyModel.Extract is %v, want %v — the IR field must stay opaque", got, want)
+	}
+
+	const authored = `[{"source":"builder","path":"/out/x","dest":"/usr/x"}]`
+	raw, err := json.Marshal(CandyModel{Extract: RawBody(authored)})
+	if err != nil {
+		t.Fatalf("marshal CandyModel: %v", err)
+	}
+	var round map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &round); err != nil {
+		t.Fatalf("unmarshal the marshalled model: %v", err)
+	}
+	if got := string(round["extract"]); got != authored {
+		t.Fatalf("extract marshalled as %s, want the authored JSON verbatim (%s)", got, authored)
+	}
+}
