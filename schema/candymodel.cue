@@ -104,7 +104,10 @@ package schema
 	// --- security / hooks / skills (the OCI-label-collector surface: CollectSecurity/CollectHooks
 	// read this per-candy field then apply the box-level #ResolvedBoxView.security override) ---
 	security?: #Security  @go(Security,optional=nillable)
-	hook?:     #CandyHook @go(Hook,optional=nillable)
+	// hook — the candy lifecycle hooks as OPAQUE BYTES. The authored #CandyHook STAYS in spec (it is
+	// #Candy's own field and both metadata shapes reference it); what changes is that the IR stops
+	// importing it, so the build engine reads bytes and deploykit's specCandyAdapter decodes them.
+	hook?: bytes @go(Hook,type=RawBody)
 	// skills: the NAMES of the `skill:` nodes this candy OWNS — the build-time association
 	// `skill.cue`'s `owner:` records, projected onto the wire model so a consumer holding only
 	// the model can answer "which skills does this candy carry?" without reaching
