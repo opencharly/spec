@@ -76,7 +76,10 @@ package schema
 	run_ops?: [...#Op] @go(RunOps)
 
 	// --- services / extract / data / apk ---
-	service?: [...#CandyService] @go(Service)
+	// service — the candy's service declarations as OPAQUE BYTES, on the hook/extract/data pattern:
+	// the authored #CandyService stays in spec (it is #Candy's own field), and the IR carries the
+	// JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
+	service?: bytes @go(Service,type=RawBody)
 	// extract — the candy's file extractions as OPAQUE BYTES, the same shape as hook above: the
 	// authored #CandyExtract stays in spec (it is #Candy's own field), and the IR carries the JSON
 	// bytes rather than importing the shape, so the def can move to the plugin that owns the body.
@@ -101,8 +104,10 @@ package schema
 	shell?: #Shell       @go(Shell,optional=nillable)
 
 	// --- volumes / aliases ---
-	volumes?: [...#CandyVolume] @go(Volumes)
-	aliases?: [...#CandyAlias] @go(Aliases)
+	// volumes / aliases — OPAQUE BYTES for the same reason: the build model projects what the
+	// consumers need without importing the authored shapes (I1/D-SCH-7).
+	volumes?: bytes @go(Volumes,type=RawBody)
+	aliases?: bytes @go(Aliases,type=RawBody)
 
 	// --- security / hooks / skills (the OCI-label-collector surface: CollectSecurity/CollectHooks
 	// read this per-candy field then apply the box-level #ResolvedBoxView.security override) ---
@@ -150,7 +155,8 @@ package schema
 	// projected onto the build model. artifact/requires_capability/secret/port mirror
 	// candy.cue's own fields+shapes exactly; capability widens the CandyView's narrow
 	// (preserve_user-only) #CandyCapabilitiesView to the full authored #CandyCapability.
-	artifact?: [...#CandyArtifact] @go(Artifact)
+	// artifact — OPAQUE BYTES; the authored #CandyArtifact stays #Candy's, the model carries bytes.
+	artifact?: bytes @go(Artifact,type=RawBody)
 	requires_capability?: [...(string & !="")] @go(RequiresCapability)
 	capability?: #CandyCapability @go(Capability,optional=nillable)
 	secret?: [...#CandySecret] @go(Secret)
