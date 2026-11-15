@@ -86,7 +86,10 @@ package schema
 	// authored #CandyExtract stays in spec (it is #Candy's own field), and the IR carries the JSON
 	// bytes rather than importing the shape, so the def can move to the plugin that owns the body.
 	extract?: bytes @go(Extract,type=RawBody)
-	data?: [...#CandyData] @go(Data)
+	// data — the candy's data-seeding entries as OPAQUE BYTES, the third field on the hook/extract
+	// pattern: the authored #CandyData stays in spec (it is #Candy's own field), and the IR carries
+	// the JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
+	data?: bytes @go(Data,type=RawBody)
 	apk?: [...#CandyApk] @go(Apk,type=[]ApkPackageSpec)
 
 	// --- package surface (resolved) ---

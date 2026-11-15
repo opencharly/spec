@@ -81,10 +81,33 @@ func TestCandyModelExtractIsOpaqueRawJSON(t *testing.T) {
 	}
 }
 
+// TestCandyModelDataIsOpaqueRawJSON is the data twin: the field must not carry []CandyData, and its
+// bytes must marshal INLINE as the authored JSON array.
+func TestCandyModelDataIsOpaqueRawJSON(t *testing.T) {
+	field, ok := reflect.TypeOf(CandyModel{}).FieldByName("Data")
+	if !ok {
+		t.Fatal("CandyModel has no Data field")
+	}
+	if got, want := field.Type, reflect.TypeOf(RawBody(nil)); got != want {
+		t.Fatalf("CandyModel.Data is %v, want %v — the IR field must stay opaque", got, want)
+	}
+
+	const authored = `[{"volume":"workspace","src":"/seed","dest":"/data"}]`
+	raw, err := json.Marshal(CandyModel{Data: RawBody(authored)})
+	if err != nil {
+		t.Fatalf("marshal CandyModel: %v", err)
+	}
+	var round map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &round); err != nil {
+		t.Fatalf("unmarshal the marshalled model: %v", err)
+	}
+	if got := string(round["data"]); got != authored {
+		t.Fatalf("data marshalled as %s, want the authored JSON verbatim (%s)", got, authored)
+	}
+}
+
 // TestCandyModelBatchFieldsAreOpaqueRawJSON covers the four fields converted together (artifact,
-// service, volumes, aliases) with ONE table instead of four near-identical functions — the same
-// "one implementation per behavior" rule the change itself follows. Each row fails if the field
-// reverts to its authored slice type, or if the bytes stop being the authored JSON verbatim.
+// service, volumes, aliases) with ONE table instead of four near-identical functions.
 func TestCandyModelBatchFieldsAreOpaqueRawJSON(t *testing.T) {
 	cases := []struct {
 		field    string

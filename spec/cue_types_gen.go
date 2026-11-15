@@ -2485,7 +2485,10 @@ type CandyModel struct {
 	// bytes rather than importing the shape, so the def can move to the plugin that owns the body.
 	Extract RawBody `yaml:"extract,omitempty" json:"extract,omitempty"`
 
-	Data []CandyData `yaml:"data,omitempty" json:"data,omitempty"`
+	// data — the candy's data-seeding entries as OPAQUE BYTES, the third field on the hook/extract
+	// pattern: the authored #CandyData stays in spec (it is #Candy's own field), and the IR carries
+	// the JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
+	Data RawBody `yaml:"data,omitempty" json:"data,omitempty"`
 
 	Apk []ApkPackageSpec `yaml:"apk,omitempty" json:"apk,omitempty"`
 
@@ -2593,15 +2596,6 @@ type CandyModel struct {
 	// form). generate.go's emitBakedPlugins reads this to COPY the plugin's pre-built provider
 	// binary into every composing image.
 	BakePlugin []CandyRef `yaml:"bake_plugin,omitempty" json:"bake_plugin,omitempty"`
-}
-
-// DataYAML — stage candy-dir data into a volume at build, provision at deploy.
-type CandyData struct {
-	Src string `yaml:"src,omitempty" json:"src"`
-
-	Volume string `yaml:"volume,omitempty" json:"volume"`
-
-	Dest string `yaml:"dest,omitempty" json:"dest,omitempty"`
 }
 
 // #Packaging — the native-package metadata section (candy `packaging:`): the
@@ -3776,6 +3770,15 @@ type CandyExtract struct {
 	Path string `yaml:"path,omitempty" json:"path"`
 
 	Dest string `yaml:"dest,omitempty" json:"dest"`
+}
+
+// DataYAML — stage candy-dir data into a volume at build, provision at deploy.
+type CandyData struct {
+	Src string `yaml:"src,omitempty" json:"src"`
+
+	Volume string `yaml:"volume,omitempty" json:"volume"`
+
+	Dest string `yaml:"dest,omitempty" json:"dest,omitempty"`
 }
 
 // CandyArtifact — a file the candy publishes back to the operator post-setup.
