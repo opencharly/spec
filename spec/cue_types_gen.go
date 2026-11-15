@@ -2480,7 +2480,10 @@ type CandyModel struct {
 	// bytes rather than importing the shape, so the def can move to the plugin that owns the body.
 	Extract RawBody `yaml:"extract,omitempty" json:"extract,omitempty"`
 
-	Data []CandyData `yaml:"data,omitempty" json:"data,omitempty"`
+	// data — the candy's data-seeding entries as OPAQUE BYTES, the third field on the hook/extract
+	// pattern: the authored #CandyData stays in spec (it is #Candy's own field), and the IR carries
+	// the JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
+	Data RawBody `yaml:"data,omitempty" json:"data,omitempty"`
 
 	Apk []ApkPackageSpec `yaml:"apk,omitempty" json:"apk,omitempty"`
 
@@ -2746,15 +2749,6 @@ type ServiceWaitFor struct {
 	// timeout — how long to wait before failing the start. "30s" or a bare 30,
 	// matching stop_timeout's shape. Absent means the init's own default.
 	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-}
-
-// DataYAML — stage candy-dir data into a volume at build, provision at deploy.
-type CandyData struct {
-	Src string `yaml:"src,omitempty" json:"src"`
-
-	Volume string `yaml:"volume,omitempty" json:"volume"`
-
-	Dest string `yaml:"dest,omitempty" json:"dest,omitempty"`
 }
 
 // #Packaging — the native-package metadata section (candy `packaging:`): the
@@ -3799,6 +3793,15 @@ type CandyExtract struct {
 	Path string `yaml:"path,omitempty" json:"path"`
 
 	Dest string `yaml:"dest,omitempty" json:"dest"`
+}
+
+// DataYAML — stage candy-dir data into a volume at build, provision at deploy.
+type CandyData struct {
+	Src string `yaml:"src,omitempty" json:"src"`
+
+	Volume string `yaml:"volume,omitempty" json:"volume"`
+
+	Dest string `yaml:"dest,omitempty" json:"dest,omitempty"`
 }
 
 // #PackagingVariant — one named plugin-set variant.
