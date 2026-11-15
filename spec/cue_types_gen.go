@@ -2473,7 +2473,12 @@ type CandyModel struct {
 	RunOps []Op `yaml:"run_ops,omitempty" json:"run_ops,omitempty"`
 
 	// --- services / extract / data / apk ---
-	Service []CandyService `yaml:"service,omitempty" json:"service,omitempty"`
+	// service — the candy's service declarations as OPAQUE BYTES, on the hook/extract/data pattern:
+	// the authored #CandyService stays in spec (it is #Candy's own field), and the IR carries the
+	// JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
+	// The consumer side is TWO repos: the sdk adapter decodes, and plugin-box decodes its four
+	// model sites. PROGRAM/schema-ownership-rca-rdd.md section 7c carries the per-field inventory.
+	Service RawBody `yaml:"service,omitempty" json:"service,omitempty"`
 
 	// extract — the candy's file extractions as OPAQUE BYTES, the same shape as hook above: the
 	// authored #CandyExtract stays in spec (it is #Candy's own field), and the IR carries the JSON
@@ -2510,9 +2515,11 @@ type CandyModel struct {
 	Shell *Shell `yaml:"shell,omitempty" json:"shell,omitempty"`
 
 	// --- volumes / aliases ---
-	Volumes []CandyVolume `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	// volumes / aliases — OPAQUE BYTES for the same reason: the build model projects what the
+	// consumers need without importing the authored shapes (I1/D-SCH-7).
+	Volumes RawBody `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 
-	Aliases []CandyAlias `yaml:"aliases,omitempty" json:"aliases,omitempty"`
+	Aliases RawBody `yaml:"aliases,omitempty" json:"aliases,omitempty"`
 
 	// --- security / hooks / skills (the OCI-label-collector surface: CollectSecurity/CollectHooks
 	// read this per-candy field then apply the box-level #ResolvedBoxView.security override) ---
@@ -2571,7 +2578,8 @@ type CandyModel struct {
 	// projected onto the build model. artifact/requires_capability/secret/port mirror
 	// candy.cue's own fields+shapes exactly; capability widens the CandyView's narrow
 	// (preserve_user-only) #CandyCapabilitiesView to the full authored #CandyCapability.
-	Artifact []CandyArtifact `yaml:"artifact,omitempty" json:"artifact,omitempty"`
+	// artifact — OPAQUE BYTES; the authored #CandyArtifact stays #Candy's, the model carries bytes.
+	Artifact RawBody `yaml:"artifact,omitempty" json:"artifact,omitempty"`
 
 	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
 
@@ -2588,167 +2596,6 @@ type CandyModel struct {
 	// form). generate.go's emitBakedPlugins reads this to COPY the plugin's pre-built provider
 	// binary into every composing image.
 	BakePlugin []CandyRef `yaml:"bake_plugin,omitempty" json:"bake_plugin,omitempty"`
-}
-
-// ServiceEntry (spec). use_packaged XOR exec is a Go cross-field
-// rule (mixed-entry polymorphism allows the SAME name twice: one packaged form,
-// one exec form) — neither is required at the CUE layer.
-type CandyService struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	UsePackaged string `yaml:"use_packaged,omitempty" json:"use_packaged,omitempty"`
-
-	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
-
-	// distro restricts this entry to the named distros — a bare distro name
-	// ("debian") or a versioned tag ("debian:13"). Empty = every distro (the
-	// backward-compatible default). The service analogue of a check step's
-	// exclude_distros: — it lets ONE candy carry per-distro-DIVERGENT packaged
-	// units / exec daemons (the modular virtqemud.socket + virtnetworkd.socket
-	// on Fedora/Arch vs the monolithic libvirtd.socket on Debian/Ubuntu, whose
-	// libvirt is built without the split daemons) WITHOUT a <name>-host sibling
-	// candy (CLAUDE.md "Init-system polymorphism"; R3). Filtered at render time
-	// against the target distro tag chain (compileServiceSteps + generate.go).
-	Distro []string `yaml:"distro,omitempty" json:"distro,omitempty"`
-
-	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
-
-	Restart string `yaml:"restart,omitempty" json:"restart,omitempty"`
-
-	WorkingDirectory string `yaml:"working_directory,omitempty" json:"working_directory,omitempty"`
-
-	User string `yaml:"user,omitempty" json:"user,omitempty"`
-
-	After []string `yaml:"after,omitempty" json:"after,omitempty"`
-
-	Before []string `yaml:"before,omitempty" json:"before,omitempty"`
-
-	WantedBy []string `yaml:"wanted_by,omitempty" json:"wanted_by,omitempty"`
-
-	Stdout string `yaml:"stdout,omitempty" json:"stdout,omitempty"`
-
-	StopTimeout string `yaml:"stop_timeout,omitempty" json:"stop_timeout,omitempty"`
-
-	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"`
-
-	Enable bool `yaml:"enable,omitempty" json:"enable,omitempty"`
-
-	// exec_start_pre / exec_start_post — ordered hook commands run around a CUSTOM
-	// (exec:) entry's own start, rendered by the init system's service_template
-	// (systemd: ExecStartPre= / ExecStartPost= lines, emitted in authored order).
-	// They exist for guards belonging to the SERVICE's lifecycle rather than to the
-	// install timeline: a plan step runs ONCE, at deploy, whereas a pre-start hook
-	// re-asserts a host precondition on EVERY start (a restart included), and a
-	// post-start hook is the only place a guard runs ALONGSIDE the daemon it
-	// guards — the sole vantage from which that daemon's own socket/API is
-	// reachable. Both are init-supervised, so a failure surfaces in the unit's
-	// status instead of being swallowed; prefix a command with "-" for systemd's
-	// ignore-failure semantics.
-	// Canonical consumer: candy/k3s-server (the cgroup cpuset-delegation assertion
-	// and the CRD-establishment wedge heal).
-	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
-
-	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
-
-	Overrides *CandyServiceOverrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
-
-	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
-
-	Events string `yaml:"event,omitempty" json:"event,omitempty"`
-
-	AutoStart *bool `yaml:"auto_start,omitempty" json:"auto_start,omitempty"`
-
-	StartRetries int `yaml:"start_retry,omitempty" json:"start_retry,omitempty"`
-
-	StartSecs int `yaml:"start_sec,omitempty" json:"start_sec,omitempty"`
-
-	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
-
-	ExitCode string `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
-
-	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
-
-	// ---- Portable lifecycle fields -------------------------------------------
-	// Every field below is expressible by at least TWO of the three init systems.
-	// That is the admission rule: a field only one init can honour belongs in
-	// unit_options: instead, where it is named as that init's own.
-	//
-	// type — systemd Type=; supervisord approximates oneshot with startsecs=0;
-	// OpenRC distinguishes forking via command_background.
-	Type string `yaml:"type,omitempty" json:"type,omitempty"`
-
-	// requires — a HARD dependency, distinct from after:'s ordering. systemd
-	// Requires=; OpenRC depend(){ need … }, which its template already emits for
-	// localmount. supervisord has no equivalent and ignores it.
-	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
-
-	// restart_sec — delay before a restart. systemd RestartSec=; OpenRC
-	// --respawn-delay. Accepts "5s" or a bare 5 (Go-coerced; the Go field is string,
-	// matching stop_timeout's shape).
-	RestartSec string `yaml:"restart_sec,omitempty" json:"restart_sec,omitempty"`
-
-	// watchdog_sec — liveness deadline. systemd WatchdogSec=; OpenRC
-	// --healthcheck-timer. Requires type: notify on systemd to be meaningful.
-	WatchdogSec string `yaml:"watchdog_sec,omitempty" json:"watchdog_sec,omitempty"`
-
-	// unit_options — the ONE escape hatch for init-specific directives, keyed
-	// init-name -> directive -> value.
-	//
-	// It exists so #ServiceRenderContext does not grow a field per init-specific
-	// knob. That struct is a kind-AGNOSTIC envelope rendered by every init's
-	// template; putting NotifyAccess, Slice, KillMode, RuntimeDirectory and a
-	// hardening block into it would make it systemd's typed shape wearing a generic
-	// name — the leak the boundary law names. With this map, a FOURTH init needs no
-	// schema change, exactly as the openrc init entity needed no Go change.
-	//
-	// A value may be a scalar or a list; a list emits the directive once per element,
-	// which is what systemd expects for repeatable directives such as
-	// RuntimeDirectory= or ReadWritePaths=.
-	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
-
-	// wait_for — block the service's start until the paths it needs exist.
-	//
-	// Nine hand-rolled versions of this loop exist in the candy corpus today
-	// (labwc, kde-selkies x2, chrome-cdp, wayvnc x3, swaync, waybar, waybar-labwc,
-	// sway), each re-deriving the same poll with its own hardcoded timeout — the
-	// sleeps and magic numbers R4 forbids. One of them is already wrong: labwc's
-	// declares TIMEOUT=30 but sleeps 0.5s per iteration while counting +1, so it
-	// actually gives up after 15 seconds. That is the failure mode a hand-rolled
-	// loop has and a declared one cannot.
-	//
-	// Each init lowers this natively — systemd ExecStartPre=, supervisord a
-	// rendered pre-exec ahead of the command, OpenRC start_pre() — so the wait is
-	// SUPERVISED: a timeout fails the unit and surfaces in its status, instead of a
-	// wrapper exiting non-zero and looking like a crash.
-	WaitFor *ServiceWaitFor `yaml:"wait_for,omitempty" json:"wait_for,omitempty"`
-}
-
-type CandyServiceOverrides struct {
-	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
-
-	After []string `yaml:"after,omitempty" json:"after,omitempty"`
-
-	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
-}
-
-// #ServiceWaitFor is a readiness precondition on a service's start.
-//
-// PATHS only, deliberately. All nine existing loops wait on a filesystem path (a
-// Wayland socket, an IPC socket, a lock file); none polls a TCP port. A ports:
-// form would need a probe tool the base images do not all carry, so it waits for
-// a real second consumer rather than being designed against a hypothetical one.
-type ServiceWaitFor struct {
-	// paths — every path must exist before the service starts. Relative paths are
-	// resolved by the init against the service's own working directory, exactly as
-	// exec: is.
-	//
-	// Required, and at least one element: a wait_for with no paths waits for
-	// nothing while reading like a guard, which is worse than no guard at all.
-	Paths []string `yaml:"paths,omitempty" json:"paths"`
-
-	// timeout — how long to wait before failing the start. "30s" or a bare 30,
-	// matching stop_timeout's shape. Absent means the init's own default.
-	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 }
 
 // #Packaging — the native-package metadata section (candy `packaging:`): the
@@ -2808,37 +2655,6 @@ type EnvConfig struct {
 	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty"`
 
 	PathAppend []string `yaml:"path_append,omitempty" json:"path_append,omitempty"`
-}
-
-// CandyArtifact — a file the candy publishes back to the operator post-setup.
-type CandyArtifact struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Path string `yaml:"path,omitempty" json:"path"`
-
-	RetrieveTo string `yaml:"retrieve_to,omitempty" json:"retrieve_to"`
-
-	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
-
-	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
-
-	WaitSeconds int `yaml:"wait_second,omitempty" json:"wait_second,omitempty"`
-
-	Rewrite []CandyArtifactRewrite `yaml:"rewrite,omitempty" json:"rewrite,omitempty"`
-
-	// register: an optional NAME-BLIND post-retrieve processing hint (e.g. "kubeconfig") —
-	// what to do with the retrieved artifact beyond the generic retrieve/rewrite pipeline,
-	// dispatched by a host-side registry keyed on this word (retrieveArtifactsAndK3s /
-	// artifactRegisterHandlers). Replaces a hardcoded candy-NAME check
-	// (deployHasCandy(candyList, "k3s-server")) with a declaration the candy itself carries,
-	// so a future candy needing the same registration need not be named "k3s-server".
-	Register string `yaml:"register,omitempty" json:"register,omitempty"`
-}
-
-type CandyArtifactRewrite struct {
-	Find string `yaml:"find,omitempty" json:"find"`
-
-	Replace string `yaml:"replace,omitempty" json:"replace,omitempty"`
 }
 
 // CandyCapabilities — image-level facts a candy contributes (aggregated at
@@ -3784,6 +3600,167 @@ type CandyRoute struct {
 	Port int `yaml:"port,omitempty" json:"port"`
 }
 
+// ServiceEntry (spec). use_packaged XOR exec is a Go cross-field
+// rule (mixed-entry polymorphism allows the SAME name twice: one packaged form,
+// one exec form) — neither is required at the CUE layer.
+type CandyService struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	UsePackaged string `yaml:"use_packaged,omitempty" json:"use_packaged,omitempty"`
+
+	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
+
+	// distro restricts this entry to the named distros — a bare distro name
+	// ("debian") or a versioned tag ("debian:13"). Empty = every distro (the
+	// backward-compatible default). The service analogue of a check step's
+	// exclude_distros: — it lets ONE candy carry per-distro-DIVERGENT packaged
+	// units / exec daemons (the modular virtqemud.socket + virtnetworkd.socket
+	// on Fedora/Arch vs the monolithic libvirtd.socket on Debian/Ubuntu, whose
+	// libvirt is built without the split daemons) WITHOUT a <name>-host sibling
+	// candy (CLAUDE.md "Init-system polymorphism"; R3). Filtered at render time
+	// against the target distro tag chain (compileServiceSteps + generate.go).
+	Distro []string `yaml:"distro,omitempty" json:"distro,omitempty"`
+
+	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Restart string `yaml:"restart,omitempty" json:"restart,omitempty"`
+
+	WorkingDirectory string `yaml:"working_directory,omitempty" json:"working_directory,omitempty"`
+
+	User string `yaml:"user,omitempty" json:"user,omitempty"`
+
+	After []string `yaml:"after,omitempty" json:"after,omitempty"`
+
+	Before []string `yaml:"before,omitempty" json:"before,omitempty"`
+
+	WantedBy []string `yaml:"wanted_by,omitempty" json:"wanted_by,omitempty"`
+
+	Stdout string `yaml:"stdout,omitempty" json:"stdout,omitempty"`
+
+	StopTimeout string `yaml:"stop_timeout,omitempty" json:"stop_timeout,omitempty"`
+
+	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"`
+
+	Enable bool `yaml:"enable,omitempty" json:"enable,omitempty"`
+
+	// exec_start_pre / exec_start_post — ordered hook commands run around a CUSTOM
+	// (exec:) entry's own start, rendered by the init system's service_template
+	// (systemd: ExecStartPre= / ExecStartPost= lines, emitted in authored order).
+	// They exist for guards belonging to the SERVICE's lifecycle rather than to the
+	// install timeline: a plan step runs ONCE, at deploy, whereas a pre-start hook
+	// re-asserts a host precondition on EVERY start (a restart included), and a
+	// post-start hook is the only place a guard runs ALONGSIDE the daemon it
+	// guards — the sole vantage from which that daemon's own socket/API is
+	// reachable. Both are init-supervised, so a failure surfaces in the unit's
+	// status instead of being swallowed; prefix a command with "-" for systemd's
+	// ignore-failure semantics.
+	// Canonical consumer: candy/k3s-server (the cgroup cpuset-delegation assertion
+	// and the CRD-establishment wedge heal).
+	ExecStartPre []string `yaml:"exec_start_pre,omitempty" json:"exec_start_pre,omitempty"`
+
+	ExecStartPost []string `yaml:"exec_start_post,omitempty" json:"exec_start_post,omitempty"`
+
+	Overrides *CandyServiceOverrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
+
+	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Events string `yaml:"event,omitempty" json:"event,omitempty"`
+
+	AutoStart *bool `yaml:"auto_start,omitempty" json:"auto_start,omitempty"`
+
+	StartRetries int `yaml:"start_retry,omitempty" json:"start_retry,omitempty"`
+
+	StartSecs int `yaml:"start_sec,omitempty" json:"start_sec,omitempty"`
+
+	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
+
+	ExitCode string `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
+
+	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// ---- Portable lifecycle fields -------------------------------------------
+	// Every field below is expressible by at least TWO of the three init systems.
+	// That is the admission rule: a field only one init can honour belongs in
+	// unit_options: instead, where it is named as that init's own.
+	//
+	// type — systemd Type=; supervisord approximates oneshot with startsecs=0;
+	// OpenRC distinguishes forking via command_background.
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+
+	// requires — a HARD dependency, distinct from after:'s ordering. systemd
+	// Requires=; OpenRC depend(){ need … }, which its template already emits for
+	// localmount. supervisord has no equivalent and ignores it.
+	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+
+	// restart_sec — delay before a restart. systemd RestartSec=; OpenRC
+	// --respawn-delay. Accepts "5s" or a bare 5 (Go-coerced; the Go field is string,
+	// matching stop_timeout's shape).
+	RestartSec string `yaml:"restart_sec,omitempty" json:"restart_sec,omitempty"`
+
+	// watchdog_sec — liveness deadline. systemd WatchdogSec=; OpenRC
+	// --healthcheck-timer. Requires type: notify on systemd to be meaningful.
+	WatchdogSec string `yaml:"watchdog_sec,omitempty" json:"watchdog_sec,omitempty"`
+
+	// unit_options — the ONE escape hatch for init-specific directives, keyed
+	// init-name -> directive -> value.
+	//
+	// It exists so #ServiceRenderContext does not grow a field per init-specific
+	// knob. That struct is a kind-AGNOSTIC envelope rendered by every init's
+	// template; putting NotifyAccess, Slice, KillMode, RuntimeDirectory and a
+	// hardening block into it would make it systemd's typed shape wearing a generic
+	// name — the leak the boundary law names. With this map, a FOURTH init needs no
+	// schema change, exactly as the openrc init entity needed no Go change.
+	//
+	// A value may be a scalar or a list; a list emits the directive once per element,
+	// which is what systemd expects for repeatable directives such as
+	// RuntimeDirectory= or ReadWritePaths=.
+	UnitOptions map[string]map[string]any/* CUE disjunction: (string|list) */ `yaml:"unit_options,omitempty" json:"unit_options,omitempty"`
+
+	// wait_for — block the service's start until the paths it needs exist.
+	//
+	// Nine hand-rolled versions of this loop exist in the candy corpus today
+	// (labwc, kde-selkies x2, chrome-cdp, wayvnc x3, swaync, waybar, waybar-labwc,
+	// sway), each re-deriving the same poll with its own hardcoded timeout — the
+	// sleeps and magic numbers R4 forbids. One of them is already wrong: labwc's
+	// declares TIMEOUT=30 but sleeps 0.5s per iteration while counting +1, so it
+	// actually gives up after 15 seconds. That is the failure mode a hand-rolled
+	// loop has and a declared one cannot.
+	//
+	// Each init lowers this natively — systemd ExecStartPre=, supervisord a
+	// rendered pre-exec ahead of the command, OpenRC start_pre() — so the wait is
+	// SUPERVISED: a timeout fails the unit and surfaces in its status, instead of a
+	// wrapper exiting non-zero and looking like a crash.
+	WaitFor *ServiceWaitFor `yaml:"wait_for,omitempty" json:"wait_for,omitempty"`
+}
+
+type CandyServiceOverrides struct {
+	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
+
+	After []string `yaml:"after,omitempty" json:"after,omitempty"`
+
+	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
+}
+
+// #ServiceWaitFor is a readiness precondition on a service's start.
+//
+// PATHS only, deliberately. All nine existing loops wait on a filesystem path (a
+// Wayland socket, an IPC socket, a lock file); none polls a TCP port. A ports:
+// form would need a probe tool the base images do not all carry, so it waits for
+// a real second consumer rather than being designed against a hypothetical one.
+type ServiceWaitFor struct {
+	// paths — every path must exist before the service starts. Relative paths are
+	// resolved by the init against the service's own working directory, exactly as
+	// exec: is.
+	//
+	// Required, and at least one element: a wait_for with no paths waits for
+	// nothing while reading like a guard, which is worse than no guard at all.
+	Paths []string `yaml:"paths,omitempty" json:"paths"`
+
+	// timeout — how long to wait before failing the start. "30s" or a bare 30,
+	// matching stop_timeout's shape. Absent means the init's own default.
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+}
+
 // ExtractYAML — copy a path out of another OCI image into this one. source is
 // an image ref; path (in the source image) and dest (in this image) are
 // absolute (validateCandyContents).
@@ -3802,6 +3779,37 @@ type CandyData struct {
 	Volume string `yaml:"volume,omitempty" json:"volume"`
 
 	Dest string `yaml:"dest,omitempty" json:"dest,omitempty"`
+}
+
+// CandyArtifact — a file the candy publishes back to the operator post-setup.
+type CandyArtifact struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	RetrieveTo string `yaml:"retrieve_to,omitempty" json:"retrieve_to"`
+
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
+
+	WaitSeconds int `yaml:"wait_second,omitempty" json:"wait_second,omitempty"`
+
+	Rewrite []CandyArtifactRewrite `yaml:"rewrite,omitempty" json:"rewrite,omitempty"`
+
+	// register: an optional NAME-BLIND post-retrieve processing hint (e.g. "kubeconfig") —
+	// what to do with the retrieved artifact beyond the generic retrieve/rewrite pipeline,
+	// dispatched by a host-side registry keyed on this word (retrieveArtifactsAndK3s /
+	// artifactRegisterHandlers). Replaces a hardcoded candy-NAME check
+	// (deployHasCandy(candyList, "k3s-server")) with a declaration the candy itself carries,
+	// so a future candy needing the same registration need not be named "k3s-server".
+	Register string `yaml:"register,omitempty" json:"register,omitempty"`
+}
+
+type CandyArtifactRewrite struct {
+	Find string `yaml:"find,omitempty" json:"find"`
+
+	Replace string `yaml:"replace,omitempty" json:"replace,omitempty"`
 }
 
 // #PackagingVariant — one named plugin-set variant.
