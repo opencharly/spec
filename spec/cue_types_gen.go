@@ -2512,7 +2512,10 @@ type CandyModel struct {
 	// read this per-candy field then apply the box-level #ResolvedBoxView.security override) ---
 	Security *Security `yaml:"security,omitempty" json:"security,omitempty"`
 
-	Hook *CandyHook `yaml:"hook,omitempty" json:"hook,omitempty"`
+	// hook — the candy lifecycle hooks as OPAQUE BYTES: the authored #CandyHook moves into the plugin
+	// that OWNS the candy body (DESIGN.md 3.1), so the IR carries the bytes rather than importing that
+	// shape (I1/D-SCH-7). deploykit's specCandyAdapter decodes what the build engine needs.
+	Hook RawBody `yaml:"hook,omitempty" json:"hook,omitempty"`
 
 	// skills: the NAMES of the `skill:` nodes this candy OWNS — the build-time association
 	// `skill.cue`'s `owner:` records, projected onto the wire model so a consumer holding only
