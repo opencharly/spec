@@ -2019,6 +2019,13 @@ type BuildResolveReply struct {
 	// generate-only path that writes Containerfiles host-side (transitional).
 	ResolvedProject *ResolvedProject `yaml:"resolved_project,omitempty" json:"resolved_project,omitempty"`
 
+	// diagnostics carries every diagnostic-grade finding the resolve emitted, so the CALLER can
+	// count what the resolve printed. Until this field existed the only channel was inherited
+	// stderr: `charly box validate` printed the init-dependency warning and then reported
+	// "0 warnings", because the namespaced-box fill happens under THIS reply (OpResolve) while the
+	// summary is built from OpValidate's own diagnostics (opencharly/sdk#519).
+	Diagnostics Diagnostics `yaml:"diagnostics,omitempty" json:"diagnostics,omitempty"`
+
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
@@ -2898,6 +2905,21 @@ type BuildTarget struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
 	Auto bool `yaml:"auto,omitempty" json:"auto,omitempty"`
+}
+
+// #Diagnostics is the OpValidate reply. HasErrors() is a pure Go METHOD — CUE
+// cannot express it — and stays hand-written in spec/deploy_methods.go.
+type Diagnostics struct {
+	Items []Diagnostic `yaml:"items,omitempty" json:"items,omitempty"`
+}
+
+// #Diagnostic is one finding from a plugin kind's deep OpValidate check (F7/C8).
+type Diagnostic struct {
+	Severity string `yaml:"severity,omitempty" json:"severity,omitempty"`
+
+	Message string `yaml:"message,omitempty" json:"message"`
+
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
 }
 
 // #ExtraCandyRef is a candy ref collected IN ADDITION to the closure, together with the
@@ -5087,21 +5109,6 @@ type DeployVenue struct {
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 
 	Substrate RawBody `yaml:"substrate,omitempty" json:"substrate,omitempty"`
-}
-
-// #Diagnostic is one finding from a plugin kind's deep OpValidate check (F7/C8).
-type Diagnostic struct {
-	Severity string `yaml:"severity,omitempty" json:"severity,omitempty"`
-
-	Message string `yaml:"message,omitempty" json:"message"`
-
-	Path string `yaml:"path,omitempty" json:"path,omitempty"`
-}
-
-// #Diagnostics is the OpValidate reply. HasErrors() is a pure Go METHOD — CUE
-// cannot express it — and stays hand-written in spec/deploy_methods.go.
-type Diagnostics struct {
-	Items []Diagnostic `yaml:"items,omitempty" json:"items,omitempty"`
 }
 
 // #StructuralKindLoadEnv is the OpLoad invocation context (op.Env) the host
