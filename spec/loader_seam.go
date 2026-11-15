@@ -331,6 +331,13 @@ type ProjectLoader interface {
 	// strict; it needs the host's registry-derived verb primaries to parse its candy cases, so it
 	// runs host-side and reaches the loader's compiled schema through this seam.
 	ValidateEntityCUE(kind, label string, entity cue.Value) error
+	// ValidateEntityCUEWithGates is the same check resolved through the host's THREADED kind
+	// gates: a kind whose authored body moved into a plugin is reachable only through its
+	// DECLARED gate, while the base table's entry for such a kind is whatever keeper remained
+	// (`vm` -> `#ResolvedVm`, the POST-default envelope) and an authored document can never
+	// satisfy it. The host reaches it HERE rather than importing the mechanism kits, which are
+	// for plugins (opencharly/opencharly#1048).
+	ValidateEntityCUEWithGates(kind, label string, entity cue.Value, gates map[string]KindGate) error
 	// CueDocFromYAML ingests one YAML document into a cue.Value (the whole doc), built with the
 	// loader's own cue.Context so the result can Unify against its compiled schema (K1 unit 2
 	// relocation; the host-threaded schema handle was dropped in K-wave 2 cone R1).
