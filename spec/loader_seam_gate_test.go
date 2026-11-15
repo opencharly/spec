@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"cuelang.org/go/cue"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -90,4 +91,21 @@ func TestKindGateCarriesTheAuthoredAndWireShapesApart(t *testing.T) {
 	if !strings.Contains(string(out), `"wire_def":"#VmValue"`) {
 		t.Fatalf("a set WireDef must ride the wire, got %s", out)
 	}
+}
+
+// TestProjectLoaderExposesTheGatedEntityValidation is the compile-time assertion this declaration
+// needs: it pins that ProjectLoader carries ValidateEntityCUEWithGates with EXACTLY the signature
+// the host calls, so the method cannot be removed, renamed or re-shaped without this test failing
+// to compile. Its behaviour belongs to the implementor (opencharly/sdk#527 exercises the gated
+// resolution and its nil-gates control); what a contract PR owes is that the declaration itself is
+// the one the caller binds.
+func TestProjectLoaderExposesTheGatedEntityValidation(t *testing.T) {
+	var loader ProjectLoader
+	var gated func(string, string, cue.Value, map[string]KindGate) error
+	if loader != nil {
+		gated = loader.ValidateEntityCUEWithGates
+	}
+	// A nil loader yields a nil method value; assigning it above is what compiles the signature
+	// against the interface. The assertion is the assignment itself.
+	_ = gated
 }
