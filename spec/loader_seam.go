@@ -21,6 +21,15 @@ import (
 // ProjectWalker seam below, and the per-node MATERIALIZE exclusively through Materializer, both
 // resolved from the registered compiled-in loader plugin (mirroring DocParser/Threaded for PARSE).
 
+// KindGate is one kind's declared gate: the CUE definition path (e.g. "#CandyValue") and the
+// SERVED CUE source text that declares it. Both ride spec.Threaded as data; the receiving process
+// compiles Source locally, so a gate declared by a plugin is reachable from a process that holds
+// no plugin registry (the box-validate path).
+type KindGate struct {
+	Def    string `yaml:"def" json:"def"`
+	Source string `yaml:"source" json:"source"`
+}
+
 // Threaded is the host-computed, registry-derived DATA the per-document parse consults instead of
 // querying the provider registry (boundary law clause D): which words are recognized kinds /
 // deploy substrates, which external kinds may nest sub-entity members, and each plugin verb's
@@ -46,6 +55,13 @@ type Threaded struct {
 	// the byte-exact predicate is threaded, never approximated. A word absent from the set is
 	// NOT an external deploy substrate (isExternalDeploySubstrate would return false for it).
 	ExternalDeploySubstrates map[string]bool
+	// KindGates is the kind word → its DECLARED gate, carried as Clause-D DATA so a loader-side
+	// gate can compile the definition a plugin declares WITHOUT a registry query and WITHOUT a
+	// second private copy of the schema (RCA §3 I2/I3/I4, PROGRAM/schema-ownership-rca-rdd.md).
+	// The host fills it from the composed schema; the loader compiles Source in its own context
+	// and looks Def up there, falling back to the base module only when a word is absent.
+	KindGates map[string]KindGate
+
 	// StructuralDeclaredFields is the STRUCTURAL kind word → its declared input-schema body FIELD
 	// NAMES set (the parent-disc channel for the in-body member scan): the host fills it from the
 	// plugin's REGISTERED schema (the capability's InputDef, the plugin's own #XInput) —
