@@ -337,8 +337,10 @@ type ProjectLoader interface {
 	// (K1 unit 2 relocation).
 	ValidateNodeDocCUE(label string, data []byte) error
 	// ApplyCueDefaults fills schema-declared defaults into an already-RESOLVED entity by unifying
-	// its marshaled form with #<Kind> and decoding back (K1 unit 2 relocation).
-	ApplyCueDefaults(kind string, out any) error
+	// its marshaled form with the kind's AUTHORED def and decoding back. The def is resolved
+	// through t.KindGates first — a body that moved into a plugin is reachable only that way — so
+	// the threaded snapshot is part of the contract, exactly as it is for the sibling seams below.
+	ApplyCueDefaults(kind string, out any, t Threaded) error
 	// ResolveMergedDeployTree returns the top-level Deploy (deploy-node) map — the merged project
 	// charly.yml + per-host operator overlay, ready for dotted-path traversal — the host-side
 	// merged-tree read the check host seams (deployNodePluginContext + check_venue_resolve) need.
