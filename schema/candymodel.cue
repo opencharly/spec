@@ -79,6 +79,8 @@ package schema
 	// service — the candy's service declarations as OPAQUE BYTES, on the hook/extract/data pattern:
 	// the authored #CandyService stays in spec (it is #Candy's own field), and the IR carries the
 	// JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
+	// The consumer side is TWO repos: the sdk adapter decodes, and plugin-box decodes its four
+	// model sites. PROGRAM/schema-ownership-rca-rdd.md section 7c carries the per-field inventory.
 	service?: bytes @go(Service,type=RawBody)
 	// extract — the candy's file extractions as OPAQUE BYTES, the same shape as hook above: the
 	// authored #CandyExtract stays in spec (it is #Candy's own field), and the IR carries the JSON
