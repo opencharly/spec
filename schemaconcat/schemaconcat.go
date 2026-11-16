@@ -55,16 +55,70 @@ func ConcatSchema(fsys fs.FS, dir string, exclude func(name string) bool) (strin
 		names = append(names, e.Name())
 	}
 	sort.Strings(names) // deterministic concatenation
+	// Imports are HOISTED, not concatenated in place. CUE requires every import to precede all
+	// declarations, so a file whose `import "list"` is joined after another file's defs produces
+	// `expected label or ':', found 'STRING'` — measured when #AuditEvent's `... & list.MaxItems(32)`
+	// arrived. Hoisting keeps the one-directory concatenation working while letting any schema file
+	// use a CUE builtin, and deduplicates so a builtin imported by two files is emitted once.
+	imports := map[string]struct{}{}
 	var b strings.Builder
 	for _, n := range names {
 		data, err := fs.ReadFile(fsys, path(dir, n))
 		if err != nil {
 			return "", nil, fmt.Errorf("read schema %s: %w", n, err)
 		}
-		b.Write(stripPackageClause(data))
+		body, found := stripImportDecls(stripPackageClause(data))
+		for _, imp := range found {
+			imports[imp] = struct{}{}
+		}
+		b.Write(body)
 		b.WriteString("\n")
 	}
-	return b.String(), names, nil
+	var out strings.Builder
+	if len(imports) > 0 {
+		sorted := make([]string, 0, len(imports))
+		for imp := range imports {
+			sorted = append(sorted, imp)
+		}
+		sort.Strings(sorted)
+		for _, imp := range sorted {
+			out.WriteString(imp)
+			out.WriteString("\n")
+		}
+		out.WriteString("\n")
+	}
+	out.WriteString(b.String())
+	return out.String(), names, nil
+}
+
+// stripImportDecls removes a schema file's `import` declarations and returns them verbatim, so the
+// caller can hoist them above every concatenated declaration. Both CUE forms are handled: the
+// single-line `import "list"` and the parenthesized block `import ( "list" \n "strings" )`.
+// A file with no import is returned untouched.
+func stripImportDecls(src []byte) ([]byte, []string) {
+	var (
+		out     bytes.Buffer
+		imports []string
+		inBlock bool
+	)
+	for _, raw := range bytes.SplitAfter(src, []byte("\n")) {
+		line := bytes.TrimSpace(raw)
+		switch {
+		case inBlock:
+			imports = append(imports, string(raw))
+			if bytes.Contains(line, []byte(")")) {
+				inBlock = false
+			}
+		case bytes.HasPrefix(line, []byte("import (")):
+			imports = append(imports, string(raw))
+			inBlock = true
+		case bytes.HasPrefix(line, []byte("import ")):
+			imports = append(imports, string(raw))
+		default:
+			out.Write(raw)
+		}
+	}
+	return out.Bytes(), imports
 }
 
 // path joins a dir and a file name with "/" (fs.FS always uses forward slashes,
