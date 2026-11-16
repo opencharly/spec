@@ -111,19 +111,3 @@ func TestTheAuditRecordCarriesDesignsShape(t *testing.T) {
 		}
 	})
 }
-
-// TestTheHostMethodVocabularyIsClosed gates §4.6's "It is closed: adding a method amends this
-// document." `audit_append` must be a member (D-AUDIT-4 makes it the ONLY writer), and the set is
-// carried by the schema rather than by this test — so the assertion is that the record type and
-// the method coexist, not that a list somewhere contains a string.
-func TestTheHostMethodVocabularyIsClosed(t *testing.T) {
-	// If #AuditRecord exists and audit_append is its only writer (§4.6's table), then the method
-	// set must include it. The pairing is what this asserts: the record type without the method
-	// would be a contract nothing can write.
-	var r spec.AuditRecord
-	r.Identity, r.Action = "i", "a"
-	r.Outcome = spec.AuditOutcome{Ok: true}
-	if r.Identity == "" || r.Action == "" {
-		t.Fatal("#AuditRecord is not constructible — audit_append would have no value to write")
-	}
-}

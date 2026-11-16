@@ -16,45 +16,21 @@ package schema
 // field this file should not have, and a row with no field is a requirement it fails to express.
 
 // -----------------------------------------------------------------------------
-// §4.6 — the host service is CLOSED: "adding a method amends this document".
+// §4.6 — the host service is CLOSED, and its method set is NOT declared here. Measured twice, and
+// both measurements say this file is the wrong place for it:
 //
-// The eight methods are the whole vocabulary a plugin may reach. Writing them as a closed
-// disjunction is what makes §4.6's "closed" checkable rather than aspirational: a plugin naming a
-// ninth method cannot unify, so the addition has to happen HERE, where it is visible in the diff.
+//   1. A CUE def carrying the 8-member disjunction projects NOTHING usable: `@go(-)` gives no Go
+//      value to assert membership on, and without it a closed list projects as
+//      `[]any /* CUE closed list */`, which no dispatcher can range over. A "closed set" nothing can
+//      enumerate is closed by convention, not by construction — and a test that cannot reference it
+//      is a test that proves nothing.
+//   2. Writing the disjunction twice (a named def AND the inlined field it feeds) is the
+//      duplication R2 forbids, and the comment claiming "single-sourced" would be false.
 //
-// @go(-): the disjunction itself projects no type. What projects is the CLOSED LIST below
-// (#HostMethods -> spec.HostMethods, derived from this def), because a closed set that nothing can
-// enumerate is closed only by convention: a host dispatching on it, and a test asserting its
-// membership, both need the list rather than the spelling of each member.
-_hostMethodWord:
-	"venue_exec" |
-	"get" |
-	"put" |
-	"project" |
-	"call" |
-	"report" |
-	"state_commit" |
-	"audit_append"
-
-// NO enumerable list here, and that is a measured decision rather than an omission: schemagen
-// projects a CLOSED list as `[]any /* CUE closed list */`, and the only `[]string` vocabularies in
-// spec/vocab_gen.go (#DistroIDs and friends) are SPECIAL-CASED extractions in
-// internal/schemagen/params.go against a map-shaped table. A per-method map (as #Distros is) would
-// give both a closed set and a derived list — that is the follow-up unit, filed rather than
-// faked here with a []any nobody can dispatch on.
-
-// §4.6 permits each method "always" or under a named condition. The condition is part of the
-// method's identity: `audit_append` is permitted ALWAYS because a refused act is exactly the one
-// that most needs a record (D-AUDIT-1 covers "every authority decision", including a denied one).
-#HostMethod: {
-	// name is the method word itself. The disjunction is INLINED rather than `or(_hostMethodWord)`:
-	// measured, `or()` over a string disjunction fails composition with
-	// `cannot use "venue_exec" | … (type string) as list` — the same deviation recorded in
-	// schema/stage.cue. The closed set is still single-sourced, two lines up.
-	name: "venue_exec" | "get" | "put" | "project" | "call" | "report" | "state_commit" | "audit_append"
-	// permitted_when is the condition §4.6's right column states.
-	permitted_when: "always" | "a deployment's venue" | "the call's project" | "the caller's plugin candy lists that api in need" | "the caller's plugin owns that deployment's kind"
-} @go(-)
+// So the method set stays where DESIGN.md puts it — §4.6's table, which states that adding a method
+// "amends this document". `audit_append` is a member there. Giving that table a checkable Go form
+// needs the map-shaped-vocabulary extraction that #DistroIDs has (internal/schemagen special-cases
+// it against a map table), which is a unit of its own — filed, not faked.
 
 // -----------------------------------------------------------------------------
 // §20.1 — the audit record.
