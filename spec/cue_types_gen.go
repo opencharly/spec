@@ -3938,6 +3938,20 @@ type OciRef string
 // is reachable by either route without a second declaration surface.
 type PluginSource string
 
+// #ResolvedCandyAlias — one entry of a candy's `alias:` list, post-default.
+type ResolvedCandyAlias struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Command string `yaml:"command,omitempty" json:"command"`
+}
+
+// #ResolvedCandyVolume — one entry of a candy's `volume:` list, post-default.
+type ResolvedCandyVolume struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Path string `yaml:"path,omitempty" json:"path"`
+}
+
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
 // authoring kind (never in #Node/#Op) — a pure generated wire/render struct, single-sourced
 // here so `charly task cue-gen` produces the Go struct charly core's registry-coupled floor files

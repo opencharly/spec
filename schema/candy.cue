@@ -704,3 +704,37 @@ _source: {
 	"huawei-app-gallery": {}
 } @vocab(spec)
 _sourceWord: [for w, _ in _source {w}]
+
+// -----------------------------------------------------------------------------
+// #Resolved* — the RESOLVED twins of the authored candy sub-shapes.
+//
+// THE AUTHORED/WIRE SPLIT, per DESIGN.md 3.1 and 10.2 and the precedent that landed
+// the `vm` unit (spec#328's KindGate{Def, WireDef}; spec's charly_names.go:
+// "VmSpec is the charly name for the vm entity: the authored #Vm moved into
+// plugin-substrate; VmSpec = ResolvedVm").
+//
+// The authored defs above (#CandyAlias, #CandyVolume, ...) are the shapes a user
+// WRITES under `candy:`; 3.1 assigns them to the plugin that owns the candy body.
+// The resolved twins below are what a consumer DECODES an opaque body into; 10.2
+// assigns them to spec and they are generated into Go exactly like every other spec
+// shape.
+//
+// They are written out EXPLICITLY rather than embedding the authored def, for the
+// reason #ResolvedVm states: the resolved envelope carries PLAIN post-default
+// values, not the authored def's validation machinery (a volume name's regex, an
+// alias command's non-emptiness). That is also why the twins cannot drift from the
+// authored defs -- they answer different questions, which is what makes 3.1 and
+// 10.2 satisfiable at once without a copy of any authored shape.
+// -----------------------------------------------------------------------------
+
+// #ResolvedCandyAlias — one entry of a candy's `alias:` list, post-default.
+#ResolvedCandyAlias: {
+	name:    string @go(Name)
+	command: string @go(Command)
+}
+
+// #ResolvedCandyVolume — one entry of a candy's `volume:` list, post-default.
+#ResolvedCandyVolume: {
+	name: string @go(Name)
+	path: string @go(Path)
+}
