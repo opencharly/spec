@@ -10052,6 +10052,111 @@ type SkillReference struct {
 	Content string `yaml:"content,omitempty" json:"content"`
 }
 
+// #Count / #Text — DESIGN.cue:53-54's two scalar primitives, transcribed because this module had no
+// def for either and a stage's `attempt`, `concurrency` and `prompt` are exactly them. ONE definition
+// each (R2).
+type Count int64
+
+type Text string
+
+// #Retry — D-FLOW-2: a stage's repetition is a DECLARED, BOUNDED count. It never repeats a failed
+// plugin call (D-PROTO-7) and is never blind (D-LAW-5), which is why `attempt` is bounded by #Count
+// and `until` names the condition that ends it. This REPLACES plugin-pipeline's timed
+// `#PipelineRetry{max, delay_ms, factor}`; row 2.22's `attempt` is therefore `retry.attempt`
+// (DESIGN.cue:563-567), not a top-level field.
+type Retry struct {
+	Until Duration `yaml:"until,omitempty" json:"until,omitempty"`
+
+	Attempt Count `yaml:"attempt,omitempty" json:"attempt,omitempty"`
+
+	Interval string `yaml:"interval,omitempty" json:"interval"`
+}
+
+type Lane struct {
+	// #Lane — D-FLOW-1: a stage may run once per item of the list a parameter holds.
+	Over EntityRef `yaml:"over,omitempty" json:"over"`
+}
+
+// #StageName / #StageRef — what a stage's `after:`/`when:` name and what its arms hold. Both use this
+// module's ONE name grammar (#EntityRef) rather than a second one.
+type StageName EntityRef
+
+type StageRef EntityRef
+
+// #StageWhen — the parameter matcher map a stage's `when:` holds.
+type StageWhen map[string]Matcher
+
+// #StageAlt — D-FLOW-1: a stage does EXACTLY ONE thing. Four arms and never a fifth field.
+//
+// THE SCHEDULING FIELDS ARE DECLARED HERE, ONCE, BESIDE THE ARMS — not unified into each arm.
+// DESIGN.cue writes each arm as `{step!: [...], #StageFields...}`; in this module BOTH the postfix
+// spread and the `&` unification are unusable, measured: the spread needs an experiment flag, and
+// `{name!: T} & #StageFields` fails composition with `#<Arm>.<field>: field not allowed` for every
+// required field name tried (and `#StageAsk & #StageFields` fails the same way). Hoisting the shared
+// fields onto the sum is the shape that compiles, generates typed Go, and still reads as
+// "a stage has scheduling fields and one arm".
+//
+// TWO FURTHER MEASURED DEVIATIONS, both deliberate (§7g's class — a silent difference would be the
+// defect, a recorded one is not):
+//   - the ask arm carries `#StageAsk` DIRECTLY rather than nesting a second `ask:` inside the `ask:`
+//     arm as DESIGN.cue spells it; a REQUIRED field named `ask` cannot be unified with anything here,
+//     and the direct form is one nesting shallower with the same fields.
+//   - `#Stage: or([for _, a in #StageAlt {a}])` cannot be written; `or()` over the arms fails the same
+//     way. The sum is four optional arms, and "exactly one arm" is a VALIDATION rule, not a schema one.
+type StageAlt struct {
+	After []StageName `yaml:"after,omitempty" json:"after,omitempty"`
+
+	When StageWhen `yaml:"when,omitempty" json:"when,omitempty"`
+
+	Timeout Duration `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+
+	Retry Retry `yaml:"retry,omitempty" json:"retry,omitempty"`
+
+	On_error string `yaml:"on_error,omitempty" json:"on_error"`
+
+	Lane Lane `yaml:"lane,omitempty" json:"lane,omitempty"`
+
+	Concurrency int64 `yaml:"concurrency,omitempty" json:"concurrency"`
+
+	Step StageStep `yaml:"step,omitempty" json:"step,omitempty"`
+
+	Pipeline StagePipeline `yaml:"pipeline,omitempty" json:"pipeline,omitempty"`
+
+	Deployment StageDeployment `yaml:"deployment,omitempty" json:"deployment,omitempty"`
+
+	Ask StageAsk `yaml:"ask,omitempty" json:"ask,omitempty"`
+}
+
+// The four arms, each a PURE payload: the scheduling fields live on #StageAlt above.
+type StageStep struct {
+	Step []Step `yaml:"step,omitempty" json:"step"`
+}
+
+type StagePipeline struct {
+	Pipeline StageRef `yaml:"pipeline,omitempty" json:"pipeline"`
+}
+
+type StageDeployment struct {
+	Deployment []StageRef `yaml:"deployment,omitempty" json:"deployment"`
+}
+
+// #StageAsk / #Answer — D-FLOW-3: an ask carries its ANSWER CHANNEL, so a question with no channel is
+// not an ask. The response must satisfy `expect:` to be `granted`; silence takes `unanswered:`,
+// refused by default.
+type StageAsk struct {
+	Prompt Text `yaml:"prompt,omitempty" json:"prompt"`
+
+	Answer Answer `yaml:"answer,omitempty" json:"answer"`
+}
+
+type Answer struct {
+	Expect Matcher `yaml:"expect,omitempty" json:"expect,omitempty"`
+
+	Unanswered string `yaml:"unanswered,omitempty" json:"unanswered"`
+}
+
+type Stage StageAlt
+
 // #PortMapping — one published port's structured runtime mapping (host IP/port ->
 // container port/proto). Surfaces on #DeploymentStatus so renderers + host probes
 // consume it without re-parsing.
