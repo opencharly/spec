@@ -961,6 +961,54 @@ type ArbiterInvokeReply struct {
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
+// -----------------------------------------------------------------------------
+// §20.1 — the audit record.
+//
+// D-AUDIT-3: "#Redacted, because an audit that holds a secret is a leak with a timestamp."
+//
+// A redacted reference is a NAME, never a value: the record may say that a secret was used, and
+// which one, but never what it held. Making it a distinct type (not a string that happens to look
+// like one) is the point — a caller cannot accidentally hand a value to a field typed #Redacted
+// without writing `secret:` in front of it.
+type Redacted struct {
+	// secret names the secret that was referenced. It is the name, not the value.
+	Secret string `yaml:"secret,omitempty" json:"secret"`
+}
+
+// #AuditOutcome is what the act produced. D-AUDIT-1 requires a record for an act that FAILED as
+// well as one that succeeded — an append-only record of successes only is a record that cannot
+// explain an incident.
+type AuditOutcome struct {
+	// ok is whether the act succeeded.
+	Ok bool `yaml:"ok,omitempty" json:"ok"`
+
+	// message carries the failure's reason when ok is false, and is absent otherwise. A message
+	// on a success is noise, and noise in an audit is how a real finding hides.
+	Message string `yaml:"message,omitempty" json:"message,omitempty"`
+}
+
+// #AuditRecord is ONE act and its outcome. It is append-only by construction (D-AUDIT-4): this
+// type has no field naming an earlier record, so a record cannot reference a record it amends.
+type AuditRecord struct {
+	// identity is WHO acted (D-AUDIT-2). ONE field for both a mutation and an authority decision —
+	// "authority is the grant of a need (§8), not a separate concept", so a separate
+	// `decided_by:` field would be the duplication D-AUDIT-2 forbids.
+	Identity string `yaml:"identity,omitempty" json:"identity"`
+
+	// action is a charly verb or mutation word (D-AUDIT-5), never a foreign system's own verb.
+	// Its value set is the verb vocabulary; this field does not accept free text by intent, and
+	// the writer validates it against the verbs it knows.
+	Action string `yaml:"action,omitempty" json:"action"`
+
+	// outcome is what the act produced — required, because D-AUDIT-1's record is of "an action and
+	// its outcome" and an outcome-less record cannot answer the question an audit exists for.
+	Outcome AuditOutcome `yaml:"outcome,omitempty" json:"outcome"`
+
+	// redacted lists any secret the act referenced, BY NAME (D-AUDIT-3). Absent when the act
+	// referenced none; never a value.
+	Redacted []Redacted `yaml:"redacted,omitempty" json:"redacted,omitempty"`
+}
+
 // MergeConfig (config.go). CLOSED.
 type BoxMerge struct {
 	Auto bool `yaml:"auto,omitempty" json:"auto,omitempty"`
