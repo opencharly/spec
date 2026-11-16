@@ -95,9 +95,15 @@ type CandyReader interface {
 	// were considered and DROPPED — zero external caller outside layers.go itself (they
 	// back OTHER *Candy-internal composition, e.g. HasContent/HasInstallFiles, which
 	// stays a host-precomputed field per the #67 predicate-carrying pattern above).
-	Alias() []CandyAlias
+	// Alias/Volume return the RESOLVED twins, not the authored shapes. The candy sub-shapes are
+	// one def wearing two hats: AUTHORED (#CandyAlias, what a user writes, which 3.1 assigns to the
+	// plugin that owns the candy body) and WIRE (what a consumer decodes an opaque body into, which
+	// 10.2 assigns to spec). A reader decodes a body that has already been validated, so the
+	// resolved form is what it needs -- the same split the vm unit landed (VmSpec = ResolvedVm),
+	// and the reason the authored defs can leave spec without taking their decode target with them.
+	Alias() []ResolvedCandyAlias
 	HasAliases() bool
-	Volume() []CandyVolume
+	Volume() []ResolvedCandyVolume
 	HasVolumes() bool
 	Artifact() []CandyArtifact
 	Capabilities() *CandyCapability
