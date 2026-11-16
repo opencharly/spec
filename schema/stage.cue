@@ -85,11 +85,6 @@ package schema
 #StageStep:       {step!: [...#Step]}
 #StagePipeline:   {pipeline!: #StageRef}
 #StageDeployment: {deployment!: [...#StageRef]}
-// The ask arm IS the ask: prompt! + answer! (no second `ask:` nesting — see above).
-#StageAsking: #StageAsk
-
-// #StageWhen — the parameter matcher map a stage's `when:` holds.
-#StageWhen: {[string]: #Matcher}
 
 // #StageAsk / #Answer — D-FLOW-3: an ask carries its ANSWER CHANNEL, so a question with no channel is
 // not an ask. The response must satisfy `expect:` to be `granted`; silence takes `unanswered:`,

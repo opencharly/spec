@@ -10084,7 +10084,7 @@ type StageName EntityRef
 type StageRef EntityRef
 
 // #StageWhen — the parameter matcher map a stage's `when:` holds.
-type StageWhen map[string]any /* TODO: IncompleteKind: (bool|string|struct|number) */
+type StageWhen map[string]Matcher
 
 // #StageAlt — D-FLOW-1: a stage does EXACTLY ONE thing. Four arms and never a fifth field.
 //
@@ -10156,9 +10156,6 @@ type Answer struct {
 }
 
 type Stage StageAlt
-
-// The ask arm IS the ask: prompt! + answer! (no second `ask:` nesting — see above).
-type StageAsking StageAsk
 
 // #PortMapping — one published port's structured runtime mapping (host IP/port ->
 // container port/proto). Surfaces on #DeploymentStatus so renderers + host probes
