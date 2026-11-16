@@ -29,7 +29,7 @@ import "list"
 
 // ── §20.1: one append-only record per mutation and per authority decision ──
 //
-// The four word sets are DESIGN.cue's, and they are TABLES rather than bare unions so the words
+// The THREE word sets are DESIGN.cue's, and they are TABLES rather than bare unions so the words
 // carry their own existence: D-GEN-8's D1 form derives the list from the table, and a word added
 // here is a schema change rather than a payload choice.
 _auditEvent: {mutate: {}, authorize: {}, admit: {}, activate: {}, teardown: {}} @go(-) @vocab(spec)

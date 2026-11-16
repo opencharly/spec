@@ -10,7 +10,7 @@ import (
 )
 
 // TestTheAuditContractIsDesigns ports-verified: DESIGN.cue declares the audit record at
-// :1146-1175 (`#AuditEvent`, `#AuditDetail`, `#Redacted`, `#AuditAppendInput` and four word
+// :1146-1175 (`#AuditEvent`, `#AuditDetail`, `#Redacted`, `#AuditAppendInput` and THREE word
 // tables), and schema/audit.cue is that declaration MOVED into the contract module. This test
 // pins the parts a re-spelling would silently change.
 //
