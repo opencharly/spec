@@ -32,11 +32,11 @@ import "list"
 // The four word sets are DESIGN.cue's, and they are TABLES rather than bare unions so the words
 // carry their own existence: D-GEN-8's D1 form derives the list from the table, and a word added
 // here is a schema change rather than a payload choice.
-_auditEvent: {mutate: {}, authorize: {}, admit: {}, activate: {}, teardown: {}} @go(-)
+_auditEvent: {mutate: {}, authorize: {}, admit: {}, activate: {}, teardown: {}} @go(-) @vocab(spec)
 _auditEventWord: [for w, _ in _auditEvent {w}]
-_auditOutcome: {ok: {}, refused: {}, failed: {}} @go(-)
+_auditOutcome: {ok: {}, refused: {}, failed: {}} @go(-) @vocab(spec)
 _auditOutcomeWord: [for w, _ in _auditOutcome {w}]
-_detailCode: {reason: {}, path: {}, field: {}, ref: {}, count: {}, duration: {}} @go(-)
+_detailCode: {reason: {}, path: {}, field: {}, ref: {}, count: {}, duration: {}} @go(-) @vocab(spec)
 _detailCodeWord: [for w, _ in _detailCode {w}]
 
 // A record says a value was there WITHOUT holding it (D-AUDIT-3): "an audit that holds a secret is a

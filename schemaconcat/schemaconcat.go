@@ -55,12 +55,9 @@ func ConcatSchema(fsys fs.FS, dir string, exclude func(name string) bool) (strin
 		names = append(names, e.Name())
 	}
 	sort.Strings(names) // deterministic concatenation
-	// Imports are HOISTED, not concatenated in place. CUE requires every import to precede all
-	// declarations, so a file whose `import "list"` is joined after another file's defs produces
-	// `expected label or ':', found 'STRING'` — measured when #AuditEvent's `... & list.MaxItems(32)`
-	// arrived. Hoisting keeps the one-directory concatenation working while letting any schema file
-	// use a CUE builtin, and deduplicates so a builtin imported by two files is emitted once.
-	imports := map[string]struct{}{}
+	// Imports are HOISTED, not concatenated in place (see stripImportDecls).
+	seen := map[string]struct{}{}
+	var decls []string
 	var b strings.Builder
 	for _, n := range names {
 		data, err := fs.ReadFile(fsys, path(dir, n))
@@ -69,21 +66,22 @@ func ConcatSchema(fsys fs.FS, dir string, exclude func(name string) bool) (strin
 		}
 		body, found := stripImportDecls(stripPackageClause(data))
 		for _, imp := range found {
-			imports[imp] = struct{}{}
+			if _, dup := seen[imp]; !dup {
+				seen[imp] = struct{}{}
+				decls = append(decls, imp)
+			}
 		}
 		b.Write(body)
 		b.WriteString("\n")
 	}
 	var out strings.Builder
-	if len(imports) > 0 {
-		sorted := make([]string, 0, len(imports))
-		for imp := range imports {
-			sorted = append(sorted, imp)
-		}
-		sort.Strings(sorted)
-		for _, imp := range sorted {
-			out.WriteString(imp)
-			out.WriteString("\n")
+	if len(decls) > 0 {
+		sort.Strings(decls)
+		for _, d := range decls {
+			out.WriteString(d)
+			if !strings.HasSuffix(d, "\n") {
+				out.WriteString("\n")
+			}
 		}
 		out.WriteString("\n")
 	}
@@ -91,32 +89,49 @@ func ConcatSchema(fsys fs.FS, dir string, exclude func(name string) bool) (strin
 	return out.String(), names, nil
 }
 
-// stripImportDecls removes a schema file's `import` declarations and returns them verbatim, so the
-// caller can hoist them above every concatenated declaration. Both CUE forms are handled: the
-// single-line `import "list"` and the parenthesized block `import ( "list" \n "strings" )`.
-// A file with no import is returned untouched.
+// stripImportDecls removes a schema file's `import` declarations and returns them VERBATIM, so the
+// caller can hoist them above every concatenated declaration. CUE requires every import to precede
+// all declarations, so a file whose import is joined after another file's defs fails to parse;
+// hoisting keeps the one-directory concatenation working while letting a schema file use a CUE
+// builtin.
+//
+// A parenthesised block is returned as ONE entry including its parentheses. Appending its lines
+// individually and re-emitting them sorted would reorder and unparenthesise it into
+// `import "list"` / `"strings"`, which is invalid — so a block is one declaration, always.
 func stripImportDecls(src []byte) ([]byte, []string) {
 	var (
 		out     bytes.Buffer
 		imports []string
+		block   []byte
 		inBlock bool
 	)
 	for _, raw := range bytes.SplitAfter(src, []byte("\n")) {
 		line := bytes.TrimSpace(raw)
 		switch {
 		case inBlock:
-			imports = append(imports, string(raw))
+			block = append(block, raw...)
 			if bytes.Contains(line, []byte(")")) {
 				inBlock = false
+				imports = append(imports, string(block))
+				block = nil
 			}
 		case bytes.HasPrefix(line, []byte("import (")):
-			imports = append(imports, string(raw))
+			if bytes.Contains(line, []byte(")")) {
+				imports = append(imports, string(raw))
+				continue
+			}
 			inBlock = true
+			block = append(block, raw...)
 		case bytes.HasPrefix(line, []byte("import ")):
 			imports = append(imports, string(raw))
 		default:
 			out.Write(raw)
 		}
+	}
+	if inBlock {
+		// An unterminated block cannot be hoisted coherently; leaving it in place lets the parser
+		// report the real syntax error instead of the file silently losing a declaration.
+		out.Write(block)
 	}
 	return out.Bytes(), imports
 }

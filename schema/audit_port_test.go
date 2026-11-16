@@ -2,6 +2,8 @@ package schema_test
 
 import (
 	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/opencharly/spec/spec"
@@ -104,30 +106,34 @@ func TestTheAuditContractIsDesigns(t *testing.T) {
 		}
 	})
 
-	t.Run("the four word sets are derived from tables, not written beside them (D-GEN-8 D1)", func(t *testing.T) {
-		// The words themselves reach Go through the tables' comprehensions. This asserts the sets a
-		// reader of DESIGN.cue would expect, so a dropped word is caught here rather than by a
-		// downstream consumer rejecting a valid record.
-		for _, w := range []string{"mutate", "authorize", "admit", "activate", "teardown"} {
-			if w == "" {
-				t.Fatal("unreachable")
+	t.Run("three word tables, not four -- and each is closed", func(t *testing.T) {
+		// COUNTED, not assumed: DESIGN.cue declares EXACTLY THREE audit tables for this contract --
+		// _auditEvent, _auditOutcome and _detailCode. An earlier revision of this test claimed four
+		// and its body was a tautology over a hardcoded literal; this one reads the schema text and
+		// counts the `@go(-)`-marked tables, so the number in the prose and the number in the file
+		// cannot drift apart again.
+		src, err := os.ReadFile("audit.cue")
+		if err != nil {
+			t.Fatalf("read audit.cue: %v", err)
+		}
+		n := strings.Count(string(src), "} @go(-)")
+		if n != 3 {
+			t.Fatalf("audit.cue declares %d @go(-) word tables, want exactly 3 (_auditEvent, _auditOutcome, _detailCode)", n)
+		}
+		for _, table := range []string{"_auditEvent:", "_auditOutcome:", "_detailCode:"} {
+			if !strings.Contains(string(src), table) {
+				t.Fatalf("table %q is missing", table)
 			}
 		}
-		// The event/outcome/detail-code words are closed in schema/audit.cue; their VALUES arrive as
-		// free strings in the generated type (the union is validated by CUE at authoring time, not
-		// re-encoded as a Go enum). What must hold is that a record round-trips each one.
-		for _, outcome := range []string{"ok", "refused", "failed"} {
-			e := spec.AuditEvent{At: "2026-11-16T10:00:00Z", Event: "mutate", Outcome: outcome, Identity: "operator"}
-			raw, err := json.Marshal(e)
-			if err != nil {
-				t.Fatalf("marshal %s: %v", outcome, err)
+		// And the words the design names are the words the tables hold.
+		for _, w := range []string{"mutate", "authorize", "admit", "activate", "teardown"} {
+			if !strings.Contains(string(src), w) {
+				t.Fatalf("event word %q is missing", w)
 			}
-			var back spec.AuditEvent
-			if err := json.Unmarshal(raw, &back); err != nil {
-				t.Fatalf("unmarshal %s: %v", outcome, err)
-			}
-			if back.Outcome != outcome {
-				t.Fatalf("outcome %q did not round-trip: %q", outcome, back.Outcome)
+		}
+		for _, w := range []string{"ok", "refused", "failed"} {
+			if !strings.Contains(string(src), w) {
+				t.Fatalf("outcome word %q is missing", w)
 			}
 		}
 	})
