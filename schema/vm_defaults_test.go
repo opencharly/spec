@@ -60,7 +60,7 @@ func TestResolvedVmBackendAndAutostartCarryDefaults(t *testing.T) {
 	if out.Backend != "" {
 		t.Fatalf("backend = %q, want the empty zero value for an omitted field", out.Backend)
 	}
-	if out.Autostart != false {
+	if out.Autostart {
 		t.Fatalf("autostart = %v, want false", out.Autostart)
 	}
 }
