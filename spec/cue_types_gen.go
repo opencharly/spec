@@ -9659,9 +9659,24 @@ type ResolvedVm struct {
 
 	Firmware string `yaml:"firmware,omitempty" json:"firmware"`
 
-	Backend string `yaml:"backend,omitempty" json:"backend"`
+	// OPTIONAL, and that is load-bearing rather than cosmetic. The SDK's kind table maps
+	// `vm` to THIS def (loaderkit: cueKindDefs["vm"] = "#ResolvedVm"), and plugin-vm routes
+	// every `charly vm create` through `loaderkit.ApplyCueDefaults("vm", …)`, which marshals
+	// the resolved struct (whose `Backend`/`Autostart` are plain `string`/`bool` with
+	// `omitempty`), unifies it here, and DECODES back with no `.Default()` call. So a plain
+	// `autostart!: bool` leaves `autostart` non-concrete whenever the resolved struct omitted
+	// its zero value, and the decode fails:
+	//
+	//	applyCueDefaults vm: decode: autostart: cannot convert non-concrete value bool
+	//
+	// Adding a default does NOT fix that — measured: `autostart!: *false | true` fails
+	// identically with "cannot convert non-concrete value *false | true", because Decode
+	// never resolves a default disjunction. Optional is the shape this envelope documents
+	// anyway ("PLAIN post-default scalars"): the producer sets them when they are set, and an
+	// absent one decodes to the Go zero value. opencharly/spec#341.
+	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
 
-	Autostart bool `yaml:"autostart,omitempty" json:"autostart"`
+	Autostart bool `yaml:"autostart,omitempty" json:"autostart,omitempty"`
 
 	Network *VmNetwork `yaml:"network,omitempty" json:"network,omitempty"`
 
