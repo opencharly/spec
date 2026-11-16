@@ -147,3 +147,64 @@ func TestCandyModelBatchFieldsAreOpaqueRawJSON(t *testing.T) {
 		})
 	}
 }
+
+// TestTheCandyViewsCarryOpaqueVolumeAndAliasBodies covers the three VIEW fields that were the last
+// things in spec naming #CandyVolume / #CandyAlias — the barrier that kept those defs from moving to
+// the plugin that owns the candy body.
+//
+// Each is checked the same way as the model fields: the field must be RawBody (not the authored
+// slice), and its bytes must marshal INLINE as the authored JSON.
+func TestTheCandyViewsCarryOpaqueVolumeAndAliasBodies(t *testing.T) {
+	const vols = `[{"name":"workspace","path":"/workspace"}]`
+	const als = `[{"name":"app","command":"/opt/app"}]`
+
+	t.Run("CandyView", func(t *testing.T) {
+		for _, tc := range []struct {
+			field, authored, jsonKey string
+			value                    any
+		}{
+			{"Volumes", vols, "volumes", CandyView{Volumes: RawBody(vols)}},
+			{"Aliases", als, "aliases", CandyView{Aliases: RawBody(als)}},
+		} {
+			f, ok := reflect.TypeOf(CandyView{}).FieldByName(tc.field)
+			if !ok {
+				t.Fatalf("CandyView has no %s field", tc.field)
+			}
+			if got, want := f.Type, reflect.TypeOf(RawBody(nil)); got != want {
+				t.Fatalf("CandyView.%s is %v, want %v", tc.field, got, want)
+			}
+			raw, err := json.Marshal(tc.value)
+			if err != nil {
+				t.Fatalf("marshal CandyView: %v", err)
+			}
+			var round map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &round); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if got := string(round[tc.jsonKey]); got != tc.authored {
+				t.Fatalf("CandyView.%s marshalled as %s, want %s", tc.field, got, tc.authored)
+			}
+		}
+	})
+
+	t.Run("ResolvedBoxView", func(t *testing.T) {
+		f, ok := reflect.TypeOf(ResolvedBoxView{}).FieldByName("Aliases")
+		if !ok {
+			t.Fatal("ResolvedBoxView has no Aliases field")
+		}
+		if got, want := f.Type, reflect.TypeOf(RawBody(nil)); got != want {
+			t.Fatalf("ResolvedBoxView.Aliases is %v, want %v", got, want)
+		}
+		raw, err := json.Marshal(ResolvedBoxView{Aliases: RawBody(als)})
+		if err != nil {
+			t.Fatalf("marshal ResolvedBoxView: %v", err)
+		}
+		var round map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &round); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got := string(round["aliases"]); got != als {
+			t.Fatalf("ResolvedBoxView.Aliases marshalled as %s, want %s", got, als)
+		}
+	})
+}
