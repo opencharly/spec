@@ -67,7 +67,10 @@ package schema
 	// resolver result ("" → the command body renders "(global default)").
 	ports?: [...string] @go(Ports)
 	volumes?: [...#ResolvedVolumeMount] @go(Volumes)
-	aliases?: [...#CandyAlias] @go(Aliases)
+	// aliases — the box view's alias list as OPAQUE BYTES: the authored #CandyAlias is about to move
+	// into the plugin that owns the candy body, and this view stops importing it (I1/D-SCH-7). The
+	// consumer decodes what it needs.
+	aliases?: bytes @go(Aliases,type=RawBody)
 	engine?: string @go(Engine)
 
 	// box-AUTHORED surfaces the validate ENGINE checks (task #60): the box's OWN authored `plan:`
@@ -184,8 +187,10 @@ package schema
 	// the RouteCandy/VolumeCandy/AliasCandy predicate). has_init + port_relay reconstruct the
 	// InitCandy predicate (HasAnyInit() || PortRelayPorts>0) for `list services`.
 	route?: #RouteConfig @go(Route,optional=nillable)
-	volumes?: [...#CandyVolume] @go(Volumes)
-	aliases?: [...#CandyAlias] @go(Aliases)
+	// volumes / aliases — OPAQUE BYTES, same reasoning: these two views are the LAST things in spec
+	// that name #CandyVolume / #CandyAlias, so converting them is what finally lets those defs leave.
+	volumes?: bytes @go(Volumes,type=RawBody)
+	aliases?: bytes @go(Aliases,type=RawBody)
 	has_init?: bool @go(HasInit)
 	// init_systems — the PER-INIT-SYSTEM trigger map (W9 finding: HasInit alone is one AGGREGATE
 	// "any init" bool, which cannot answer "does this candy trigger init system Y" — the question

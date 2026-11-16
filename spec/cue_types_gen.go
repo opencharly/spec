@@ -2206,7 +2206,10 @@ type ResolvedBoxView struct {
 
 	Volumes []ResolvedVolumeMount `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 
-	Aliases []CandyAlias `yaml:"aliases,omitempty" json:"aliases,omitempty"`
+	// aliases — the box view's alias list as OPAQUE BYTES: the authored #CandyAlias is about to move
+	// into the plugin that owns the candy body, and this view stops importing it (I1/D-SCH-7). The
+	// consumer decodes what it needs.
+	Aliases RawBody `yaml:"aliases,omitempty" json:"aliases,omitempty"`
 
 	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
 
@@ -2274,14 +2277,6 @@ type ResolvedVolumeMount struct {
 	VolumeName string `yaml:"volume_name,omitempty" json:"volume_name,omitempty"`
 
 	ContainerPath string `yaml:"container_path,omitempty" json:"container_path,omitempty"`
-}
-
-// AliasYAML — for a CANDY alias `command` is REQUIRED (validateAliases); the
-// box-level #BoxAlias keeps it optional (defaults to name).
-type CandyAlias struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Command string `yaml:"command,omitempty" json:"command"`
 }
 
 // #AggregatedCandyCapsView — the box-level aggregated candy capability surface the build RENDER reads
@@ -2363,9 +2358,11 @@ type CandyView struct {
 	// InitCandy predicate (HasAnyInit() || PortRelayPorts>0) for `list services`.
 	Route *RouteConfig `yaml:"route,omitempty" json:"route,omitempty"`
 
-	Volumes []CandyVolume `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	// volumes / aliases — OPAQUE BYTES, same reasoning: these two views are the LAST things in spec
+	// that name #CandyVolume / #CandyAlias, so converting them is what finally lets those defs leave.
+	Volumes RawBody `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 
-	Aliases []CandyAlias `yaml:"aliases,omitempty" json:"aliases,omitempty"`
+	Aliases RawBody `yaml:"aliases,omitempty" json:"aliases,omitempty"`
 
 	HasInit bool `yaml:"has_init,omitempty" json:"has_init,omitempty"`
 
@@ -2417,14 +2414,6 @@ type RouteConfig struct {
 	Host string `yaml:"host,omitempty" json:"host,omitempty"`
 
 	Port string `yaml:"port,omitempty" json:"port,omitempty"`
-}
-
-// VolumeYAML — name is lowercase-hyphen (validateVolume); path may be
-// home-relative (~/…) or absolute, so not anchored to /.
-type CandyVolume struct {
-	Name string `yaml:"name,omitempty" json:"name"`
-
-	Path string `yaml:"path,omitempty" json:"path"`
 }
 
 // #CandyCapabilitiesView — the per-candy capability surface a consumer reads off the envelope.
@@ -3759,6 +3748,22 @@ type ServiceWaitFor struct {
 	// timeout — how long to wait before failing the start. "30s" or a bare 30,
 	// matching stop_timeout's shape. Absent means the init's own default.
 	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+}
+
+// VolumeYAML — name is lowercase-hyphen (validateVolume); path may be
+// home-relative (~/…) or absolute, so not anchored to /.
+type CandyVolume struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Path string `yaml:"path,omitempty" json:"path"`
+}
+
+// AliasYAML — for a CANDY alias `command` is REQUIRED (validateAliases); the
+// box-level #BoxAlias keeps it optional (defaults to name).
+type CandyAlias struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	Command string `yaml:"command,omitempty" json:"command"`
 }
 
 // ExtractYAML — copy a path out of another OCI image into this one. source is
