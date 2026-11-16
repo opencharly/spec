@@ -993,7 +993,7 @@ type AuditDetail struct {
 
 	Text Text `yaml:"text,omitempty" json:"text"`
 
-	Value Redacted `yaml:"value,omitempty" json:"value,omitempty"`
+	Value *Redacted `yaml:"value,omitempty" json:"value,omitempty"`
 }
 
 type Text string

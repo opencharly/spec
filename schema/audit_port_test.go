@@ -138,3 +138,44 @@ func TestTheAuditContractIsDesigns(t *testing.T) {
 		}
 	})
 }
+
+// TestAnAbsentRedactionIsAbsentOnTheWire pins the reason `#AuditDetail.value?` projects a POINTER.
+//
+// `Redacted` is a struct, and encoding/json's `omitempty` cannot omit a struct value — so before this
+// was a pointer, a detail carrying NO marker serialized as `"value":{"redacted":false}`, asserting
+// "not redacted" on a record that simply had no marker. That is not a D-AUDIT-3 leak (the field can
+// only ever hold `true`), but it is the `?` lost on the wire: a reader cannot tell "absent" from
+// "explicitly false", and the design says the field is OPTIONAL.
+func TestAnAbsentRedactionIsAbsentOnTheWire(t *testing.T) {
+	t.Run("no marker -> no `value` key at all", func(t *testing.T) {
+		raw, err := json.Marshal(spec.AuditDetail{Code: "reason", Text: "the target is not disposable"})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if v, ok := got["value"]; ok {
+			t.Fatalf("an absent marker serialized as `value: %v` — `?` was lost (this is what the pointer fixes)", v)
+		}
+	})
+
+	t.Run("a marker -> exactly {\"redacted\": true}", func(t *testing.T) {
+		raw, err := json.Marshal(spec.AuditDetail{Code: "ref", Text: "…", Value: &spec.Redacted{Redacted: true}})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		m, ok := got["value"].(map[string]any)
+		if !ok {
+			t.Fatalf("value = %v, want an object", got["value"])
+		}
+		if len(m) != 1 || m["redacted"] != true {
+			t.Fatalf("value = %v, want exactly {\"redacted\": true}", m)
+		}
+	})
+}
