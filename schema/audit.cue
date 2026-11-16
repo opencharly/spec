@@ -49,7 +49,7 @@ _detailCodeWord: [for w, _ in _detailCode {w}]
 #AuditDetail: {
 	code!:  or(_detailCodeWord)
 	text!:  #Text
-	value?: #Redacted
+	value?: #Redacted @go(Value,type=*Redacted)
 }
 
 // #AuditEvent is ONE act and its outcome.
