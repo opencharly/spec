@@ -196,9 +196,12 @@ func StoreDir(name string) (string, error) {
 // IT ASKS THE ONE RESOLVER (D-STORE-1): `spec/storeroot` owns the four roots and the single
 // `CHARLY_CACHE_DIR` override, so the plugin host and every plugin it serves resolve the same tree
 // from the same code. This function used to re-derive the cache root itself — reading the env var,
-// then `filepath.Dir(spec.DefaultDeployConfigPath())/cache` — a SECOND copy of the rule that could
-// silently disagree with the resolver the rest of the tree uses (and did: the two branches order the
-// override differently from `storeroot.CacheDir`).
+// then `filepath.Dir(spec.DefaultDeployConfigPath())/cache` — a SECOND copy of the rule that
+// silently disagreed with the resolver the rest of the tree uses. The disagreement was in the
+// DEFAULT, not the override: with `CHARLY_CACHE_DIR` unset the duplicate resolved
+// `$XDG_CONFIG_HOME/charly/cache` while `storeroot.CacheDir` resolves `$XDG_CACHE_HOME/charly`, so
+// the host and a plugin resolved DIFFERENT cache trees. D-STORE-1 puts the cache at
+// `$XDG_CACHE_HOME/charly`, so the resolver is right and the duplicate was the defect.
 func StoreRoot() (string, error) {
 	return storeroot.CacheDir()
 }
