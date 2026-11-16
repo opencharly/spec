@@ -47,8 +47,18 @@ func TestTheStageVocabularyCarriesDesignsShape(t *testing.T) {
 	if askStage.Ask.Prompt != "deploy?" {
 		t.Fatalf("the ask arm lost its prompt: %+v", askStage.Ask)
 	}
+	// An EXPLICIT answered outcome round-trips. The `*"refused"` default is a CUE-layer fact: Go's
+	// decoder does not apply schema defaults (the same reason `retry.interval` is asserted with an
+	// explicit value below), so asserting the default here would prove nothing.
 	if got := askStage.Ask.Answer.Unanswered; got != "refused" {
-		t.Fatalf("answer.unanswered = %q, want the default refused", got)
+		t.Fatalf("answer.unanswered = %q, want the authored value to round-trip", got)
+	}
+	var unansweredEmpty Stage
+	if err := json.Unmarshal([]byte(`{"ask":{"prompt":"deploy?","answer":{}}}`), &unansweredEmpty); err != nil {
+		t.Fatalf("an ask with no answered outcome does not decode: %v", err)
+	}
+	if got := unansweredEmpty.Ask.Answer.Unanswered; got != "" {
+		t.Fatalf("answer.unanswered = %q with no authored value; the CUE default must NOT leak into Go", got)
 	}
 
 	// D-FLOW-2: repetition is a DECLARED, BOUNDED count — retry.attempt, not a top-level field.
