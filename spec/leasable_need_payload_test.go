@@ -91,8 +91,17 @@ func TestLeasableNeedElementCarriesItsPayload(t *testing.T) {
 		{reflect.TypeOf(CandyUse{}), "Memory", "Size", "string"},
 		{reflect.TypeOf(CandyUse{}), "Storage", "Size", "string"},
 		{reflect.TypeOf(CandyUse{}), "Mount", "Host", "spec.AbsPath"},
+		// Need/Use carry the same four leasable fields as their Candy twins -- all sixteen
+		// sites, not just the first four. A table that stops at Cpu would let the other
+		// twelve regress to interface{} while claiming "every leasable entry".
 		{reflect.TypeOf(Need{}), "Cpu", "Count", "spec.Count"},
+		{reflect.TypeOf(Need{}), "Memory", "Size", "string"},
+		{reflect.TypeOf(Need{}), "Storage", "Size", "string"},
+		{reflect.TypeOf(Need{}), "Mount", "Host", "spec.AbsPath"},
 		{reflect.TypeOf(Use{}), "Cpu", "Count", "spec.Count"},
+		{reflect.TypeOf(Use{}), "Memory", "Size", "string"},
+		{reflect.TypeOf(Use{}), "Storage", "Size", "string"},
+		{reflect.TypeOf(Use{}), "Mount", "Host", "spec.AbsPath"},
 	} {
 		elem := mapElement(t, c.owner, c.field)
 		requireField(t, elem, c.wantField, c.wantType)
