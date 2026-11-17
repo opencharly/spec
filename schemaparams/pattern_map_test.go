@@ -33,7 +33,15 @@ import (
 	"testing"
 )
 
-// patternFixture exercises the four shapes the fix must tell apart, plus the guard.
+// patternFixture exercises the shapes the fix must tell apart, plus the guard.
+//
+// The last two cases carry a REQUIRED field in the element -- the shape that exposed the second
+// half of this defect. A closed definition merged with the lease fields evaluates to BOTTOM
+// ("exclusive: field not allowed"), so the emitter reached its `any /* TODO */` fallback and the
+// payload was lost again, spelled `map[string]any` instead of `struct {}`. The schema no longer
+// produces that bottom (schema/capability.cue declares the lease field on the leasable shapes);
+// these cases pin the generator side: whatever the element is, a required field must survive
+// into the map's value type.
 const patternFixture = `package schema
 
 #Word: =~"^[a-z][a-z0-9_]*$"
@@ -44,6 +52,11 @@ const patternFixture = `package schema
 #Disj: {[("nvidia" | "amd" | "intel")]: {n: int}}
 #Ellip: {[string]: int}
 #Mixed: {[=~"^zz"]: int, named: string}
+
+// a REQUIRED field in the element (see the Go comment above)
+#Strict: {count!: int}
+#ReqRef: {[#Word]: #Strict}
+#ReqInline: {[#Word]: {count!: int}}
 `
 
 // writePatternFixture materializes the fixture in a temp schema dir.
@@ -105,6 +118,24 @@ func TestPatternKeyedCollectionIsAMapCarryingItsPayload(t *testing.T) {
 		}
 	})
 
+	t.Run("an element with a REQUIRED field keeps its payload", func(t *testing.T) {
+		block := blockFor(t, src, "ReqInline")
+		if !strings.HasPrefix(block, "type ReqInline map[string]struct {") {
+			t.Fatalf("`#ReqInline: {[#Word]: {count!: int}}` is not a map:\n%s", block)
+		}
+		if !strings.Contains(block, "Count int64") {
+			t.Fatalf("the required field did not survive into the value type:\n%s", block)
+		}
+		// The definition-reference form must keep its NAME, not an anonymous struct.
+		ref := blockFor(t, src, "ReqRef")
+		if !strings.HasPrefix(ref, "type ReqRef map[string]Strict") {
+			t.Fatalf("`#ReqRef: {[#Word]: #Strict}` did not keep the named element type:\n%s", ref)
+		}
+		if !strings.Contains(blockFor(t, src, "Strict"), "Count int64") {
+			t.Fatalf("the referenced required-field type lost its payload:\n%s", blockFor(t, src, "Strict"))
+		}
+	})
+
 	t.Run("a struct mixing a pattern with named fields is NOT flattened to a map", func(t *testing.T) {
 		block := blockFor(t, src, "Mixed")
 		if strings.HasPrefix(block, "type Mixed map[") {
@@ -123,7 +154,8 @@ func TestPatternKeyedCollectionIsAMapCarryingItsPayload(t *testing.T) {
 func TestThePinnedCLIStillCollapsesPatternMaps(t *testing.T) {
 	cue := pinnedCue(t)
 	if cue == "" {
-		t.Fatalf("the pinned cue binary could not be provisioned — the divergence cannot be measured, and the oracle test would have skipped this too")
+		t.Skip("the pinned cue binary could not be provisioned, so the divergence cannot be measured here; " +
+			"R8: live or skip, never fake. The oracle test skips the same way.")
 	}
 	dir := writePatternFixture(t)
 	out := string(gengotypesOracle(t, dir, "params", cue))

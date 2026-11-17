@@ -2812,13 +2812,33 @@ type CandyNeed struct {
 		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"device,omitempty" json:"device,omitempty"`
 
-	Cpu map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	Cpu map[string]struct {
+		Count Count `yaml:"count,omitempty" json:"count"`
 
-	Memory map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"memory,omitempty" json:"memory,omitempty"`
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Storage map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Memory map[string]struct {
+		Size Size `yaml:"size,omitempty" json:"size"`
 
-	Mount map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"mount,omitempty" json:"mount,omitempty"`
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Storage map[string]struct {
+		Size Size `yaml:"size,omitempty" json:"size"`
+
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Mount map[string]struct {
+		Host AbsPath `yaml:"host,omitempty" json:"host"`
+
+		Path AbsPath `yaml:"path,omitempty" json:"path"`
+
+		Writable bool `yaml:"writable,omitempty" json:"writable"`
+
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"mount,omitempty" json:"mount,omitempty"`
 
 	Nesting map[string]struct {
 	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
@@ -2847,6 +2867,18 @@ type CandyNeed struct {
 	Api map[string]struct {
 	} `yaml:"api,omitempty" json:"api,omitempty"`
 }
+
+// #Count / #Text — DESIGN.cue:53-54's two scalar primitives, transcribed because this module had no
+// def for either and a stage's `attempt`, `concurrency` and `prompt` are exactly them. ONE definition
+// each (R2).
+type Count int64
+
+// #AbsPath — a literal absolute path. DESIGN.cue:77.
+//
+// The `[^$]*` is load-bearing rather than cosmetic: it is how D-SCH-7 keeps a variable OUT of a path,
+// so a path can never expand into a value. A schema that allowed `$` here would reopen the leak this
+// contract exists to close, one layer down.
+type AbsPath string
 
 type CandyUse struct {
 	Parameter map[string]struct {
@@ -2887,13 +2919,33 @@ type CandyUse struct {
 		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"device,omitempty" json:"device,omitempty"`
 
-	Cpu map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	Cpu map[string]struct {
+		Count Count `yaml:"count,omitempty" json:"count"`
 
-	Memory map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"memory,omitempty" json:"memory,omitempty"`
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Storage map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Memory map[string]struct {
+		Size Size `yaml:"size,omitempty" json:"size"`
 
-	Mount map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"mount,omitempty" json:"mount,omitempty"`
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Storage map[string]struct {
+		Size Size `yaml:"size,omitempty" json:"size"`
+
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Mount map[string]struct {
+		Host AbsPath `yaml:"host,omitempty" json:"host"`
+
+		Path AbsPath `yaml:"path,omitempty" json:"path"`
+
+		Writable bool `yaml:"writable,omitempty" json:"writable"`
+
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"mount,omitempty" json:"mount,omitempty"`
 
 	Nesting map[string]struct {
 	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
@@ -2924,13 +2976,6 @@ type CandyUse struct {
 }
 
 type InitNeutral string
-
-// #AbsPath — a literal absolute path. DESIGN.cue:77.
-//
-// The `[^$]*` is load-bearing rather than cosmetic: it is how D-SCH-7 keeps a variable OUT of a path,
-// so a path can never expand into a value. A schema that allowed `$` here would reopen the leak this
-// contract exists to close, one layer down.
-type AbsPath string
 
 // CandyCapabilities — image-level facts a candy contributes (aggregated at
 // resolve time). oci_label is a genuine open string→string passthrough.
@@ -4364,13 +4409,33 @@ type Need struct {
 		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"device,omitempty" json:"device,omitempty"`
 
-	Cpu map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	Cpu map[string]struct {
+		Count Count `yaml:"count,omitempty" json:"count"`
 
-	Memory map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"memory,omitempty" json:"memory,omitempty"`
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Storage map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Memory map[string]struct {
+		Size Size `yaml:"size,omitempty" json:"size"`
 
-	Mount map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"mount,omitempty" json:"mount,omitempty"`
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Storage map[string]struct {
+		Size Size `yaml:"size,omitempty" json:"size"`
+
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Mount map[string]struct {
+		Host AbsPath `yaml:"host,omitempty" json:"host"`
+
+		Path AbsPath `yaml:"path,omitempty" json:"path"`
+
+		Writable bool `yaml:"writable,omitempty" json:"writable"`
+
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"mount,omitempty" json:"mount,omitempty"`
 
 	Nesting map[string]struct {
 	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
@@ -4439,13 +4504,33 @@ type Use struct {
 		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"device,omitempty" json:"device,omitempty"`
 
-	Cpu map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	Cpu map[string]struct {
+		Count Count `yaml:"count,omitempty" json:"count"`
 
-	Memory map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"memory,omitempty" json:"memory,omitempty"`
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Storage map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Memory map[string]struct {
+		Size Size `yaml:"size,omitempty" json:"size"`
 
-	Mount map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"mount,omitempty" json:"mount,omitempty"`
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Storage map[string]struct {
+		Size Size `yaml:"size,omitempty" json:"size"`
+
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Mount map[string]struct {
+		Host AbsPath `yaml:"host,omitempty" json:"host"`
+
+		Path AbsPath `yaml:"path,omitempty" json:"path"`
+
+		Writable bool `yaml:"writable,omitempty" json:"writable"`
+
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+	} `yaml:"mount,omitempty" json:"mount,omitempty"`
 
 	Nesting map[string]struct {
 	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
@@ -4562,17 +4647,25 @@ type EndpointNeed struct {
 	Protocol string `yaml:"protocol,omitempty" json:"protocol"`
 }
 
+// The three LEASABLE shapes declare `exclusive` themselves, and that is the port of DESIGN's
+// `{c.need..., #LeaseFields...}` rather than a weakening of it. DESIGN opens the closed
+// definition AT THE EMBEDDING SITE with the postfix `...`, which the pinned CUE v0.16.1 refuses
+// without @experiment(explicitopen); merging `#LeaseFields` into a CLOSED definition without it
+// evaluates to `exclusive: field not allowed` -- a BOTTOM need entry, which the generator can
+// only spell `map[string]any` and which would make every `need: {cpu: ...}` document
+// unvalidatable. Declaring the lease field on the definition is the CUE-v0.16.1 spelling of the
+// same net shape: `#Need`/`#Use` still add it only for a `lease: true` row, and these four rows
+// (cpu, memory, storage, mount) are exactly the leasable ones.
 type CountNeed struct {
 	Count Count `yaml:"count,omitempty" json:"count"`
-}
 
-// #Count / #Text — DESIGN.cue:53-54's two scalar primitives, transcribed because this module had no
-// def for either and a stage's `attempt`, `concurrency` and `prompt` are exactly them. ONE definition
-// each (R2).
-type Count int64
+	Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+}
 
 type SizeNeed struct {
 	Size Size `yaml:"size,omitempty" json:"size"`
+
+	Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 }
 
 type MountNeed struct {
@@ -4581,6 +4674,8 @@ type MountNeed struct {
 	Path AbsPath `yaml:"path,omitempty" json:"path"`
 
 	Writable bool `yaml:"writable,omitempty" json:"writable"`
+
+	Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 }
 
 // An endpoint the content serves: its port and transport, and the protocol, path and host name it

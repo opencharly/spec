@@ -195,9 +195,18 @@ _leasableWord: [for w, r in _capability if r.lease {w}]
 #CandyUse:  {#Use, parameter?: {[#Name]: #CandyParameterUse}}   // D-SCH-7
 
 #EndpointNeed: {protocol!: or(_protocolWord)}
-#CountNeed:    {count!: #Count}
-#SizeNeed:     {size!: #Size}
-#MountNeed:    {host!: #AbsPath, path!: #AbsPath, writable: *false | bool}
+// The three LEASABLE shapes declare `exclusive` themselves, and that is the port of DESIGN's
+// `{c.need..., #LeaseFields...}` rather than a weakening of it. DESIGN opens the closed
+// definition AT THE EMBEDDING SITE with the postfix `...`, which the pinned CUE v0.16.1 refuses
+// without @experiment(explicitopen); merging `#LeaseFields` into a CLOSED definition without it
+// evaluates to `exclusive: field not allowed` -- a BOTTOM need entry, which the generator can
+// only spell `map[string]any` and which would make every `need: {cpu: ...}` document
+// unvalidatable. Declaring the lease field on the definition is the CUE-v0.16.1 spelling of the
+// same net shape: `#Need`/`#Use` still add it only for a `lease: true` row, and these four rows
+// (cpu, memory, storage, mount) are exactly the leasable ones.
+#CountNeed:    {count!: #Count, exclusive: *false | bool}
+#SizeNeed:     {size!: #Size, exclusive: *false | bool}
+#MountNeed:    {host!: #AbsPath, path!: #AbsPath, writable: *false | bool, exclusive: *false | bool}
 
 // An endpoint the content serves: its port and transport, and the protocol, path and host name it
 // is reached by. A deployment publishes endpoints by name (D-VAL-13).
