@@ -54,6 +54,23 @@ func requireField(t *testing.T, elem reflect.Type, field, want string) {
 
 // TestLeasableNeedElementCarriesItsPayload is the assertion the four leasable types never had:
 // a CPU need says HOW MANY, and a memory need says HOW MUCH, not merely that they are needed.
+// TestSizeIsAnAliasAndCountIsNot pins the fact the payload table depends on: #Size emits an
+// ALIAS so its field renders as "string", while #Count emits a DEFINED type so its field
+// renders as "spec.Count". If a future schema change turns #Size into a defined type, that
+// table's "string" expectation becomes wrong and this test names why.
+func TestSizeIsAnAliasAndCountIsNot(t *testing.T) {
+	size := reflect.TypeOf(Size(""))
+	if size.Kind() != reflect.String || size.Name() != "string" {
+		t.Fatalf("Size is no longer an ALIAS (Kind=%v Name=%q) -- the payload table's "+
+			"`\"string\"` expectation for .Size must be updated to %q", size.Kind(), size.Name(), "spec."+size.Name())
+	}
+	count := reflect.TypeOf(Count(0))
+	if count.Name() != "Count" {
+		t.Fatalf("Count is no longer a DEFINED type (Name=%q) -- the payload table's "+
+			"`\"spec.Count\"` expectation must be updated", count.Name())
+	}
+}
+
 func TestLeasableNeedElementCarriesItsPayload(t *testing.T) {
 	for _, c := range []struct {
 		owner reflect.Type
@@ -62,6 +79,11 @@ func TestLeasableNeedElementCarriesItsPayload(t *testing.T) {
 		wantField, wantType string
 	}{
 		{reflect.TypeOf(CandyNeed{}), "Cpu", "Count", "spec.Count"},
+		// "string" rather than "spec.Size" is CORRECT and deliberate: #Size is declared
+		// `@go(-)` and emits `type Size = string` (an ALIAS), while #Count is a real
+		// `type Count int64`. reflect.Type.String() on an alias field renders the
+		// underlying type, so a reader who sees "string" beside "spec.Count" must not
+		// "fix" this to "spec.Size" -- that would fail. Asserted below, not assumed.
 		{reflect.TypeOf(CandyNeed{}), "Memory", "Size", "string"},
 		{reflect.TypeOf(CandyNeed{}), "Storage", "Size", "string"},
 		{reflect.TypeOf(CandyNeed{}), "Mount", "Host", "spec.AbsPath"},
