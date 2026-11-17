@@ -961,6 +961,85 @@ type ArbiterInvokeReply struct {
 	Error string `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
+// ── the primitives this contract names, PORTED from DESIGN.cue:50-72 and :354 ──
+//
+// They are not invented here: each is DESIGN.cue's own definition, byte for byte, because a port that
+// re-spells a primitive is not a port. They live beside the shapes that use them rather than in a
+// shared primitives file because nothing else in this module uses them yet, and a shared file with
+// one consumer is a place for a second spelling to appear.
+type Word string
+
+type Ref string
+
+type Digest string
+
+type Timestamp string
+
+type TopName string
+
+type Namespace TopName
+
+// A record says a value was there WITHOUT holding it (D-AUDIT-3): "an audit that holds a secret is a
+// leak with a timestamp". The shape is a bare marker — there is no field a value could occupy, which
+// is a stronger guarantee than validating a string that is supposed to be a name.
+type Redacted struct {
+	Redacted bool `yaml:"redacted,omitempty" json:"redacted"`
+}
+
+// #AuditDetail is one structured item of context. `value?` is the ONLY place a value could appear,
+// and its type admits nothing but the marker above.
+type AuditDetail struct {
+	Code string `yaml:"code,omitempty" json:"code"`
+
+	Text Text `yaml:"text,omitempty" json:"text"`
+
+	Value *Redacted `yaml:"value,omitempty" json:"value,omitempty"`
+}
+
+type Text string
+
+// #AuditEvent is ONE act and its outcome.
+type AuditEvent struct {
+	// at is when it happened.
+	At Timestamp `yaml:"at,omitempty" json:"at"`
+
+	// event is what kind of act it was — the five words above.
+	Event string `yaml:"event,omitempty" json:"event"`
+
+	// outcome is how it ended, as a WORD: ok, refused, or failed. A refused act is recorded (D-AUDIT-1
+	// covers "every authority decision", including a denied one) — an append-only record of successes
+	// alone cannot explain an incident.
+	Outcome string `yaml:"outcome,omitempty" json:"outcome"`
+
+	// identity is WHO acted (D-AUDIT-2) — ONE field for a mutation and an authority decision alike,
+	// because "authority is the grant of a need (§8), not a separate concept".
+	Identity Ref `yaml:"identity,omitempty" json:"identity"`
+
+	// target? is what was acted on.
+	Target Ref `yaml:"target,omitempty" json:"target,omitempty"`
+
+	// action? is a charly verb or mutation word (D-AUDIT-5), never a foreign system's own verb.
+	Action Word `yaml:"action,omitempty" json:"action,omitempty"`
+
+	// namespace? is where it held.
+	Namespace Namespace `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// revision? is the digest the act produced or addressed.
+	Revision Digest `yaml:"revision,omitempty" json:"revision,omitempty"`
+
+	// detail? is bounded: an unbounded record is an unbounded disk cost on a path every mutation
+	// takes.
+	Detail []AuditDetail `yaml:"detail,omitempty" json:"detail,omitempty"`
+}
+
+// #AuditAppendInput is the host method's input (§4.6 `audit_append`): one event, exactly one.
+//
+// The field is REQUIRED and singular, which is how D-AUDIT-1's "exactly one record" is expressed in
+// the shape: there is no form of this input that carries zero events or two.
+type AuditAppendInput struct {
+	Event AuditEvent `yaml:"event,omitempty" json:"event"`
+}
+
 // MergeConfig (config.go). CLOSED.
 type BoxMerge struct {
 	Auto bool `yaml:"auto,omitempty" json:"auto,omitempty"`
@@ -9659,9 +9738,24 @@ type ResolvedVm struct {
 
 	Firmware string `yaml:"firmware,omitempty" json:"firmware"`
 
-	Backend string `yaml:"backend,omitempty" json:"backend"`
+	// OPTIONAL, and that is load-bearing rather than cosmetic. The SDK's kind table maps
+	// `vm` to THIS def (loaderkit: cueKindDefs["vm"] = "#ResolvedVm"), and plugin-vm routes
+	// every `charly vm create` through `loaderkit.ApplyCueDefaults("vm", …)`, which marshals
+	// the resolved struct (whose `Backend`/`Autostart` are plain `string`/`bool` with
+	// `omitempty`), unifies it here, and DECODES back with no `.Default()` call. So a plain
+	// `autostart!: bool` leaves `autostart` non-concrete whenever the resolved struct omitted
+	// its zero value, and the decode fails:
+	//
+	//	applyCueDefaults vm: decode: autostart: cannot convert non-concrete value bool
+	//
+	// Adding a default does NOT fix that — measured: `autostart!: *false | true` fails
+	// identically with "cannot convert non-concrete value *false | true", because Decode
+	// never resolves a default disjunction. Optional is the shape this envelope documents
+	// anyway ("PLAIN post-default scalars"): the producer sets them when they are set, and an
+	// absent one decodes to the Go zero value. opencharly/spec#341.
+	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
 
-	Autostart bool `yaml:"autostart,omitempty" json:"autostart"`
+	Autostart bool `yaml:"autostart,omitempty" json:"autostart,omitempty"`
 
 	Network *VmNetwork `yaml:"network,omitempty" json:"network,omitempty"`
 
@@ -10056,8 +10150,6 @@ type SkillReference struct {
 // def for either and a stage's `attempt`, `concurrency` and `prompt` are exactly them. ONE definition
 // each (R2).
 type Count int64
-
-type Text string
 
 // #Retry — D-FLOW-2: a stage's repetition is a DECLARED, BOUNDED count. It never repeats a failed
 // plugin call (D-PROTO-7) and is never blind (D-LAW-5), which is why `attempt` is bounded by #Count

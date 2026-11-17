@@ -55,16 +55,85 @@ func ConcatSchema(fsys fs.FS, dir string, exclude func(name string) bool) (strin
 		names = append(names, e.Name())
 	}
 	sort.Strings(names) // deterministic concatenation
+	// Imports are HOISTED, not concatenated in place (see stripImportDecls).
+	seen := map[string]struct{}{}
+	var decls []string
 	var b strings.Builder
 	for _, n := range names {
 		data, err := fs.ReadFile(fsys, path(dir, n))
 		if err != nil {
 			return "", nil, fmt.Errorf("read schema %s: %w", n, err)
 		}
-		b.Write(stripPackageClause(data))
+		body, found := stripImportDecls(stripPackageClause(data))
+		for _, imp := range found {
+			if _, dup := seen[imp]; !dup {
+				seen[imp] = struct{}{}
+				decls = append(decls, imp)
+			}
+		}
+		b.Write(body)
 		b.WriteString("\n")
 	}
-	return b.String(), names, nil
+	var out strings.Builder
+	if len(decls) > 0 {
+		sort.Strings(decls)
+		for _, d := range decls {
+			out.WriteString(d)
+			if !strings.HasSuffix(d, "\n") {
+				out.WriteString("\n")
+			}
+		}
+		out.WriteString("\n")
+	}
+	out.WriteString(b.String())
+	return out.String(), names, nil
+}
+
+// stripImportDecls removes a schema file's `import` declarations and returns them VERBATIM, so the
+// caller can hoist them above every concatenated declaration. CUE requires every import to precede
+// all declarations, so a file whose import is joined after another file's defs fails to parse;
+// hoisting keeps the one-directory concatenation working while letting a schema file use a CUE
+// builtin.
+//
+// A parenthesised block is returned as ONE entry including its parentheses. Appending its lines
+// individually and re-emitting them sorted would reorder and unparenthesise it into
+// `import "list"` / `"strings"`, which is invalid — so a block is one declaration, always.
+func stripImportDecls(src []byte) ([]byte, []string) {
+	var (
+		out     bytes.Buffer
+		imports []string
+		block   []byte
+		inBlock bool
+	)
+	for _, raw := range bytes.SplitAfter(src, []byte("\n")) {
+		line := bytes.TrimSpace(raw)
+		switch {
+		case inBlock:
+			block = append(block, raw...)
+			if bytes.Contains(line, []byte(")")) {
+				inBlock = false
+				imports = append(imports, string(block))
+				block = nil
+			}
+		case bytes.HasPrefix(line, []byte("import (")):
+			if bytes.Contains(line, []byte(")")) {
+				imports = append(imports, string(raw))
+				continue
+			}
+			inBlock = true
+			block = append(block, raw...)
+		case bytes.HasPrefix(line, []byte("import ")):
+			imports = append(imports, string(raw))
+		default:
+			out.Write(raw)
+		}
+	}
+	if inBlock {
+		// An unterminated block cannot be hoisted coherently; leaving it in place lets the parser
+		// report the real syntax error instead of the file silently losing a declaration.
+		out.Write(block)
+	}
+	return out.Bytes(), imports
 }
 
 // path joins a dir and a file name with "/" (fs.FS always uses forward slashes,
