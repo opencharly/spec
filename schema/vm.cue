@@ -740,7 +740,7 @@ package schema
 	// The vocabulary is closed because libvirt's own RNG closes it (domaincommon.rng,
 	// the type='virtio' group): any other value is rejected at DEFINE time with an
 	// error that blames <devices>, not the attribute. Rejecting it here names the field.
-	device?: or(_deviceWord)
+	device?: or(_libvirtVideoDeviceWord)
 
 	ram?:    int @go(,type=int)
 	vram?:   int @go(VRAM,type=int)
@@ -847,7 +847,7 @@ package schema
 
 #LibvirtFilesystem: {
 	type?:       string
-	driver?:     or(_driverWord)
+	driver?:     or(_libvirtFilesystemDriverWord)
 	accessmode?: or(_accessmodeWord) @go(AccessMode)
 	source:      string & !=""                       // required (host path)
 	target:      string & !=""                       // required (guest mount tag)
@@ -1059,8 +1059,12 @@ _libvirtGraphicsType: {
 	dbus: {}
 } @vocab(spec)
 _libvirtGraphicsTypeWord: [for w, _ in _libvirtGraphicsType {w}]
-// #LibvirtVideo.device
-_device: {
+// #LibvirtVideo.device — the libvirt VIDEO MODEL (`<video><model type=…>`), named for what it
+// feeds, following this file's own `_libvirt*` convention (`_libvirtGraphicsType`,
+// `_libvirtVideoDriver`, `_libvirtHostdevType`). It is NOT `_device`: DESIGN.cue spends that word
+// on the §9 HOST DEVICE NODES a need asks a venue for (kvm, render, fuse, tun, vhost_net, vsock,
+// hwrng, kfd), and one name cannot be two closed sets — CUE merges same-name definitions silently.
+_libvirtVideoDevice: {
 	"virtio-vga": {}
 	"virtio-vga-gl": {}
 	"virtio-gpu": {}
@@ -1068,7 +1072,7 @@ _device: {
 	"vhost-user-vga": {}
 	"vhost-user-gpu": {}
 } @vocab(spec)
-_deviceWord: [for w, _ in _device {w}]
+_libvirtVideoDeviceWord: [for w, _ in _libvirtVideoDevice {w}]
 // #LibvirtVideoDriver.name
 _name: {qemu: {}, vhostuser: {}} @vocab(spec)
 _nameWord: [for w, _ in _name {w}]
@@ -1081,9 +1085,11 @@ _libvirtHostdevTypeWord: [for w, _ in _libvirtHostdevType {w}]
 // #LibvirtHostdev.managed
 _managed: {yes: {}, no: {}} @vocab(spec)
 _managedWord: [for w, _ in _managed {w}]
-// #LibvirtFilesystem.driver
-_driver: {virtiofs: {}, "9p": {}, path: {}} @vocab(spec)
-_driverWord: [for w, _ in _driver {w}]
+// #LibvirtFilesystem.driver — the libvirt FILESYSTEM DRIVER (`<driver type=…>`), named for what it
+// feeds. It is NOT `_driver`: DESIGN.cue spends that word on the §17.6 DRIVER TABLE (podman, libvirt,
+// qemu, kind, …), and one name cannot be two closed sets.
+_libvirtFilesystemDriver: {virtiofs: {}, "9p": {}, path: {}} @vocab(spec)
+_libvirtFilesystemDriverWord: [for w, _ in _libvirtFilesystemDriver {w}]
 // #LibvirtFilesystem.accessmode
 _accessmode: {passthrough: {}, mapped: {}, squash: {}} @vocab(spec)
 _accessmodeWord: [for w, _ in _accessmode {w}]
