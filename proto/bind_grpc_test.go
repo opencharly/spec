@@ -37,7 +37,6 @@ import (
 type bindServer struct {
 	pb.UnimplementedProviderServer
 	failWith error
-	empty    bool
 }
 
 func (s *bindServer) Bind(_ context.Context, in *pb.BindRequest) (*pb.BindReply, error) {
@@ -47,10 +46,6 @@ func (s *bindServer) Bind(_ context.Context, in *pb.BindRequest) (*pb.BindReply,
 	var input spec.BindInput
 	if err := json.Unmarshal(in.GetInputJson(), &input); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "decode #BindInput: %v", err)
-	}
-	if s.empty {
-		out, _ := json.Marshal(spec.BindOutput{})
-		return &pb.BindReply{OutputJson: out}, nil
 	}
 	out, _ := json.Marshal(spec.BindOutput{Binding: spec.Opaque{
 		"bound_by":   string(input.Provided_by),
