@@ -10010,6 +10010,31 @@ type BoxFetchResolveReply struct {
 	Path string `yaml:"path,omitempty" json:"path,omitempty"`
 }
 
+// #AbsPath — a literal absolute path. DESIGN.cue:77.
+//
+// The `[^$]*` is load-bearing rather than cosmetic: it is how D-SCH-7 keeps a variable OUT of a path,
+// so a path can never expand into a value. A schema that allowed `$` here would reopen the leak this
+// contract exists to close, one layer down.
+type AbsPath string
+
+// #SecretUse — what a `use:` entry on a secret carries. DESIGN.cue:474-480.
+//
+// `src` is the host file the value is read from; `dst` is where it lands in the venue. Both are
+// optional at the SCHEMA level because the delivery is resolved by the type owner, but the pair is
+// what makes delivery possible without the value ever being text.
+//
+// `optional` is the one behavioural flag: a missing source does not fail the deployment. It exists
+// because "this deployment works without the credential" is a real and common intent, and the
+// alternative -- a placeholder secret authored to satisfy a required field -- is exactly how a real
+// credential ends up in an authored file.
+type SecretUse struct {
+	Src AbsPath `yaml:"src,omitempty" json:"src,omitempty"`
+
+	Dst AbsPath `yaml:"dst,omitempty" json:"dst,omitempty"`
+
+	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
+}
+
 // #SidecarResolveInput is the input to candy/plugin-sidecar's OpResolve leg
 // (the host-side sidecar de-type): the three sidecar-def layers to merge
 // (embedded template base, project-root templates, per-deploy overrides —
