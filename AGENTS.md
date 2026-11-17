@@ -24,6 +24,27 @@ Canonical files:
   live in `charly.yml` beside the `spec-skill-shelf` candy that owns them.
 - `README.md` — user overview only; never agent guidance.
 
+## `DESIGN.md` is the contract this module projects
+
+[`DESIGN.md`](https://github.com/opencharly/opencharly/blob/main/DESIGN.md) is **the MUST's
+subject**: the umbrella `AGENTS.md` says how to work; `DESIGN.md` says what must be true when the
+work is done — the contract's requirements, its invariants, and the data shapes every repo shares.
+**Read it before designing anything here:** before adding a field, a shape or a mechanism, grep the
+contract for it and read the row that governs the area.
+
+- **Conformance to the rulebook with a violation of `DESIGN.md` is not a pass.**
+- **When the two disagree, the disagreement is a defect in one of them** — fix the one that is
+  wrong, in the open, and say so.
+- **`schema/*.cue` IS the machine-readable projection of `DESIGN.md`, and `DESIGN.cue` is its
+  schema.** Where the prose and the CUE differ, **the CUE is what the tooling enforces** — and the
+  difference is a defect to resolve, never a licence to pick whichever is convenient.
+- **This module owns the projection, so it owns the divergence.** A field that exists in
+  `schema/*.cue` and not in `DESIGN.md` is **either** a projection that has not been documented
+  **or** a field that should be deleted — and **which one it is must be decided in `DESIGN.md`, not
+  in the PR that needs the field.** A `TODO.md` row whose premise stopped describing the tree is
+  exactly this shape: the schema moved and the prose did not. Add the `DESIGN.md` row for a new
+  field before (or in the same cutover as) the CUE that projects it, never after.
+
 ## Load these skills first (R0)
 
 - `/charly-internals:go` — the SDD operationalization: the schema→generated-code
