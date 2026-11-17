@@ -206,7 +206,12 @@ _leasableWord: [for w, r in _capability if r.lease {w}]
 // (cpu, memory, storage, mount) are exactly the leasable ones.
 #CountNeed:    {count!: #Count, exclusive: *false | bool}
 #SizeNeed:     {size!: #Size, exclusive: *false | bool}
-#MountNeed:    {host!: #AbsPath, path!: #AbsPath, writable: *false | bool, exclusive: *false | bool}
+#MountNeed: {
+	host!:      #AbsPath
+	path!:      #AbsPath
+	writable:   *false | bool
+	exclusive:  *false | bool
+}
 
 // An endpoint the content serves: its port and transport, and the protocol, path and host name it
 // is reached by. A deployment publishes endpoints by name (D-VAL-13).
