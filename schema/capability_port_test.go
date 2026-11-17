@@ -42,11 +42,12 @@ import (
 // the CONTRACT's behaviour rather than through a lookup: every word DESIGN.cue gives the table must be
 // ACCEPTED by #Need and a word it does not give must be REFUSED.
 //
-// Behaviour is the assertion that matters here, because three of DESIGN.cue's generic words are taken
-// by unrelated concepts in other schema files and CUE merges two definitions of one name SILENTLY
-// (measured: `_device` plus schema/vm.cue's `_device` evaluates to ["kvm","render","virtio-vga",
-// "virtio-vga-gl"] with exit 0). A merged table makes the foreign word pass, so the REFUSED half is
-// what catches it — and neither cue-gen nor go build refuses the merge.
+// Behaviour is the assertion that matters here, because three of DESIGN.cue's generic words HAD been
+// taken by unrelated concepts in other schema files and CUE merges two definitions of one name SILENTLY
+// (measured before spec#354/#356: `_device` plus schema/vm.cue's `_device` evaluated to 14 words with
+// exit 0). A merged table lets the foreign word pass, so the REFUSED half is what catches it — and
+// neither cue-gen nor go build refuses the merge. The names are separate now; this assertion is what
+// keeps a future file from re-spending one.
 func TestTheCapabilityVocabulariesAreDesigns(t *testing.T) {
 	v := compileShipped(t)
 	need := v.LookupPath(cue.ParsePath("#Need"))
@@ -96,9 +97,10 @@ func TestTheCapabilityVocabulariesAreDesigns(t *testing.T) {
 		t.Error("#Need accepted a role key that is not a #Word")
 	}
 
-	// The THIRD collision: `_accessWord` is DESIGN.cue's seven venue accesses (D-VENUE), but
-	// schema/deploy.cue declares an unrelated volume-access vocabulary under that name, so CUE merges
-	// them and #DriverRow admits a volume mode as a venue access.
+	// The THIRD collision, now CLOSED: `_accessWord` is DESIGN.cue's seven venue accesses (D-VENUE), and
+	// schema/deploy.cue USED TO declare an unrelated volume-access vocabulary under that name, so CUE
+	// merged them and #DriverRow admitted a volume mode as a venue access. spec#354 renamed the volume
+	// concept to `_volumeAccessMode`; this assertion is what keeps the two apart.
 	driver := v.LookupPath(cue.ParsePath("#DriverRow"))
 	if !driver.Exists() {
 		t.Fatal("#DriverRow does not resolve in the shipped schema")
