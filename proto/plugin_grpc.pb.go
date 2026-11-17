@@ -119,6 +119,8 @@ const (
 	Provider_Invoke_FullMethodName       = "/charlyplugin.Provider/Invoke"
 	Provider_InvokeStream_FullMethodName = "/charlyplugin.Provider/InvokeStream"
 	Provider_Channel_FullMethodName      = "/charlyplugin.Provider/Channel"
+	Provider_Bind_FullMethodName         = "/charlyplugin.Provider/Bind"
+	Provider_Unbind_FullMethodName       = "/charlyplugin.Provider/Unbind"
 )
 
 // ProviderClient is the client API for Provider service.
@@ -131,6 +133,10 @@ type ProviderClient interface {
 	InvokeStream(ctx context.Context, in *InvokeRequest, opts ...grpc.CallOption) (Provider_InvokeStreamClient, error)
 	// generic bidirectional provider/process stream with explicit ordering, acknowledgements, cancellation, and resynchronization
 	Channel(ctx context.Context, opts ...grpc.CallOption) (Provider_ChannelClient, error)
+	// the capability type owner's `bind` — DESIGN.md:413: a binding is `a need or use paired with its provide, delivered by bind to the owner of the capability type`. The reply IS the binding, and a binding is STATE (D-CAP-4), so nothing here names a destination: how the owner effectuates it is the owner's business.
+	Bind(ctx context.Context, in *BindRequest, opts ...grpc.CallOption) (*BindReply, error)
+	// the capability type owner's `unbind` — removes the binding the owner minted. A failure crosses as the gRPC status, like Invoke's: the reply is Empty.
+	Unbind(ctx context.Context, in *UnbindRequest, opts ...grpc.CallOption) (*Empty, error)
 }
 
 type providerClient struct {
@@ -213,6 +219,24 @@ func (x *providerChannelClient) Recv() (*ChannelFrame, error) {
 	return m, nil
 }
 
+func (c *providerClient) Bind(ctx context.Context, in *BindRequest, opts ...grpc.CallOption) (*BindReply, error) {
+	out := new(BindReply)
+	err := c.cc.Invoke(ctx, Provider_Bind_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *providerClient) Unbind(ctx context.Context, in *UnbindRequest, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, Provider_Unbind_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProviderServer is the server API for Provider service.
 // All implementations must embed UnimplementedProviderServer
 // for forward compatibility
@@ -223,6 +247,10 @@ type ProviderServer interface {
 	InvokeStream(*InvokeRequest, Provider_InvokeStreamServer) error
 	// generic bidirectional provider/process stream with explicit ordering, acknowledgements, cancellation, and resynchronization
 	Channel(Provider_ChannelServer) error
+	// the capability type owner's `bind` — DESIGN.md:413: a binding is `a need or use paired with its provide, delivered by bind to the owner of the capability type`. The reply IS the binding, and a binding is STATE (D-CAP-4), so nothing here names a destination: how the owner effectuates it is the owner's business.
+	Bind(context.Context, *BindRequest) (*BindReply, error)
+	// the capability type owner's `unbind` — removes the binding the owner minted. A failure crosses as the gRPC status, like Invoke's: the reply is Empty.
+	Unbind(context.Context, *UnbindRequest) (*Empty, error)
 	mustEmbedUnimplementedProviderServer()
 }
 
@@ -238,6 +266,12 @@ func (UnimplementedProviderServer) InvokeStream(*InvokeRequest, Provider_InvokeS
 }
 func (UnimplementedProviderServer) Channel(Provider_ChannelServer) error {
 	return status.Errorf(codes.Unimplemented, "method Channel not implemented")
+}
+func (UnimplementedProviderServer) Bind(context.Context, *BindRequest) (*BindReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Bind not implemented")
+}
+func (UnimplementedProviderServer) Unbind(context.Context, *UnbindRequest) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Unbind not implemented")
 }
 func (UnimplementedProviderServer) mustEmbedUnimplementedProviderServer() {}
 
@@ -317,6 +351,42 @@ func (x *providerChannelServer) Recv() (*ChannelFrame, error) {
 	return m, nil
 }
 
+func _Provider_Bind_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BindRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProviderServer).Bind(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Provider_Bind_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProviderServer).Bind(ctx, req.(*BindRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Provider_Unbind_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnbindRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProviderServer).Unbind(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Provider_Unbind_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProviderServer).Unbind(ctx, req.(*UnbindRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Provider_ServiceDesc is the grpc.ServiceDesc for Provider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -327,6 +397,14 @@ var Provider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Invoke",
 			Handler:    _Provider_Invoke_Handler,
+		},
+		{
+			MethodName: "Bind",
+			Handler:    _Provider_Bind_Handler,
+		},
+		{
+			MethodName: "Unbind",
+			Handler:    _Provider_Unbind_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

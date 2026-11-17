@@ -167,6 +167,21 @@ message InvokeReply {
   bytes result_json = 1;
 }
 
+// the marshalled #BindInput — `need`, `provided_by`, `deployment`, all three from schema/bind.cue (spec#352). Carried as JSON in bytes, exactly as InvokeRequest carries params_json.
+message BindRequest {
+  bytes input_json = 1;
+}
+
+// the marshalled #BindOutput — `binding`, the HANDLE the type owner mints for this pairing, opaque to core and the only thing a later `unbind` can name. ONE field, mirroring InvokeReply: a failure crosses as the gRPC status, never as a reply field.
+message BindReply {
+  bytes output_json = 1;
+}
+
+// the marshalled #UnbindInput — the binding handle the owner minted at bind. JSON in bytes, like every other domain payload on this wire.
+message UnbindRequest {
+  bytes input_json = 1;
+}
+
 // one streamed result frame (single-shot sends one)
 message Frame {
   bytes result_json = 1;
@@ -429,6 +444,10 @@ service Provider {
   rpc InvokeStream(InvokeRequest) returns (stream Frame);
   // generic bidirectional provider/process stream with explicit ordering, acknowledgements, cancellation, and resynchronization
   rpc Channel(stream ChannelFrame) returns (stream ChannelFrame);
+  // the capability type owner's `bind` — DESIGN.md:413: a binding is `a need or use paired with its provide, delivered by bind to the owner of the capability type`. The reply IS the binding, and a binding is STATE (D-CAP-4), so nothing here names a destination: how the owner effectuates it is the owner's business.
+  rpc Bind(BindRequest) returns (BindReply);
+  // the capability type owner's `unbind` — removes the binding the owner minted. A failure crosses as the gRPC status, like Invoke's: the reply is Empty.
+  rpc Unbind(UnbindRequest) returns (Empty);
 }
 
 // ExecutorService — the HOST-SERVED reverse channel (E3b). A provider's live
