@@ -401,6 +401,39 @@ protocol: {
 			]
 		},
 		{
+			"name": "BindRequest"
+			"doc":  "the marshalled #BindInput — `need`, `provided_by`, `deployment`, all three from schema/bind.cue (spec#352). Carried as JSON in bytes, exactly as InvokeRequest carries params_json."
+			"fields": [
+				{
+					"name":   "input_json"
+					"type":   "bytes"
+					"number": 1
+				},
+			]
+		},
+		{
+			"name": "BindReply"
+			"doc":  "the marshalled #BindOutput — `binding`, the HANDLE the type owner mints for this pairing, opaque to core and the only thing a later `unbind` can name. ONE field, mirroring InvokeReply: a failure crosses as the gRPC status, never as a reply field."
+			"fields": [
+				{
+					"name":   "output_json"
+					"type":   "bytes"
+					"number": 1
+				},
+			]
+		},
+		{
+			"name": "UnbindRequest"
+			"doc":  "the marshalled #UnbindInput — the binding handle the owner minted at bind. JSON in bytes, like every other domain payload on this wire."
+			"fields": [
+				{
+					"name":   "input_json"
+					"type":   "bytes"
+					"number": 1
+				},
+			]
+		},
+		{
 			"name": "Frame"
 			"doc":  "one streamed result frame (single-shot sends one)"
 			"fields": [
@@ -1101,6 +1134,18 @@ protocol: {
 					"doc":              "generic bidirectional provider/process stream with explicit ordering, acknowledgements, cancellation, and resynchronization"
 					"client_streaming": true
 					"server_streaming": true
+				},
+				{
+					"name":     "Bind"
+					"request":  "BindRequest"
+					"response": "BindReply"
+					"doc":      "the capability type owner's `bind` — DESIGN.md:413: a binding is `a need or use paired with its provide, delivered by bind to the owner of the capability type`. The reply IS the binding, and a binding is STATE (D-CAP-4), so nothing here names a destination: how the owner effectuates it is the owner's business."
+				},
+				{
+					"name":     "Unbind"
+					"request":  "UnbindRequest"
+					"response": "Empty"
+					"doc":      "the capability type owner's `unbind` — removes the binding the owner minted. A failure crosses as the gRPC status, like Invoke's: the reply is Empty."
 				},
 			]
 		},
