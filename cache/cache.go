@@ -51,7 +51,7 @@ import (
 	"time"
 
 	"github.com/opencharly/spec/lock"
-	"github.com/opencharly/spec/spec"
+	"github.com/opencharly/spec/storeroot"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociv1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -191,17 +191,18 @@ func StoreDir(name string) (string, error) {
 	return filepath.Join(root, name), nil
 }
 
-// StoreRoot returns the ROOT directory every named store lives under
-// (~/.config/charly/cache/), honoring the CHARLY_CACHE_DIR override.
+// StoreRoot returns the ROOT directory every named store lives under.
+//
+// IT ASKS THE ONE RESOLVER (D-STORE-1): `spec/storeroot` owns the four roots and the single
+// `CHARLY_CACHE_DIR` override, so the plugin host and every plugin it serves resolve the same tree
+// from the same code. This function used to re-derive the cache root itself — reading the env var,
+// then falling back to `filepath.Dir(spec.DefaultDeployConfigPath())/cache` — a SECOND copy of the rule
+// that DID disagree with the resolver the rest of the tree uses. Both branches honoured the override,
+// so the divergence was in the FALLBACK: `<config>/cache` here versus `os.UserCacheDir()/charly` there,
+// i.e. `~/.config/charly/cache` against `~/.cache/charly`. Two trees that never meet, each side
+// believing it had resolved "the cache".
 func StoreRoot() (string, error) {
-	if root := os.Getenv("CHARLY_CACHE_DIR"); root != "" {
-		return root, nil
-	}
-	cfg, err := spec.DefaultDeployConfigPath()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(filepath.Dir(cfg), "cache"), nil
+	return storeroot.CacheDir()
 }
 
 // NamedStores returns every named store under the cache root, sorted by name.
