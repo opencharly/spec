@@ -2701,6 +2701,12 @@ type CandyModel struct {
 
 	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
 
+	// need/use mirror candy.cue's authored pair (§8; schema/capability.cue carries the shapes),
+	// projected onto the build model the same way every other candy field is.
+	Need *CandyNeed `yaml:"need,omitempty" json:"need,omitempty"`
+
+	Use *CandyUse `yaml:"use,omitempty" json:"use,omitempty"`
+
 	Capability *CandyCapability `yaml:"capability,omitempty" json:"capability,omitempty"`
 
 	Secret []CandySecret `yaml:"secret,omitempty" json:"secret,omitempty"`
@@ -2773,6 +2779,136 @@ type EnvConfig struct {
 	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty"`
 
 	PathAppend []string `yaml:"path_append,omitempty" json:"path_append,omitempty"`
+}
+
+type CandyNeed struct {
+	Parameter struct {
+	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
+
+	Env struct {
+	} `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Secret struct {
+	} `yaml:"secret,omitempty" json:"secret,omitempty"`
+
+	Endpoint struct {
+	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Network struct {
+	} `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Harness struct {
+	} `yaml:"harness,omitempty" json:"harness,omitempty"`
+
+	Gpu struct {
+	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+
+	Device struct {
+	} `yaml:"device,omitempty" json:"device,omitempty"`
+
+	Cpu struct {
+	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+
+	Memory struct {
+	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Storage struct {
+	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Mount struct {
+	} `yaml:"mount,omitempty" json:"mount,omitempty"`
+
+	Nesting struct {
+	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
+
+	Isolation struct {
+	} `yaml:"isolation,omitempty" json:"isolation,omitempty"`
+
+	Privilege struct {
+	} `yaml:"privilege,omitempty" json:"privilege,omitempty"`
+
+	Driver_api struct {
+	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
+
+	Kind struct {
+	} `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Verb struct {
+	} `yaml:"verb,omitempty" json:"verb,omitempty"`
+
+	Subcommand struct {
+	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
+
+	Type struct {
+	} `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Api struct {
+	} `yaml:"api,omitempty" json:"api,omitempty"`
+}
+
+type CandyUse struct {
+	Parameter struct {
+	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
+
+	Env struct {
+	} `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Secret struct {
+	} `yaml:"secret,omitempty" json:"secret,omitempty"`
+
+	Endpoint struct {
+	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Network struct {
+	} `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Harness struct {
+	} `yaml:"harness,omitempty" json:"harness,omitempty"`
+
+	Gpu struct {
+	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+
+	Device struct {
+	} `yaml:"device,omitempty" json:"device,omitempty"`
+
+	Cpu struct {
+	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+
+	Memory struct {
+	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Storage struct {
+	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Mount struct {
+	} `yaml:"mount,omitempty" json:"mount,omitempty"`
+
+	Nesting struct {
+	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
+
+	Isolation struct {
+	} `yaml:"isolation,omitempty" json:"isolation,omitempty"`
+
+	Privilege struct {
+	} `yaml:"privilege,omitempty" json:"privilege,omitempty"`
+
+	Driver_api struct {
+	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
+
+	Kind struct {
+	} `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Verb struct {
+	} `yaml:"verb,omitempty" json:"verb,omitempty"`
+
+	Subcommand struct {
+	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
+
+	Type struct {
+	} `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Api struct {
+	} `yaml:"api,omitempty" json:"api,omitempty"`
 }
 
 // CandyCapabilities — image-level facts a candy contributes (aggregated at
@@ -3482,6 +3618,15 @@ type Candy struct {
 
 	Require []CandyRef `yaml:"require,omitempty" json:"require,omitempty"`
 
+	// need/use — the authored capability-ask surface (§8): what this candy MUST be given and what
+	// it CAN be given, one entry per capability type. #Need/#Use/#CandyNeed/#CandyUse are the §8
+	// table's own shapes (schema/capability.cue, ported from DESIGN.cue:506-524); a candy's
+	// `parameter:` entry additionally carries `one_of` (D-SCH-7), which is why the candy shape is
+	// #CandyNeed rather than #Need.
+	Need *CandyNeed `yaml:"need,omitempty" json:"need,omitempty"`
+
+	Use *CandyUse `yaml:"use,omitempty" json:"use,omitempty"`
+
 	// bake_plugin — the OUT-OF-TREE plugin candies whose pre-built provider binary
 	// this candy BAKES into every composing image at /usr/lib/charly/plugins/, so a
 	// DEPLOYED container (no candy source, no go toolchain) can run an external plugin
@@ -4079,6 +4224,314 @@ type ResolvedCandyVolume struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
 	Path string `yaml:"path,omitempty" json:"path"`
+}
+
+// ── the primitives this contract names, PORTED from DESIGN.cue:49-100 ──
+type Name string
+
+type EnvName string
+
+type Port int64
+
+type Hostname string
+
+type InitNeutral string
+
+type TextSet []Text
+
+type NativeRow struct {
+	Native Text `yaml:"native,omitempty" json:"native,omitempty"`
+}
+
+type DriverRow struct {
+	Subsystem string `yaml:"subsystem,omitempty" json:"subsystem"`
+
+	Default bool `yaml:"default,omitempty" json:"default"`
+
+	Form []string `yaml:"form,omitempty" json:"form,omitempty"`
+
+	Access []string `yaml:"access,omitempty" json:"access,omitempty"`
+
+	Capture []string `yaml:"capture,omitempty" json:"capture,omitempty"`
+
+	Grant struct {
+	} `yaml:"grant,omitempty" json:"grant,omitempty"`
+
+	Tool Text `yaml:"tool,omitempty" json:"tool,omitempty"`
+}
+
+// ── §8: one table of capability types; a need and a provide are rows of it ──
+//
+// A capability type: what its entries are keyed by, what a need entry and a provide entry add,
+// whether it is a leasable host resource, and — for a type whose keys name nodes — the kinds they
+// may name (`ref`, S9). Only a leasable type's entry is `exclusive` or not (D-HW-8), so `exclusive`
+// on any other type is not a field.
+type CapabilityRow struct {
+	Key any/* CUE top */ `yaml:"key,omitempty" json:"key"`
+
+	Need any/* CUE top */ `yaml:"need,omitempty" json:"need,omitempty"`
+
+	Provide any/* CUE top */ `yaml:"provide,omitempty" json:"provide,omitempty"`
+
+	Use any/* CUE top */ `yaml:"use,omitempty" json:"use,omitempty"`
+
+	Lease bool `yaml:"lease,omitempty" json:"lease"`
+
+	Ref []string `yaml:"ref,omitempty" json:"ref,omitempty"`
+}
+
+// D-CAP-1: a capability's strength is the key it is written under — `need:` MUST be set, `use:` CAN
+// be set — never a field of the entry. Only a `use:` entry carries a `default`.
+type LeaseFields struct {
+	Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
+}
+
+type Need struct {
+	Env struct {
+	} `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Parameter struct {
+	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
+
+	Secret struct {
+	} `yaml:"secret,omitempty" json:"secret,omitempty"`
+
+	Endpoint struct {
+	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Network struct {
+	} `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Harness struct {
+	} `yaml:"harness,omitempty" json:"harness,omitempty"`
+
+	Gpu struct {
+	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+
+	Device struct {
+	} `yaml:"device,omitempty" json:"device,omitempty"`
+
+	Cpu struct {
+	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+
+	Memory struct {
+	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Storage struct {
+	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Mount struct {
+	} `yaml:"mount,omitempty" json:"mount,omitempty"`
+
+	Nesting struct {
+	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
+
+	Isolation struct {
+	} `yaml:"isolation,omitempty" json:"isolation,omitempty"`
+
+	Privilege struct {
+	} `yaml:"privilege,omitempty" json:"privilege,omitempty"`
+
+	Driver_api struct {
+	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
+
+	Kind struct {
+	} `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Verb struct {
+	} `yaml:"verb,omitempty" json:"verb,omitempty"`
+
+	Subcommand struct {
+	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
+
+	Type struct {
+	} `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Api struct {
+	} `yaml:"api,omitempty" json:"api,omitempty"`
+}
+
+type Use struct {
+	Env struct {
+	} `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Parameter struct {
+	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
+
+	Secret struct {
+	} `yaml:"secret,omitempty" json:"secret,omitempty"`
+
+	Endpoint struct {
+	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Network struct {
+	} `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Harness struct {
+	} `yaml:"harness,omitempty" json:"harness,omitempty"`
+
+	Gpu struct {
+	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
+
+	Device struct {
+	} `yaml:"device,omitempty" json:"device,omitempty"`
+
+	Cpu struct {
+	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+
+	Memory struct {
+	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+
+	Storage struct {
+	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	Mount struct {
+	} `yaml:"mount,omitempty" json:"mount,omitempty"`
+
+	Nesting struct {
+	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
+
+	Isolation struct {
+	} `yaml:"isolation,omitempty" json:"isolation,omitempty"`
+
+	Privilege struct {
+	} `yaml:"privilege,omitempty" json:"privilege,omitempty"`
+
+	Driver_api struct {
+	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
+
+	Kind struct {
+	} `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Verb struct {
+	} `yaml:"verb,omitempty" json:"verb,omitempty"`
+
+	Subcommand struct {
+	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
+
+	Type struct {
+	} `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Api struct {
+	} `yaml:"api,omitempty" json:"api,omitempty"`
+}
+
+type Provide struct {
+	Env struct {
+	} `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Parameter struct {
+	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
+
+	Endpoint struct {
+	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Network struct {
+	} `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Kind struct {
+	} `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Verb struct {
+	} `yaml:"verb,omitempty" json:"verb,omitempty"`
+
+	Subcommand struct {
+	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
+
+	Type struct {
+	} `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Api struct {
+	} `yaml:"api,omitempty" json:"api,omitempty"`
+}
+
+type EnvProvide struct {
+	Value InitNeutral `yaml:"value,omitempty" json:"value"`
+}
+
+type EnvUse struct {
+	Default InitNeutral `yaml:"default,omitempty" json:"default,omitempty"`
+}
+
+// A parameter: a value a node takes from whoever references it. A candy's is a bounded choice,
+// never a substitution (D-SCH-7); a pipeline's is any text.
+type ParameterNeed struct {
+	Description Text `yaml:"description,omitempty" json:"description,omitempty"`
+
+	One_of TextSet `yaml:"one_of,omitempty" json:"one_of,omitempty"`
+}
+
+type ParameterUse struct {
+	Default Text `yaml:"default,omitempty" json:"default,omitempty"`
+
+	Description Text `yaml:"description,omitempty" json:"description,omitempty"`
+
+	One_of TextSet `yaml:"one_of,omitempty" json:"one_of,omitempty"`
+}
+
+type ParameterProvide struct {
+	Value Text `yaml:"value,omitempty" json:"value"`
+}
+
+// D-SCH-7: a candy's parameter is a bounded choice, so its entry carries `one_of`.
+type CandyParameterNeed struct {
+	Description Text `yaml:"description,omitempty" json:"description,omitempty"`
+
+	One_of []Text `yaml:"one_of,omitempty" json:"one_of"`
+}
+
+type CandyParameterUse struct {
+	Default Text `yaml:"default,omitempty" json:"default,omitempty"`
+
+	Description Text `yaml:"description,omitempty" json:"description,omitempty"`
+
+	One_of []Text `yaml:"one_of,omitempty" json:"one_of"`
+}
+
+type EndpointNeed struct {
+	Protocol string `yaml:"protocol,omitempty" json:"protocol"`
+}
+
+type CountNeed struct {
+	Count Count `yaml:"count,omitempty" json:"count"`
+}
+
+// #Count / #Text — DESIGN.cue:53-54's two scalar primitives, transcribed because this module had no
+// def for either and a stage's `attempt`, `concurrency` and `prompt` are exactly them. ONE definition
+// each (R2).
+type Count int64
+
+type SizeNeed struct {
+	Size Size `yaml:"size,omitempty" json:"size"`
+}
+
+type MountNeed struct {
+	Host AbsPath `yaml:"host,omitempty" json:"host"`
+
+	Path AbsPath `yaml:"path,omitempty" json:"path"`
+
+	Writable bool `yaml:"writable,omitempty" json:"writable"`
+}
+
+// #AbsPath — a literal absolute path. DESIGN.cue:77.
+//
+// The `[^$]*` is load-bearing rather than cosmetic: it is how D-SCH-7 keeps a variable OUT of a path,
+// so a path can never expand into a value. A schema that allowed `$` here would reopen the leak this
+// contract exists to close, one layer down.
+type AbsPath string
+
+// An endpoint the content serves: its port and transport, and the protocol, path and host name it
+// is reached by. A deployment publishes endpoints by name (D-VAL-13).
+type Endpoint struct {
+	Port Port `yaml:"port,omitempty" json:"port"`
+
+	Transport string `yaml:"transport,omitempty" json:"transport"`
+
+	Protocol string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+
+	Path AbsPath `yaml:"path,omitempty" json:"path,omitempty"`
+
+	Host Hostname `yaml:"host,omitempty" json:"host,omitempty"`
 }
 
 // CUE schema for the check-engine's per-step VERDICT envelope (FLOOR-SLIM Unit 4). NOT an
@@ -10060,13 +10513,6 @@ type BoxFetchResolveReply struct {
 	Path string `yaml:"path,omitempty" json:"path,omitempty"`
 }
 
-// #AbsPath — a literal absolute path. DESIGN.cue:77.
-//
-// The `[^$]*` is load-bearing rather than cosmetic: it is how D-SCH-7 keeps a variable OUT of a path,
-// so a path can never expand into a value. A schema that allowed `$` here would reopen the leak this
-// contract exists to close, one layer down.
-type AbsPath string
-
 // #SecretUse — what a `use:` entry on a secret carries. DESIGN.cue:474-480.
 //
 // `src` is the host file the value is read from; `dst` is where it lands in the venue. Both are
@@ -10220,11 +10666,6 @@ type SkillReference struct {
 
 	Content string `yaml:"content,omitempty" json:"content"`
 }
-
-// #Count / #Text — DESIGN.cue:53-54's two scalar primitives, transcribed because this module had no
-// def for either and a stage's `attempt`, `concurrency` and `prompt` are exactly them. ONE definition
-// each (R2).
-type Count int64
 
 // #Retry — D-FLOW-2: a stage's repetition is a DECLARED, BOUNDED count. It never repeats a failed
 // plugin call (D-PROTO-7) and is never blind (D-LAW-5), which is why `attempt` is bounded by #Count
