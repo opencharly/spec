@@ -349,6 +349,51 @@ func (g *generator) emitType(val cue.Value, optionalStg optionalStrategy) (typeF
 	return facts, nil
 }
 
+// patternMapElem returns the ELEMENT type of a struct whose only constraint is a universal
+// pattern, and ok=false for every other struct.
+//
+// The Go key is `string`, and that is a property of what is available rather than a
+// compromise: Selector.Pattern() yields the CONSTRAINT itself (`=~"^[a-z][a-z0-9_]*$"`, or
+// `"x" | "y"`), a string-kind value, so the name of the definition whose regex it is does not
+// survive to be emitted. A disjunction key has no Go sum type at all. So the key is `string`
+// and the set stays closed where it already lives: the key type's `Valid()` (#Word, #EnvName,
+// #Name), which every consumer of a vocabulary in this module already calls. Typing the key
+// here would mean recovering a definition name from a constraint -- a second authority over
+// naming -- and would buy a compile-time refusal only for a constant key, which a value read
+// from config never is.
+//
+// A struct that mixes a pattern with NAMED fields is not a map: emitting one would drop the
+// named fields, so that shape keeps the struct branch (no generated def does this today; the
+// guard is here so a future one cannot silently lose data).
+func patternMapElem(val cue.Value) (cue.Value, bool) {
+	if val.IncompleteKind() != cue.StructKind {
+		return cue.Value{}, false
+	}
+	iter, err := val.Fields(cue.Patterns(true), cue.Optional(true))
+	if err != nil {
+		return cue.Value{}, false
+	}
+	var elem cue.Value
+	found := false
+	named := 0
+	for iter.Next() {
+		sel := iter.Selector()
+		if sel.ConstraintType()&cue.PatternConstraint != 0 {
+			if !found {
+				elem, found = iter.Value(), true
+			}
+			continue
+		}
+		if !sel.IsDefinition() {
+			named++
+		}
+	}
+	if !found || named > 0 {
+		return cue.Value{}, false
+	}
+	return elem, true
+}
+
 // emitStructKind emits a CUE struct as a Go map, a `map[string]any` fallback for a
 // disjunction of structs, or a struct with one field per CUE field. Extracted from
 // emitType so each function stays under the complexity gate; the emitted bytes are
@@ -356,6 +401,20 @@ func (g *generator) emitType(val cue.Value, optionalStg optionalStrategy) (typeF
 func (g *generator) emitStructKind(val cue.Value, optionalStg optionalStrategy) (typeFacts, error) {
 	var facts typeFacts
 	if elem := val.LookupPath(cue.MakePath(cue.AnyString)); elem.Err() == nil {
+		facts.isNillable = true // maps can be nil
+		g.def.printf("map[string]")
+		if _, err := g.emitType(elem, optionalStg); err != nil {
+			return facts, err
+		}
+		return facts, nil
+	}
+	// A UNIVERSAL pattern constraint ([#Word]: T, [("a"|"b")]: T) is a map too, and it is not
+	// reachable through AnyString above: that lookup selects only the ELLIPSIS `[string]: T`.
+	// Without this branch such a collection fell through to `struct {` and closed immediately,
+	// because a pattern contributes no FIELD -- the payload was not lost, it was never asked
+	// for. `cue.Patterns` exposes universal patterns; its own doc draws the distinction, and
+	// Selector.Pattern() carries the constraint (opencharly/spec#271, which this branch closes).
+	if elem, ok := patternMapElem(val); ok {
 		facts.isNillable = true // maps can be nil
 		g.def.printf("map[string]")
 		if _, err := g.emitType(elem, optionalStg); err != nil {
