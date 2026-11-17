@@ -2782,134 +2782,155 @@ type EnvConfig struct {
 }
 
 type CandyNeed struct {
-	Parameter struct {
+	Parameter map[string]struct {
+		Description Text `yaml:"description,omitempty" json:"description,omitempty"`
+
+		One_of []Text `yaml:"one_of,omitempty" json:"one_of"`
 	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
 
-	Env struct {
+	Env map[string]struct {
 	} `yaml:"env,omitempty" json:"env,omitempty"`
 
-	Secret struct {
+	Secret map[string]struct {
 	} `yaml:"secret,omitempty" json:"secret,omitempty"`
 
-	Endpoint struct {
+	Endpoint map[string]struct {
+		Protocol string `yaml:"protocol,omitempty" json:"protocol"`
 	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
 
-	Network struct {
+	Network map[string]struct {
 	} `yaml:"network,omitempty" json:"network,omitempty"`
 
-	Harness struct {
+	Harness map[string]struct {
 	} `yaml:"harness,omitempty" json:"harness,omitempty"`
 
-	Gpu struct {
+	Gpu map[string]struct {
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
 
-	Device struct {
+	Device map[string]struct {
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"device,omitempty" json:"device,omitempty"`
 
-	Cpu struct {
-	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	Cpu map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Memory struct {
-	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+	Memory map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"memory,omitempty" json:"memory,omitempty"`
 
-	Storage struct {
-	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Storage map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"storage,omitempty" json:"storage,omitempty"`
 
-	Mount struct {
-	} `yaml:"mount,omitempty" json:"mount,omitempty"`
+	Mount map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"mount,omitempty" json:"mount,omitempty"`
 
-	Nesting struct {
+	Nesting map[string]struct {
 	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
 
-	Isolation struct {
+	Isolation map[string]struct {
 	} `yaml:"isolation,omitempty" json:"isolation,omitempty"`
 
-	Privilege struct {
+	Privilege map[string]struct {
 	} `yaml:"privilege,omitempty" json:"privilege,omitempty"`
 
-	Driver_api struct {
+	Driver_api map[string]struct {
 	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
 
-	Kind struct {
+	Kind map[string]struct {
 	} `yaml:"kind,omitempty" json:"kind,omitempty"`
 
-	Verb struct {
+	Verb map[string]struct {
 	} `yaml:"verb,omitempty" json:"verb,omitempty"`
 
-	Subcommand struct {
+	Subcommand map[string]struct {
 	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
 
-	Type struct {
+	Type map[string]struct {
 	} `yaml:"type,omitempty" json:"type,omitempty"`
 
-	Api struct {
+	Api map[string]struct {
 	} `yaml:"api,omitempty" json:"api,omitempty"`
 }
 
 type CandyUse struct {
-	Parameter struct {
+	Parameter map[string]struct {
+		Default Text `yaml:"default,omitempty" json:"default,omitempty"`
+
+		Description Text `yaml:"description,omitempty" json:"description,omitempty"`
+
+		One_of []Text `yaml:"one_of,omitempty" json:"one_of"`
 	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
 
-	Env struct {
+	Env map[string]struct {
+		Default InitNeutral `yaml:"default,omitempty" json:"default,omitempty"`
 	} `yaml:"env,omitempty" json:"env,omitempty"`
 
-	Secret struct {
+	Secret map[string]struct {
+		Src AbsPath `yaml:"src,omitempty" json:"src,omitempty"`
+
+		Dst AbsPath `yaml:"dst,omitempty" json:"dst,omitempty"`
+
+		Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
 	} `yaml:"secret,omitempty" json:"secret,omitempty"`
 
-	Endpoint struct {
+	Endpoint map[string]struct {
+		Protocol string `yaml:"protocol,omitempty" json:"protocol"`
 	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
 
-	Network struct {
+	Network map[string]struct {
 	} `yaml:"network,omitempty" json:"network,omitempty"`
 
-	Harness struct {
+	Harness map[string]struct {
 	} `yaml:"harness,omitempty" json:"harness,omitempty"`
 
-	Gpu struct {
+	Gpu map[string]struct {
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
 
-	Device struct {
+	Device map[string]struct {
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"device,omitempty" json:"device,omitempty"`
 
-	Cpu struct {
-	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	Cpu map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Memory struct {
-	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+	Memory map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"memory,omitempty" json:"memory,omitempty"`
 
-	Storage struct {
-	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Storage map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"storage,omitempty" json:"storage,omitempty"`
 
-	Mount struct {
-	} `yaml:"mount,omitempty" json:"mount,omitempty"`
+	Mount map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"mount,omitempty" json:"mount,omitempty"`
 
-	Nesting struct {
+	Nesting map[string]struct {
 	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
 
-	Isolation struct {
+	Isolation map[string]struct {
 	} `yaml:"isolation,omitempty" json:"isolation,omitempty"`
 
-	Privilege struct {
+	Privilege map[string]struct {
 	} `yaml:"privilege,omitempty" json:"privilege,omitempty"`
 
-	Driver_api struct {
+	Driver_api map[string]struct {
 	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
 
-	Kind struct {
+	Kind map[string]struct {
 	} `yaml:"kind,omitempty" json:"kind,omitempty"`
 
-	Verb struct {
+	Verb map[string]struct {
 	} `yaml:"verb,omitempty" json:"verb,omitempty"`
 
-	Subcommand struct {
+	Subcommand map[string]struct {
 	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
 
-	Type struct {
+	Type map[string]struct {
 	} `yaml:"type,omitempty" json:"type,omitempty"`
 
-	Api struct {
+	Api map[string]struct {
 	} `yaml:"api,omitempty" json:"api,omitempty"`
 }
+
+type InitNeutral string
+
+// #AbsPath — a literal absolute path. DESIGN.cue:77.
+//
+// The `[^$]*` is load-bearing rather than cosmetic: it is how D-SCH-7 keeps a variable OUT of a path,
+// so a path can never expand into a value. A schema that allowed `$` here would reopen the leak this
+// contract exists to close, one layer down.
+type AbsPath string
 
 // CandyCapabilities — image-level facts a candy contributes (aggregated at
 // resolve time). oci_label is a genuine open string→string passthrough.
@@ -4264,8 +4285,6 @@ type Port int64
 
 type Hostname string
 
-type InitNeutral string
-
 type TextSet []Text
 
 type NativeRow struct {
@@ -4283,8 +4302,7 @@ type DriverRow struct {
 
 	Capture []string `yaml:"capture,omitempty" json:"capture,omitempty"`
 
-	Grant struct {
-	} `yaml:"grant,omitempty" json:"grant,omitempty"`
+	Grant map[string]string `yaml:"grant,omitempty" json:"grant,omitempty"`
 
 	Tool Text `yaml:"tool,omitempty" json:"tool,omitempty"`
 }
@@ -4316,161 +4334,184 @@ type LeaseFields struct {
 }
 
 type Need struct {
-	Env struct {
+	Env map[string]struct {
 	} `yaml:"env,omitempty" json:"env,omitempty"`
 
-	Parameter struct {
+	Parameter map[string]struct {
+		Description Text `yaml:"description,omitempty" json:"description,omitempty"`
+
+		One_of TextSet `yaml:"one_of,omitempty" json:"one_of,omitempty"`
 	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
 
-	Secret struct {
+	Secret map[string]struct {
 	} `yaml:"secret,omitempty" json:"secret,omitempty"`
 
-	Endpoint struct {
+	Endpoint map[string]struct {
+		Protocol string `yaml:"protocol,omitempty" json:"protocol"`
 	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
 
-	Network struct {
+	Network map[string]struct {
 	} `yaml:"network,omitempty" json:"network,omitempty"`
 
-	Harness struct {
+	Harness map[string]struct {
 	} `yaml:"harness,omitempty" json:"harness,omitempty"`
 
-	Gpu struct {
+	Gpu map[string]struct {
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
 
-	Device struct {
+	Device map[string]struct {
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"device,omitempty" json:"device,omitempty"`
 
-	Cpu struct {
-	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	Cpu map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Memory struct {
-	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+	Memory map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"memory,omitempty" json:"memory,omitempty"`
 
-	Storage struct {
-	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Storage map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"storage,omitempty" json:"storage,omitempty"`
 
-	Mount struct {
-	} `yaml:"mount,omitempty" json:"mount,omitempty"`
+	Mount map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"mount,omitempty" json:"mount,omitempty"`
 
-	Nesting struct {
+	Nesting map[string]struct {
 	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
 
-	Isolation struct {
+	Isolation map[string]struct {
 	} `yaml:"isolation,omitempty" json:"isolation,omitempty"`
 
-	Privilege struct {
+	Privilege map[string]struct {
 	} `yaml:"privilege,omitempty" json:"privilege,omitempty"`
 
-	Driver_api struct {
+	Driver_api map[string]struct {
 	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
 
-	Kind struct {
+	Kind map[string]struct {
 	} `yaml:"kind,omitempty" json:"kind,omitempty"`
 
-	Verb struct {
+	Verb map[string]struct {
 	} `yaml:"verb,omitempty" json:"verb,omitempty"`
 
-	Subcommand struct {
+	Subcommand map[string]struct {
 	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
 
-	Type struct {
+	Type map[string]struct {
 	} `yaml:"type,omitempty" json:"type,omitempty"`
 
-	Api struct {
+	Api map[string]struct {
 	} `yaml:"api,omitempty" json:"api,omitempty"`
 }
 
 type Use struct {
-	Env struct {
+	Env map[string]struct {
+		Default InitNeutral `yaml:"default,omitempty" json:"default,omitempty"`
 	} `yaml:"env,omitempty" json:"env,omitempty"`
 
-	Parameter struct {
+	Parameter map[string]struct {
+		Default Text `yaml:"default,omitempty" json:"default,omitempty"`
+
+		Description Text `yaml:"description,omitempty" json:"description,omitempty"`
+
+		One_of TextSet `yaml:"one_of,omitempty" json:"one_of,omitempty"`
 	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
 
-	Secret struct {
+	Secret map[string]struct {
+		Src AbsPath `yaml:"src,omitempty" json:"src,omitempty"`
+
+		Dst AbsPath `yaml:"dst,omitempty" json:"dst,omitempty"`
+
+		Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
 	} `yaml:"secret,omitempty" json:"secret,omitempty"`
 
-	Endpoint struct {
+	Endpoint map[string]struct {
+		Protocol string `yaml:"protocol,omitempty" json:"protocol"`
 	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
 
-	Network struct {
+	Network map[string]struct {
 	} `yaml:"network,omitempty" json:"network,omitempty"`
 
-	Harness struct {
+	Harness map[string]struct {
 	} `yaml:"harness,omitempty" json:"harness,omitempty"`
 
-	Gpu struct {
+	Gpu map[string]struct {
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"gpu,omitempty" json:"gpu,omitempty"`
 
-	Device struct {
+	Device map[string]struct {
+		Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive"`
 	} `yaml:"device,omitempty" json:"device,omitempty"`
 
-	Cpu struct {
-	} `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	Cpu map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"cpu,omitempty" json:"cpu,omitempty"`
 
-	Memory struct {
-	} `yaml:"memory,omitempty" json:"memory,omitempty"`
+	Memory map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"memory,omitempty" json:"memory,omitempty"`
 
-	Storage struct {
-	} `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Storage map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"storage,omitempty" json:"storage,omitempty"`
 
-	Mount struct {
-	} `yaml:"mount,omitempty" json:"mount,omitempty"`
+	Mount map[string]any/* TODO: IncompleteKind: _|_ */ `yaml:"mount,omitempty" json:"mount,omitempty"`
 
-	Nesting struct {
+	Nesting map[string]struct {
 	} `yaml:"nesting,omitempty" json:"nesting,omitempty"`
 
-	Isolation struct {
+	Isolation map[string]struct {
 	} `yaml:"isolation,omitempty" json:"isolation,omitempty"`
 
-	Privilege struct {
+	Privilege map[string]struct {
 	} `yaml:"privilege,omitempty" json:"privilege,omitempty"`
 
-	Driver_api struct {
+	Driver_api map[string]struct {
 	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
 
-	Kind struct {
+	Kind map[string]struct {
 	} `yaml:"kind,omitempty" json:"kind,omitempty"`
 
-	Verb struct {
+	Verb map[string]struct {
 	} `yaml:"verb,omitempty" json:"verb,omitempty"`
 
-	Subcommand struct {
+	Subcommand map[string]struct {
 	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
 
-	Type struct {
+	Type map[string]struct {
 	} `yaml:"type,omitempty" json:"type,omitempty"`
 
-	Api struct {
+	Api map[string]struct {
 	} `yaml:"api,omitempty" json:"api,omitempty"`
 }
 
 type Provide struct {
-	Env struct {
+	Env map[string]struct {
+		Value InitNeutral `yaml:"value,omitempty" json:"value"`
 	} `yaml:"env,omitempty" json:"env,omitempty"`
 
-	Parameter struct {
+	Parameter map[string]struct {
+		Value Text `yaml:"value,omitempty" json:"value"`
 	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
 
-	Endpoint struct {
+	Endpoint map[string]struct {
+		Port Port `yaml:"port,omitempty" json:"port"`
+
+		Transport string `yaml:"transport,omitempty" json:"transport"`
+
+		Protocol string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+
+		Path AbsPath `yaml:"path,omitempty" json:"path,omitempty"`
+
+		Host Hostname `yaml:"host,omitempty" json:"host,omitempty"`
 	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
 
-	Network struct {
+	Network map[string]struct {
 	} `yaml:"network,omitempty" json:"network,omitempty"`
 
-	Kind struct {
+	Kind map[string]struct {
 	} `yaml:"kind,omitempty" json:"kind,omitempty"`
 
-	Verb struct {
+	Verb map[string]struct {
 	} `yaml:"verb,omitempty" json:"verb,omitempty"`
 
-	Subcommand struct {
+	Subcommand map[string]struct {
 	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
 
-	Type struct {
+	Type map[string]struct {
 	} `yaml:"type,omitempty" json:"type,omitempty"`
 
-	Api struct {
+	Api map[string]struct {
 	} `yaml:"api,omitempty" json:"api,omitempty"`
 }
 
@@ -4541,13 +4582,6 @@ type MountNeed struct {
 
 	Writable bool `yaml:"writable,omitempty" json:"writable"`
 }
-
-// #AbsPath — a literal absolute path. DESIGN.cue:77.
-//
-// The `[^$]*` is load-bearing rather than cosmetic: it is how D-SCH-7 keeps a variable OUT of a path,
-// so a path can never expand into a value. A schema that allowed `$` here would reopen the leak this
-// contract exists to close, one layer down.
-type AbsPath string
 
 // An endpoint the content serves: its port and transport, and the protocol, path and host name it
 // is reached by. A deployment publishes endpoints by name (D-VAL-13).
