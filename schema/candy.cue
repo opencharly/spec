@@ -40,6 +40,24 @@ package schema
 	// #CandyNeed rather than #Need.
 	need?: #CandyNeed @go(Need,optional=nillable)
 	use?:  #CandyUse @go(Use,optional=nillable)
+	// provide — the authored capability-SET surface (§8), the mirror of need/use: DESIGN.md:572
+	// spells the form as `provide: {<type>: {<name>: <attributes>}}` and :567 says "this node SETS
+	// it". #Provide is the §8 table's own shape (schema/capability.cue), derived from the same
+	// `_capability` rows that give #Need and #Use, so the three cannot drift.
+	//
+	// THE LEGACY MAPS ARE A BOUNDED WINDOW, NOT A SECOND SURFACE. env_provide / mcp_provide /
+	// agent_provide predate this key; they stay accepted only until the 170 authored sites listed
+	// on spec#368 have migrated, and the `_|_` below refuses any manifest that authors both, so
+	// the duplication cannot GROW while it shrinks. Delete the legacy keys when that count is 0.
+	provide?: #Provide @go(Provide,optional=nillable)
+
+	// D-CAP-2/R2: one provide surface. A node may migrate from a legacy map to `provide:`, but it
+	// may not hold both — a manifest that does is a schema error naming the two.
+	if provide != _|_ && (env_provide != _|_ || mcp_provide != _|_ || agent_provide != _|_) {
+		// The field NAME is the message: CUE reports it in the conflict, so the author sees the rule
+		// and the issue that closes the window rather than a bare `_|_ literal`.
+		"author either provide: or a legacy provide map, never both (spec#368)": string & 1
+	}
 	// bake_plugin — the OUT-OF-TREE plugin candies whose pre-built provider binary
 	// this candy BAKES into every composing image at /usr/lib/charly/plugins/, so a
 	// DEPLOYED container (no candy source, no go toolchain) can run an external plugin
