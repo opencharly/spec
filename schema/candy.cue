@@ -33,6 +33,13 @@ package schema
 	// --- composition ---
 	candy?: [...#CandyRef]
 	require?: [...#CandyRef]
+	// need/use — the authored capability-ask surface (§8): what this candy MUST be given and what
+	// it CAN be given, one entry per capability type. #Need/#Use/#CandyNeed/#CandyUse are the §8
+	// table's own shapes (schema/capability.cue, ported from DESIGN.cue:506-524); a candy's
+	// `parameter:` entry additionally carries `one_of` (D-SCH-7), which is why the candy shape is
+	// #CandyNeed rather than #Need.
+	need?: #CandyNeed @go(Need,optional=nillable)
+	use?:  #CandyUse @go(Use,optional=nillable)
 	// bake_plugin — the OUT-OF-TREE plugin candies whose pre-built provider binary
 	// this candy BAKES into every composing image at /usr/lib/charly/plugins/, so a
 	// DEPLOYED container (no candy source, no go toolchain) can run an external plugin

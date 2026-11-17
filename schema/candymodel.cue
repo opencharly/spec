@@ -163,6 +163,10 @@ package schema
 	// artifact — OPAQUE BYTES; the authored #CandyArtifact stays #Candy's, the model carries bytes.
 	artifact?: bytes @go(Artifact,type=RawBody)
 	requires_capability?: [...(string & !="")] @go(RequiresCapability)
+	// need/use mirror candy.cue's authored pair (§8; schema/capability.cue carries the shapes),
+	// projected onto the build model the same way every other candy field is.
+	need?: #CandyNeed @go(Need,optional=nillable)
+	use?:  #CandyUse @go(Use,optional=nillable)
 	capability?: #CandyCapability @go(Capability,optional=nillable)
 	secret?: [...#CandySecret] @go(Secret)
 	// port mirrors candy.cue's own union shape exactly (a plain int OR a "proto:port" string,
