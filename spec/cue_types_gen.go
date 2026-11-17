@@ -1040,6 +1040,56 @@ type AuditAppendInput struct {
 	Event AuditEvent `yaml:"event,omitempty" json:"event"`
 }
 
+// #BindNeed — WHAT is wanted. DESIGN.cue:1289.
+//
+// `config` is `#Opaque` because only the capability type knows its own configuration shape (D-CAP-2:
+// each type has exactly one owner). A solver that inspected it would be a second authority over a
+// type it does not own.
+type BindNeed struct {
+	Type Word `yaml:"type,omitempty" json:"type"`
+
+	Name Text `yaml:"name,omitempty" json:"name"`
+
+	Config Opaque `yaml:"config,omitempty" json:"config"`
+}
+
+// ── the primitives these shapes name ──
+//
+// #Word, #Ref and #Text are already declared in this package (audit.cue, stage.cue) and are reused
+// rather than re-spelled: a port that redefines a primitive is not a port. #Opaque is DESIGN.cue:93's
+// `{...}` — a shape that is deliberately undecided here because its authority is the type's owner.
+type Opaque map[string]any
+
+// #BindInput — the `bind` method's input. DESIGN.cue:1288.
+//
+// `provided_by` names the provide that WON, and `deployment` names where the need was authored. Both are
+// `#Ref` and not `#Text` because each names a node that exists in the resolved tree — the type owner
+// receives references it can resolve, not free text it would have to parse.
+type BindInput struct {
+	Need BindNeed `yaml:"need,omitempty" json:"need"`
+
+	Provided_by Ref `yaml:"provided_by,omitempty" json:"provided_by"`
+
+	Deployment Ref `yaml:"deployment,omitempty" json:"deployment"`
+}
+
+// #BindOutput — what the type owner returns. DESIGN.cue:1290.
+//
+// `binding` is the HANDLE the type owner mints for this pairing: opaque to core, and the only thing a
+// later `unbind` can name. Core never inspects it — that is what makes the type the owner of its own
+// capability rather than a lookup table core reads.
+type BindOutput struct {
+	Binding Opaque `yaml:"binding,omitempty" json:"binding"`
+}
+
+// #UnbindInput — the `unbind` method's input. DESIGN.cue:1291.
+//
+// It takes the HANDLE, not the need: by the time anything is unbound, the pairing it came from may be
+// gone, and the type owner is the only party that can map a handle back to its state.
+type UnbindInput struct {
+	Binding Opaque `yaml:"binding,omitempty" json:"binding"`
+}
+
 // MergeConfig (config.go). CLOSED.
 type BoxMerge struct {
 	Auto bool `yaml:"auto,omitempty" json:"auto,omitempty"`
