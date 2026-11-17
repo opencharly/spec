@@ -29,7 +29,7 @@ package schema
 #BindNeed: {
 	type!:   #Word
 	name!:   #Text
-	config!: #Opaque
+	config!: #Opaque // S10 — foreign-owned: only its type knows the shape (D-CAP-2)
 }
 
 // #BindInput — the `bind` method's input. DESIGN.cue:1288.
@@ -48,13 +48,17 @@ package schema
 // `binding` is the HANDLE the type owner mints for this pairing: opaque to core, and the only thing a
 // later `unbind` can name. Core never inspects it — that is what makes the type the owner of its own
 // capability rather than a lookup table core reads.
-#BindOutput: {binding!: #Opaque}
+#BindOutput: {
+	binding!: #Opaque // S10 — foreign-owned: core never inspects the owner's handle (D-CAP-2)
+}
 
 // #UnbindInput — the `unbind` method's input. DESIGN.cue:1291.
 //
 // It takes the HANDLE, not the need: by the time anything is unbound, the pairing it came from may be
 // gone, and the type owner is the only party that can map a handle back to its state.
-#UnbindInput: {binding!: #Opaque}
+#UnbindInput: {
+	binding!: #Opaque // S10 — foreign-owned: only the type owner can map it back (D-CAP-2)
+}
 
 // ── the primitives these shapes name ──
 //
