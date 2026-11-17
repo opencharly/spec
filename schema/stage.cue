@@ -93,7 +93,18 @@ package schema
 	prompt!: #Text
 	answer!: #Answer
 }
+// #Answer.unanswered (D-FLOW-3) — three words, so a VOCABULARY TABLE (S3), not an inline
+// union: D-PAT-3 allows an inline literal default only for a two-value set, and a table makes
+// the enum and the words unforgeable from each other (a new word is ONE row here).
+_answerUnanswered: {
+	refused:   {}
+	granted:   {}
+	cancelled: {}
+} @vocab(spec)
+
+_answerUnansweredWord: [for w, _ in _answerUnanswered {w}]
+
 #Answer: {
 	expect?:    #Matcher
-	unanswered: *"refused" | "granted" | "cancelled"
+	unanswered: *"refused" | or(_answerUnansweredWord)
 }
