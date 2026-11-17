@@ -9,11 +9,13 @@ package schema_test
 //
 // WHAT THIS FILE PINS, and why each assertion can fail:
 //
-//   - the WORD SETS, exactly. This is not pedantry: three of DESIGN.cue's generic words are already
-//     taken by unrelated concepts in other schema files, and CUE UNIFIES two definitions of one name
-//     SILENTLY. Measured before this file existed: `_device` here plus schema/vm.cue's `_device`
-//     evaluates to ["kvm","render","virtio-vga","virtio-vga-gl"] with exit 0 — neither `cue-gen` nor
-//     `go build` refuses that, so a set-equality assertion is the ONLY thing that catches it.
+//   - the WORD SETS, exactly. This is not pedantry, and the reason is a measured incident rather than a
+//     principle: three of DESIGN.cue's generic words HAD been taken by unrelated concepts in other
+//     schema files, and CUE UNIFIES two definitions of one name SILENTLY — the union of the two
+//     `_device` tables evaluated to 14 words with exit 0, and neither `cue-gen` nor `go build` refused
+//     it. spec#354 and spec#356 gave each concept its own name, so the tables below are DESIGN's
+//     alone; this assertion is what keeps them that way, because a future file re-spending one of
+//     these words would merge just as quietly.
 //   - the TABLE-DERIVED shapes (#Need/#Use/#Provide type keys), so a hand-written list cannot stand
 //     in for the table.
 //   - the LEASE placement (D-HW-8: only a leasable type's entry carries `exclusive`).

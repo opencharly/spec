@@ -17,17 +17,20 @@ import "list"
 // re-declared: #Word and #Ref (audit.cue), #Text (stage.cue), #Count (stage.cue), #Size
 // (00_common.cue), #AbsPath and #SecretUse (secret.cue).
 //
-// ONE FINDING IS OPEN, and it is why this file's word tables are currently WIDER than DESIGN says:
-// three of DESIGN.cue's generic mechanism words are already taken, for unrelated concepts, by other
-// schema files — `_device`/`_deviceWord` by schema/vm.cue (libvirt VIDEO device names),
-// `_driver`/`_driverWord` by schema/vm.cue (libvirt FILESYSTEM driver names) and `_access`/
-// `_accessWord` by schema/deploy.cue (VOLUME access modes, a vocabulary DESIGN.cue does not have at
-// all). CUE unifies two definitions of one name, so each pair merges SILENTLY — measured: the union
-// of the two `_device` tables evaluates to ["kvm", "render", "virtio-vga", "virtio-vga-gl"] with
-// exit 0 — which means neither `cue-gen` nor `go build` refuses it and only a test that pins the
-// exact word set catches it (schema/capability_port_test.go does). Resolving the three names needs a
-// rename in vm.cue/deploy.cue, which is another unit's surface; the port is otherwise complete.
-
+// THREE NAMES WERE ONCE SHARED, and the finding is now CLOSED. Recorded because the failure mode is
+// invisible and will recur: three of DESIGN.cue's generic mechanism words had already been spent by
+// other schema files on unrelated concepts -- `_device`/`_driver` by schema/vm.cue (libvirt VIDEO
+// devices and FILESYSTEM drivers), `_access` by schema/deploy.cue (VOLUME access modes, a vocabulary
+// DESIGN.cue does not have at all). CUE unifies two definitions of one name, so each pair merged
+// SILENTLY: the union of the two `_device` tables evaluated to 14 words with exit 0, and neither
+// `cue-gen` nor `go build` refused it. Only a test that pins the EXACT word set catches it, which is
+// what schema/capability_port_test.go does.
+//
+// RESOLVED by giving each concept its own name in its own file -- spec#354 (`_access` ->
+// `_volumeAccessMode`) and spec#356 (`_device`/`_driver` -> `_libvirtVideoDevice`/
+// `_libvirtFilesystemDriver`). The word tables below are therefore DESIGN's own, exactly, and the
+// vocabularies are proven separate rather than merely believed separate. The general question this
+// raised -- whether the S3 shape gate and DESIGN.cue can even meet -- is opencharly/spec#355.
 // ── the primitives this contract names, PORTED from DESIGN.cue:49-100 ──
 #Name:        =~"^[a-z][a-z0-9]*(-[a-z0-9]+)*$" // D-NEST-4: a user name, never `--`
 #EnvName:     =~"^[A-Za-z_][A-Za-z0-9_]*$"
