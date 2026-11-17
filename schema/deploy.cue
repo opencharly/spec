@@ -556,7 +556,7 @@ package schema
 	name:        string & !=""
 	size?:       string & !=""
 	class_hint?: or(_classHintWord) @go(ClassHint)
-	access?:     or(_accessWord)
+	access?:     or(_volumeAccessModeWord)
 	path?:       string & =~"^/"
 }
 #KubernetesDeploy: {
@@ -1100,9 +1100,11 @@ _deployVolumeTypeWord: [for w, _ in _deployVolumeType {w}]
 // #DeployStorage.class_hint
 _classHint: {fast: {}, cheap: {}, encrypted: {}, default: {}} @vocab(spec)
 _classHintWord: [for w, _ in _classHint {w}]
-// #DeployStorage.access
-_access: {"single-writer": {}, "many-readers": {}, "many-writers": {}} @vocab(spec)
-_accessWord: [for w, _ in _access {w}]
+// #DeployStorage.access — the volume's ACCESS MODE (single-writer / many-readers / many-writers).
+// Named `_volumeAccessMode`, not `_access`: DESIGN.cue spends `_access` on the §17.7 VENUE accesses
+// (exec, copy, log, console, display, forward, power), and one name cannot mean two closed sets.
+_volumeAccessMode: {"single-writer": {}, "many-readers": {}, "many-writers": {}} @vocab(spec)
+_volumeAccessModeWord: [for w, _ in _volumeAccessMode {w}]
 // #KubernetesDeploy.workload
 _workload: {
 	"Deployment": {}
