@@ -3693,6 +3693,17 @@ type Candy struct {
 
 	Use *CandyUse `yaml:"use,omitempty" json:"use,omitempty"`
 
+	// provide — the authored capability-SET surface (§8), the mirror of need/use: DESIGN.md:572
+	// spells the form as `provide: {<type>: {<name>: <attributes>}}` and :567 says "this node SETS
+	// it". #Provide is the §8 table's own shape (schema/capability.cue), derived from the same
+	// `_capability` rows that give #Need and #Use, so the three cannot drift.
+	//
+	// THE LEGACY MAPS ARE A BOUNDED WINDOW, NOT A SECOND SURFACE. env_provide / mcp_provide /
+	// agent_provide predate this key; they stay accepted only until the 170 authored sites listed
+	// on spec#368 have migrated, and the `_|_` below refuses any manifest that authors both, so
+	// the duplication cannot GROW while it shrinks. Delete the legacy keys when that count is 0.
+	Provide *Provide `yaml:"provide,omitempty" json:"provide,omitempty"`
+
 	// bake_plugin — the OUT-OF-TREE plugin candies whose pre-built provider binary
 	// this candy BAKES into every composing image at /usr/lib/charly/plugins/, so a
 	// DEPLOYED container (no candy source, no go toolchain) can run an external plugin
@@ -3860,6 +3871,50 @@ type Candy struct {
 // rootful OR rootless. `nerdctl` is the CLI binary, never an engine word: the
 // former `engine: nerdctl` spelling is deleted (R5, no alias, no dual path).
 type EngineName string
+
+type Provide struct {
+	Env map[string]struct {
+		Value InitNeutral `yaml:"value,omitempty" json:"value"`
+	} `yaml:"env,omitempty" json:"env,omitempty"`
+
+	Parameter map[string]struct {
+		Value Text `yaml:"value,omitempty" json:"value"`
+	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
+
+	Endpoint map[string]struct {
+		Port Port `yaml:"port,omitempty" json:"port"`
+
+		Transport string `yaml:"transport,omitempty" json:"transport"`
+
+		Protocol string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+
+		Path AbsPath `yaml:"path,omitempty" json:"path,omitempty"`
+
+		Host Hostname `yaml:"host,omitempty" json:"host,omitempty"`
+	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+
+	Network map[string]struct {
+	} `yaml:"network,omitempty" json:"network,omitempty"`
+
+	Kind map[string]struct {
+	} `yaml:"kind,omitempty" json:"kind,omitempty"`
+
+	Verb map[string]struct {
+	} `yaml:"verb,omitempty" json:"verb,omitempty"`
+
+	Subcommand map[string]struct {
+	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
+
+	Type map[string]struct {
+	} `yaml:"type,omitempty" json:"type,omitempty"`
+
+	Api map[string]struct {
+	} `yaml:"api,omitempty" json:"api,omitempty"`
+}
+
+type Port int64
+
+type Hostname string
 
 // #Plugin — the candy's plugin declaration. Its presence makes the candy a
 // plugin (Go: charly/checkspec.go via the generated Candy.Plugin field, consumed
@@ -4326,10 +4381,6 @@ type Name string
 
 type EnvName string
 
-type Port int64
-
-type Hostname string
-
 type TextSet []Text
 
 type NativeRow struct {
@@ -4543,46 +4594,6 @@ type Use struct {
 
 	Driver_api map[string]struct {
 	} `yaml:"driver_api,omitempty" json:"driver_api,omitempty"`
-
-	Kind map[string]struct {
-	} `yaml:"kind,omitempty" json:"kind,omitempty"`
-
-	Verb map[string]struct {
-	} `yaml:"verb,omitempty" json:"verb,omitempty"`
-
-	Subcommand map[string]struct {
-	} `yaml:"subcommand,omitempty" json:"subcommand,omitempty"`
-
-	Type map[string]struct {
-	} `yaml:"type,omitempty" json:"type,omitempty"`
-
-	Api map[string]struct {
-	} `yaml:"api,omitempty" json:"api,omitempty"`
-}
-
-type Provide struct {
-	Env map[string]struct {
-		Value InitNeutral `yaml:"value,omitempty" json:"value"`
-	} `yaml:"env,omitempty" json:"env,omitempty"`
-
-	Parameter map[string]struct {
-		Value Text `yaml:"value,omitempty" json:"value"`
-	} `yaml:"parameter,omitempty" json:"parameter,omitempty"`
-
-	Endpoint map[string]struct {
-		Port Port `yaml:"port,omitempty" json:"port"`
-
-		Transport string `yaml:"transport,omitempty" json:"transport"`
-
-		Protocol string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
-
-		Path AbsPath `yaml:"path,omitempty" json:"path,omitempty"`
-
-		Host Hostname `yaml:"host,omitempty" json:"host,omitempty"`
-	} `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
-
-	Network map[string]struct {
-	} `yaml:"network,omitempty" json:"network,omitempty"`
 
 	Kind map[string]struct {
 	} `yaml:"kind,omitempty" json:"kind,omitempty"`
