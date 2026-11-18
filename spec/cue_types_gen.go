@@ -8140,8 +8140,10 @@ type LoadedProject struct {
 //
 // families: one entry per plugin family (the plugins/ directory name). The generator emits
 // plugins/<family>/.claude-plugin/plugin.json + .codex-plugin/plugin.json, plugins/<family>/.mcp.json
-// (when mcp_servers is non-empty), the aggregated plugins/.claude-plugin/marketplace.json and
-// plugins/profiles.json, and the .claude/settings.json plugin-owned keys.
+// (when at least one declared mcp_servers entry is PUBLIC — an http server whose URL host is not
+// local; a localhost server is one a charly pod serves while it runs, and it is never wired into the
+// static harness config, opencharly/plugin-marketplace#61), and the aggregated
+// plugins/.claude-plugin/marketplace.json and plugins/profiles.json.
 type Marketplace struct {
 	Name string `yaml:"name,omitempty" json:"name"`
 
