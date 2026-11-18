@@ -319,7 +319,7 @@ _ipcModeWord: [for w, _ in _ipcMode {w}]
 // A YAML scalar Go decodes into a string (map[string]string / string field):
 // yaml.v3 coerces an unquoted int/bool/float to its literal text, so an
 // idiomatic `PORT: 8080` is a valid string value. #StrMap is the matching map.
-#StrVal: string | number | bool // gengotypes: emits `type StrVal any` — referenced by inline
+#StrVal: string | number | bool // gengotypes: emits `type StrVal any` — referenced by inline {[string]: #StrVal} maps
 
 #StrMap: ({[string]: #StrVal}) @go(-) // gengotypes: hand StrMap = map[string]string (spec/union_types.go)
 
@@ -373,7 +373,7 @@ _ipcModeWord: [for w, _ in _ipcMode {w}]
 #PackageItem: ((string & !="") | {
 		name:         string & !=""
 		description?: string & !=""
-	}) @go(-) // gengotypes: hand PackageItem (spec/union_types.go)
+}) @go(-) // gengotypes: hand PackageItem (spec/union_types.go)
 #DistroPackages: {
 	package?: [...#PackageItem]
 	copr?: [...(string & !="")]
