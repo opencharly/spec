@@ -58,7 +58,7 @@ func ExtractMetadata(engine, imageRef string) (*spec.BoxMetadata, error) {
 		return nil, nil
 	}
 
-	// Schema v4: DNS / AcmeEmail / Engine no longer read from OCI labels —
+	// Schema v4: DNS / Engine no longer read from OCI labels —
 	// they are deployment choices and flow onto BoxMetadata via
 	// MergeDeployOntoMetadata (charly.yml → metadata).
 	meta := &spec.BoxMetadata{
