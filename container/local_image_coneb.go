@@ -19,6 +19,7 @@ package container
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -212,10 +213,38 @@ func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 			binary, listLocalImagesTimeout)
 	}
 	if err != nil {
+		// `Output` puts the child's stderr on the ExitError for us (cmd.Stderr is nil here,
+		// which is exactly the condition that enables the capture), so the engine's own
+		// diagnosis is already in hand. Wrapping `err` alone renders a bare "exit status 1",
+		// which names no cause and sends the operator to a shell to find one — measured with
+		// a build holding the engine's storage lock. Carry it, bounded and on one line.
+		if detail := engineFailureDetail(err); detail != "" {
+			return nil, fmt.Errorf("listing local images via %s: %w: %s", binary, err, detail)
+		}
 		return nil, fmt.Errorf("listing local images via %s: %w", binary, err)
 	}
 	return ParseLocalImagesJSON(out)
 }
+
+// engineFailureDetail is the engine's own stderr text carried by a failed run, collapsed to
+// one line and bounded, or "" when the failure carries none (a signal, a start failure — a
+// form that has no stderr to report). An error message is read on one line in a terminal and
+// pasted into an issue; the bound keeps a pathological engine from flooding either, and the
+// ellipsis says the text was cut rather than ended.
+func engineFailureDetail(err error) string {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return ""
+	}
+	text := strings.Join(strings.Fields(string(exitErr.Stderr)), " ")
+	if r := []rune(text); len(r) > engineFailureDetailMaxRunes {
+		return string(r[:engineFailureDetailMaxRunes]) + "…"
+	}
+	return text
+}
+
+// engineFailureDetailMaxRunes bounds the engine stderr carried into an error message.
+const engineFailureDetailMaxRunes = 400
 
 // ParseLocalImagesJSON parses `{podman,docker} images --format json` output
 // into ONE LocalImageInfo per distinct image ID, with that id's tag refs
