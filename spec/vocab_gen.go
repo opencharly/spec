@@ -70,7 +70,6 @@ var DocDirectives = []string{
 	"provides",
 	"repo",
 	"system",
-	"verb_primaries",
 }
 
 // DistroIDs is the CLOSED guest-distro id vocabulary, derived from #Distros' own keys (schema/distro_vocab.cue).
