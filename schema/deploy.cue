@@ -423,6 +423,11 @@ package schema
 	refcount?:    int
 } @go(-)
 
+// ephemeral persists the FINAL/K5 unit 6a cross-substrate ephemeral-instance lifecycle state
+// (candy/plugin-deploy/ephemeral.go's RegisterEphemeralLifecycle / persistEphemeralRuntime) —
+// machine-written, so EVERY field is optional to tolerate legacy/partial entries (an ephemeral
+// registered before a field existed, or interrupted mid-write never has a required-field gap to
+// violate). Mirrors spec.EphemeralRuntime (sdk/spec/hand_state_types.go) field-for-field.
 #EphemeralRuntime: {
 	id?:              string
 	parent_vm?:       string
@@ -433,6 +438,10 @@ package schema
 	ttl_deadline?:    string
 	status?:          string
 	instance_name?:   string
+	// deploy_address is the CLI-addressable deploy identity (the dotted tree path for a nested
+	// deploy — `charly deploy del <deploy_address>`), DISTINCT from the dc.Deploy map key this
+	// entry is stored under (a dot-sanitized "vm:<domain-id>" form — see
+	// spec.ValidateDeploymentName + sdk/vmshared.VmDomainIdentity). RCA #2, FINAL/K5 unit 6a.
 	deploy_address?:  string
 } @go(-)
 
