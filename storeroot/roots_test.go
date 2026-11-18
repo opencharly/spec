@@ -17,14 +17,13 @@ func pinXDG(t *testing.T, home string) {
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "xdg-cache"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "xdg-state"))
 	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(home, "xdg-run"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg-data"))
 	t.Setenv("CHARLY_CACHE_DIR", "")
 }
 
-// TestDirResolvesTheFiveRoots pins all five roots in the DEFAULT condition (every XDG
+// TestDirResolvesTheFourRoots pins all four roots in the DEFAULT condition (every XDG
 // variable set, the one override unset). Each expectation is spelled out rather than
 // derived from the implementation, so a root that moves is a failure, not a new truth.
-func TestDirResolvesTheFiveRoots(t *testing.T) {
+func TestDirResolvesTheFourRoots(t *testing.T) {
 	home := t.TempDir()
 	pinXDG(t, home)
 
@@ -33,7 +32,6 @@ func TestDirResolvesTheFiveRoots(t *testing.T) {
 		RootCache:   filepath.Join(home, "xdg-cache", "charly"),
 		RootState:   filepath.Join(home, "xdg-state", "charly"),
 		RootRuntime: filepath.Join(home, "xdg-run", "charly"),
-		RootData:    filepath.Join(home, "xdg-data", "charly"),
 	}
 	for root, wantDir := range want {
 		got, err := Dir(root)
@@ -51,14 +49,6 @@ func TestDirResolvesTheFiveRoots(t *testing.T) {
 	}
 	if cache != want[RootCache] {
 		t.Errorf("CacheDir() = %q, want the cache root %q", cache, want[RootCache])
-	}
-
-	data, err := DataDir()
-	if err != nil {
-		t.Fatalf("DataDir: %v", err)
-	}
-	if data != want[RootData] {
-		t.Errorf("DataDir() = %q, want the data root %q — the accessor and Dir(RootData) must not disagree", data, want[RootData])
 	}
 }
 
@@ -91,7 +81,6 @@ func TestCacheOverrideRelocatesOnlyTheCacheRoot(t *testing.T) {
 		RootConfig:  filepath.Join(home, "xdg-config", "charly"),
 		RootState:   filepath.Join(home, "xdg-state", "charly"),
 		RootRuntime: filepath.Join(home, "xdg-run", "charly"),
-		RootData:    filepath.Join(home, "xdg-data", "charly"),
 	} {
 		if gotDir, err := Dir(root); err != nil {
 			t.Fatalf("Dir(%s): %v", root, err)
@@ -134,7 +123,7 @@ func TestCacheOverrideIsUsedVerbatim(t *testing.T) {
 func TestRootsFallBackToHomeWithoutXDG(t *testing.T) {
 	home := t.TempDir()
 	pinXDG(t, home)
-	for _, v := range []string{"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "XDG_DATA_HOME"} {
+	for _, v := range []string{"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"} {
 		t.Setenv(v, "")
 	}
 
@@ -143,7 +132,6 @@ func TestRootsFallBackToHomeWithoutXDG(t *testing.T) {
 		RootCache:   filepath.Join(home, ".cache", "charly"),
 		RootState:   filepath.Join(home, ".local", "state", "charly"),
 		RootRuntime: filepath.Join(home, ".local", "state", "charly"),
-		RootData:    filepath.Join(home, ".local", "share", "charly"),
 	}
 	for root, wantDir := range want {
 		got, err := Dir(root)
@@ -193,7 +181,7 @@ func TestRuntimeRootFallsBackToStateAlone(t *testing.T) {
 }
 
 // TestUnknownRootIsAnError pins the closed root set: a misspelt root is an error naming
-// the five valid ones, never a silently-created directory named after the typo.
+// the four valid ones, never a silently-created directory named after the typo.
 func TestUnknownRootIsAnError(t *testing.T) {
 	pinXDG(t, t.TempDir())
 
@@ -201,7 +189,7 @@ func TestUnknownRootIsAnError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Dir(%q) = %q, want an error — the root set is closed", "cach", got)
 	}
-	for _, valid := range []string{"config", "cache", "state", "runtime", "data"} {
+	for _, valid := range []string{"config", "cache", "state", "runtime"} {
 		if !strings.Contains(err.Error(), valid) {
 			t.Errorf("error %q does not name the valid root %q — a caller cannot correct the typo from it", err, valid)
 		}
