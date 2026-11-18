@@ -399,10 +399,14 @@ package schema
 // via @go(VmState,type=*VmDeployState)). Runtime ingress validation still uses
 // this open #VmDeployState — @go(-) only affects the generated Go type.
 // The hand-mirrored records #VmDeployState carries. Their Go structs live in
-// spec/hand_state_types.go, @go(-)'d together with their parent because the open `...` tail of
-// #VmDeployState degrades gengotypes' output to map[string]any. Every field is optional for the
-// same reason the ephemeral record states: the record is MACHINE-WRITTEN runtime state, so a
-// legacy or interrupted entry must not fail validation.
+// spec/hand_state_types.go and are hand-written, so each def here is @go(-): the annotation
+// SUPPRESSES generation for a record whose Go type is hand-written, and it is load-bearing -- with
+// it removed, cue-gen emits VmKeyInjectionResolved/VmSnapshotState/EphemeralRuntime into
+// spec/cue_types_gen.go and the build fails on the redeclaration against the hand-written ones.
+// (#VmDeployState's OWN @go(-) is a different sentence: the open `...` tail degrades gengotypes'
+// output to map[string]any, so its generated type would be lossy as well as a duplicate.)
+// Every field is optional for the reason the ephemeral record states: the record is
+// MACHINE-WRITTEN runtime state, so a legacy or interrupted entry must not fail validation.
 // schema/hand_state_lockstep_test.go fails the moment either side gains a field the other lacks.
 #VmKeyInjectionResolved: {
 	smbios?:     bool
