@@ -1435,7 +1435,7 @@ type LabelSkillReference struct {
 
 // #BoxMetadata — the OCI-label metadata hub. NEVER whole-marshaled (ExtractMetadata builds it
 // field-by-field), so its own tags are wire-irrelevant. Deploy-only fields (Tunnel/DNS/
-// AcmeEmail/Engine) are fed by MergeDeployOntoMetadata, never baked. PortProto RESHAPED
+// Engine) are fed by MergeDeployOntoMetadata, never baked. PortProto RESHAPED
 // map[int]string → map[string]string (the WIRE was always string-keyed; the int-key was an
 // ExtractMetadata-internal convenience — resolveProto + ExtractMetadata rewired to match).
 type BoxMetadata struct {
@@ -1468,8 +1468,6 @@ type BoxMetadata struct {
 	Tunnel *TunnelYAML `yaml:"tunnel,omitempty" json:"tunnel,omitempty"`
 
 	DNS string `yaml:"dns,omitempty" json:"dns,omitempty"`
-
-	AcmeEmail string `yaml:"acme_email,omitempty" json:"acme_email,omitempty"`
 
 	Env []string `yaml:"env,omitempty" json:"env,omitempty"`
 
@@ -5374,8 +5372,6 @@ type Deploy struct {
 	Tunnel *TunnelYAML `yaml:"tunnel,omitempty" json:"tunnel,omitempty"`
 
 	DNS string `yaml:"dns,omitempty" json:"dns,omitempty"`
-
-	AcmeEmail string `yaml:"acme_email,omitempty" json:"acme_email,omitempty"`
 
 	Port []PortPin `yaml:"port,omitempty" json:"port,omitempty"`
 

@@ -139,7 +139,6 @@ package schema
 
 	tunnel?:     #Tunnel       @go(Tunnel,type=*TunnelYAML)
 	dns?:        string & !="" @go(DNS)
-	acme_email?: string & !="" @go(AcmeEmail)
 	port?: [...#PortPin]
 	resolved_port?: [...#PortPin] @go(ResolvedPort)
 	// resolved_image: the concrete image ref the pod deploy's add_candy: overlay
