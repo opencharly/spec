@@ -193,7 +193,7 @@ func StoreDir(name string) (string, error) {
 
 // StoreRoot returns the ROOT directory every named store lives under.
 //
-// IT ASKS THE ONE RESOLVER (D-STORE-1): `spec/storeroot` owns the five roots and the single
+// IT ASKS THE ONE RESOLVER (D-STORE-1): `spec/storeroot` owns the four roots and the single
 // `CHARLY_CACHE_DIR` override, so the plugin host and every plugin it serves resolve the same tree
 // from the same code. This function used to re-derive the cache root itself — reading the env var,
 // then falling back to `filepath.Dir(spec.DefaultDeployConfigPath())/cache` — a SECOND copy of the rule
