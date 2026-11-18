@@ -7,8 +7,10 @@ package schema
 //
 // families: one entry per plugin family (the plugins/ directory name). The generator emits
 // plugins/<family>/.claude-plugin/plugin.json + .codex-plugin/plugin.json, plugins/<family>/.mcp.json
-// (when mcp_servers is non-empty), the aggregated plugins/.claude-plugin/marketplace.json and
-// plugins/profiles.json, and the .claude/settings.json plugin-owned keys.
+// (when at least one declared mcp_servers entry is PUBLIC — an http server whose URL host is not
+// local; a localhost server is one a charly pod serves while it runs, and it is never wired into the
+// static harness config, opencharly/plugin-marketplace#61), and the aggregated
+// plugins/.claude-plugin/marketplace.json and plugins/profiles.json.
 #Marketplace: close({
 	name:        string & =~"^[a-z][a-z0-9-]*$"         // "charly-plugins" (the marketplace name)
 	// version is DELIBERATELY not required: the marketplace versions by commit SHA
@@ -27,7 +29,7 @@ package schema
 	keywords?:    [...(string & !="")]                             // marketplace.json keywords
 	version?:     string & =~"^[0-9]+[.][0-9]+[.][0-9]+$"          // plugin.json version (default: family candy CalVer)
 	profiles?:    [...or(_profilesWord)]        // profiles.json membership
-	mcp_servers?: [...#MarketplaceMCPServer] @go(McpServers,type=[]MarketplaceMCPServer) // plugins/<family>/.mcp.json entries
+	mcp_servers?: [...#MarketplaceMCPServer] @go(McpServers,type=[]MarketplaceMCPServer) // the family's MCP servers; only the PUBLIC ones reach plugins/<family>/.mcp.json
 })
 #MarketplaceMCPServer: close({
 	name:    string & !=""
