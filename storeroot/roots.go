@@ -1,5 +1,5 @@
-// Package storeroot resolves charly's FOUR roots — configuration, cache, state and
-// runtime — and owns the single environment override that relocates the cache.
+// Package storeroot resolves charly's FIVE roots — configuration, cache, state,
+// runtime and data — and owns the single environment override that relocates the cache.
 //
 // # Why the roots are a CONTRACT, not a mechanism
 //
@@ -43,7 +43,7 @@ import (
 	"path/filepath"
 )
 
-// Root names one of the four roots.
+// Root names one of the five roots.
 type Root string
 
 const (
@@ -59,9 +59,19 @@ const (
 	RootState Root = "state"
 	// RootRuntime — `$XDG_RUNTIME_DIR/charly`: per-boot runtime state.
 	RootRuntime Root = "runtime"
+	// RootData — `$XDG_DATA_HOME/charly`: durable, operator-visible DATA that a
+	// re-derivation cannot replace — the artefacts a build produces. The one tenant
+	// today is the engine-neutral image store (`images/`, an OCI layout).
+	//
+	// It is deliberately NOT under the cache root: a cache is disposable by contract
+	// (a `cache clear` must be able to delete it), while a built image is a product
+	// whose loss costs a rebuild. For the same reason `CHARLY_CACHE_DIR` does not
+	// relocate it — an override meant to make the cache disposable must not carry the
+	// durable artefacts along with it.
+	RootData Root = "data"
 )
 
-// Dir resolves one of the four roots. It is THE resolver: no caller builds a `.cache`
+// Dir resolves one of the five roots. It is THE resolver: no caller builds a `.cache`
 // path by hand.
 func Dir(r Root) (string, error) {
 	switch r {
@@ -89,8 +99,17 @@ func Dir(r Root) (string, error) {
 		// No runtime dir (a container, a cron job): fall back to the STATE root rather
 		// than /tmp, which is shared and world-writable. Documented, not silent.
 		return Dir(RootState)
+	case RootData:
+		if v := os.Getenv("XDG_DATA_HOME"); v != "" {
+			return filepath.Join(v, "charly"), nil
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve data root: %w", err)
+		}
+		return filepath.Join(home, ".local", "share", "charly"), nil
 	default:
-		return "", fmt.Errorf("unknown root %q (want %s|%s|%s|%s)", r, RootConfig, RootCache, RootState, RootRuntime)
+		return "", fmt.Errorf("unknown root %q (want %s|%s|%s|%s|%s)", r, RootConfig, RootCache, RootState, RootRuntime, RootData)
 	}
 }
 
@@ -106,3 +125,13 @@ func CacheDir() (string, error) {
 	}
 	return filepath.Join(base, "charly"), nil
 }
+
+// DataDir resolves the data root: `$XDG_DATA_HOME/charly`, or
+// `$HOME/.local/share/charly` when that variable is unset.
+//
+// It sits beside CacheDir() rather than being reached through Dir(RootData) alone
+// because the two roots are the pair a caller actually compares: an artefact belongs
+// in the data root when losing it costs a rebuild, and in the cache root when it can be
+// re-derived. A caller that has to spell one of them by hand is the duplication this
+// package exists to end.
+func DataDir() (string, error) { return Dir(RootData) }
