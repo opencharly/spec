@@ -11,11 +11,43 @@ package schema
 // faithfully, no disjunction/inexpressibility escape needed (per the SDD "wire
 // types are CUE-sourced without exception" mandate).
 //
+// This file also owns the word `clean` as a PER-HOST CONFIG SECTION (#CleanSection
+// below), beside `cache:`, `ledger:` and `system:`: the machine-scoped knobs of the
+// same surface. That is config, not wire — no peer ever receives it (D-STORE-7 is
+// resolved where the config is read), which is why #RetentionRequest gains no field
+// for it.
+//
 // The engine is reached two ways: `charly clean`'s own CLI dispatch calls it
 // in-package (no wire hop — same Go process, same package); `charly box build` /
 // `charly check run` / `charly box list tags` (still core) reach it via
 // verb:retention — the same "core adapter resolves+Invokes a compiled-in plugin
 // word" pattern verb:credential/verb:gpu/verb:tunnel already use.
+
+// #CleanSection is the per-host `clean:` block — the LOCAL, machine-scoped knobs of
+// the retention surface, beside `cache:`, `ledger:` and `system:` in
+// ~/.config/charly/charly.yml. CLOSED, and recognized as a document directive
+// (#NodeDoc) so an authored block is never mis-read as a node named "clean".
+//
+// store_budget is D-STORE-7's ceiling: how much a named store may occupy before the
+// sweep keeps only what state references. It is a property of the MACHINE that holds
+// the store, which is why it lives in the per-host configuration and not in a
+// project's `defaults:` block: a project file is shared, a host's disk is not.
+#CleanSection: {
+	store_budget?: #StoreBudget @go(StoreBudget, optional=nillable)
+}
+
+// #StoreBudget is a store's size ceiling. `int64`, not `int`: a budget is a byte count
+// and the value this exists for (256 GiB = 274877906944) does not fit a 32-bit int, so
+// a bare `int` would wrap silently on the `386` and `arm` cross-compile targets. Same
+// reasoning as distro.cue's disk_size_bytes.
+//
+// DELIBERATELY no CUE default on `bytes`: absent must stay absent (`cfg.Clean == nil`
+// or `store_budget == nil`), because the one fallback lives in the plugin that
+// enforces it. A default here would put the number in two places and let them
+// disagree.
+#StoreBudget: {
+	bytes: int & >0 @go(Bytes, type=int64)
+}
 
 // #RetentionRequest is the verb:retention request. dir is the project directory
 // (os.Getwd()) — always present, never empty. keep=0 means "use the resolved

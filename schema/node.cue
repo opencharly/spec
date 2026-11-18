@@ -151,6 +151,13 @@ package schema
 	// GPU, …). Recognized here so a document carrying it is not mis-read as a node
 	// named "system". Shape: schema/system.cue #SystemInfo.
 	system?: _
+	// clean — the per-host RETENTION knobs (schema/clean.cue #CleanSection), the
+	// machine-scoped ceiling D-STORE-7's sweep keeps a named store within.
+	// Recognized here so a document carrying it is not mis-read as a node named
+	// "clean" — and TYPED, unlike its `_` siblings above, because the requirement is
+	// that an UNDECLARED key inside this new section is a load error: `_` would
+	// accept a typo and the retention plugin would silently fall back to its default.
+	clean?: #CleanSection
 	// providers — the registry membership manifest (provider class → the words it
 	// contributes). Read at init by registry_bootstrap.go to drive built-in provider
 	// registration from the embedded charly.yml (the binary's default config);

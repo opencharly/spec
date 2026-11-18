@@ -58,6 +58,7 @@ var ProviderClasses = []string{
 // DocDirectives is the reserved document directives (#NodeDoc top-level keys).
 var DocDirectives = []string{
 	"cache",
+	"clean",
 	"compiled_plugins",
 	"context_ignore_baseline",
 	"defaults",
