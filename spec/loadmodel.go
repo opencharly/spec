@@ -59,6 +59,9 @@ type UnifiedFile struct {
 	// System is the per-host LOCAL SYSTEM INFO (hostname, distro, kernel, arch,
 	// GPU, …). Shape: schema/system.cue #SystemInfo.
 	System *SystemInfo `yaml:"system,omitempty" json:"system,omitempty"`
+	// Clean is the per-host RETENTION knobs. Shape: schema/clean.cue #CleanSection.
+	// nil means "unset" — the fallback lives in the retention plugin, never here.
+	Clean *CleanSection `yaml:"clean,omitempty" json:"clean,omitempty"`
 
 	// PluginKinds holds entities of KINDS contributed by plugins (a kind the core has no typed
 	// map for). NAME-KEYED: kind word → entity NAME → canonical body (opaque JSON). Built-in

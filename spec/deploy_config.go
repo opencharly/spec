@@ -33,6 +33,10 @@ type DeployConfig struct {
 	Ledger *LedgerConfig `yaml:"ledger,omitempty" json:"ledger,omitempty"`
 	// System is the per-host LOCAL SYSTEM INFO.
 	System *SystemInfo `yaml:"system,omitempty" json:"system,omitempty"`
+	// Clean is the per-host RETENTION knobs (schema/clean.cue #CleanSection): the
+	// machine-scoped store ceiling D-STORE-7's sweep honours. nil means "unset", and
+	// the plugin's own fallback applies — this type carries no default.
+	Clean *CleanSection `yaml:"clean,omitempty" json:"clean,omitempty"`
 }
 
 // Lookup returns the DeployNode for (deployName, instance), or
