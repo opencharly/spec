@@ -391,7 +391,7 @@ _ipcModeWord: [for w, _ in _ipcMode {w}]
 
 // Free-form per-distro upstream-repo block: `name` is load-bearing (the only
 // key any code requires), the rest pass through verbatim to install templates.
-#RepoBlock: #Opaque & {name: string & !=""} @go(-) // S10 — foreign-owned: the rest pass through verbatim to install templates
+#RepoBlock: #Opaque & {name: string & !=""} @go(-) // S10 — foreign-owned: the rest pass through verbatim to install templates. The Go side is a hand-written ALIAS (`type RepoBlock = map[string]any` in spec/scalar_aliases.go), so `[]RepoBlock` IS `[]map[string]any` for toMapSlice / template rendering.
 
 // install_opts gates (deploy.go InstallOptsConfig) — shared by local + deploy.
 #InstallOpts: {
