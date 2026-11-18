@@ -1,8 +1,6 @@
 package container
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,12 +17,7 @@ func TestDefaultListLocalImages_FailsFastOnHungEngine(t *testing.T) {
 	defer func() { listLocalImagesTimeout = old }()
 
 	// A fake engine binary that never answers, the shape of a saturated store.
-	dir := t.TempDir()
-	engine := filepath.Join(dir, "podman")
-	if err := os.WriteFile(engine, []byte("#!/bin/sh\nsleep 60\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	fakeEngine(t, "podman", "#!/bin/sh\nsleep 60\n")
 
 	done := make(chan error, 1)
 	go func() {

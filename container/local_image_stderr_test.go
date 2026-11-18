@@ -7,30 +7,15 @@ package container
 // defect was dropping it. These tests fail if a future error path drops it again.
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// fakeEngine writes a fake engine binary into a temp dir and puts it first on PATH, so
-// `exec.Command(<engine>, ...)` resolves to the script. The shape mirrors
-// TestDefaultListLocalImages_FailsFastOnHungEngine — one fake, one seam, no mocking of the
-// code under test.
-func fakeEngine(t *testing.T, script string) {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "podman"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
 
 // TestDefaultListLocalImages_CarriesTheEngineStderr pins the fix: a non-zero exit carries the
 // engine's own stderr text, so the message names the cause instead of only the status.
 func TestDefaultListLocalImages_CarriesTheEngineStderr(t *testing.T) {
 	const diagnosis = "Error: database storage is locked by another process"
-	fakeEngine(t, "#!/bin/sh\n"+
+	fakeEngine(t, "podman", "#!/bin/sh\n"+
 		"echo '"+diagnosis+"' >&2\n"+
 		"exit 1\n")
 
@@ -55,7 +40,7 @@ func TestDefaultListLocalImages_CarriesTheEngineStderr(t *testing.T) {
 func TestDefaultListLocalImages_BoundsTheEngineStderr(t *testing.T) {
 	// 2000 'x' characters, far past the bound.
 	flood := strings.Repeat("x", 2000)
-	fakeEngine(t, "#!/bin/sh\n"+
+	fakeEngine(t, "podman", "#!/bin/sh\n"+
 		"printf '%s' '"+flood+"' >&2\n"+
 		"exit 1\n")
 
@@ -81,7 +66,7 @@ func TestDefaultListLocalImages_BoundsTheEngineStderr(t *testing.T) {
 // no stderr (a signal, a start failure) keeps the plain wrap rather than gaining a dangling
 // ": " separator.
 func TestDefaultListLocalImages_NoStderrStaysClean(t *testing.T) {
-	fakeEngine(t, "#!/bin/sh\nexit 1\n")
+	fakeEngine(t, "podman", "#!/bin/sh\nexit 1\n")
 
 	_, err := defaultListLocalImages("podman")
 	if err == nil {
