@@ -15,7 +15,7 @@ import (
 // engine's own stderr text, so the message names the cause instead of only the status.
 func TestDefaultListLocalImages_CarriesTheEngineStderr(t *testing.T) {
 	const diagnosis = "Error: database storage is locked by another process"
-	fakeEngine(t, "podman", "#!/bin/sh\n"+
+	fakeEngine(t, "#!/bin/sh\n"+
 		"echo '"+diagnosis+"' >&2\n"+
 		"exit 1\n")
 
@@ -40,7 +40,7 @@ func TestDefaultListLocalImages_CarriesTheEngineStderr(t *testing.T) {
 func TestDefaultListLocalImages_BoundsTheEngineStderr(t *testing.T) {
 	// 2000 'x' characters, far past the bound.
 	flood := strings.Repeat("x", 2000)
-	fakeEngine(t, "podman", "#!/bin/sh\n"+
+	fakeEngine(t, "#!/bin/sh\n"+
 		"printf '%s' '"+flood+"' >&2\n"+
 		"exit 1\n")
 
@@ -66,7 +66,7 @@ func TestDefaultListLocalImages_BoundsTheEngineStderr(t *testing.T) {
 // no stderr (a signal, a start failure) keeps the plain wrap rather than gaining a dangling
 // ": " separator.
 func TestDefaultListLocalImages_NoStderrStaysClean(t *testing.T) {
-	fakeEngine(t, "podman", "#!/bin/sh\nexit 1\n")
+	fakeEngine(t, "#!/bin/sh\nexit 1\n")
 
 	_, err := defaultListLocalImages("podman")
 	if err == nil {

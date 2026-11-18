@@ -17,7 +17,7 @@ func TestDefaultListLocalImages_FailsFastOnHungEngine(t *testing.T) {
 	defer func() { listLocalImagesTimeout = old }()
 
 	// A fake engine binary that never answers, the shape of a saturated store.
-	fakeEngine(t, "podman", "#!/bin/sh\nsleep 60\n")
+	fakeEngine(t, "#!/bin/sh\nsleep 60\n")
 
 	done := make(chan error, 1)
 	go func() {

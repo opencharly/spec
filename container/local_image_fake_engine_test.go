@@ -13,17 +13,21 @@ import (
 	"testing"
 )
 
-// fakeEngine writes `script` as an executable named after `name` in a fresh temp dir and
-// puts that dir first on PATH, so `exec.Command(name, ...)` resolves to it. The temp dir is
+// fakeEngine writes `script` as an executable named `podman` in a fresh temp dir and puts
+// that dir first on PATH, so `exec.Command("podman", ...)` resolves to it. The temp dir is
 // t.TempDir(), so it is cleaned up with the test.
+//
+// The name is fixed rather than a parameter because this package only ever fakes the engine
+// it asks for by name (`defaultListLocalImages("podman")`), and a parameter no caller varies
+// is `unparam`'s finding: a seam that pretends to generality it does not have.
 //
 // The seam is deliberately the smallest one that is real: the child process genuinely runs,
 // genuinely writes to its stderr, and genuinely exits with the status the script chooses —
 // only the engine is simulated, never the code under test.
-func fakeEngine(t *testing.T, name, script string) {
+func fakeEngine(t *testing.T, script string) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "podman"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
