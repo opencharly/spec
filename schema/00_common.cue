@@ -26,6 +26,34 @@ package schema
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: or(_opVerbWord) @go(-)
 
+// --- vocabulary tables (S3) -------------------------------------------------------------------
+// The three word enums of this file, as ONE row per word each: an extract policy, a cgroup
+// namespace and an IPC mode. The Go field types are unchanged (they are plain strings), and a new
+// word is one row here rather than a new alternative on a declaration line (§10.1 S3).
+_extractPolicy: {
+	"tar.gz":  {}
+	"tar.xz":  {}
+	"tar.zst": {}
+	zip:       {}
+	none:      {}
+	sh:        {}
+	"":        {}
+} @vocab(spec)
+_extractPolicyWord: [for w, _ in _extractPolicy {w}]
+_cgroupNS: {
+	host:    {}
+	private: {}
+	"":      {}
+} @vocab(spec)
+_cgroupNSWord: [for w, _ in _cgroupNS {w}]
+_ipcMode: {
+	host:      {}
+	private:   {}
+	shareable: {}
+	"":        {}
+} @vocab(spec)
+_ipcModeWord: [for w, _ in _ipcMode {w}]
+
 // ---------------------------------------------------------------------------
 // Plan steps: the unified run/check/agent-run/agent-check/include vocabulary.
 // ---------------------------------------------------------------------------
@@ -113,7 +141,7 @@ package schema
 	depends_on?: [...string] @go(DependsOn)
 	// plugin_input — generic params for a `plugin:` verb. Opaque to base #Op
 	// (accepts any shape); the plugin's own spliced CUE schema validates it.
-	plugin_input?: {...} @go(PluginInput,type=map[string]any)
+	plugin_input?: #Opaque @go(PluginInput,type=map[string]any) // S10 — foreign-owned: the plugin own spliced schema validates it
 
 	// --- install/build modifiers ---
 	run_as?:  string @go(RunAs)
@@ -121,7 +149,7 @@ package schema
 	target?:  string
 	caps?:    string
 	content?: string
-	extract?: "tar.gz" | "tar.xz" | "tar.zst" | "zip" | "none" | "sh" | ""
+	extract?: or(_extractPolicyWord)
 	extract_include?: [...string] @go(ExtractInclude)
 	// unless_exists — capability GATE for an install step: when the named path already
 	// exists in the image, the step is a no-op. It exists because a plan step has no
@@ -303,11 +331,11 @@ package schema
 // ---------------------------------------------------------------------------
 #Security: {
 	privileged?: bool
-	cgroupns?:   "host" | "private" | "" @go(CgroupNS)
+	cgroupns?:   or(_cgroupNSWord) @go(CgroupNS)
 	cap_add?: [...string] @go(CapAdd)
 	devices?: [...string]
 	security_opt?: [...string] @go(SecurityOpt)
-	ipc_mode?: "host" | "private" | "shareable" | "" @go(IpcMode)
+	ipc_mode?: or(_ipcModeWord) @go(IpcMode)
 	shm_size?: #Size                                 @go(ShmSize)
 	group_add?: [...string] @go(GroupAdd)
 	mount?: [...string] @go(Mounts)
@@ -363,10 +391,7 @@ package schema
 
 // Free-form per-distro upstream-repo block: `name` is load-bearing (the only
 // key any code requires), the rest pass through verbatim to install templates.
-#RepoBlock: {
-	name: string & !=""
-	...
-} @go(-) // gengotypes: hand-written `type RepoBlock = map[string]any` (spec/scalar_aliases.go) — an ALIAS so []RepoBlock IS []map[string]any (toMapSlice / template rendering)
+#RepoBlock: #Opaque & {name: string & !=""} @go(-) // S10 — foreign-owned: the rest pass through verbatim to install templates. The Go side is a hand-written ALIAS (`type RepoBlock = map[string]any` in spec/scalar_aliases.go), so `[]RepoBlock` IS `[]map[string]any` for toMapSlice / template rendering.
 
 // install_opts gates (deploy.go InstallOptsConfig) — shared by local + deploy.
 #InstallOpts: {

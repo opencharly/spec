@@ -37,7 +37,7 @@ package schema
 // the PLUGIN's own served CUE schema (not this def).
 #PipelineWord: {
 	plugin?:       string
-	plugin_input?: {...} @go(PluginInput,type=map[string]any)
+	plugin_input?: #Opaque @go(PluginInput,type=map[string]any) // S10 — foreign-owned: the plugin own spliced schema validates it
 }
 
 // #Instrument — one run-scoped observation entry on a substrate-node body
@@ -68,7 +68,7 @@ package schema
 	// --- the desugared verb pair — INTERNAL-ONLY, mirroring #Op's exact
 	// declarations (the authored `<word>: <input>` sugar rewrites here) ---
 	plugin?:       string
-	plugin_input?: {...} @go(PluginInput,type=map[string]any)
+	plugin_input?: #Opaque @go(PluginInput,type=map[string]any) // S10 — foreign-owned: the plugin own spliced schema validates it
 	// --- the shared modifiers an instrument meaningfully shares with #Op ---
 	timeout?: #Duration
 	context?: [...#Context]
