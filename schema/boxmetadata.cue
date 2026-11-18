@@ -152,7 +152,7 @@ package schema
 
 // #BoxMetadata — the OCI-label metadata hub. NEVER whole-marshaled (ExtractMetadata builds it
 // field-by-field), so its own tags are wire-irrelevant. Deploy-only fields (Tunnel/DNS/
-// AcmeEmail/Engine) are fed by MergeDeployOntoMetadata, never baked. PortProto RESHAPED
+// Engine) are fed by MergeDeployOntoMetadata, never baked. PortProto RESHAPED
 // map[int]string → map[string]string (the WIRE was always string-keyed; the int-key was an
 // ExtractMetadata-internal convenience — resolveProto + ExtractMetadata rewired to match).
 #BoxMetadata: {
@@ -171,7 +171,6 @@ package schema
 	network?:  string    @go(Network)
 	tunnel?: {...} @go(Tunnel,type=*TunnelYAML)
 	dns?:        string @go(DNS)
-	acme_email?: string @go(AcmeEmail)
 	env?: [...string] @go(Env)
 	hook?: #CandyHook @go(Hook,optional=nillable)
 	route?: [...#LabelRouteEntry] @go(Route)
