@@ -397,6 +397,54 @@ package schema
 // VmDeployState is hand-written in spec/hand_state_types.go (the field references it
 // via @go(VmState,type=*VmDeployState)). Runtime ingress validation still uses
 // this open #VmDeployState — @go(-) only affects the generated Go type.
+// The hand-mirrored records #VmDeployState carries. Their Go structs live in
+// spec/hand_state_types.go and are hand-written, so each def here is @go(-): the annotation
+// SUPPRESSES generation for a record whose Go type is hand-written, and it is load-bearing -- with
+// it removed, cue-gen emits VmKeyInjectionResolved/VmSnapshotState/EphemeralRuntime into
+// spec/cue_types_gen.go and the build fails on the redeclaration against the hand-written ones.
+// (#VmDeployState's OWN @go(-) is a different sentence: the open `...` tail degrades gengotypes'
+// output to map[string]any, so its generated type would be lossy as well as a duplicate.)
+// Every field is optional for the reason the ephemeral record states: the record is
+// MACHINE-WRITTEN runtime state, so a legacy or interrupted entry must not fail validation.
+// schema/hand_state_lockstep_test.go fails the moment either side gains a field the other lacks.
+#VmKeyInjectionResolved: {
+	smbios?:     bool
+	cloud_init?: bool
+} @go(-)
+
+#VmSnapshotState: {
+	name?:        string
+	mode?:        string
+	libvirt_name?: string
+	disk_path?:   string
+	description?: string
+	created?:     string
+	parent?:      string
+	refcount?:    int
+} @go(-)
+
+// ephemeral persists the FINAL/K5 unit 6a cross-substrate ephemeral-instance lifecycle state
+// (candy/plugin-deploy/ephemeral.go's RegisterEphemeralLifecycle / persistEphemeralRuntime) —
+// machine-written, so EVERY field is optional to tolerate legacy/partial entries (an ephemeral
+// registered before a field existed, or interrupted mid-write never has a required-field gap to
+// violate). Mirrors spec.EphemeralRuntime (sdk/spec/hand_state_types.go) field-for-field.
+#EphemeralRuntime: {
+	id?:              string
+	parent_vm?:       string
+	parent_snapshot?: string
+	parent_ephemeral?: string
+	child_refcount?:  int
+	timer_unit?:      string
+	ttl_deadline?:    string
+	status?:          string
+	instance_name?:   string
+	// deploy_address is the CLI-addressable deploy identity (the dotted tree path for a nested
+	// deploy — `charly deploy del <deploy_address>`), DISTINCT from the dc.Deploy map key this
+	// entry is stored under (a dot-sanitized "vm:<domain-id>" form — see
+	// spec.ValidateDeploymentName + sdk/vmshared.VmDomainIdentity). RCA #2, FINAL/K5 unit 6a.
+	deploy_address?:  string
+} @go(-)
+
 #VmDeployState: {
 	instance_id?:                string
 	disk_path?:                  string
@@ -411,6 +459,12 @@ package schema
 	// allocation is reused across the vm-create → deploy-add sequence — the
 	// sibling of ssh_port. Validation-only (the Go type is hand-mirrored, @go(-)).
 	port_forwards?: {[string]: int}
+	// key_injection_resolved is the effective per-channel key-injection state written by the
+	// vm lifecycle hook; the Go mirror is spec.VmKeyInjectionResolved.
+	key_injection_resolved?: #VmKeyInjectionResolved
+	// snapshot persists the snapshot records taken from this deployment; the Go mirror is
+	// spec.VmSnapshotState.
+	snapshot?: [...#VmSnapshotState]
 	// ephemeral persists the FINAL/K5 unit 6a cross-substrate ephemeral-instance lifecycle
 	// state (candy/plugin-deploy/ephemeral.go's RegisterEphemeralLifecycle /
 	// persistEphemeralRuntime) — machine-written, so EVERY field is optional to tolerate
@@ -418,23 +472,7 @@ package schema
 	// mid-write never has a required-field gap to violate). Mirrors spec.EphemeralRuntime
 	// (sdk/spec/hand_state_types.go) field-for-field. Validation-only (the Go type is
 	// hand-mirrored, @go(-), matching #VmDeployState's own @go(-) at the top level).
-	ephemeral?: {
-		id?:               string
-		parent_vm?:        string
-		parent_snapshot?:  string
-		parent_ephemeral?: string
-		child_refcount?:   int
-		timer_unit?:       string
-		ttl_deadline?:     string
-		status?:           string
-		instance_name?:    string
-		// deploy_address is the CLI-addressable deploy identity (the dotted tree path for a
-		// nested deploy — `charly deploy del <deploy_address>`), DISTINCT from the dc.Deploy
-		// map key this entry is stored under (a dot-sanitized "vm:<domain-id>" form — see
-		// spec.ValidateDeploymentName + sdk/vmshared.VmDomainIdentity). RCA #2,
-		// FINAL/K5 unit 6a.
-		deploy_address?: string
-	}
+	ephemeral?: #EphemeralRuntime
 	...
 } @go(-)
 
