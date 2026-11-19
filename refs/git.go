@@ -841,8 +841,7 @@ func downloadRepoFromMode(repoURL, repoPath, version string, mode fetchMode) (st
 //
 // This is the RAW primitive — it always hits the network. Caching is the
 // GitClient's job (refs/git_client.go): every consumer that needs a cached answer
-// goes through GitClient.DefaultBranch. The former per-primitive cache
-// (latest-tags.json) is DELETED — one cache, one layer (R3/R5).
+// goes through GitClient.DefaultBranch: one cache, one layer (R3/R5).
 func GitDefaultBranch(repoURL string) (string, error) {
 	out, err := runGitOp(false, "", nil, "ls-remote", "--symref", repoURL, "HEAD")
 	if err != nil {
@@ -878,8 +877,7 @@ func parseDefaultBranch(output string) string {
 // This is the RAW primitive — it always hits the network. Caching is the
 // GitClient's job (refs/git_client.go): every consumer that needs a cached answer
 // goes through GitClient.LatestTag, which wraps this primitive with the persistent
-// `cache:` section of the per-host charly.yml. The former per-primitive cache
-// (latest-tags.json) is DELETED — one cache, one layer (R3/R5).
+// `cache:` section of the per-host charly.yml: one cache, one layer (R3/R5).
 func GitLatestTag(repoURL string) (string, error) {
 	out, err := runGitOp(false, "", nil, "ls-remote", "--tags", repoURL)
 	if err != nil {
