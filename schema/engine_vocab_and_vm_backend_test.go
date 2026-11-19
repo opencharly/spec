@@ -44,7 +44,7 @@ func checker(def cue.Value, ctx *cue.Context) func(string) error {
 
 // TestEngineNameVocabIsContainerdNotNerdctl is the R5 negative/positive pair for
 // the engine word cutover. `containerd` is the engine word (rootful or rootless,
-// driven through the nerdctl CLI); `nerdctl` is DELETED as an engine word, so a
+// driven through the nerdctl CLI); `nerdctl` is not an engine word, so a
 // checked-in `engine: nerdctl` must be a schema conflict, not an alias.
 func TestEngineNameVocabIsContainerdNotNerdctl(t *testing.T) {
 	nameDef, nameCtx := defValue(t, "#EngineName")
