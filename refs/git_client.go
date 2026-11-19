@@ -480,12 +480,11 @@ func (g *GitClient) DefaultBranch(repoURL string) (string, error) {
 	return branch, nil
 }
 
-// (ResolveRef was DELETED here: it produced no result any caller consumed — org-wide, no
-// production call site existed, only the unrelated spec.WalkSeams.ResolveRef seam and
-// net/url's ResolveReference — while carrying a second persisted, time-validated map over the
-// same "which commit does this ref name" question. The live answer is GitResolveRef, which
-// downloadRepoFrom already runs on every mutable-ref access; a persisted duplicate of it is
-// precisely the content-blind authority this cutover removes (R3/R5).)
+// (There is no ResolveRef here: it would return a result no caller consumes — this package's
+// only ref-question callers use GitResolveRef — while carrying a second persisted,
+// time-validated map over the same "which commit does this ref name" question. The live answer
+// is GitResolveRef, which downloadRepoFrom runs on every mutable-ref access; a persisted
+// duplicate of it would be precisely the content-blind authority this package refuses (R3/R5).)
 
 // WarmUp prefetches the git metadata (latest tag + default branch) for a batch of repos so the
 // first project load does not pay every `git ls-remote` on its critical path.
