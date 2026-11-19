@@ -7,10 +7,10 @@ import (
 	"github.com/opencharly/spec/storeroot"
 )
 
-// cache.go — the remote-repo cache LOCATION helpers. Pure path computation over
-// $CHARLY_REPO_CACHE / ~/.cache/charly/repos, shared by core (reconcile / the collection walk)
-// and the refs fetch backend (candy/plugin-refs) that clones into these paths. RELOCATED from
-// sdk/kit alongside the git primitives (#55 fabric-primitive extraction).
+// cache.go — the remote-repo cache LOCATION helpers. Pure path computation over the `repos`
+// entry of the ONE cache root that storeroot resolves (D-STORE-1), shared by core (reconcile /
+// the collection walk) and the refs fetch backend (candy/plugin-refs) that clones into these
+// paths. RELOCATED from sdk/kit alongside the git primitives (#55 fabric-primitive extraction).
 
 // RepoCacheDir returns the cache directory for remote repos: the `repos` entry under the ONE cache
 // root, resolved by the contract surface's resolver (D-STORE-1 — `$XDG_CACHE_HOME/charly`, or
