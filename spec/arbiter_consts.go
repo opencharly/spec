@@ -12,11 +12,11 @@ package spec
 //
 // K1-unblock wave 1 retired the ExecutorService.HostArbiter reverse RPC entirely: its last 2
 // actions (gather/resources) now read the generic resolved-project envelope instead
-// (candy/plugin-preempt/arbiter.go, fetched via InvokeProvider("build","project", OpResolve) — the
-// former HostBuild("resolved-project") seam is DELETED — the same envelope every other
+// (candy/plugin-preempt/arbiter.go, fetched via InvokeProvider("build","project", OpResolve) —
+// the same resolved-project envelope every other
 // resolved-project consumer uses) —
 // so ArbiterSeamGather/ArbiterSeamResources and the #ArbiterGatherReply/#ArbiterResourcesReply
-// wire types they tagged are DELETED (not merely unused), along with charly/arbiter_host.go.
+// wire types do not exist — an absent wire type is stronger than an unused one.
 
 // --- canonical preemption policy values (shared: the resolved-project-reading gather projection
 // produces Restore, the plugin's releaseLeaseEffects reads it) -------------------------------

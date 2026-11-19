@@ -19,13 +19,12 @@ package spec
 // the defs, in plugin-pipeline's corpus); that is what makes the change IR-only: no
 // authored wire key moved, so — the rule the
 // recipe states as "a schema-version bump ONLY on an authored wire-key change" — there
-// is no version STAMP to bump. The `#SchemaVersion` / `#SchemaFloor` CalVer, the
-// `charly.yml` `version:` stamp and the equality gate were DELETED
-// (CHANGELOG/0.2026270.938.md). `charly migrate` (`plugin-migrate`, `command:migrate`)
-// was NOT deleted — it was a LEG of that same chain and survives as the live remedy: it
-// is what strips a retired `version:` stamp, and its `check-migrate-local` bed is what
-// proves it. So a future authored wire-key change still has a route; what it does not
-// have is a stamp to bump. That distinction is the one this corpus pins.
+// is no version STAMP to bump: no `#SchemaVersion` / `#SchemaFloor` CalVer, no
+// `charly.yml` `version:` field, and no equality gate. `charly migrate`
+// (`plugin-migrate`, `command:migrate`) is the live remedy: it strips a retired
+// `version:` stamp, and its `check-migrate-local` bed proves it. So an authored wire-key
+// change has a route; what it does not have is a stamp to bump. That distinction is the
+// one this corpus pins.
 
 import (
 	"os"
