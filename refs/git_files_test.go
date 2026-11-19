@@ -143,7 +143,7 @@ func entriesIn(t *testing.T, dir string) int {
 func TestDownloadRepoFiles_SkipsDeclaredSubmodules(t *testing.T) {
 	g := newGitTestRig(t)
 	root := t.TempDir()
-	t.Setenv("CHARLY_REPO_CACHE", filepath.Join(root, "cache"))
+	t.Setenv("CHARLY_CACHE_DIR", filepath.Join(root, "cache"))
 	subURL := g.mkSubRemote(root, "subrepo", "sub.txt")
 	superURL := g.mkSuperRemote(root, "superrepo", subURL, true)
 
@@ -161,7 +161,7 @@ func TestDownloadRepoFiles_SkipsDeclaredSubmodules(t *testing.T) {
 	// BASENAME stays <repo>@<version> — the shape a consumer reads the source tag
 	// out of (plugin-marketplace's resolve.go ranks twins by the CalVer at the end
 	// of Entity.SourceRoot, so a suffix there would blind it).
-	rel, relErr := filepath.Rel(os.Getenv("CHARLY_REPO_CACHE"), dir)
+	rel, relErr := filepath.Rel(filepath.Join(os.Getenv("CHARLY_CACHE_DIR"), "repos"), dir)
 	if relErr != nil || !strings.HasPrefix(rel, filesCacheDir+string(filepath.Separator)) {
 		t.Fatalf("files-only export must publish under the %q cache subdirectory, got %q (rel %q)", filesCacheDir, dir, rel)
 	}
@@ -182,7 +182,7 @@ func TestDownloadRepoFiles_SkipsDeclaredSubmodules(t *testing.T) {
 func TestDownloadRepo_PopulatesSubmodules(t *testing.T) {
 	g := newGitTestRig(t)
 	root := t.TempDir()
-	t.Setenv("CHARLY_REPO_CACHE", filepath.Join(root, "cache"))
+	t.Setenv("CHARLY_CACHE_DIR", filepath.Join(root, "cache"))
 	subURL := g.mkSubRemote(root, "subrepo2", "sub.txt")
 	superURL := g.mkSuperRemote(root, "superrepo2", subURL, true)
 
@@ -190,7 +190,7 @@ func TestDownloadRepo_PopulatesSubmodules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("whole-project fetch must succeed: %v", err)
 	}
-	if filesRel, _ := filepath.Rel(os.Getenv("CHARLY_REPO_CACHE"), dir); strings.HasPrefix(filesRel, filesCacheDir+string(filepath.Separator)) {
+	if filesRel, _ := filepath.Rel(filepath.Join(os.Getenv("CHARLY_CACHE_DIR"), "repos"), dir); strings.HasPrefix(filesRel, filesCacheDir+string(filepath.Separator)) {
 		t.Fatalf("whole-project export must publish to <repo>@<version>, got %q", dir)
 	}
 	if n := entriesIn(t, filepath.Join(dir, "sub")); n == 0 {
@@ -209,7 +209,7 @@ func TestDownloadRepo_PopulatesSubmodules(t *testing.T) {
 func TestUnreachableSubmodule_ProjectFailsLoud_FilesSucceeds(t *testing.T) {
 	g := newGitTestRig(t)
 	root := t.TempDir()
-	t.Setenv("CHARLY_REPO_CACHE", filepath.Join(root, "cache"))
+	t.Setenv("CHARLY_CACHE_DIR", filepath.Join(root, "cache"))
 	missing := "file://" + filepath.Join(root, "does-not-exist")
 	superURL := g.mkSuperRemote(root, "broken", missing, false)
 
@@ -238,7 +238,7 @@ func TestUnreachableSubmodule_ProjectFailsLoud_FilesSucceeds(t *testing.T) {
 func TestDownloadRepoFiles_ReusesFilesCache(t *testing.T) {
 	g := newGitTestRig(t)
 	root := t.TempDir()
-	t.Setenv("CHARLY_REPO_CACHE", filepath.Join(root, "cache"))
+	t.Setenv("CHARLY_CACHE_DIR", filepath.Join(root, "cache"))
 	subURL := g.mkSubRemote(root, "subrepo3", "sub.txt")
 	superURL := g.mkSuperRemote(root, "superrepo3", subURL, true)
 

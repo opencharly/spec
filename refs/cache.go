@@ -1,27 +1,32 @@
 package refs
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/opencharly/spec/storeroot"
 )
 
-// cache.go — the remote-repo cache LOCATION helpers. Pure path computation over
-// $CHARLY_REPO_CACHE / ~/.cache/charly/repos, shared by core (reconcile / the collection walk)
-// and the refs fetch backend (candy/plugin-refs) that clones into these paths. RELOCATED from
-// sdk/kit alongside the git primitives (#55 fabric-primitive extraction).
+// cache.go — the remote-repo cache LOCATION helpers. Pure path computation over the `repos`
+// entry of the ONE cache root that storeroot resolves (D-STORE-1), shared by core (reconcile /
+// the collection walk) and the refs fetch backend (candy/plugin-refs) that clones into these
+// paths. RELOCATED from sdk/kit alongside the git primitives (#55 fabric-primitive extraction).
 
-// RepoCacheDir returns the cache directory for remote repos.
-// Uses $CHARLY_REPO_CACHE env var if set, otherwise ~/.cache/charly/repos/.
+// RepoCacheDir returns the cache directory for remote repos: the `repos` entry under the ONE cache
+// root, resolved by the contract surface's resolver (D-STORE-1 — `$XDG_CACHE_HOME/charly`, or
+// `CHARLY_CACHE_DIR` when set).
+//
+// This used to read a SECOND override, `CHARLY_REPO_CACHE`, and otherwise hand-build
+// `$HOME/.cache/charly/repos`. Both are DELETED (R5), not deprecated: a per-cache variable is a second
+// resolver, and a hand-built path is a second computation of the same root. DESIGN.md never named the
+// variable -- D-STORE-1 names one override and this was not it -- but three consumer sites did, and they
+// are filed rather than left to discover the change: opencharly/charly#1213 and opencharly/marketplace#629.
 func RepoCacheDir() (string, error) {
-	if envDir := os.Getenv("CHARLY_REPO_CACHE"); envDir != "" {
-		return envDir, nil
-	}
-	home, err := os.UserHomeDir()
+	root, err := storeroot.Dir(storeroot.RootCache)
 	if err != nil {
-		return "", fmt.Errorf("getting home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(home, ".cache", "charly", "repos"), nil
+	return filepath.Join(root, "repos"), nil
 }
 
 // RepoCachePath returns the cache path for a specific repo version.

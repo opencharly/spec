@@ -96,7 +96,7 @@ CHARLY_PROJECT_REPO=opencharly/charly charly box list boxes
 - bare `owner/repo@ref` → pinned to `ref`
 - `host.tld/owner/repo[@ref]` → used literally (the dot in the host disambiguates)
 
-Remote repos are cloned into `~/.cache/charly/repos/<repoPath>@<version>/` (override via `CHARLY_REPO_CACHE`). The cache is shared with the existing remote-layer fetcher (`sdk/loaderkit`'s refs seams — the former `charly/refs.go`/`charly/refs_git.go` are DELETED, K-wave 2) — both go through `EnsureRepoDownloaded`.
+Remote repos are cloned into `<cache root>/repos/<repoPath>@<version>/`, where the cache root is `$XDG_CACHE_HOME/charly` (override via `CHARLY_CACHE_DIR`, per `D-STORE-1`). The cache is shared with the existing remote-layer fetcher (`sdk/loaderkit`'s refs seams — the former `charly/refs.go`/`charly/refs_git.go` are DELETED, K-wave 2) — both go through `EnsureRepoDownloaded`.
 
 **Canonical use case**: running `charly mcp serve` inside a container. The container's cwd is `/workspace` (set by the `charly-mcp` layer's env + volume declaration). There are three deployment patterns, in order of progressively less local setup:
 

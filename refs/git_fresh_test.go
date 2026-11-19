@@ -77,7 +77,7 @@ func TestDownloadRepoFrom_RefreshesMovedBranch(t *testing.T) {
 		t.Skip("git not available")
 	}
 	root := t.TempDir()
-	t.Setenv("CHARLY_REPO_CACHE", filepath.Join(root, "cache"))
+	t.Setenv("CHARLY_CACHE_DIR", filepath.Join(root, "cache"))
 
 	git := func(dir string, args ...string) {
 		cmd := exec.Command("git", args...)
