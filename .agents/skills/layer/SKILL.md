@@ -188,27 +188,7 @@ e.g. from a flaky CDN, is never reused). No author action needed; prefer
 
 For a `command:` step that downloads/builds via its own tool (an SDK installer, a
 source build) and so can't use `download:`, declare a `cache:` mount and route
-the tool's downloads into it.
-
-**`download:` carries NO digest — so a supply-chain-pinned artifact belongs in a `run:` step, and that
-is the org's established shape rather than a workaround.** The verb's fields are `extract`, `to`,
-`extract_include`, `strip_components`, `mode`, `env`, `cache` and nothing checksum-shaped, and the
-renderer emits `curl -fL --retry 3 -o …` with no verification. `download:`'s cache is content-ADDRESSED
-BY URL, not by the artifact's bytes: it makes a re-fetch cheap and a flaky CDN harmless, and it never
-tells you that what arrived is what you pinned. Two different properties, and only the second is
-supply chain.
-
-So when the artifact IS the supply chain — a released engine, a CLI tarball, an installer whose
-provenance matters — use the shape `layer-k3s`, `layer-kind`, `layer-nerdctl`, `layer-vscode` and the
-Strata layer already use: ONE `run:` step that fetches into a `cache:` mount, verifies `sha256sum -c`
-against a digest PINNED IN THE CANDY'S `var:` BLOCK (an auditable value in the diff, not a re-fetched
-`SHA256SUMS.txt`), and unpacks in the SAME layer so the archive never becomes a resident lower layer.
-Keep a declarative `check:` beside it asserting the INSTALLED artifact, so the proof sits at the
-artifact's boundary and not only inside the shell.
-
-Raising digest support ONTO the verb (`sha256?:` on the step def, verified by the renderer before the
-copy, so a mismatch fails the step rather than the following layer) is filed as
-`opencharly/spec#397`; when it lands, this note is the reason the field exists. Canonical worked example — caching the Android SDK
+the tool's downloads into it. Canonical worked example — caching the Android SDK
 so an upstream base cache-miss doesn't re-download ~1.5GB from Google's CDN:
 
 ```yaml
@@ -232,6 +212,30 @@ The sentinel (`.charly-sdk-complete`, written only after a fully-successful inst
 guards against a partial/interrupted download populating the cache. AUR builds
 get the same treatment via the embedded build vocabulary's `aur` builder (owned `cache_mount`
 entries for makepkg `SRCDEST` + yay's clone cache) — see `/charly-build:build`.
+
+### Supply-chain-pinned downloads (`download:` has NO digest)
+
+**`download:` carries no checksum field, so an artifact whose provenance matters belongs in a `run:`
+step — and that is the org's established shape, not a workaround.** The verb's fields are `extract`,
+`to`, `extract_include`, `strip_components`, `mode`, `env` and `cache`, and the renderer emits
+`curl -fL --retry 3 -o …` with no verification. `download:`'s cache is content-ADDRESSED BY URL, not by
+the artifact's bytes: it makes a re-fetch cheap and a flaky CDN harmless, and it never tells you that
+what arrived is what you pinned. Two different properties, and only the second is supply chain.
+
+So when the artifact IS the supply chain — a released engine, a CLI tarball, an installer — use the
+shape `layer-k3s`, `layer-kind`, `layer-nerdctl`, `layer-vscode` and the Strata layer already use:
+
+1. ONE `run:` step that fetches into a `cache:` mount, exactly as the Android example above routes its
+   downloads;
+2. verify `sha256sum -c` against a digest PINNED IN THE CANDY'S `var:` BLOCK — an auditable value in
+   the diff, not a re-fetched `SHA256SUMS.txt`;
+3. unpack in the SAME layer, so the archive never becomes a resident lower layer;
+4. keep a declarative `check:` beside it asserting the INSTALLED artifact, so the proof sits at the
+   artifact's boundary and not only inside the shell.
+
+Raising digest support ONTO the verb (`sha256?:` on the step def, verified by the renderer before the
+copy, so a mismatch fails the step rather than the following layer) is filed as
+`opencharly/spec#397`; when it lands, this section is the reason the field exists.
 
 ### Verb examples
 
