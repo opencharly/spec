@@ -9,9 +9,9 @@ package exec
 // INSTEAD of the sdk root; the sdk root keeps a thin re-export during cutover then is
 // deleted.
 //
-// NOTE on StepContract: the SDK-facing authoring StepContract (string Scope / int Venue /
-// string Gate) was DELETED in the R3 unification — spec/spec.StepContract (the typed form,
-// Scope/Venue/Gate enums) is the single canonical StepContract. DescribeProvider below
+// NOTE on StepContract: spec/spec.StepContract (the typed form, Scope/Venue/Gate enums) is
+// the single canonical StepContract — a string-typed authoring twin would be a second shape
+// for one fact. DescribeProvider below
 // converts the proto wire form (pb.StepContract, string Scope) into spec.StepContract via
 // spec.ScopeFromName / spec.Venue / spec.Gate. The sdk root re-exports the typed form
 // (`type StepContract = spec.StepContract`); the loose string form is gone (R3 — ONE

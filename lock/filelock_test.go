@@ -15,13 +15,11 @@ import (
 // deletion depends on (a caller writing after acquiring keeps its bytes) and the fact that
 // the flock is taken at all, without which the content assertions are vacuous.
 
-// TestAcquireFileLock_WritesNothing pins the DELETED half: a lock file carries no content of
-// its own. It previously carried "pid=%d", which nothing read and which taught every human
-// who opened it that this is a pidfile lock whose staleness must be reasoned about. It is
-// not — the kernel releases an flock when the holder dies, so the file's presence proves
-// nothing and its absence proves nothing.
+// TestAcquireFileLock_WritesNothing pins the absent half: a lock file carries no content of
+// its own, and it is not a pidfile — the kernel releases an flock when the holder dies, so the
+// file's presence proves nothing and its absence proves nothing.
 //
-// Fails if the pid write (or any other decorative content) is reintroduced.
+// Fails if decorative content is written to the lock file.
 func TestAcquireFileLock_WritesNothing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty.lock")
 	release, err := AcquireFileLock(path, true)
