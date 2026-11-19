@@ -79,7 +79,7 @@ func TestIsRepoCached_LegacyProvenanceIsNotCached(t *testing.T) {
 	t.Setenv("CHARLY_CACHE_DIR", cacheDir)
 
 	const repo = "github.com/opencharly/charly"
-	cache := filepath.Join(cacheDir, repo+"@main")
+	cache := filepath.Join(cacheDir, "repos", repo+"@main")
 	if err := os.MkdirAll(cache, 0o755); err != nil {
 		t.Fatal(err)
 	}
