@@ -30,6 +30,16 @@ Nesting is expressed by **tree position**, not a `nested:` field: a resource nod
 
 `sidecar:` declares co-running containers with their own env-var routing (`env_accept` / `env_require`). See `/charly-automation:sidecar` for the topic skill.
 
+## Security posture and the workload's user
+
+A pod that injects a CDI device (`devices:`) **cannot** run with `--userns=keep-id` — the injection fails
+with `mount_setattr … EPERM`. The workload runs as **container root under `userns=host`**, which in a
+rootless pod IS the invoking host user, and it needs no capability at all; `plugin-deploy-pod` DERIVES
+that decision from the resolved deploy, so a pod does not declare it. The mechanism, the measured matrix
+and the two legal shapes are `/charly-cdi:cdi`; the deploy-time consequences (the posture is captured at
+`deploy add`, so an entity edit does not move a running unit; `cap_drop` is not yet expressible,
+`spec#398`) are `/charly-core:deploy`.
+
 ## Cross-references
 
 - Verb-level: `/charly-core:deploy`, `/charly-core:charly-update`, `/charly-core:remove`.
