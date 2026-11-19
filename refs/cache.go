@@ -18,8 +18,9 @@ import (
 //
 // This used to read a SECOND override, `CHARLY_REPO_CACHE`, and otherwise hand-build
 // `$HOME/.cache/charly/repos`. Both are DELETED (R5), not deprecated: a per-cache variable is a second
-// resolver, and a hand-built path is a second computation of the same root. The variable was never
-// named in DESIGN.md, so nothing outside this file's own history referred to it.
+// resolver, and a hand-built path is a second computation of the same root. DESIGN.md never named the
+// variable -- D-STORE-1 names one override and this was not it -- but three consumer sites did, and they
+// are filed rather than left to discover the change: opencharly/charly#1213 and opencharly/marketplace#629.
 func RepoCacheDir() (string, error) {
 	root, err := storeroot.Dir(storeroot.RootCache)
 	if err != nil {
