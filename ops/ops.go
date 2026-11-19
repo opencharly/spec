@@ -35,8 +35,8 @@ const (
 	// OpCompile is the K4-B deploy-COMPILE selector (command:deploy): the host's
 	// deployAddCmd.compileNodePlans computes the per-node selection and Invokes the
 	// command:deploy plugin's OpCompile with a spec.DeployCompileRequest; the plugin
-	// re-hydrates the resolved-project envelope (InvokeProvider("build","project", OpResolve) —
-	// the former HostBuild("resolved-project") seam is DELETED) +
+	// re-hydrates the resolved-project envelope (InvokeProvider("build","project", OpResolve), which
+	// returns that same envelope) +
 	// loops deploykit.BuildDeployPlan, returning []spec.InstallPlanView the host
 	// re-materializes. A generic action selector (never a provider word — F11).
 	OpCompile = "compile"
@@ -80,8 +80,7 @@ const (
 	// OpConfigSetup / OpConfigRemove are the P13-KERNEL config-BODY selectors: the deploy:pod
 	// plugin's Invoke handles these carrying #PodConfigSetupRequest / #PodConfigRemoveRequest
 	// VERBATIM as Params — the direction-flip counterpart of OpConfigWrite (which stayed
-	// host-initiated/plugin-rendered). The former "pod-config-setup"/"pod-config-remove" HostBuild
-	// forwarders are DELETED (K-wave 2 cone R3): candy/plugin-pod's config leaves dispatch these ops
+	// host-initiated/plugin-rendered). candy/plugin-pod's config leaves dispatch these ops
 	// peer-to-peer via InvokeProvider (the pattern candy/plugin-deploy/from_box_pod.go proves),
 	// threading HostEnvJSON as DATA on the OpRun envelope. The plugin runs the ported
 	// BoxConfigSetupCmd/BoxConfigRemoveCmd orchestration in its own code.
@@ -173,7 +172,7 @@ const (
 
 	// OpDeployDispatch is the command:deploy S3b selector: the ONE generic host→plugin envelope
 	// every UnifiedDeployTarget/LifecycleTarget method (Add/Update/Del/Start/Stop/Status/Logs/
-	// Shell/Attach/Rebuild — Test DELETED, #55 W3 B3 remainder) dispatches through, discriminated by
+	// Shell/Attach/Rebuild) dispatches through, discriminated by
 	// spec.DeployTargetDispatchRequest.Op — a generic action selector (never a provider word,
 	// F11), mirroring OpCompile's shape but carrying TEN former methods through ONE wire pair
 	// instead of ten (R3 — the project rulebook's "generic over ad-hoc"). Core's thin
