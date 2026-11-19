@@ -16,12 +16,12 @@ import (
 // held 1 of 10.
 func TestIsRepoCached_IncompleteExportIsNotCached(t *testing.T) {
 	cacheDir := t.TempDir()
-	t.Setenv("CHARLY_REPO_CACHE", cacheDir)
+	t.Setenv("CHARLY_CACHE_DIR", cacheDir)
 
 	const repo = "github.com/opencharly/charly"
 	mk := func(t *testing.T, version string, populate bool) {
 		t.Helper()
-		cache := filepath.Join(cacheDir, repo+"@"+version)
+		cache := filepath.Join(cacheDir, "repos", repo+"@"+version)
 		if err := os.MkdirAll(filepath.Join(cache, "spec"), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -76,7 +76,7 @@ func TestIsRepoCached_IncompleteExportIsNotCached(t *testing.T) {
 // permanent hit for immutable refs (the exact bug this cutover fixes).
 func TestIsRepoCached_LegacyProvenanceIsNotCached(t *testing.T) {
 	cacheDir := t.TempDir()
-	t.Setenv("CHARLY_REPO_CACHE", cacheDir)
+	t.Setenv("CHARLY_CACHE_DIR", cacheDir)
 
 	const repo = "github.com/opencharly/charly"
 	cache := filepath.Join(cacheDir, repo+"@main")
