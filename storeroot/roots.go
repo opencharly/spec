@@ -1,5 +1,6 @@
 // Package storeroot resolves charly's roots — configuration, data, cache, state and
-// runtime — and owns the single environment override that relocates the cache.
+// runtime — and owns their charly-only overrides, the environment that relocates a root
+// for charly alone.
 //
 // # Why the roots are a CONTRACT, not a mechanism
 //
@@ -21,13 +22,24 @@
 // through a permitted surface, and the mechanism kits re-export it rather than keeping
 // a second copy (see `sdk/storekit`).
 //
-// # The one override
+// # The charly-only overrides
 //
-// `CHARLY_CACHE_DIR` relocates the CACHE root, and only that root: it is the single
-// environment override in the whole system, and every named store lives under it. The
-// value is used exactly as the operator wrote it — the resolver never absolutises,
-// cleans or rewrites it, so a relative value stays relative. No other root has an
-// override.
+// Every XDG input a charly root is built from has a charly-only override that takes
+// precedence for charly over that input (D-STORE-1): `CHARLY_CONFIG_HOME`,
+// `CHARLY_CONFIG_DIRS`, `CHARLY_DATA_HOME`, `CHARLY_DATA_DIRS`, `CHARLY_STATE_HOME`,
+// `CHARLY_CACHE_HOME` and `CHARLY_RUNTIME_DIR`. The `_HOME`/`_DIR` form names a
+// COMPLETE charly root — an absolute path, not an XDG base — and the `_DIRS` form names
+// a colon-separated list of complete charly directories. An override never moves the
+// XDG base itself, so a path belonging to another application (a quadlet unit, a fish
+// snippet, libvirt) keeps resolving against `$XDG_*`; only charly's own trees move.
+// A relative or empty override is invalid and is ignored, so the XDG input's default
+// applies. When both cache overrides are set, `CHARLY_CACHE_HOME` wins.
+//
+// `CHARLY_CACHE_DIR` and `CHARLY_REPO_CACHE` remain compatibility overrides and are
+// never dropped (operator direction of 2026-11-20): `CHARLY_CACHE_DIR` relocates the
+// cache root and is used exactly as the operator wrote it — never absolutised, cleaned
+// or rewritten, so a relative value stays relative — and `CHARLY_REPO_CACHE` names the
+// remote-repo directory (see `refs`).
 //
 // # Cache and data are different trees
 //
@@ -63,8 +75,8 @@ const (
 	// `charly clean` never evicts this root.
 	RootData Root = "data"
 	// RootCache — `$XDG_CACHE_HOME/charly`: everything content-addressed and
-	// re-derivable. The single `CHARLY_CACHE_DIR` override relocates this one and
-	// therefore every store.
+	// re-derivable. `CHARLY_CACHE_HOME` (then the compatibility `CHARLY_CACHE_DIR`)
+	// relocates this root and therefore every store.
 	RootCache Root = "cache"
 	// RootState — `$XDG_STATE_HOME/charly`: durable state that is NOT cache — install
 	// ledgers, process locks, anything a restart must not lose and a `cache clear`
@@ -157,10 +169,61 @@ func (r *Resolver) lookupEnv(key string) (string, bool) {
 	return os.LookupEnv(key)
 }
 
+// The charly-only override for each root (D-STORE-1). Each names a COMPLETE charly root,
+// so the resolver uses it verbatim instead of joining `charly` onto an XDG base.
+var rootOverride = map[Root]string{
+	RootConfig:  "CHARLY_CONFIG_HOME",
+	RootData:    "CHARLY_DATA_HOME",
+	RootState:   "CHARLY_STATE_HOME",
+	RootCache:   "CHARLY_CACHE_HOME",
+	RootRuntime: "CHARLY_RUNTIME_DIR",
+}
+
+// rootSearchOverride names the charly-only search-path override of a root that has one.
+var rootSearchOverride = map[Root]string{
+	RootConfig: "CHARLY_CONFIG_DIRS",
+	RootData:   "CHARLY_DATA_DIRS",
+}
+
+// override returns the root's charly-only override when it is set to a valid value: an
+// absolute COMPLETE charly root. A relative or empty value is invalid and ignored.
+func (r *Resolver) override(root Root) (string, bool) {
+	key, ok := rootOverride[root]
+	if !ok {
+		return "", false
+	}
+	if v, ok := r.lookupEnv(key); ok && v != "" && filepath.IsAbs(v) {
+		return v, true
+	}
+	return "", false
+}
+
+// searchOverride returns the root's charly-only search list when it holds at least one
+// absolute entry. An entry that is not absolute is invalid and is ignored.
+func (r *Resolver) searchOverride(root Root) ([]string, bool) {
+	key, ok := rootSearchOverride[root]
+	if !ok {
+		return nil, false
+	}
+	v, ok := r.lookupEnv(key)
+	if !ok || v == "" {
+		return nil, false
+	}
+	dirs := searchDirs(v, nil)
+	if len(dirs) == 0 {
+		return nil, false
+	}
+	return dirs, true
+}
+
 // Base resolves the UNSURFIXED XDG base a root lives under. It is what a path belonging
 // to another application (systemd/quadlet, libvirt, opencharly, fish) is built from; use
-// Dir for charly's own trees. RootCache is special: the CHARLY_CACHE_DIR override is a
-// complete root and is returned verbatim.
+// Dir for charly's own trees. The charly-only overrides are COMPLETE charly roots, not
+// XDG bases, so they do not move the base of any other application's path.
+//
+// RootCache is special, and only because the cache overrides replace that one root
+// wholesale: `CHARLY_CACHE_HOME` and then `CHARLY_CACHE_DIR` are returned verbatim, so a
+// charly-owned sibling of the cache root (the shared Go temp dir) lands beside it.
 func (r *Resolver) Base(root Root) (string, error) {
 	bases, err := r.bases()
 	switch root {
@@ -173,6 +236,9 @@ func (r *Resolver) Base(root Root) (string, error) {
 	case RootRuntime:
 		return absoluteBase(bases.Runtime, err, "runtime")
 	case RootCache:
+		if v, ok := r.override(RootCache); ok {
+			return v, nil
+		}
 		if v, ok := r.lookupEnv("CHARLY_CACHE_DIR"); ok && v != "" {
 			return v, nil
 		}
@@ -183,10 +249,14 @@ func (r *Resolver) Base(root Root) (string, error) {
 }
 
 // Dir resolves one of the roots. It is THE resolver: no caller builds a `.config`,
-// `.local/share` or `.cache` path by hand.
+// `.local/share` or `.cache` path by hand. A root's charly-only override is a complete
+// charly root and is returned verbatim.
 func (r *Resolver) Dir(root Root) (string, error) {
 	if root == RootCache {
 		return r.CacheDir()
+	}
+	if v, ok := r.override(root); ok {
+		return v, nil
 	}
 	base, err := r.Base(root)
 	if err != nil {
@@ -195,13 +265,18 @@ func (r *Resolver) Dir(root Root) (string, error) {
 	return filepath.Join(base, "charly"), nil
 }
 
-// CacheDir resolves the cache root: `$XDG_CACHE_HOME/charly`, or `CHARLY_CACHE_DIR`
-// when set. Every named store lives under it.
+// CacheDir resolves the cache root: `CHARLY_CACHE_HOME` when set, else the
+// `CHARLY_CACHE_DIR` compatibility override (verbatim), else `$XDG_CACHE_HOME/charly`.
+// Every named store lives under it.
 func (r *Resolver) CacheDir() (string, error) {
+	if v, ok := r.override(RootCache); ok {
+		return v, nil
+	}
 	if v, ok := r.lookupEnv("CHARLY_CACHE_DIR"); ok && v != "" {
 		return v, nil
 	}
-	base, err := r.Base(RootCache)
+	bases, err := r.bases()
+	base, err := absoluteBase(bases.Cache, err, "cache")
 	if err != nil {
 		return "", err
 	}
@@ -211,9 +286,10 @@ func (r *Resolver) CacheDir() (string, error) {
 // DataDir resolves the durable data root (`$XDG_DATA_HOME/charly`).
 func (r *Resolver) DataDir() (string, error) { return r.Dir(RootData) }
 
-// BaseDirs returns the RAW search path for a root that has one (configuration or data),
-// in specification order. An unset or empty variable takes the Unix defaults; a
-// non-absolute entry is ignored.
+// BaseDirs returns the RAW XDG search path for a root that has one (configuration or
+// data), in specification order. An unset or empty variable takes the Unix defaults; a
+// non-absolute entry is ignored. It reads the XDG input only: the charly-only `_DIRS`
+// overrides name COMPLETE charly directories, so they are applied by Dirs, never here.
 func (r *Resolver) BaseDirs(root Root) ([]string, error) {
 	switch root {
 	case RootConfig:
@@ -227,8 +303,10 @@ func (r *Resolver) BaseDirs(root Root) ([]string, error) {
 	}
 }
 
-// Dirs returns the root's search path with charly's own tree first, then each search
-// entry under its `charly` subdirectory. Only configuration and data have a search path.
+// Dirs returns the root's search path: charly's own root first, then the search entries.
+// A `CHARLY_CONFIG_DIRS`/`CHARLY_DATA_DIRS` override supplies complete charly
+// directories and is used verbatim; otherwise each XDG search entry is read from its
+// `charly` subdirectory. Only configuration and data have a search path.
 func (r *Resolver) Dirs(root Root) ([]string, error) {
 	if root != RootConfig && root != RootData {
 		return nil, fmt.Errorf("root %q has no search path", root)
@@ -237,16 +315,20 @@ func (r *Resolver) Dirs(root Root) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	search, err := r.BaseDirs(root)
-	if err != nil {
-		return nil, err
+	search, ok := r.searchOverride(root)
+	if !ok {
+		xdg, err := r.BaseDirs(root)
+		if err != nil {
+			return nil, err
+		}
+		search = make([]string, 0, len(xdg))
+		for _, dir := range xdg {
+			search = append(search, filepath.Join(dir, "charly"))
+		}
 	}
 	out := make([]string, 0, 1+len(search))
 	out = append(out, home)
-	for _, dir := range search {
-		out = append(out, filepath.Join(dir, "charly"))
-	}
-	return out, nil
+	return append(out, search...), nil
 }
 
 // Search returns the first existing file named by rel across Dirs(root). rel must be

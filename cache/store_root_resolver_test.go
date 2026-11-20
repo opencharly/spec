@@ -32,7 +32,7 @@ func TestStoreRootIsTheOneResolver(t *testing.T) {
 		}
 	})
 
-	t.Run("agrees with storeroot.CacheDir under the single override", func(t *testing.T) {
+	t.Run("agrees with storeroot.CacheDir under the CHARLY_CACHE_DIR override", func(t *testing.T) {
 		t.Setenv("CHARLY_CACHE_DIR", t.TempDir())
 		got, err := StoreRoot()
 		if err != nil {

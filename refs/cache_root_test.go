@@ -5,7 +5,7 @@ package refs
 // Operator direction (2026-11-20): no CHARLY_ environment variable is dropped, so
 // `CHARLY_REPO_CACHE` keeps its long-standing meaning — the REPOS DIRECTORY, used
 // verbatim. When it is unset, the repos entry under the one cache root is used
-// (`CHARLY_CACHE_DIR/repos`, else `$XDG_CACHE_HOME/charly/repos`, D-STORE-1).
+// (`CHARLY_CACHE_HOME`, else `CHARLY_CACHE_DIR`, else `$XDG_CACHE_HOME/charly`, D-STORE-1).
 //
 // FOUR ARMS, because each answers a different claim: the variable's own meaning (and its
 // verbatim relative value), the cache root's repos entry, and the resolver's default.
