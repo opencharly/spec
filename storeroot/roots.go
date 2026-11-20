@@ -41,6 +41,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // Root names one of the four roots.
@@ -61,6 +62,52 @@ const (
 	RootRuntime Root = "runtime"
 )
 
+// Bases holds the five XDG Base Directory Specification values resolved for the current
+// user. Dir and CacheDir build charly's own roots from these; hostenv expands an
+// operator-authored `$XDG_*` token from the SAME values, so a relocated base moves both
+// charly's trees and every deployment path.
+type Bases struct {
+	Data    string
+	Config  string
+	Cache   string
+	State   string
+	Runtime string
+}
+
+// XDG resolves the XDG bases ONCE. It applies the specification's Unix defaults and its
+// rule that a non-absolute value is invalid and MUST be ignored. The error is non-nil
+// only when no base can be resolved at all ($HOME unavailable and the variable unset);
+// the returned Bases still carry the relative defaults.
+func XDG() (Bases, error) {
+	home, homeErr := os.UserHomeDir()
+	base := func(env, defaultRel string) string {
+		if v := os.Getenv(env); filepath.IsAbs(v) {
+			return v
+		}
+		if homeErr != nil {
+			return defaultRel
+		}
+		return filepath.Join(home, defaultRel)
+	}
+	runtime := ""
+	if v := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(v) {
+		runtime = v
+	} else {
+		runtime = filepath.Join("/run/user", strconv.Itoa(os.Getuid()))
+	}
+	bases := Bases{
+		Data:    base("XDG_DATA_HOME", ".local/share"),
+		Config:  base("XDG_CONFIG_HOME", ".config"),
+		Cache:   base("XDG_CACHE_HOME", ".cache"),
+		State:   base("XDG_STATE_HOME", ".local/state"),
+		Runtime: runtime,
+	}
+	if homeErr != nil {
+		return bases, fmt.Errorf("resolve XDG bases: %w", homeErr)
+	}
+	return bases, nil
+}
+
 // Dir resolves one of the four roots. It is THE resolver: no caller builds a `.cache`
 // path by hand.
 func Dir(r Root) (string, error) {
@@ -68,23 +115,24 @@ func Dir(r Root) (string, error) {
 	case RootCache:
 		return CacheDir()
 	case RootConfig:
-		base, err := os.UserConfigDir()
+		bases, err := XDG()
 		if err != nil {
 			return "", fmt.Errorf("resolve config root: %w", err)
 		}
-		return filepath.Join(base, "charly"), nil
+		return filepath.Join(bases.Config, "charly"), nil
 	case RootState:
-		if v := os.Getenv("XDG_STATE_HOME"); v != "" {
-			return filepath.Join(v, "charly"), nil
-		}
-		home, err := os.UserHomeDir()
+		bases, err := XDG()
 		if err != nil {
 			return "", fmt.Errorf("resolve state root: %w", err)
 		}
-		return filepath.Join(home, ".local", "state", "charly"), nil
+		return filepath.Join(bases.State, "charly"), nil
 	case RootRuntime:
 		if v := os.Getenv("XDG_RUNTIME_DIR"); v != "" {
-			return filepath.Join(v, "charly"), nil
+			bases, err := XDG()
+			if err != nil {
+				return "", fmt.Errorf("resolve runtime root: %w", err)
+			}
+			return filepath.Join(bases.Runtime, "charly"), nil
 		}
 		// No runtime dir (a container, a cron job): fall back to the STATE root rather
 		// than /tmp, which is shared and world-writable. Documented, not silent.
@@ -100,9 +148,9 @@ func CacheDir() (string, error) {
 	if root := os.Getenv("CHARLY_CACHE_DIR"); root != "" {
 		return root, nil
 	}
-	base, err := os.UserCacheDir()
+	bases, err := XDG()
 	if err != nil {
 		return "", fmt.Errorf("resolve cache root: %w", err)
 	}
-	return filepath.Join(base, "charly"), nil
+	return filepath.Join(bases.Cache, "charly"), nil
 }
