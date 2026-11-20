@@ -12,16 +12,19 @@ import (
 // the collection walk) and the refs fetch backend (candy/plugin-refs) that clones into these
 // paths. RELOCATED from sdk/kit alongside the git primitives (#55 fabric-primitive extraction).
 
-// RepoCacheDir returns the cache directory for remote repos: the `repos` entry under the ONE cache
-// root, resolved by the contract surface's resolver (D-STORE-1 — `$XDG_CACHE_HOME/charly`, or
-// `CHARLY_CACHE_DIR` when set).
+// RepoCacheDir returns the remote-repo cache directory. When the operator sets
+// `CHARLY_REPO_CACHE`, its value is used VERBATIM as the repos directory — the variable's
+// long-standing meaning. Kept by operator direction (2026-11-20): no CHARLY_ environment
+// variable is dropped. When unset, the `repos` entry under the ONE cache root is used
+// (D-STORE-1: `$XDG_CACHE_HOME/charly`, or `CHARLY_CACHE_DIR` when set).
 //
-// This used to read a SECOND override, `CHARLY_REPO_CACHE`, and otherwise hand-build
-// `$XDG_CACHE_HOME/charly/repos`. Both are DELETED (R5), not deprecated: a per-cache variable is a second
-// resolver, and a hand-built path is a second computation of the same root. DESIGN.md never named the
-// variable -- D-STORE-1 names one override and this was not it -- but three consumer sites did, and they
-// are filed rather than left to discover the change: opencharly/charly#1213 and opencharly/marketplace#629.
+// The override names the REPOS DIRECTORY, not the cache root: `CHARLY_REPO_CACHE` and
+// `CHARLY_CACHE_DIR/repos` are alternatives, and the latter is used only when the former is
+// unset. A relative value is used verbatim, exactly as before.
 func RepoCacheDir() (string, error) {
+	if dir := os.Getenv("CHARLY_REPO_CACHE"); dir != "" {
+		return dir, nil
+	}
 	root, err := storeroot.Dir(storeroot.RootCache)
 	if err != nil {
 		return "", err
