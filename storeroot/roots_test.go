@@ -19,6 +19,13 @@ func pinXDG(t *testing.T, home string) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "xdg-state"))
 	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(home, "xdg-run"))
 	t.Setenv("CHARLY_CACHE_DIR", "")
+	for _, v := range []string{
+		"CHARLY_CONFIG_HOME", "CHARLY_CONFIG_DIRS",
+		"CHARLY_DATA_HOME", "CHARLY_DATA_DIRS",
+		"CHARLY_STATE_HOME", "CHARLY_CACHE_HOME", "CHARLY_RUNTIME_DIR",
+	} {
+		t.Setenv(v, "")
+	}
 }
 
 // TestDirResolvesTheRoots pins every root in the DEFAULT condition (every XDG variable

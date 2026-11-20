@@ -16,11 +16,12 @@ import (
 // `CHARLY_REPO_CACHE`, its value is used VERBATIM as the repos directory — the variable's
 // long-standing meaning. Kept by operator direction (2026-11-20): no CHARLY_ environment
 // variable is dropped. When unset, the `repos` entry under the ONE cache root is used
-// (D-STORE-1: `$XDG_CACHE_HOME/charly`, or `CHARLY_CACHE_DIR` when set).
+// (D-STORE-1: `$XDG_CACHE_HOME/charly`, or its charly-only override `CHARLY_CACHE_HOME`,
+// or the compatibility override `CHARLY_CACHE_DIR`, in that order).
 //
-// The override names the REPOS DIRECTORY, not the cache root: `CHARLY_REPO_CACHE` and
-// `CHARLY_CACHE_DIR/repos` are alternatives, and the latter is used only when the former is
-// unset. A relative value is used verbatim, exactly as before.
+// The override names the REPOS DIRECTORY, not the cache root: `CHARLY_REPO_CACHE` and the
+// cache root's `repos` entry are alternatives, and the latter is used only when the former
+// is unset. A relative value is used verbatim, exactly as before.
 func RepoCacheDir() (string, error) {
 	if dir := os.Getenv("CHARLY_REPO_CACHE"); dir != "" {
 		return dir, nil
