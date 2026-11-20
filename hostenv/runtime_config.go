@@ -369,6 +369,46 @@ func ValidateBindAddress(value string) error {
 	return nil
 }
 
+// xdgBaseDirs lists the XDG Base Directory Specification variables ExpandHostHome
+// expands, with the specification's Unix defaults. These are the OPERATOR's bases for
+// deployment data (bind-backed volume hosts, env_file paths), not charly's own four
+// roots: configuration/cache/state/runtime stay owned by spec/storeroot (D-STORE-1),
+// and the content-addressed cache stays the only cache under the cache root
+// (D-STORE-3). A model store or a deployment's state lives under the DATA base.
+var xdgBaseDirs = []struct {
+	env        string
+	defaultRel string
+}{
+	{"XDG_DATA_HOME", ".local/share"},
+	{"XDG_CONFIG_HOME", ".config"},
+	{"XDG_CACHE_HOME", ".cache"},
+	{"XDG_STATE_HOME", ".local/state"},
+}
+
+// xdgBaseDir resolves one XDG base directory. The specification says a value MUST be
+// an absolute path; a relative value is invalid and MUST be ignored, so it falls back
+// to the specification default under the user's home rather than leaking a relative
+// path into a container bind.
+func xdgBaseDir(envName, defaultRel string) string {
+	if v := os.Getenv(envName); filepath.IsAbs(v) {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return defaultRel
+	}
+	return filepath.Join(home, defaultRel)
+}
+
+// xdgRuntimeDir resolves `$XDG_RUNTIME_DIR`, defaulting to /run/user/<uid> as the
+// specification and the reference implementation do.
+func xdgRuntimeDir() string {
+	if v := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(v) {
+		return v
+	}
+	return filepath.Join("/run/user", strconv.Itoa(os.Getuid()))
+}
+
 func ResolveEncryptedStoragePath(envVal, cfgVal string) string {
 	if envVal != "" {
 		return ExpandHostHome(envVal)
@@ -376,11 +416,7 @@ func ResolveEncryptedStoragePath(envVal, cfgVal string) string {
 	if cfgVal != "" {
 		return ExpandHostHome(cfgVal)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".local", "share", "charly", "encrypted")
-	}
-	return filepath.Join(home, ".local", "share", "charly", "encrypted")
+	return filepath.Join(xdgBaseDir("XDG_DATA_HOME", ".local/share"), "charly", "encrypted")
 }
 
 func ResolveVolumesPath(envVal, cfgVal string) string {
@@ -390,26 +426,34 @@ func ResolveVolumesPath(envVal, cfgVal string) string {
 	if cfgVal != "" {
 		return ExpandHostHome(cfgVal)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".local", "share", "charly", "volumes")
-	}
-	return filepath.Join(home, ".local", "share", "charly", "volumes")
+	return filepath.Join(xdgBaseDir("XDG_DATA_HOME", ".local/share"), "charly", "volumes")
 }
 
-// ExpandHostHome expands ~ and $HOME in a path using the actual user's home directory.
+// ExpandHostHome expands `~`, `$HOME`/`${HOME}` and every XDG base directory variable
+// in a path, using the actual user's home directory and the XDG specification's
+// defaults for an unset (or non-absolute) variable: `$XDG_DATA_HOME`,
+// `$XDG_CONFIG_HOME`, `$XDG_CACHE_HOME`, `$XDG_STATE_HOME` and `$XDG_RUNTIME_DIR`.
+// Deploy volume hosts and env_file paths are authored with these variables so that a
+// relocated XDG base moves every deployment's data with it, at `charly config` time.
 func ExpandHostHome(path string) string {
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return path
+	if err == nil {
+		if path == "~" {
+			path = home
+		} else if strings.HasPrefix(path, "~/") {
+			path = home + path[1:]
+		}
+		path = strings.ReplaceAll(path, "${HOME}", home)
+		path = strings.ReplaceAll(path, "$HOME", home)
 	}
-	if strings.HasPrefix(path, "~/") {
-		return home + path[1:]
+	for _, d := range xdgBaseDirs {
+		base := xdgBaseDir(d.env, d.defaultRel)
+		path = strings.ReplaceAll(path, "${"+d.env+"}", base)
+		path = strings.ReplaceAll(path, "$"+d.env, base)
 	}
-	if path == "~" {
-		return home
-	}
-	path = strings.ReplaceAll(path, "$HOME", home)
+	runtime := xdgRuntimeDir()
+	path = strings.ReplaceAll(path, "${XDG_RUNTIME_DIR}", runtime)
+	path = strings.ReplaceAll(path, "$XDG_RUNTIME_DIR", runtime)
 	return path
 }
 
