@@ -109,3 +109,21 @@ func TestResolveEncryptedStoragePathXDG(t *testing.T) {
 		t.Errorf("env precedence = %q", got)
 	}
 }
+
+// TestResolvePathsAbsoluteDataNeedsNoHome pins that the data base answers from an
+// absolute XDG_DATA_HOME without $HOME: the old resolvers never needed the home for an
+// absolute variable, so falling back to a relative default here would be a regression.
+func TestResolvePathsAbsoluteDataNeedsNoHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_DATA_HOME", "/abs/data")
+
+	if got, want := ResolveVolumesPath("", ""), "/abs/data/charly/volumes"; got != want {
+		t.Errorf("ResolveVolumesPath without $HOME = %q, want %q", got, want)
+	}
+	if got, want := ResolveEncryptedStoragePath("", ""), "/abs/data/charly/encrypted"; got != want {
+		t.Errorf("ResolveEncryptedStoragePath without $HOME = %q, want %q", got, want)
+	}
+	if got, want := ExpandHostHome("$XDG_DATA_HOME/charly/models"), "/abs/data/charly/models"; got != want {
+		t.Errorf("ExpandHostHome without $HOME = %q, want %q", got, want)
+	}
+}

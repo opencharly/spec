@@ -377,8 +377,8 @@ func ResolveEncryptedStoragePath(envVal, cfgVal string) string {
 	if cfgVal != "" {
 		return ExpandHostHome(cfgVal)
 	}
-	bases, err := storeroot.XDG()
-	if err != nil {
+	bases, _ := storeroot.XDG()
+	if !filepath.IsAbs(bases.Data) {
 		return filepath.Join(".local", "share", "charly", "encrypted")
 	}
 	return filepath.Join(bases.Data, "charly", "encrypted")
@@ -391,8 +391,8 @@ func ResolveVolumesPath(envVal, cfgVal string) string {
 	if cfgVal != "" {
 		return ExpandHostHome(cfgVal)
 	}
-	bases, err := storeroot.XDG()
-	if err != nil {
+	bases, _ := storeroot.XDG()
+	if !filepath.IsAbs(bases.Data) {
 		return filepath.Join(".local", "share", "charly", "volumes")
 	}
 	return filepath.Join(bases.Data, "charly", "volumes")

@@ -80,16 +80,20 @@ type Bases struct {
 }
 
 // XDG resolves the XDG bases ONCE. It applies the specification's Unix defaults and its
-// rule that a non-absolute value is invalid and MUST be ignored. The error is non-nil
-// only when no base can be resolved at all ($HOME unavailable and the variable unset);
-// the returned Bases still carry the relative defaults.
+// rule that a non-absolute value is invalid and MUST be ignored. The error is non-nil only
+// when at least one base had to fall back to a RELATIVE default because `$HOME` was
+// unavailable while its variable was unset or relative; the returned Bases still carry
+// every value that did resolve. A caller that needs one base should use it when it is
+// absolute and treat the home error as fatal only for the base that fell back.
 func XDG() (Bases, error) {
 	home, homeErr := os.UserHomeDir()
+	unresolved := false
 	base := func(env, defaultRel string) string {
 		if v := os.Getenv(env); filepath.IsAbs(v) {
 			return v
 		}
 		if homeErr != nil {
+			unresolved = true
 			return defaultRel
 		}
 		return filepath.Join(home, defaultRel)
@@ -110,7 +114,7 @@ func XDG() (Bases, error) {
 		Runtime:    runtime,
 		RuntimeSet: runtimeSet,
 	}
-	if homeErr != nil {
+	if unresolved {
 		return bases, fmt.Errorf("resolve XDG bases: %w", homeErr)
 	}
 	return bases, nil

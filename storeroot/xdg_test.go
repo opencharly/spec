@@ -174,3 +174,43 @@ func TestDirWithAbsoluteVariablesNeedsNoHome(t *testing.T) {
 		t.Errorf("CacheDir() without $HOME = %q, want /abs/cache/charly", cache)
 	}
 }
+
+// TestXDGAbsoluteVariablesNeedNoHome pins the error contract: when every variable is
+// absolute, the bases do not depend on $HOME and XDG() must not error.
+func TestXDGAbsoluteVariablesNeedNoHome(t *testing.T) {
+	clearXDG(t)
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_DATA_HOME", "/abs/data")
+	t.Setenv("XDG_CONFIG_HOME", "/abs/config")
+	t.Setenv("XDG_CACHE_HOME", "/abs/cache")
+	t.Setenv("XDG_STATE_HOME", "/abs/state")
+	t.Setenv("XDG_RUNTIME_DIR", "/abs/run")
+
+	bases, err := XDG()
+	if err != nil {
+		t.Fatalf("XDG with every variable absolute and no $HOME: %v", err)
+	}
+	if bases.Data != "/abs/data" || bases.Config != "/abs/config" || bases.Cache != "/abs/cache" || bases.State != "/abs/state" || bases.Runtime != "/abs/run" {
+		t.Errorf("XDG() = %+v", bases)
+	}
+	if !bases.RuntimeSet {
+		t.Error("an absolute XDG_RUNTIME_DIR must be reported as set")
+	}
+}
+
+// TestXDGUnresolvedBaseErrorsWithoutHome pins the other half of the contract: a base that
+// had to fall back to a relative default because $HOME is unavailable yields the error,
+// while an absolute base in the same call still resolves.
+func TestXDGUnresolvedBaseErrorsWithoutHome(t *testing.T) {
+	clearXDG(t)
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_DATA_HOME", "/abs/data")
+
+	bases, err := XDG()
+	if err == nil {
+		t.Fatal("XDG must error when unset bases fell back to relative defaults without $HOME")
+	}
+	if bases.Data != "/abs/data" {
+		t.Errorf("bases.Data = %q, want the absolute data base", bases.Data)
+	}
+}
