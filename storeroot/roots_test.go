@@ -18,6 +18,10 @@ func pinXDG(t *testing.T, home string) {
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "xdg-cache"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "xdg-state"))
 	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(home, "xdg-run"))
+	// The search-path inputs are read by BaseDirs, so they are inputs too: pinning them
+	// keeps a developer host's XDG_CONFIG_DIRS off every assertion (D-STORE-8).
+	t.Setenv("XDG_CONFIG_DIRS", filepath.Join(home, "xdg-config-dirs"))
+	t.Setenv("XDG_DATA_DIRS", filepath.Join(home, "xdg-data-dirs"))
 	t.Setenv("CHARLY_CACHE_DIR", "")
 	for _, v := range []string{
 		"CHARLY_CONFIG_HOME", "CHARLY_CONFIG_DIRS",
@@ -28,8 +32,9 @@ func pinXDG(t *testing.T, home string) {
 	}
 }
 
-// TestDirResolvesTheRoots pins every root in the DEFAULT condition (every XDG variable
-// set, the one override unset). Each expectation is spelled out rather than derived from
+// TestDirResolvesTheRoots pins every root in the DEFAULT condition (every XDG search input
+// pinned, every charly-only and compatibility override unset). Each expectation is spelled
+// out rather than derived from
 // the implementation, so a root that moves is a failure, not a new truth.
 func TestDirResolvesTheRoots(t *testing.T) {
 	home := t.TempDir()
@@ -61,8 +66,8 @@ func TestDirResolvesTheRoots(t *testing.T) {
 	}
 }
 
-// TestCacheOverrideRelocatesOnlyTheCacheRoot pins the ONE override: CHARLY_CACHE_DIR
-// moves the cache root, and no other root follows it. An override that also moved the
+// TestCacheOverrideRelocatesOnlyTheCacheRoot pins the compatibility override:
+// CHARLY_CACHE_DIR moves the cache root, and no other root follows it. An override that also moved the
 // state or runtime root would relocate locks and per-boot files into a cache the
 // operator expects to be disposable.
 func TestCacheOverrideRelocatesOnlyTheCacheRoot(t *testing.T) {

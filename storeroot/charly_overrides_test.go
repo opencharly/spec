@@ -181,10 +181,13 @@ func TestCharlyDirsOverrideIsCompleteCharlyDirs(t *testing.T) {
 }
 
 // TestCharlyDirsOverrideWithNoAbsoluteEntryIsIgnored pins the invalid-value rule for the
-// `_DIRS` form, and the fallback to the XDG search path built from each base.
+// `_DIRS` form, and the fallback to the XDG search path built from each base. The expected
+// search entry is derived from the value this test pins, never from the host's `/etc/xdg`.
 func TestCharlyDirsOverrideWithNoAbsoluteEntryIsIgnored(t *testing.T) {
 	home := t.TempDir()
 	pinXDG(t, home)
+	searchBase := filepath.Join(home, "pinned-search-base")
+	t.Setenv("XDG_CONFIG_DIRS", searchBase)
 	t.Setenv("CHARLY_CONFIG_DIRS", "relative:also-relative")
 
 	homeRoot, err := Dir(RootConfig)
@@ -195,8 +198,8 @@ func TestCharlyDirsOverrideWithNoAbsoluteEntryIsIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dirs(RootConfig): %v", err)
 	}
-	want := []string{homeRoot, filepath.Join("/etc/xdg", "charly")}
+	want := []string{homeRoot, filepath.Join(searchBase, "charly")}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Dirs(RootConfig) = %q with a relative CHARLY_CONFIG_DIRS, want the XDG default path %q", got, want)
+		t.Errorf("Dirs(RootConfig) = %q with a relative CHARLY_CONFIG_DIRS, want the pinned XDG search path %q", got, want)
 	}
 }
