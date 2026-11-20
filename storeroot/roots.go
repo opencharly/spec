@@ -123,15 +123,15 @@ func Dir(r Root) (string, error) {
 	case RootCache:
 		return CacheDir()
 	case RootConfig:
-		bases, err := XDG()
-		if err != nil {
-			return "", fmt.Errorf("resolve config root: %w", err)
+		bases, homeErr := XDG()
+		if !filepath.IsAbs(bases.Config) {
+			return "", fmt.Errorf("resolve config root: %w", homeErr)
 		}
 		return filepath.Join(bases.Config, "charly"), nil
 	case RootState:
-		bases, err := XDG()
-		if err != nil {
-			return "", fmt.Errorf("resolve state root: %w", err)
+		bases, homeErr := XDG()
+		if !filepath.IsAbs(bases.State) {
+			return "", fmt.Errorf("resolve state root: %w", homeErr)
 		}
 		return filepath.Join(bases.State, "charly"), nil
 	case RootRuntime:
@@ -155,9 +155,9 @@ func CacheDir() (string, error) {
 	if root := os.Getenv("CHARLY_CACHE_DIR"); root != "" {
 		return root, nil
 	}
-	bases, err := XDG()
-	if err != nil {
-		return "", fmt.Errorf("resolve cache root: %w", err)
+	bases, homeErr := XDG()
+	if !filepath.IsAbs(bases.Cache) {
+		return "", fmt.Errorf("resolve cache root: %w", homeErr)
 	}
 	return filepath.Join(bases.Cache, "charly"), nil
 }

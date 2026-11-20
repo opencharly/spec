@@ -143,3 +143,34 @@ func mustDir(t *testing.T, r Root) string {
 	}
 	return got
 }
+
+// TestDirWithAbsoluteVariablesNeedsNoHome pins that an absolute variable answers even when
+// $HOME is unavailable: the old resolvers returned the variable directly, so failing on
+// the unrelated missing home would be a regression. `XDG()` reports the missing home, but
+// each root only needs its OWN base.
+func TestDirWithAbsoluteVariablesNeedsNoHome(t *testing.T) {
+	clearXDG(t)
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "/abs/config")
+	t.Setenv("XDG_STATE_HOME", "/abs/state")
+	t.Setenv("XDG_CACHE_HOME", "/abs/cache")
+	t.Setenv("XDG_RUNTIME_DIR", "/abs/run")
+
+	for root, want := range map[Root]string{
+		RootConfig:  "/abs/config/charly",
+		RootState:   "/abs/state/charly",
+		RootCache:   "/abs/cache/charly",
+		RootRuntime: "/abs/run/charly",
+	} {
+		if got := mustDir(t, root); got != want {
+			t.Errorf("Dir(%s) without $HOME = %q, want %q", root, got, want)
+		}
+	}
+	cache, err := CacheDir()
+	if err != nil {
+		t.Fatalf("CacheDir without $HOME: %v", err)
+	}
+	if cache != "/abs/cache/charly" {
+		t.Errorf("CacheDir() without $HOME = %q, want /abs/cache/charly", cache)
+	}
+}
