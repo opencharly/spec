@@ -423,6 +423,12 @@ func ExpandHostHome(path string) string {
 		{"XDG_STATE_HOME", bases.State},
 		{"XDG_RUNTIME_DIR", bases.Runtime},
 	} {
+		// An unresolved base is a RELATIVE fallback (the variable was unset or invalid and
+		// $HOME was unavailable). Substituting it would write a relative path into a
+		// container bind, so the token is left literal for the caller to reject.
+		if !filepath.IsAbs(v.value) {
+			continue
+		}
 		path = strings.ReplaceAll(path, "${"+v.name+"}", v.value)
 		path = strings.ReplaceAll(path, "$"+v.name, v.value)
 	}

@@ -1,9 +1,7 @@
 package hostenv
 
 import (
-	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 )
 
@@ -63,10 +61,33 @@ func TestExpandHostHomeXDGDefaults(t *testing.T) {
 			t.Errorf("ExpandHostHome(%q) = %q, want %q", in, got, want)
 		}
 	}
-	// The runtime default is /run/user/<uid>, never an unexpanded token.
-	wantRuntime := filepath.Join("/run/user", strconv.Itoa(os.Getuid()), "x")
+	// The runtime base follows D-STORE-1: with XDG_RUNTIME_DIR unset it is the state base,
+	// never /run/user/<uid> — the same value Dir(RootRuntime) uses.
+	wantRuntime := filepath.Join(home, ".local", "state", "x")
 	if got := ExpandHostHome("$XDG_RUNTIME_DIR/x"); got != wantRuntime {
 		t.Errorf("runtime default = %q, want %q", got, wantRuntime)
+	}
+}
+
+// TestExpandHostHomeUnresolvedTokenStaysLiteral pins that an unresolved base (the variable
+// unset or relative and $HOME unavailable) is left as a literal token rather than replaced
+// with a relative path that would become a container bind.
+func TestExpandHostHomeUnresolvedTokenStaysLiteral(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "relative/config")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("XDG_RUNTIME_DIR", "")
+
+	if got, want := ExpandHostHome("$XDG_DATA_HOME/x"), "$XDG_DATA_HOME/x"; got != want {
+		t.Errorf("unresolved XDG_DATA_HOME = %q, want the literal token %q", got, want)
+	}
+	if got, want := ExpandHostHome("$XDG_CONFIG_HOME/x"), "$XDG_CONFIG_HOME/x"; got != want {
+		t.Errorf("relative XDG_CONFIG_HOME = %q, want the literal token %q", got, want)
+	}
+	if got, want := ExpandHostHome("$XDG_RUNTIME_DIR/x"), "$XDG_RUNTIME_DIR/x"; got != want {
+		t.Errorf("unresolved XDG_RUNTIME_DIR = %q, want the literal token %q", got, want)
 	}
 }
 

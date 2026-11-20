@@ -1,9 +1,7 @@
 package storeroot
 
 import (
-	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 )
 
@@ -48,7 +46,7 @@ func TestXDGDefaultsWithoutVariables(t *testing.T) {
 		Config:     filepath.Join(home, ".config"),
 		Cache:      filepath.Join(home, ".cache"),
 		State:      filepath.Join(home, ".local", "state"),
-		Runtime:    filepath.Join("/run/user", strconv.Itoa(os.Getuid())),
+		Runtime:    filepath.Join(home, ".local", "state"),
 		RuntimeSet: false,
 	}
 	if bases != want {

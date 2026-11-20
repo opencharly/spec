@@ -41,7 +41,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 )
 
 // Root names one of the four roots.
@@ -73,9 +72,8 @@ type Bases struct {
 	State   string
 	Runtime string
 	// RuntimeSet reports whether `XDG_RUNTIME_DIR` was set to a VALID (absolute) path.
-	// Dir(RootRuntime) uses it to choose between the runtime root and the documented
-	// state-root fallback; XDG().Runtime always carries a path, so a caller must not
-	// infer availability from the path alone.
+	// When false, Runtime carries the D-STORE-1 state fallback; the flag lets a caller
+	// distinguish the two without re-reading the variable.
 	RuntimeSet bool
 }
 
@@ -98,21 +96,19 @@ func XDG() (Bases, error) {
 		}
 		return filepath.Join(home, defaultRel)
 	}
-	runtime := ""
-	runtimeSet := false
-	if v := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(v) {
-		runtime = v
-		runtimeSet = true
-	} else {
-		runtime = filepath.Join("/run/user", strconv.Itoa(os.Getuid()))
-	}
+	// Runtime follows D-STORE-1: a valid (absolute) XDG_RUNTIME_DIR names it; otherwise the
+	// runtime root falls back to the STATE base, never to /tmp. RuntimeSet tells a caller
+	// whether the variable was genuinely set.
 	bases := Bases{
-		Data:       base("XDG_DATA_HOME", ".local/share"),
-		Config:     base("XDG_CONFIG_HOME", ".config"),
-		Cache:      base("XDG_CACHE_HOME", ".cache"),
-		State:      base("XDG_STATE_HOME", ".local/state"),
-		Runtime:    runtime,
-		RuntimeSet: runtimeSet,
+		Data:   base("XDG_DATA_HOME", ".local/share"),
+		Config: base("XDG_CONFIG_HOME", ".config"),
+		Cache:  base("XDG_CACHE_HOME", ".cache"),
+		State:  base("XDG_STATE_HOME", ".local/state"),
+	}
+	bases.Runtime = bases.State
+	if v := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(v) {
+		bases.Runtime = v
+		bases.RuntimeSet = true
 	}
 	if unresolved {
 		return bases, fmt.Errorf("resolve XDG bases: %w", homeErr)
@@ -139,15 +135,13 @@ func Dir(r Root) (string, error) {
 		}
 		return filepath.Join(bases.State, "charly"), nil
 	case RootRuntime:
-		// The runtime path does not depend on $HOME, so a valid XDG_RUNTIME_DIR answers
-		// even when XDG() reports that $HOME is unavailable. An unset or non-absolute
-		// value is invalid (the specification's rule), and the root falls back to STATE
-		// rather than /tmp, which is shared and world-writable (D-STORE-1).
-		bases, _ := XDG()
-		if bases.RuntimeSet {
-			return filepath.Join(bases.Runtime, "charly"), nil
+		// XDG() already resolves Runtime to the absolute variable or the D-STORE-1 state
+		// fallback, so both consumers (this root and hostenv.ExpandHostHome) agree.
+		bases, homeErr := XDG()
+		if !filepath.IsAbs(bases.Runtime) {
+			return "", fmt.Errorf("resolve runtime root: %w", homeErr)
 		}
-		return Dir(RootState)
+		return filepath.Join(bases.Runtime, "charly"), nil
 	default:
 		return "", fmt.Errorf("unknown root %q (want %s|%s|%s|%s)", r, RootConfig, RootCache, RootState, RootRuntime)
 	}
