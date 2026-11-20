@@ -8458,6 +8458,122 @@ type PluginArtifactMetadata struct {
 	Layers map[string]string `yaml:"layers,omitempty" json:"layers"`
 }
 
+// #OsPackage is a plain package name; #ManagerLocator names the manager explicitly for
+// a package the os's own manager does not carry. Two arms, because the second form is
+// the escape hatch and must be visibly different from the first.
+type OsPackage string
+
+type ManagerLocator string
+
+type Package string
+
+type Url string
+
+type Sha256 string
+
+type Download struct {
+	Url Url `yaml:"url,omitempty" json:"url"`
+
+	Sha256 Sha256 `yaml:"sha256,omitempty" json:"sha256"`
+}
+
+// #OsInit names the init node per role, closed over _initRole so a typo in a role key
+// is a schema error rather than a silently-ignored service.
+type OsInit struct {
+	Container Ref `yaml:"container,omitempty" json:"container"`
+
+	System Ref `yaml:"system,omitempty" json:"system"`
+}
+
+// #Boot — the boot content of the disk form: the firmware it boots under, and the
+// kernel a microVM hypervisor boots beside a root drive (DESIGN §14.2).
+type Boot struct {
+	Firmware string `yaml:"firmware,omitempty" json:"firmware"`
+
+	Kernel AbsPath `yaml:"kernel,omitempty" json:"kernel,omitempty"`
+
+	Initrd AbsPath `yaml:"initrd,omitempty" json:"initrd,omitempty"`
+
+	Command_line Text `yaml:"command_line,omitempty" json:"command_line,omitempty"`
+}
+
+// #OsBootstrap — the command that fills a root filesystem of this os.
+type OsBootstrap struct {
+	Install Text `yaml:"install,omitempty" json:"install,omitempty"`
+
+	Package []Package `yaml:"package,omitempty" json:"package,omitempty"`
+
+	Cache_mount []AbsPath `yaml:"cache_mount,omitempty" json:"cache_mount,omitempty"`
+}
+
+// #OsFormat — the rules a rendered unit must pass, and the local packages it needs.
+type OsFormat struct {
+	Validate []Text `yaml:"validate,omitempty" json:"validate,omitempty"`
+
+	Local_package []Package `yaml:"local_package,omitempty" json:"local_package,omitempty"`
+}
+
+// #OsBootstrapper — the from-scratch tool, by the family that ships it.
+type OsBootstrapper struct {
+	Pacstrap Text `yaml:"pacstrap,omitempty" json:"pacstrap,omitempty"`
+
+	Debootstrap Text `yaml:"debootstrap,omitempty" json:"debootstrap,omitempty"`
+
+	Alpine Text `yaml:"alpine,omitempty" json:"alpine,omitempty"`
+}
+
+// #OsDiskLayout — the partitions an installer of this os creates.
+type OsDiskLayout struct {
+	Efi AbsPath `yaml:"efi,omitempty" json:"efi,omitempty"`
+
+	Root AbsPath `yaml:"root,omitempty" json:"root,omitempty"`
+
+	Swap AbsPath `yaml:"swap,omitempty" json:"swap,omitempty"`
+}
+
+// #OsInstaller — the answer file an unattended install reads, and the volume it is on.
+type OsInstaller struct {
+	Answer AbsPath `yaml:"answer,omitempty" json:"answer,omitempty"`
+
+	Volume Name `yaml:"volume,omitempty" json:"volume,omitempty"`
+}
+
+type Os struct {
+	Description Text `yaml:"description,omitempty" json:"description"`
+
+	Family Name `yaml:"family,omitempty" json:"family"`
+
+	Version Text `yaml:"version,omitempty" json:"version,omitempty"`
+
+	Package_manager string `yaml:"package_manager,omitempty" json:"package_manager"`
+
+	Init OsInit `yaml:"init,omitempty" json:"init"`
+
+	Boot Boot `yaml:"boot,omitempty" json:"boot,omitempty"`
+
+	// §16.4: the os of the stack's source owns every CONVERSION — the build vocabulary
+	// below is that ownership made checkable.
+	Inherit []Name `yaml:"inherit,omitempty" json:"inherit,omitempty"`
+
+	Inherit_package []Package `yaml:"inherit_package,omitempty" json:"inherit_package,omitempty"`
+
+	Bootstrap OsBootstrap `yaml:"bootstrap,omitempty" json:"bootstrap,omitempty"`
+
+	Workaround Text `yaml:"workaround,omitempty" json:"workaround,omitempty"`
+
+	Format map[string]OsFormat `yaml:"format,omitempty" json:"format,omitempty"`
+
+	Base_user Name `yaml:"base_user,omitempty" json:"base_user,omitempty"`
+
+	Bootstrapper OsBootstrapper `yaml:"bootstrapper,omitempty" json:"bootstrapper,omitempty"`
+
+	Bootloader Name `yaml:"bootloader,omitempty" json:"bootloader,omitempty"`
+
+	Disk_layout OsDiskLayout `yaml:"disk_layout,omitempty" json:"disk_layout,omitempty"`
+
+	Installer OsInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
+}
+
 // #PodSidecar mirrors Go SidecarConfig: a single-key wrapper around a map of
 // named sidecar templates. CLOSED (the struct has exactly one field).
 type PodSidecar struct {
@@ -10859,6 +10975,69 @@ type SkillReference struct {
 
 	Content string `yaml:"content,omitempty" json:"content"`
 }
+
+// #ImageRef — an OCI image reference: registry/repo, an optional tag, an optional
+// digest. Distinct from #OciRef (which carries an explicit `oci://` scheme) because a
+// source's `oci:` origin names an image the way `podman pull` does, with no scheme.
+type ImageRef string
+
+// #SourceIso — a disk image plus the installer's own answer file.
+type SourceIso struct {
+	Url Url `yaml:"url,omitempty" json:"url"`
+
+	Sha256 Sha256 `yaml:"sha256,omitempty" json:"sha256"`
+
+	Config Opaque `yaml:"config,omitempty" json:"config,omitempty"`
+}
+
+// #SourceBootstrap — a root filesystem made from scratch by a builder.
+type SourceBootstrap struct {
+	Builder Ref `yaml:"builder,omitempty" json:"builder"`
+
+	Package PackageMap `yaml:"package,omitempty" json:"package,omitempty"`
+}
+
+// #PackageMap — the packages a bootstrap asks for, keyed by the entry that wants them.
+type PackageMap map[string][]Package
+
+// #SourceAlt — the four origins, as an S4 key-tagged union. Exactly one is admitted,
+// which is D-SRC-1's "exactly one origin" made unrepresentable-otherwise.
+type SourceAlt struct {
+	Oci struct {
+		Oci ImageRef `yaml:"oci,omitempty" json:"oci"`
+
+		Description Text `yaml:"description,omitempty" json:"description"`
+
+		Os Ref `yaml:"os,omitempty" json:"os"`
+	} `yaml:"oci,omitempty" json:"oci"`
+
+	Disk struct {
+		Disk Download `yaml:"disk,omitempty" json:"disk"`
+
+		Description Text `yaml:"description,omitempty" json:"description"`
+
+		Os Ref `yaml:"os,omitempty" json:"os"`
+	} `yaml:"disk,omitempty" json:"disk"`
+
+	Iso struct {
+		Iso SourceIso `yaml:"iso,omitempty" json:"iso"`
+
+		Description Text `yaml:"description,omitempty" json:"description"`
+
+		Os Ref `yaml:"os,omitempty" json:"os"`
+	} `yaml:"iso,omitempty" json:"iso"`
+
+	Bootstrap struct {
+		Bootstrap SourceBootstrap `yaml:"bootstrap,omitempty" json:"bootstrap"`
+
+		Description Text `yaml:"description,omitempty" json:"description"`
+
+		Os Ref `yaml:"os,omitempty" json:"os"`
+	} `yaml:"bootstrap,omitempty" json:"bootstrap"`
+}
+
+// #Source — one of them.
+type Source map[string]any
 
 // #Retry — D-FLOW-2: a stage's repetition is a DECLARED, BOUNDED count. It never repeats a failed
 // plugin call (D-PROTO-7) and is never blind (D-LAW-5), which is why `attempt` is bounded by #Count
