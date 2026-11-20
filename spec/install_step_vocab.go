@@ -483,13 +483,13 @@ func (s *ServiceCustomStep) Reverse() []ReverseOp {
 // ShellHookStep records the env vars and PATH contributions a candy makes
 // to the user's shell environment. On the OCI target these translate to
 // `ENV K=V` directives in the Containerfile. On the host target they
-// become `~/.config/opencharly/env.d/<candy>.env` plus a managed block in
+// become `~/.config/charly/env.d/<candy>.env` plus a managed block in
 // the user's shell init that sources the env.d directory.
 type ShellHookStep struct {
 	CandyName string
 	EnvVars   map[string]string
 	PathAdd   []string // already {{.Home}}-substituted to absolute paths
-	EnvFile   string   // computed path (~/.config/opencharly/env.d/<candy>.env); populated at install
+	EnvFile   string   // computed path (~/.config/charly/env.d/<candy>.env); populated at install
 }
 
 func (s *ShellHookStep) Kind() StepKind     { return StepKindShellHook }

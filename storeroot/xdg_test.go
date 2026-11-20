@@ -92,12 +92,14 @@ func TestDirAndCacheDirFollowXDG(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "relative/config")
+	t.Setenv("XDG_DATA_HOME", "relative/data")
 	t.Setenv("XDG_STATE_HOME", "relative/state")
 	t.Setenv("XDG_CACHE_HOME", "relative/cache")
 	t.Setenv("CHARLY_CACHE_DIR", "")
 
 	for root, want := range map[Root]string{
 		RootConfig: filepath.Join(home, ".config", "charly"),
+		RootData:   filepath.Join(home, ".local", "share", "charly"),
 		RootState:  filepath.Join(home, ".local", "state", "charly"),
 		RootCache:  filepath.Join(home, ".cache", "charly"),
 	} {
@@ -150,12 +152,14 @@ func TestDirWithAbsoluteVariablesNeedsNoHome(t *testing.T) {
 	clearXDG(t)
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_CONFIG_HOME", "/abs/config")
+	t.Setenv("XDG_DATA_HOME", "/abs/data")
 	t.Setenv("XDG_STATE_HOME", "/abs/state")
 	t.Setenv("XDG_CACHE_HOME", "/abs/cache")
 	t.Setenv("XDG_RUNTIME_DIR", "/abs/run")
 
 	for root, want := range map[Root]string{
 		RootConfig:  "/abs/config/charly",
+		RootData:    "/abs/data/charly",
 		RootState:   "/abs/state/charly",
 		RootCache:   "/abs/cache/charly",
 		RootRuntime: "/abs/run/charly",

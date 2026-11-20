@@ -37,7 +37,7 @@ type ShellExecutor struct {
 	// MachineVenue marks this executor as a MACHINE venue (target: local, or a
 	// host:local/host:user@machine root) whose non-interactive commands must
 	// source the venue user's candy env.d directory first (charly#814 — a
-	// candy's `env:` lands in ~/.config/opencharly/env.d/, sourced only by an
+	// candy's `env:` lands in ~/.config/charly/env.d/, sourced only by an
 	// INTERACTIVE ~/.bashrc, so a deploy `run:`/`check:` never saw it).
 	//
 	// FALSE for the throwaway ShellExecutor{} a container-jump NestedExecutor

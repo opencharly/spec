@@ -28,7 +28,7 @@ import (
 // Credential-free by design: SSHExecutor contains zero key paths, zero
 // host-key overrides, zero ssh-agent socket detection. ssh(1) reads
 // ~/.ssh/config and ssh-agent for everything. VMs publish a managed
-// Host stanza into ~/.config/charly/ssh_config (Included from ~/.ssh/config)
+// Host stanza into $XDG_CONFIG_HOME/charly/ssh_config (Included from ~/.ssh/config)
 // that names the IdentityFile + UserKnownHostsFile + StrictHostKeyChecking
 // per VM; charly vm create writes the stanza, charly vm destroy removes it.
 type SSHExecutor struct {

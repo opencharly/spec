@@ -47,13 +47,13 @@ type UnifiedFile struct {
 	Provides *ProvidesConfig       `yaml:"provides,omitempty" json:"provides,omitempty"`
 
 	// Cache is the per-host LOCAL cache status (git metadata cache). Lives in the
-	// per-host charly.yml (~/.config/charly/charly.yml) — the single home for local
-	// system state — NOT in ad-hoc JSON files under ~/.cache/charly/repos. Shape:
+	// per-host charly.yml ($XDG_CONFIG_HOME/charly/charly.yml) — the single home for local
+	// system state — NOT in ad-hoc JSON files under $XDG_CACHE_HOME/charly/repos. Shape:
 	// schema/cache.cue #CacheConfig.
 	Cache *CacheConfig `yaml:"cache,omitempty" json:"cache,omitempty"`
 	// Ledger is the per-host INSTALL LEDGER (deploy/candy/step records). The
 	// unified home for what is installed on this host, replacing the per-deploy
-	// JSON files under ~/.config/opencharly/installed/. Shape: schema/ledger.cue
+	// JSON files under ~/.config/charly/installed/. Shape: schema/ledger.cue
 	// #LedgerConfig.
 	Ledger *LedgerConfig `yaml:"ledger,omitempty" json:"ledger,omitempty"`
 	// System is the per-host LOCAL SYSTEM INFO (hostname, distro, kernel, arch,

@@ -26,7 +26,7 @@ import (
 
 var configPermWarningOnce sync.Once
 
-// RuntimeConfig represents the user-level runtime configuration (~/.config/charly/config.yml)
+// RuntimeConfig represents the user-level runtime configuration ($XDG_CONFIG_HOME/charly/config.yml)
 type RuntimeConfig struct {
 	Engine                 EngineConfig      `yaml:"engine" json:"engine"`
 	RunMode                string            `yaml:"run_mode,omitempty" json:"run_mode,omitempty"`
@@ -79,7 +79,7 @@ type ContainerdConfig struct {
 // BuildKit is the one builder, so a `build:` key would be a selector with a single legal
 // value. The retired key is inert on load — RuntimeConfig is parsed with a plain
 // yaml.Unmarshal (no closed gate), so an existing `engine.build:` in
-// ~/.config/charly/config.yml is silently ignored rather than a load failure. See
+// $XDG_CONFIG_HOME/charly/config.yml is silently ignored rather than a load failure. See
 // opencharly/opencharly AGENTS.md "Hard Cutover by Default" and the BuildKit adoption
 // record for why no migration entry is owed for it (the migration table reshapes
 // charly.yml and the per-host overlay, never this runtime settings file).
@@ -109,11 +109,11 @@ type ResolvedRuntime struct {
 var RuntimeConfigPath = defaultRuntimeConfigPath
 
 func defaultRuntimeConfigPath() (string, error) {
-	configDir, err := os.UserConfigDir()
+	configDir, err := storeroot.Dir(storeroot.RootConfig)
 	if err != nil {
 		return "", fmt.Errorf("determining config directory: %w", err)
 	}
-	return filepath.Join(configDir, "charly", "config.yml"), nil
+	return filepath.Join(configDir, "config.yml"), nil
 }
 
 // LoadRuntimeConfig reads the runtime config file. Returns zero-value config if missing.

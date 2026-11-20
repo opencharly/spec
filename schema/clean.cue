@@ -25,7 +25,7 @@ package schema
 
 // #CleanSection is the per-host `clean:` block — the LOCAL, machine-scoped knobs of
 // the retention surface, beside `cache:`, `ledger:` and `system:` in
-// ~/.config/charly/charly.yml. CLOSED, and recognized as a document directive
+// $XDG_CONFIG_HOME/charly/charly.yml. CLOSED, and recognized as a document directive
 // (#NodeDoc) so an authored block is never mis-read as a node named "clean".
 //
 // store_budget is D-STORE-7's ceiling: how much a named store may occupy before the

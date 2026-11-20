@@ -894,7 +894,7 @@ type PreemptLease struct {
 	OwnerStart string `yaml:"owner_start,omitempty" json:"owner_start,omitempty"`
 }
 
-// #PreemptLedger is the on-disk lease set (~/.local/share/charly/preemption/leases.yml).
+// #PreemptLedger is the on-disk lease set ($XDG_DATA_HOME/charly/preemption/leases.yml).
 type PreemptLedger struct {
 	Leases []PreemptLease `yaml:"leases,omitempty" json:"leases"`
 }
@@ -4995,7 +4995,7 @@ type ScoreSummary struct {
 
 // #CleanSection is the per-host `clean:` block — the LOCAL, machine-scoped knobs of
 // the retention surface, beside `cache:`, `ledger:` and `system:` in
-// ~/.config/charly/charly.yml. CLOSED, and recognized as a document directive
+// $XDG_CONFIG_HOME/charly/charly.yml. CLOSED, and recognized as a document directive
 // (#NodeDoc) so an authored block is never mis-read as a node named "clean".
 //
 // store_budget is D-STORE-7's ceiling: how much a named store may occupy before the
@@ -8840,7 +8840,7 @@ type ResourceResolveReply struct {
 // (K5-U2/3). This is the ONE AI-harness check-project fact the resolved-project envelope cannot
 // carry: the harness's iterate sandbox is an OPERATOR-provisioned per-host deploy (`charly deploy
 // add <sandbox> <ref> --disposable`), so its disposability lives in the per-host overlay
-// (LoadDeployConfig → ~/.config/charly/charly.yml), NOT the project charly.yml the resolved-project
+// (LoadDeployConfig → $XDG_CONFIG_HOME/charly/charly.yml), NOT the project charly.yml the resolved-project
 // envelope projects (Mode Purity keeps the overlay out of the build-mode projection). The overlay
 // read needs the core loader a plugin cannot import, and no deploy/status provider serves it, so it
 // rides this THIN retained host seam. The host returns Deploy[Name].IsDisposable() (false when the
@@ -8856,7 +8856,7 @@ type PodDisposableReply struct {
 }
 
 // #DeployOverlayRequest asks the host for the PER-HOST deploy-config overlay (K4:
-// deploykit.LoadDeployConfigForRead — the runtime ledger at ~/.config/charly/charly.yml, NOT the
+// deploykit.LoadDeployConfigForRead — the runtime ledger at $XDG_CONFIG_HOME/charly/charly.yml, NOT the
 // project charly.yml the resolved-project envelope projects; Mode Purity keeps the two apart, same
 // distinction #PodDisposableRequest documents). Unlike #PodDisposableRequest (a single overlay
 // BIT), several pod-lifecycle resolvers need CROSS-DEPLOYMENT visibility (deploykit.DeployConfig's
@@ -10398,7 +10398,7 @@ type DeployTargetDispatchRequest struct {
 
 	// ledger_root OPTIONALLY overrides the ledger root directory (kit.LedgerPaths.Root) — the
 	// pre-S3b externalDeployTarget carried a settable `paths *kit.LedgerPaths` field a TEST could
-	// redirect to a temp dir instead of the operator's real ~/.config/opencharly/installed/; this
+	// redirect to a temp dir instead of the operator's real ~/.config/charly/installed/; this
 	// is the wire-safe equivalent (a bare root string, the plugin derives Deploys/Candies/LockFile
 	// from it exactly like kit.DefaultLedgerPaths does). Empty (the default) — kit.DefaultLedgerPaths().
 	LedgerRoot string `yaml:"ledger_root,omitempty" json:"ledger_root,omitempty"`

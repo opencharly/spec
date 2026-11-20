@@ -14,7 +14,7 @@ import (
 // user-scoped ledger write ("mkdir … Permission denied"), failing the 3 guest-ledger probes.
 func TestSSHInstallScript_PrivilegeByOwnerRoot(t *testing.T) {
 	// User-scoped (env.d, shell rc, the guest ledger): NO sudo, runs as the user.
-	userScript, userAsRoot := sshInstallScript("/tmp/stage", "/home/arch/.config/opencharly/env.d/nodejs.env", "0644", false)
+	userScript, userAsRoot := sshInstallScript("/tmp/stage", "/home/arch/.config/charly/env.d/nodejs.env", "0644", false)
 	if userAsRoot {
 		t.Error("ownerRoot=false MUST NOT run as root (sudo) — that creates root-owned ~/.config in the guest")
 	}

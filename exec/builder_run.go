@@ -11,10 +11,10 @@ package exec
 //   -v $HOME/.pixi:$HOME/.pixi:rw
 //   -v $HOME/.cargo:$HOME/.cargo:rw
 //   -v $HOME/.npm-global:$HOME/.npm-global:rw
-//   -v $HOME/.cache/charly:$HOME/.cache/charly:rw
+//   -v $XDG_CACHE_HOME/charly:$XDG_CACHE_HOME/charly:rw
 //   -v <candy-dir>:/work:ro
 //   -e HOME=$HOME
-//   -e PIXI_CACHE_DIR=$HOME/.cache/charly/pixi
+//   -e PIXI_CACHE_DIR=$XDG_CACHE_HOME/charly/pixi
 //   -e NPM_CONFIG_PREFIX=$HOME/.npm-global
 //   -e CARGO_HOME=$HOME/.cargo
 //   -w /work
@@ -39,6 +39,7 @@ import (
 	"strings"
 
 	"github.com/opencharly/spec/spec"
+	"github.com/opencharly/spec/storeroot"
 )
 
 // spec.BuilderRunOpts describes one invocation. ScriptBody is the rendered
@@ -181,14 +182,18 @@ func BuildBuilderRunArgs(opts spec.BuilderRunOpts) []string {
 
 // UserScopeBindMounts returns the standard subdirs each user-scope
 // builder needs bind-mounted: $HOME/.pixi, $HOME/.cargo,
-// $HOME/.npm-global, $HOME/.cache/charly. Ensures the source dirs exist on
+// $HOME/.npm-global, and the XDG cache root. Ensures the source dirs exist on
 // the host (empty dirs — so podman's --mount doesn't reject them).
 func UserScopeBindMounts(hostHome string) (map[string]string, error) {
 	if hostHome == "" {
 		return nil, fmt.Errorf("UserScopeBindMounts: empty HOME")
 	}
-	subdirs := []string{".pixi", ".cargo", ".npm-global", ".cache/charly"}
-	out := make(map[string]string, len(subdirs))
+	cache, err := storeroot.CacheDir()
+	if err != nil {
+		return nil, fmt.Errorf("UserScopeBindMounts cache root: %w", err)
+	}
+	subdirs := []string{".pixi", ".cargo", ".npm-global"}
+	out := make(map[string]string, len(subdirs)+1)
 	for _, sub := range subdirs {
 		p := filepath.Join(hostHome, sub)
 		if err := os.MkdirAll(p, 0755); err != nil {
@@ -196,19 +201,28 @@ func UserScopeBindMounts(hostHome string) (map[string]string, error) {
 		}
 		out[p] = p // same path inside and outside the container
 	}
+	if err := os.MkdirAll(cache, 0755); err != nil {
+		return nil, fmt.Errorf("UserScopeBindMounts mkdir %s: %w", cache, err)
+	}
+	out[cache] = cache
 	return out, nil
 }
 
 // UserScopeEnv returns the env-var set that pixi/npm/cargo need to
 // write into the bind-mounted directories rather than the builder's
-// own home paths.
-func UserScopeEnv(hostHome string) map[string]string {
+// own home paths. The cache-backed entries follow the one XDG cache root,
+// so CHARLY_CACHE_DIR relocates them with every store.
+func UserScopeEnv(hostHome string) (map[string]string, error) {
+	cache, err := storeroot.CacheDir()
+	if err != nil {
+		return nil, fmt.Errorf("UserScopeEnv cache root: %w", err)
+	}
 	return map[string]string{
-		"PIXI_CACHE_DIR":    filepath.Join(hostHome, ".cache", "charly", "pixi"),
-		"RATTLER_CACHE_DIR": filepath.Join(hostHome, ".cache", "charly", "rattler"),
+		"PIXI_CACHE_DIR":    filepath.Join(cache, "pixi"),
+		"RATTLER_CACHE_DIR": filepath.Join(cache, "rattler"),
 		"NPM_CONFIG_PREFIX": filepath.Join(hostHome, ".npm-global"),
 		"CARGO_HOME":        filepath.Join(hostHome, ".cargo"),
-	}
+	}, nil
 }
 
 // shellJoin renders argv as a shell-safe string for log/dry-run output.
