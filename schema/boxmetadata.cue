@@ -27,6 +27,12 @@ package schema
 	origin!:      string @go(Origin)
 	description?: string @go(Description)
 	plan?: [...#Step] @go(Plan)
+	// vars carries the declaring candy's authored `var:` block (the same one
+	// #CandyFields.var declares). It rides the RESOLVED description so a bed's check
+	// runner can substitute `${NAME}` from (auto-exports ∪ candy var:) -- the union
+	// #Op's config: comment already states, and which `check:` steps never received.
+	// It is NOT an OCI label: it is authoring data read from the resolved project.
+	vars?: #VarMap @go(Vars,type=map[string]string)
 }
 
 // #LabelDescriptionSet — the three-section (candy/box/deploy) description manifest
@@ -210,7 +216,7 @@ package schema
 	// without it a candy could declare a variable that the runner KNOWS by name (its
 	// classifier sees the declaration) yet can never SUPPLY a value for -- an
 	// unresolved-on-assert-only SKIP rather than a DEAD error, opencharly/charly#865.
-	var?: {[=~"^[A-Z_][A-Z0-9_]*$"]: #StrVal} @go(Vars,type=map[string]string)
+	var?: #VarMap @go(Vars,type=map[string]string)
 	description?: #LabelDescriptionSet @go(Description,optional=nillable)
 	shell?:       #LabelShellSet       @go(Shell,optional=nillable)
 	check_level?: string               @go(CheckLevel)
