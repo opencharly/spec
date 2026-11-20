@@ -27,6 +27,12 @@ package schema
 	origin!:      string @go(Origin)
 	description?: string @go(Description)
 	plan?: [...#Step] @go(Plan)
+	// vars carries the declaring candy's authored `var:` block (the same one
+	// #CandyFields.var declares). It rides the RESOLVED description so a bed's check
+	// runner can substitute `${NAME}` from (auto-exports ∪ candy var:) -- the union
+	// #Op's config: comment already states, and which `check:` steps never received.
+	// It is NOT an OCI label: it is authoring data read from the resolved project.
+	vars?: {[=~"^[A-Z_][A-Z0-9_]*$"]: #StrVal} @go(Vars,type=map[string]string)
 }
 
 // #LabelDescriptionSet — the three-section (candy/box/deploy) description manifest
