@@ -38,7 +38,7 @@ All the builtin concrete step kinds (plus the open `external:<word>` family — 
 **`Scope`** — where the effect lands:
 - `ScopeSystem` — `/etc`, `/usr`, `/var`; requires sudo on host; `USER root` in Containerfile.
 - `ScopeUser` — `$HOME/.pixi`, `$HOME/.cargo`, `$HOME/.local`, user-scope systemd units.
-- `ScopeUserProfile` — shell init surface (`~/.bashrc` / `~/.zshenv` / fish conf.d + `~/.config/opencharly/env.d/`).
+- `ScopeUserProfile` — shell init surface (`~/.bashrc` / `~/.zshenv` / fish conf.d + `~/.config/charly/env.d/`).
 
 **`Venue`** — where commands physically execute:
 - `VenueHostNative` — host shell (plain or sudo-wrapped) or a plain `RUN` in Containerfile.

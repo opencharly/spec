@@ -13,10 +13,10 @@ package refs
 // paid by every command including `charly version` (issue #423, #208).
 //
 // The cache lives in the `cache:` section of the PER-HOST charly.yml
-// (~/.config/charly/charly.yml) — the single home for local system state
+// ($XDG_CONFIG_HOME/charly/charly.yml) — the single home for local system state
 // (deployments under `deploy:`, install records under `ledger:`, local system
 // info under `system:`, cache status under `cache:`). It is NOT a separate ad-hoc
-// JSON file under ~/.cache/charly/repos (git-cache.json / latest-tags.json — both
+// JSON file under $XDG_CACHE_HOME/charly/repos (git-cache.json / latest-tags.json — both
 // deleted by this cutover). The `cache:` shape is CUE-sourced (schema/cache.cue
 // #CacheConfig) and validated whenever the per-host file is loaded through the
 // unified loader; the GitClient itself does a lightweight YAML read-modify-write
@@ -138,7 +138,7 @@ type gitCacheEntry struct {
 
 // NewGitClient returns a GitClient whose cache lives in the `cache:` section of
 // the per-host charly.yml at cacheFile. When cacheFile is empty, the default
-// deploy config path (~/.config/charly/charly.yml, honoring the
+// deploy config path ($XDG_CONFIG_HOME/charly/charly.yml, honoring the
 // CHARLY_DEPLOY_CONFIG override) is used.
 func NewGitClient(cacheFile string) *GitClient {
 	if cacheFile == "" {

@@ -1,13 +1,13 @@
 package schema
 
 // cache.cue — the `cache:` kind: LOCAL cache status persisted in the per-host
-// charly.yml (~/.config/charly/charly.yml).
+// charly.yml ($XDG_CONFIG_HOME/charly/charly.yml).
 //
 // The per-host config is the SINGLE home for local system state — deployments
 // (`deploy:`), install records (`ledger:`), local system info (`system:`), and
 // cache status (`cache:`) — so the git metadata cache the loader resolves
 // @github refs with lives HERE, not in ad-hoc JSON files under
-// ~/.cache/charly/repos (git-cache.json / latest-tags.json, both deleted by the
+// $XDG_CACHE_HOME/charly/repos (git-cache.json / latest-tags.json, both deleted by the
 // GitClient cutover). One file, one schema, one validation path.
 
 // #CacheConfig is the top-level `cache:` block. `git` holds the git metadata

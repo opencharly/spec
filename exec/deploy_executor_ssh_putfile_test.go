@@ -10,11 +10,11 @@ import (
 // THE GUEST USER (asRoot=false, NO sudo) so the file + the dirs `install -D` creates are
 // user-owned; a SYSTEM-scoped placement (ownerRoot=true) runs as root (sudo + -o root -g
 // root). The regression this guards: env.d / shell-rc / ledger writes (ownerRoot=false) were
-// run under sudo, creating root-owned ~/.config/opencharly in the guest and blocking the
+// run under sudo, creating root-owned ~/.config/charly in the guest and blocking the
 // user-scoped ledger write ("mkdir … Permission denied"), failing the 3 guest-ledger probes.
 func TestSSHInstallScript_PrivilegeByOwnerRoot(t *testing.T) {
 	// User-scoped (env.d, shell rc, the guest ledger): NO sudo, runs as the user.
-	userScript, userAsRoot := sshInstallScript("/tmp/stage", "/home/arch/.config/opencharly/env.d/nodejs.env", "0644", false)
+	userScript, userAsRoot := sshInstallScript("/tmp/stage", "/home/arch/.config/charly/env.d/nodejs.env", "0644", false)
 	if userAsRoot {
 		t.Error("ownerRoot=false MUST NOT run as root (sudo) — that creates root-owned ~/.config in the guest")
 	}

@@ -17,7 +17,7 @@ import (
 // `CHARLY_CACHE_DIR` when set).
 //
 // This used to read a SECOND override, `CHARLY_REPO_CACHE`, and otherwise hand-build
-// `$HOME/.cache/charly/repos`. Both are DELETED (R5), not deprecated: a per-cache variable is a second
+// `$XDG_CACHE_HOME/charly/repos`. Both are DELETED (R5), not deprecated: a per-cache variable is a second
 // resolver, and a hand-built path is a second computation of the same root. DESIGN.md never named the
 // variable -- D-STORE-1 names one override and this was not it -- but three consumer sites did, and they
 // are filed rather than left to discover the change: opencharly/charly#1213 and opencharly/marketplace#629.
@@ -30,7 +30,7 @@ func RepoCacheDir() (string, error) {
 }
 
 // RepoCachePath returns the cache path for a specific repo version.
-// e.g. ~/.cache/charly/repos/github.com/org/repo@v1.0.0/
+// e.g. $XDG_CACHE_HOME/charly/repos/github.com/org/repo@v1.0.0/
 //
 // This is the WHOLE-PROJECT entry (fetchProject): the export carries every
 // submodule the repo declares. A files-only export is a DIFFERENT entry — see
@@ -61,7 +61,7 @@ const filesCacheDir = ".files"
 
 // repoFilesCachePath returns the cache path for a repo version's FILES-ONLY
 // export (fetchFiles).
-// e.g. ~/.cache/charly/repos/.files/github.com/org/repo@v1.0.0
+// e.g. $XDG_CACHE_HOME/charly/repos/.files/github.com/org/repo@v1.0.0
 func repoFilesCachePath(repoPath, version string) (string, error) {
 	dir, err := RepoCacheDir()
 	if err != nil {

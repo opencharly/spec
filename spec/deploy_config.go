@@ -12,7 +12,7 @@ import "encoding/json"
 // GlobalEnvForImage) stay in deploykit as free functions taking *spec.DeployConfig
 // (spec can never import sdk/kit — the method-set cycle the spike flagged).
 
-// DeployConfig represents per-machine deployment overrides (~/.config/charly/charly.yml).
+// DeployConfig represents per-machine deployment overrides ($XDG_CONFIG_HOME/charly/charly.yml).
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
 //
 // Schema v4: the top-level map key is `deployment:` (singular, flat). The

@@ -20,12 +20,13 @@ import (
 	"sync"
 
 	"github.com/opencharly/spec/container"
+	"github.com/opencharly/spec/storeroot"
 	"gopkg.in/yaml.v3"
 )
 
 var configPermWarningOnce sync.Once
 
-// RuntimeConfig represents the user-level runtime configuration (~/.config/charly/config.yml)
+// RuntimeConfig represents the user-level runtime configuration ($XDG_CONFIG_HOME/charly/config.yml)
 type RuntimeConfig struct {
 	Engine                 EngineConfig      `yaml:"engine" json:"engine"`
 	RunMode                string            `yaml:"run_mode,omitempty" json:"run_mode,omitempty"`
@@ -78,7 +79,7 @@ type ContainerdConfig struct {
 // BuildKit is the one builder, so a `build:` key would be a selector with a single legal
 // value. The retired key is inert on load — RuntimeConfig is parsed with a plain
 // yaml.Unmarshal (no closed gate), so an existing `engine.build:` in
-// ~/.config/charly/config.yml is silently ignored rather than a load failure. See
+// $XDG_CONFIG_HOME/charly/config.yml is silently ignored rather than a load failure. See
 // opencharly/opencharly AGENTS.md "Hard Cutover by Default" and the BuildKit adoption
 // record for why no migration entry is owed for it (the migration table reshapes
 // charly.yml and the per-host overlay, never this runtime settings file).
@@ -108,11 +109,11 @@ type ResolvedRuntime struct {
 var RuntimeConfigPath = defaultRuntimeConfigPath
 
 func defaultRuntimeConfigPath() (string, error) {
-	configDir, err := os.UserConfigDir()
+	configDir, err := storeroot.Dir(storeroot.RootConfig)
 	if err != nil {
 		return "", fmt.Errorf("determining config directory: %w", err)
 	}
-	return filepath.Join(configDir, "charly", "config.yml"), nil
+	return filepath.Join(configDir, "config.yml"), nil
 }
 
 // LoadRuntimeConfig reads the runtime config file. Returns zero-value config if missing.
@@ -376,11 +377,11 @@ func ResolveEncryptedStoragePath(envVal, cfgVal string) string {
 	if cfgVal != "" {
 		return ExpandHostHome(cfgVal)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	bases, _ := storeroot.XDG()
+	if !filepath.IsAbs(bases.Data) {
 		return filepath.Join(".local", "share", "charly", "encrypted")
 	}
-	return filepath.Join(home, ".local", "share", "charly", "encrypted")
+	return filepath.Join(bases.Data, "charly", "encrypted")
 }
 
 func ResolveVolumesPath(envVal, cfgVal string) string {
@@ -390,26 +391,47 @@ func ResolveVolumesPath(envVal, cfgVal string) string {
 	if cfgVal != "" {
 		return ExpandHostHome(cfgVal)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	bases, _ := storeroot.XDG()
+	if !filepath.IsAbs(bases.Data) {
 		return filepath.Join(".local", "share", "charly", "volumes")
 	}
-	return filepath.Join(home, ".local", "share", "charly", "volumes")
+	return filepath.Join(bases.Data, "charly", "volumes")
 }
 
-// ExpandHostHome expands ~ and $HOME in a path using the actual user's home directory.
+// ExpandHostHome expands `~`, `$HOME`/`${HOME}` and every XDG base directory variable
+// in a path: `$XDG_DATA_HOME`, `$XDG_CONFIG_HOME`, `$XDG_CACHE_HOME`,
+// `$XDG_STATE_HOME` and `$XDG_RUNTIME_DIR`. The bases come from `storeroot.XDG` — the
+// ONE XDG resolution in the module (D-STORE-1) — so an operator-authored
+// `$XDG_DATA_HOME/charly/models/<server>` volume host moves with a relocated data base
+// at `charly config` time, and never disagrees with charly's own roots.
 func ExpandHostHome(path string) string {
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return path
+	if err == nil {
+		if path == "~" {
+			path = home
+		} else if strings.HasPrefix(path, "~/") {
+			path = home + path[1:]
+		}
+		path = strings.ReplaceAll(path, "${HOME}", home)
+		path = strings.ReplaceAll(path, "$HOME", home)
 	}
-	if strings.HasPrefix(path, "~/") {
-		return home + path[1:]
+	bases, _ := storeroot.XDG()
+	for _, v := range []struct{ name, value string }{
+		{"XDG_DATA_HOME", bases.Data},
+		{"XDG_CONFIG_HOME", bases.Config},
+		{"XDG_CACHE_HOME", bases.Cache},
+		{"XDG_STATE_HOME", bases.State},
+		{"XDG_RUNTIME_DIR", bases.Runtime},
+	} {
+		// An unresolved base is a RELATIVE fallback (the variable was unset or invalid and
+		// $HOME was unavailable). Substituting it would write a relative path into a
+		// container bind, so the token is left literal for the caller to reject.
+		if !filepath.IsAbs(v.value) {
+			continue
+		}
+		path = strings.ReplaceAll(path, "${"+v.name+"}", v.value)
+		path = strings.ReplaceAll(path, "$"+v.name, v.value)
 	}
-	if path == "~" {
-		return home
-	}
-	path = strings.ReplaceAll(path, "$HOME", home)
 	return path
 }
 

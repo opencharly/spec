@@ -56,7 +56,7 @@ package schema
 	owner_start?: string @go(OwnerStart)
 }
 
-// #PreemptLedger is the on-disk lease set (~/.local/share/charly/preemption/leases.yml).
+// #PreemptLedger is the on-disk lease set ($XDG_DATA_HOME/charly/preemption/leases.yml).
 #PreemptLedger: {
 	leases!: [...#PreemptLease] @go(Leases)
 }

@@ -33,7 +33,7 @@ const (
 	ScopeUser
 
 	// ScopeUserProfile writes to the user's shell init surface:
-	// ~/.bashrc / ~/.zshenv / fish conf.d + ~/.config/opencharly/env.d/.
+	// ~/.bashrc / ~/.zshenv / fish conf.d + ~/.config/charly/env.d/.
 	// Separate from ScopeUser because the host target has special handling
 	// (managed blocks, shell detection) and the OCI target renders these as
 	// ENV directives + path additions rather than file writes.

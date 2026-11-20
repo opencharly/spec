@@ -31,7 +31,7 @@ func VmDomainIdentity(deployName string) string {
 
 // VmSshAlias returns the canonical managed-ssh-config Host alias for a VM deployment name
 // ("charly-" namespaced) — the token `charly vm create` / the vm deploy lifecycle writes the
-// Host stanza under (~/.config/charly/ssh_config) and an SSHExecutor built with just
+// Host stanza under ($XDG_CONFIG_HOME/charly/ssh_config) and an SSHExecutor built with just
 // `Host: VmSshAlias(id)` lets ssh(1) supply User/Port/IdentityFile. Pure naming leaf, a peer of
 // VmDomainIdentity: lives in package spec — the always-floor-legal wire/vocabulary leaf — so the
 // spec/exec executor-chain constructors (RootExecutorForDeployNode/ResolveDeployChain/

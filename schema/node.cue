@@ -136,14 +136,14 @@ package schema
 	provides?: _
 	// cache — the per-host LOCAL cache status (git metadata cache: latest tags,
 	// default branches, resolved refs, downloads). Lives in the per-host charly.yml
-	// (~/.config/charly/charly.yml) — the single home for local system state — NOT
-	// in ad-hoc JSON files under ~/.cache/charly/repos. Recognized here so a
+	// ($XDG_CONFIG_HOME/charly/charly.yml) — the single home for local system state — NOT
+	// in ad-hoc JSON files under $XDG_CACHE_HOME/charly/repos. Recognized here so a
 	// document carrying it is not mis-read as a node named "cache". Shape:
 	// schema/cache.cue #CacheConfig.
 	cache?: _
 	// ledger — the per-host INSTALL LEDGER (deploy/candy/step records). The
 	// unified home for what is installed on this host, replacing the per-deploy
-	// JSON files under ~/.config/opencharly/installed/deploys/. Recognized here so
+	// JSON files under ~/.config/charly/installed/deploys/. Recognized here so
 	// a document carrying it is not mis-read as a node named "ledger". Shape:
 	// schema/ledger.cue #LedgerConfig.
 	ledger?: _

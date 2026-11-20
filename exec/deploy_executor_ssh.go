@@ -28,7 +28,7 @@ import (
 // Credential-free by design: SSHExecutor contains zero key paths, zero
 // host-key overrides, zero ssh-agent socket detection. ssh(1) reads
 // ~/.ssh/config and ssh-agent for everything. VMs publish a managed
-// Host stanza into ~/.config/charly/ssh_config (Included from ~/.ssh/config)
+// Host stanza into $XDG_CONFIG_HOME/charly/ssh_config (Included from ~/.ssh/config)
 // that names the IdentityFile + UserKnownHostsFile + StrictHostKeyChecking
 // per VM; charly vm create writes the stanza, charly vm destroy removes it.
 type SSHExecutor struct {
@@ -141,7 +141,7 @@ func (e *SSHExecutor) RunBuilder(ctx context.Context, opts spec.BuilderRunOpts) 
 // system-scoped file, root-owned); ownerRoot=false → a plain user-scoped `install`
 // run AS THE GUEST USER (RunUser, NO sudo) so the file AND any parent dirs `install
 // -D` creates are USER-owned. Running the non-root branch under sudo (the old bug —
-// it always RunSystem'd) created root-owned `~/.config/opencharly/{env.d,…}` in the
+// it always RunSystem'd) created root-owned `~/.config/charly/{env.d,…}` in the
 // guest, which then blocked the user-scoped ledger write (`mkdir … Permission
 // denied`). The prior in-proc VM target wrote env.d via RunUser for exactly this
 // reason; the externalized walk reaches the same RunUser path through here.
@@ -186,7 +186,7 @@ func (e *SSHExecutor) PutFile(ctx context.Context, localPath, remotePath string,
 // `install` run AS THE GUEST USER (RunUser, NO sudo) so the file AND the parent dirs
 // `install -D` creates are USER-owned. Split out of PutFile so the privilege mapping is
 // unit-testable — it is the exact regression point (the user-scoped branch was previously run
-// under sudo, creating root-owned ~/.config/opencharly in the guest and blocking the
+// under sudo, creating root-owned ~/.config/charly in the guest and blocking the
 // user-scoped ledger write).
 func sshInstallScript(tmpRemote, remotePath, modeOctal string, ownerRoot bool) (script string, asRoot bool) {
 	q := deployShellQuote

@@ -147,7 +147,7 @@ func InvalidateImageCache() {
 }
 
 // imageCacheStore opens the persistent image-list Store under the charly dir
-// (~/.config/charly/cache/images/). An inert store (no config dir) makes every
+// ($XDG_CACHE_HOME/charly/images/). An inert store (no config dir) makes every
 // lookup a miss without error.
 func imageCacheStore() *cache.Layout {
 	return cache.OpenNamedLayout("images")
@@ -429,7 +429,7 @@ func decodeLocalImagesJSON(out []byte) ([]map[string]any, error) {
 		return arr, nil
 	}
 	var rows []map[string]any
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

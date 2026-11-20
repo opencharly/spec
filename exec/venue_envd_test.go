@@ -20,8 +20,8 @@ func TestWithMachineVenuePreambleIsNoopOnEmpty(t *testing.T) {
 }
 
 // TestWithMachineVenuePreamblePrefixes proves the preamble is a POSIX-sh loop that
-// sources the venue user's own env.d via an unexpanded $HOME (the VENUE expands
-// it), and is semicolon-terminated so a command can concatenate.
+// sources the venue user's own env.d via an unexpanded XDG_CONFIG_HOME/$HOME (the
+// VENUE expands it), and is semicolon-terminated so a command can concatenate.
 func TestWithMachineVenuePreamblePrefixes(t *testing.T) {
 	got := WithMachineVenuePreamble("printenv FOO")
 	if !strings.HasPrefix(got, MachineVenuePreamble) {
@@ -33,8 +33,8 @@ func TestWithMachineVenuePreamblePrefixes(t *testing.T) {
 	if !strings.HasSuffix(MachineVenuePreamble, "; ") {
 		t.Fatalf("preamble must be semicolon-terminated so it can concatenate: %q", MachineVenuePreamble)
 	}
-	if !strings.Contains(MachineVenuePreamble, `"$HOME"`) {
-		t.Fatalf("preamble must leave $HOME for the venue to expand: %q", MachineVenuePreamble)
+	if !strings.Contains(MachineVenuePreamble, `${XDG_CONFIG_HOME:-$HOME/.config}`) {
+		t.Fatalf("preamble must leave XDG_CONFIG_HOME/$HOME for the venue to expand: %q", MachineVenuePreamble)
 	}
 }
 
@@ -46,16 +46,17 @@ func TestWithMachineVenuePreamblePrefixes(t *testing.T) {
 func TestShellExecutorMachineVenueSourcesEnvd(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.MkdirAll(filepath.Join(home, ".config", "opencharly", "env.d"), 0o755); err != nil {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if err := os.MkdirAll(filepath.Join(home, ".config", "charly", "env.d"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	envFile := filepath.Join(home, ".config", "opencharly", "env.d", "dsh-tui.env")
-	if err := os.WriteFile(envFile, []byte("export DSH_TUI_NO_LAUNCHPAD=1\n"), 0o644); err != nil {
+	envFile := filepath.Join(home, ".config", "charly", "env.d", "example.env")
+	if err := os.WriteFile(envFile, []byte("export CHARLY_ENVD_PROBE=1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// MachineVenue=true: the command sees the candy env.
-	out, _, exit, err := (ShellExecutor{MachineVenue: true}).RunCapture(context.Background(), "printenv DSH_TUI_NO_LAUNCHPAD")
+	out, _, exit, err := (ShellExecutor{MachineVenue: true}).RunCapture(context.Background(), "printenv CHARLY_ENVD_PROBE")
 	if err != nil {
 		t.Fatalf("RunCapture(machine): %v", err)
 	}
@@ -64,7 +65,7 @@ func TestShellExecutorMachineVenueSourcesEnvd(t *testing.T) {
 	}
 
 	// MachineVenue=false (the container-jump transport): the command does NOT.
-	out, _, _, _ = (ShellExecutor{}).RunCapture(context.Background(), "printenv DSH_TUI_NO_LAUNCHPAD")
+	out, _, _, _ = (ShellExecutor{}).RunCapture(context.Background(), "printenv CHARLY_ENVD_PROBE")
 	if strings.TrimSpace(out) != "" {
 		t.Fatalf("a non-machine ShellExecutor must NOT source the host env.d; got %q", out)
 	}
