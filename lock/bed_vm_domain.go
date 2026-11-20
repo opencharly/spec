@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/opencharly/spec/storeroot"
+
 	"github.com/opencharly/spec/deploy"
 	"github.com/opencharly/spec/spec"
 )
@@ -58,14 +60,14 @@ func BedVmDomains(name string, node spec.DeployNode) []string {
 }
 
 // AcquireVmDomainLock takes a BLOCKING, host-global advisory lock serializing every check bed
-// that occupies the given libvirt domain. Host-global (under ~/.cache/charly/.locks/) because
+// that occupies the given libvirt domain. Host-global (under $XDG_CACHE_HOME/charly/.locks/) because
 // the qemu:///session domain namespace is host-wide, shared across project dirs.
 func AcquireVmDomainLock(domain string) (func() error, error) {
-	home, err := os.UserHomeDir()
+	cache, err := storeroot.CacheDir()
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Join(home, ".cache", "charly", ".locks")
+	dir := filepath.Join(cache, ".locks")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}

@@ -89,7 +89,7 @@ func inspectImageLabelsUncached(engine, imageRef string) (map[string]string, err
 const imageLabelsCacheTTL = 5 * time.Minute
 
 // imageLabelsCacheStore opens the image-label Store under the charly dir
-// (~/.config/charly/cache/labels/). An inert store (no config dir) makes every
+// ($XDG_CACHE_HOME/charly/labels/). An inert store (no config dir) makes every
 // lookup a miss without error.
 func imageLabelsCacheStore() *cache.Layout {
 	return cache.OpenNamedLayout("labels")

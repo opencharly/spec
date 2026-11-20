@@ -169,8 +169,8 @@ func OpenLayoutLimited(dir string, maxEntries int) *Layout {
 	return &Layout{dir: dir, maxEntries: maxEntries}
 }
 
-// OpenNamedLayout opens the named layout under the charly cache dir
-// (~/.config/charly/cache/<name>/, CHARLY_CACHE_DIR overriding the root). A
+// OpenNamedLayout opens the named layout under the charly cache root
+// (its <name>/ directory, with CHARLY_CACHE_DIR overriding the root). A
 // path-resolution failure yields an inert store, so a caller never guards it.
 func OpenNamedLayout(name string) *Layout {
 	dir, err := StoreDir(name)
@@ -180,9 +180,9 @@ func OpenNamedLayout(name string) *Layout {
 	return OpenLayout(dir)
 }
 
-// StoreDir returns the cache DIRECTORY for a named store under the charly dir
-// (~/.config/charly/cache/<name>/). CHARLY_CACHE_DIR overrides the root (the
-// one override every store honors, so a caller can relocate the whole cache).
+// StoreDir returns the cache DIRECTORY for a named store under the cache root
+// (its <name>/ directory). CHARLY_CACHE_DIR overrides the root (the one
+// override every store honors, so a caller can relocate the whole cache).
 func StoreDir(name string) (string, error) {
 	root, err := StoreRoot()
 	if err != nil {
@@ -193,13 +193,13 @@ func StoreDir(name string) (string, error) {
 
 // StoreRoot returns the ROOT directory every named store lives under.
 //
-// IT ASKS THE ONE RESOLVER (D-STORE-1): `spec/storeroot` owns the four roots and the single
+// IT ASKS THE ONE RESOLVER (D-STORE-1): `spec/storeroot` owns the roots and the single
 // `CHARLY_CACHE_DIR` override, so the plugin host and every plugin it serves resolve the same tree
 // from the same code. This function used to re-derive the cache root itself — reading the env var,
 // then falling back to `filepath.Dir(spec.DefaultDeployConfigPath())/cache` — a SECOND copy of the rule
 // that DID disagree with the resolver the rest of the tree uses. Both branches honoured the override,
 // so the divergence was in the FALLBACK: `<config>/cache` here versus `os.UserCacheDir()/charly` there,
-// i.e. `~/.config/charly/cache` against `~/.cache/charly`. Two trees that never meet, each side
+// i.e. the config root's `cache` against the XDG cache root. Two trees that never meet, each side
 // believing it had resolved "the cache".
 func StoreRoot() (string, error) {
 	return storeroot.CacheDir()
@@ -735,7 +735,7 @@ func (l *Layout) capKeptManifests(manifests []ociv1.Descriptor, maxEntries int) 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].res.Before(entries[j].res) })
 	excess := len(entries) - maxEntries
 	drop := map[string]bool{}
-	for i := 0; i < excess; i++ {
+	for i := range excess {
 		drop[entries[i].desc.Annotations[ociv1.AnnotationRefName]] = true
 	}
 	kept := make([]ociv1.Descriptor, 0, maxEntries)

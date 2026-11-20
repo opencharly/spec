@@ -27,7 +27,7 @@ package schema
 // (K5-U2/3). This is the ONE AI-harness check-project fact the resolved-project envelope cannot
 // carry: the harness's iterate sandbox is an OPERATOR-provisioned per-host deploy (`charly deploy
 // add <sandbox> <ref> --disposable`), so its disposability lives in the per-host overlay
-// (LoadDeployConfig → ~/.config/charly/charly.yml), NOT the project charly.yml the resolved-project
+// (LoadDeployConfig → $XDG_CONFIG_HOME/charly/charly.yml), NOT the project charly.yml the resolved-project
 // envelope projects (Mode Purity keeps the overlay out of the build-mode projection). The overlay
 // read needs the core loader a plugin cannot import, and no deploy/status provider serves it, so it
 // rides this THIN retained host seam. The host returns Deploy[Name].IsDisposable() (false when the
@@ -43,7 +43,7 @@ package schema
 }
 
 // #DeployOverlayRequest asks the host for the PER-HOST deploy-config overlay (K4:
-// deploykit.LoadDeployConfigForRead — the runtime ledger at ~/.config/charly/charly.yml, NOT the
+// deploykit.LoadDeployConfigForRead — the runtime ledger at $XDG_CONFIG_HOME/charly/charly.yml, NOT the
 // project charly.yml the resolved-project envelope projects; Mode Purity keeps the two apart, same
 // distinction #PodDisposableRequest documents). Unlike #PodDisposableRequest (a single overlay
 // BIT), several pod-lifecycle resolvers need CROSS-DEPLOYMENT visibility (deploykit.DeployConfig's
@@ -1427,7 +1427,7 @@ package schema
 	node_only?:       bool        @go(NodeOnly)
 	// ledger_root OPTIONALLY overrides the ledger root directory (kit.LedgerPaths.Root) — the
 	// pre-S3b externalDeployTarget carried a settable `paths *kit.LedgerPaths` field a TEST could
-	// redirect to a temp dir instead of the operator's real ~/.config/opencharly/installed/; this
+	// redirect to a temp dir instead of the operator's real ~/.config/charly/installed/; this
 	// is the wire-safe equivalent (a bare root string, the plugin derives Deploys/Candies/LockFile
 	// from it exactly like kit.DefaultLedgerPaths does). Empty (the default) — kit.DefaultLedgerPaths().
 	ledger_root?:     string      @go(LedgerRoot)
@@ -1531,7 +1531,7 @@ package schema
 	alias!:           string @go(Alias)          // VmSshAlias(domainIdentity) = charly-<deploy>
 	ssh_key_path!:    string @go(SSHKeyPath)     // <stateDir>/id_ed25519
 	known_hosts_path!: string @go(KnownHostsPath) // <stateDir>/known_hosts
-	state_dir!:       string @go(StateDir)       // ~/.local/share/charly/vm/charly-<domainIdentity>
+	state_dir!:       string @go(StateDir)       // $XDG_DATA_HOME/charly/vm/charly-<domainIdentity>
 	prior_state?: #VmDeployState @go(PriorState,type=*VmDeployState) // the persisted VmDeployState (nil on first apply)
 }
 

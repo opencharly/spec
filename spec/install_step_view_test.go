@@ -85,7 +85,7 @@ func TestStepView_RoundTrip(t *testing.T) {
 			CandyName: "rust",
 			EnvVars:   map[string]string{"CARGO_HOME": "/home/u/.cargo"},
 			PathAdd:   []string{"/home/u/.cargo/bin"},
-			EnvFile:   "/home/u/.config/opencharly/env.d/rust.env",
+			EnvFile:   "/home/u/.config/charly/env.d/rust.env",
 		}},
 		{"ShellSnippet", &ShellSnippetStep{
 			CandyName:   "direnv",

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/opencharly/spec/storeroot"
 )
 
 // deployconfig.go — the per-host deploy-overlay path resolver (RELOCATED from sdk/kit,
@@ -16,11 +18,11 @@ import (
 // call sites are untouched.
 
 // DeployConfigEnv overrides the per-host deploy-config PATH. A check bed sets it so a
-// disposable run never touches the operator's real ~/.config/charly/charly.yml.
+// disposable run never touches the operator's real $XDG_CONFIG_HOME/charly/charly.yml.
 const DeployConfigEnv = "CHARLY_DEPLOY_CONFIG"
 
 // DefaultDeployConfigPath returns the per-host deploy overlay file
-// (~/.config/charly/charly.yml), honoring the DeployConfigEnv override.
+// ($XDG_CONFIG_HOME/charly/charly.yml), honoring the DeployConfigEnv override.
 //
 // An optional ctx carries a per-invocation RunEnv (spec.WithRunEnv): when present,
 // its DeployConfigEnv value WINS over the process env. This is what makes a
@@ -35,9 +37,9 @@ func DefaultDeployConfigPath(ctxs ...context.Context) (string, error) {
 	} else if p := os.Getenv(DeployConfigEnv); p != "" {
 		return p, nil
 	}
-	configDir, err := os.UserConfigDir()
+	configDir, err := storeroot.Dir(storeroot.RootConfig)
 	if err != nil {
 		return "", fmt.Errorf("determining config directory: %w", err)
 	}
-	return filepath.Join(configDir, "charly", "charly.yml"), nil
+	return filepath.Join(configDir, "charly.yml"), nil
 }

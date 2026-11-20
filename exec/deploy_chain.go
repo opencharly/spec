@@ -295,7 +295,7 @@ func VmChildExecutor(parentExec spec.DeployExecutor, deployName string) (spec.De
 // DOMAIN IDENTITY (VmDomainIdentity of the deploy), NOT the shared kind:vm
 // entity (P33). All connection details — User, Port, IdentityFile, host-key
 // checking — live in the Host stanza that `charly vm create` / `charly deploy
-// add` published into ~/.config/charly/ssh_config; ssh(1) reads them from there.
+// add` published into $XDG_CONFIG_HOME/charly/ssh_config; ssh(1) reads them from there.
 // Our SSHExecutor needs only the alias as Host.
 func SSHParamsForVm(domainID string) *SSHExecutor {
 	return &SSHExecutor{

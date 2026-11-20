@@ -3,7 +3,7 @@ package schema
 // system.cue — the `system:` kind: the per-host LOCAL SYSTEM INFO.
 //
 // The host's identity snapshot (hostname, distro, kernel, arch, GPU, …) lives in
-// the per-host charly.yml (~/.config/charly/charly.yml) under `system:`, so a
+// the per-host charly.yml ($XDG_CONFIG_HOME/charly/charly.yml) under `system:`, so a
 // command can answer "what is this host?" from the unified local config instead
 // of re-probing the host on every invocation. Populated by `charly doctor` /
 // `charly status`; read by any command that needs the host identity.

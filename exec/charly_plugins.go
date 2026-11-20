@@ -7,7 +7,7 @@
 //
 //	plugin env: unset                      # CHARLY_PLUGIN_DIR
 //	                                       # no /usr/lib/charly/plugins
-//	                                       # no ~/.cache/charly/plugins
+//	                                       # no $XDG_CACHE_HOME/charly/plugins
 //
 // The binary is the body; the plugins are the hands. ensureCharly (charly_install.go) delivers the
 // body and this file delivers the hands, over the SAME executor abstraction and with the same

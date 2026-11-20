@@ -17,6 +17,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/opencharly/spec/storeroot"
 )
 
 // ErrLockBusy is returned by a NON-blocking AcquireFileLock when another holder already owns the
@@ -33,7 +35,7 @@ var ErrLockBusy = errors.New("file lock held by another process")
 // original 2 m bound — chosen against the deploy-del stall, which is about a STUCK holder, not a
 // slow one — is shorter than one cold build, so a second builder of the SAME image failed HARD
 // (measured: `acquiring build lock for githubrunner: flock
-// ~/.cache/charly/locks/image-<sha8>.lock: lock held by another process for > 2m0s`, check run
+// $XDG_CACHE_HOME/charly/locks/image-<sha8>.lock: lock held by another process for > 2m0s`, check run
 // 2026.255.2310) although the correct behaviour is to QUEUE: the peer finishes and the waiter then
 // cache-hits. 30 m covers the longest measured cold build with headroom and stays BOUNDED.
 var lockTimeout = 30 * time.Minute
@@ -164,11 +166,11 @@ func ImageBuildLockPath(fullTag string) (string, error) {
 	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
 		ref = ref[:i] // strip :<tag>, preserving any registry:port colon
 	}
-	cache, err := os.UserCacheDir()
+	cache, err := storeroot.CacheDir()
 	if err != nil {
 		return "", fmt.Errorf("image build lock: %w", err)
 	}
-	dir := filepath.Join(cache, "charly", "locks")
+	dir := filepath.Join(cache, "locks")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("image build lock dir: %w", err)
 	}
@@ -187,11 +189,11 @@ func AcquireImageBuildLock(fullTag string) (func() error, error) {
 
 // AcquireLocalPkgBuildLock serializes concurrent localpkg builds sharing a source dir.
 func AcquireLocalPkgBuildLock(srcDir string) (func() error, error) {
-	cache, err := os.UserCacheDir()
+	cache, err := storeroot.CacheDir()
 	if err != nil {
 		return nil, fmt.Errorf("localpkg build lock: %w", err)
 	}
-	dir := filepath.Join(cache, "charly", "locks")
+	dir := filepath.Join(cache, "locks")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("localpkg build lock dir: %w", err)
 	}

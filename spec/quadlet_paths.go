@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/opencharly/spec/storeroot"
 )
 
 // quadlet_paths.go — the on-disk quadlet/systemd PATH helpers + host existence probes
@@ -14,22 +16,22 @@ import (
 // them (kit/quadlet_paths.go) so existing kit.QuadletDir / kit.QuadletExists plugin call sites
 // are untouched; new charly-core consumers reference spec.* directly.
 
-// QuadletDir returns the user-level quadlet directory.
+// QuadletDir returns the user-level quadlet directory under the XDG config base.
 func QuadletDir() (string, error) {
-	home, err := os.UserHomeDir()
+	base, err := storeroot.Base(storeroot.RootConfig)
 	if err != nil {
-		return "", fmt.Errorf("determining home directory: %w", err)
+		return "", fmt.Errorf("determining config base: %w", err)
 	}
-	return filepath.Join(home, ".config", "containers", "systemd"), nil
+	return filepath.Join(base, "containers", "systemd"), nil
 }
 
-// SystemdUserDir returns the user-level systemd unit directory (~/.config/systemd/user/).
+// SystemdUserDir returns the user-level systemd unit directory under the XDG config base.
 func SystemdUserDir() (string, error) {
-	home, err := os.UserHomeDir()
+	base, err := storeroot.Base(storeroot.RootConfig)
 	if err != nil {
-		return "", fmt.Errorf("determining home directory: %w", err)
+		return "", fmt.Errorf("determining config base: %w", err)
 	}
-	return filepath.Join(home, ".config", "systemd", "user"), nil
+	return filepath.Join(base, "systemd", "user"), nil
 }
 
 // QuadletExists checks whether a .container file exists for the given image.
