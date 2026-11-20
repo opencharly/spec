@@ -72,6 +72,11 @@ type Bases struct {
 	Cache   string
 	State   string
 	Runtime string
+	// RuntimeSet reports whether `XDG_RUNTIME_DIR` was set to a VALID (absolute) path.
+	// Dir(RootRuntime) uses it to choose between the runtime root and the documented
+	// state-root fallback; XDG().Runtime always carries a path, so a caller must not
+	// infer availability from the path alone.
+	RuntimeSet bool
 }
 
 // XDG resolves the XDG bases ONCE. It applies the specification's Unix defaults and its
@@ -90,17 +95,20 @@ func XDG() (Bases, error) {
 		return filepath.Join(home, defaultRel)
 	}
 	runtime := ""
+	runtimeSet := false
 	if v := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(v) {
 		runtime = v
+		runtimeSet = true
 	} else {
 		runtime = filepath.Join("/run/user", strconv.Itoa(os.Getuid()))
 	}
 	bases := Bases{
-		Data:    base("XDG_DATA_HOME", ".local/share"),
-		Config:  base("XDG_CONFIG_HOME", ".config"),
-		Cache:   base("XDG_CACHE_HOME", ".cache"),
-		State:   base("XDG_STATE_HOME", ".local/state"),
-		Runtime: runtime,
+		Data:       base("XDG_DATA_HOME", ".local/share"),
+		Config:     base("XDG_CONFIG_HOME", ".config"),
+		Cache:      base("XDG_CACHE_HOME", ".cache"),
+		State:      base("XDG_STATE_HOME", ".local/state"),
+		Runtime:    runtime,
+		RuntimeSet: runtimeSet,
 	}
 	if homeErr != nil {
 		return bases, fmt.Errorf("resolve XDG bases: %w", homeErr)
@@ -127,15 +135,14 @@ func Dir(r Root) (string, error) {
 		}
 		return filepath.Join(bases.State, "charly"), nil
 	case RootRuntime:
-		if v := os.Getenv("XDG_RUNTIME_DIR"); v != "" {
-			bases, err := XDG()
-			if err != nil {
-				return "", fmt.Errorf("resolve runtime root: %w", err)
-			}
+		// The runtime path does not depend on $HOME, so a valid XDG_RUNTIME_DIR answers
+		// even when XDG() reports that $HOME is unavailable. An unset or non-absolute
+		// value is invalid (the specification's rule), and the root falls back to STATE
+		// rather than /tmp, which is shared and world-writable (D-STORE-1).
+		bases, _ := XDG()
+		if bases.RuntimeSet {
 			return filepath.Join(bases.Runtime, "charly"), nil
 		}
-		// No runtime dir (a container, a cron job): fall back to the STATE root rather
-		// than /tmp, which is shared and world-writable. Documented, not silent.
 		return Dir(RootState)
 	default:
 		return "", fmt.Errorf("unknown root %q (want %s|%s|%s|%s)", r, RootConfig, RootCache, RootState, RootRuntime)

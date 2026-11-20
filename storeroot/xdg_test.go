@@ -19,11 +19,12 @@ func TestXDGResolvesEveryBase(t *testing.T) {
 		t.Fatalf("XDG: %v", err)
 	}
 	want := Bases{
-		Data:    filepath.Join(home, "xdg-data"),
-		Config:  filepath.Join(home, "xdg-config"),
-		Cache:   filepath.Join(home, "xdg-cache"),
-		State:   filepath.Join(home, "xdg-state"),
-		Runtime: filepath.Join(home, "xdg-run"),
+		Data:       filepath.Join(home, "xdg-data"),
+		Config:     filepath.Join(home, "xdg-config"),
+		Cache:      filepath.Join(home, "xdg-cache"),
+		State:      filepath.Join(home, "xdg-state"),
+		Runtime:    filepath.Join(home, "xdg-run"),
+		RuntimeSet: true,
 	}
 	if bases != want {
 		t.Errorf("XDG() = %+v, want %+v", bases, want)
@@ -43,15 +44,26 @@ func TestXDGDefaultsWithoutVariables(t *testing.T) {
 		t.Fatalf("XDG: %v", err)
 	}
 	want := Bases{
-		Data:    filepath.Join(home, ".local", "share"),
-		Config:  filepath.Join(home, ".config"),
-		Cache:   filepath.Join(home, ".cache"),
-		State:   filepath.Join(home, ".local", "state"),
-		Runtime: filepath.Join("/run/user", strconv.Itoa(os.Getuid())),
+		Data:       filepath.Join(home, ".local", "share"),
+		Config:     filepath.Join(home, ".config"),
+		Cache:      filepath.Join(home, ".cache"),
+		State:      filepath.Join(home, ".local", "state"),
+		Runtime:    filepath.Join("/run/user", strconv.Itoa(os.Getuid())),
+		RuntimeSet: false,
 	}
 	if bases != want {
 		t.Errorf("XDG() = %+v, want %+v", bases, want)
 	}
+}
+
+// clearXDG pins every XDG variable and the cache override to the empty string, so a
+// test that exercises one value never observes the developer host's real directories.
+func clearXDG(t *testing.T) {
+	t.Helper()
+	for _, v := range []string{"XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"} {
+		t.Setenv(v, "")
+	}
+	t.Setenv("CHARLY_CACHE_DIR", "")
 }
 
 // TestXDGRelativeValueIsIgnored pins the specification rule: a value that is not an
@@ -59,6 +71,7 @@ func TestXDGDefaultsWithoutVariables(t *testing.T) {
 func TestXDGRelativeValueIsIgnored(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	clearXDG(t)
 	t.Setenv("XDG_DATA_HOME", "relative/share")
 
 	bases, err := XDG()
@@ -68,4 +81,65 @@ func TestXDGRelativeValueIsIgnored(t *testing.T) {
 	if want := filepath.Join(home, ".local", "share"); bases.Data != want {
 		t.Errorf("a relative XDG_DATA_HOME must be ignored: got %q, want %q", bases.Data, want)
 	}
+	if bases.RuntimeSet {
+		t.Error("a relative XDG_RUNTIME_DIR must not be reported as set")
+	}
+}
+
+// TestDirAndCacheDirFollowXDG pins the REWIRED callers: a relative XDG value is ignored
+// by Dir and CacheDir exactly as it is by XDG(). The previous implementations
+// (os.UserConfigDir, os.UserCacheDir and a raw XDG_STATE_HOME read) returned the
+// relative value, so this test fails without the change.
+func TestDirAndCacheDirFollowXDG(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "relative/config")
+	t.Setenv("XDG_STATE_HOME", "relative/state")
+	t.Setenv("XDG_CACHE_HOME", "relative/cache")
+	t.Setenv("CHARLY_CACHE_DIR", "")
+
+	for root, want := range map[Root]string{
+		RootConfig: filepath.Join(home, ".config", "charly"),
+		RootState:  filepath.Join(home, ".local", "state", "charly"),
+		RootCache:  filepath.Join(home, ".cache", "charly"),
+	} {
+		got, err := Dir(root)
+		if err != nil {
+			t.Fatalf("Dir(%s): %v", root, err)
+		}
+		if got != want {
+			t.Errorf("Dir(%s) with a relative XDG value = %q, want %q", root, got, want)
+		}
+	}
+}
+
+// TestDirRuntimeFallback pins the runtime decision: a valid absolute XDG_RUNTIME_DIR
+// selects the runtime root even without $HOME, while an unset or relative value falls
+// back to the documented state root (D-STORE-1).
+func TestDirRuntimeFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	clearXDG(t)
+
+	t.Setenv("XDG_RUNTIME_DIR", "relative/run")
+	if got, want := mustDir(t, RootRuntime), filepath.Join(home, ".local", "state", "charly"); got != want {
+		t.Errorf("relative XDG_RUNTIME_DIR: Dir(RootRuntime) = %q, want the state fallback %q", got, want)
+	}
+
+	// A valid runtime dir answers even when $HOME is unavailable: XDG() reports the
+	// missing home, but the runtime root does not depend on it.
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
+	if got, want := mustDir(t, RootRuntime), "/run/user/1000/charly"; got != want {
+		t.Errorf("absolute XDG_RUNTIME_DIR without $HOME: Dir(RootRuntime) = %q, want %q", got, want)
+	}
+}
+
+func mustDir(t *testing.T, r Root) string {
+	t.Helper()
+	got, err := Dir(r)
+	if err != nil {
+		t.Fatalf("Dir(%s): %v", r, err)
+	}
+	return got
 }
