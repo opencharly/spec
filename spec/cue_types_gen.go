@@ -1535,6 +1535,14 @@ type BoxMetadata struct {
 
 	MCPAccept []EnvDependency `yaml:"mcp_accept,omitempty" json:"mcp_accept,omitempty"`
 
+	// var carries a candy's DECLARED template variables (the same `var:` block that
+	// #CandyFields declares, spec/schema/candy.cue) onto the metadata a bed's runner
+	// reads. A check step's `${NAME}` substitution is built from this metadata, so
+	// without it a candy could declare a variable that the runner KNOWS by name (its
+	// classifier sees the declaration) yet can never SUPPLY a value for -- an
+	// unresolved-on-assert-only SKIP rather than a DEAD error, opencharly/charly#865.
+	Vars map[string]string `yaml:"var,omitempty" json:"var,omitempty"`
+
 	Description *LabelDescriptionSet `yaml:"description,omitempty" json:"description,omitempty"`
 
 	Shell *LabelShellSet `yaml:"shell,omitempty" json:"shell,omitempty"`
