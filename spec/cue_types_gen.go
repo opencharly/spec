@@ -190,10 +190,6 @@ type Op struct {
 	Stderr MatcherList `yaml:"stderr,omitempty" json:"stderr,omitempty"`
 }
 
-// An env entry: KEY=VALUE (value may be empty / contain =).
-// A YAML scalar Go decodes into a string (map[string]string / string field):
-// yaml.v3 coerces an unquoted int/bool/float to its literal text, so an
-// idiomatic `PORT: 8080` is a valid string value. #StrMap is the matching map.
 type StrVal any /* CUE disjunction: (bool|string|number) */
 
 // Matcher operators (validMatcherOps, validate_check.go). A matcher is a scalar
@@ -239,6 +235,17 @@ type PhaseTemplates struct {
 
 	Host string `yaml:"host,omitempty" json:"host,omitempty"`
 }
+
+// An env entry: KEY=VALUE (value may be empty / contain =).
+// A YAML scalar Go decodes into a string (map[string]string / string field):
+// yaml.v3 coerces an unquoted int/bool/float to its literal text, so an
+// idiomatic `PORT: 8080` is a valid string value. #StrMap is the matching map.
+// #VarMap is the ONE declaration of a candy's `var:` shape: NAME (an uppercase
+// identifier) to value. Three shapes carry it — #CandyFields.var (what an author
+// writes), #BoxMetadata.var and #LabeledDescription.vars (the two resolved carriers) —
+// and they must accept exactly the same names, so the predicate lives here once rather
+// than being re-typed at each (R2).
+type VarMap map[string]StrVal
 
 // ---------------------------------------------------------------------------
 // Container security (SecurityConfig) — shared by box / candy / deploy / sidecar.

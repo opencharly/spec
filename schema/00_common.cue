@@ -319,6 +319,13 @@ _ipcModeWord: [for w, _ in _ipcMode {w}]
 // A YAML scalar Go decodes into a string (map[string]string / string field):
 // yaml.v3 coerces an unquoted int/bool/float to its literal text, so an
 // idiomatic `PORT: 8080` is a valid string value. #StrMap is the matching map.
+// #VarMap is the ONE declaration of a candy's `var:` shape: NAME (an uppercase
+// identifier) to value. Three shapes carry it — #CandyFields.var (what an author
+// writes), #BoxMetadata.var and #LabeledDescription.vars (the two resolved carriers) —
+// and they must accept exactly the same names, so the predicate lives here once rather
+// than being re-typed at each (R2).
+#VarMap: {[=~"^[A-Z_][A-Z0-9_]*$"]: #StrVal}
+
 #StrVal: string | number | bool // gengotypes: emits `type StrVal any` — referenced by inline {[string]: #StrVal} maps
 
 #StrMap: ({[string]: #StrVal}) @go(-) // gengotypes: hand StrMap = map[string]string (spec/union_types.go)

@@ -112,7 +112,7 @@ package schema
 	env?: {PATH?: _|_, [string]: #StrVal} @go(Env,type=map[string]string)
 	// var: Go field is `Vars map[string]string`; gengotypes degrades the
 	// pattern-keyed map to an empty struct, so pin name + shape.
-	var?: {[=~"^[A-Z_][A-Z0-9_]*$"]: #StrVal} @go(Vars,type=map[string]string)
+	var?: #VarMap @go(Vars,type=map[string]string)
 	path_append?: [...(string & !="")] @go(PathAppend)
 
 	// --- package surface (Calamares-aligned) ---
