@@ -20,7 +20,7 @@ Canonical files:
   importable).
 - `.agents/skills/<name>/SKILL.md` — the prose for this module's own six
   schema-authoring skills (`image`, `layer`, `pod`, `vms-catalog`, `vm-spec`,
-  `local-spec`) plus `install-plan` and `disposable`; the `skill:` routing nodes
+  `local-spec`) plus `install-plan`, `disposable` and `xdg`; the `skill:` routing nodes
   live in `charly.yml` beside the `spec-skill-shelf` candy that owns them.
 - `README.md` — user overview only; never agent guidance.
 
