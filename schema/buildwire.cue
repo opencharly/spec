@@ -67,6 +67,10 @@ package schema
 	copy_artifacts?: [...string] @go(CopyArtifacts)
 	copy_binary?:     string   @go(CopyBinary)
 	inline_fragment?: string   @go(InlineFragment)
+	// package — the OS package files this stage produced for the candy (aur), declared by the
+	// builder plugin; the host installs them through the target distro's local_pkg contract when it
+	// serves the format, and copies copy_artifacts in otherwise (opencharly/sdk#608).
+	package?: #BuilderPackage @go(Package,optional=nillable)
 }
 
 // #BuilderResolveInput is the OpResolve params: the RENDER CONTEXT the host
@@ -179,14 +183,22 @@ package schema
 	candy!:   string @go(Candy)
 	builder!: string @go(Builder)
 	home?:    string @go(Home)
-	packages?: [...string] @go(Packages) // the builder's detect-config section packages (aur)
-	replaces?: [...string] @go(Replaces) // aur `replaces:` — repo packages removed before pacman -U
+	packages?: [...string] @go(Packages) // the builder's manager packages declared for this image
+	// manifest / manifest_content — the candy's detected builder manifest (the first of the
+	// builder's detect_file the candy carries) and its text, read host-side. Each builder derives its
+	// teardown set from it (npm dependencies, cargo package, mise tools), so every builder declares
+	// its reverse (D-IR-2) instead of returning an empty one (opencharly/sdk#608).
+	manifest?:         string @go(Manifest)
+	manifest_content?: string @go(ManifestContent)
 }
 
 // #BuilderCollectReply is the OpCollectContext reply: the builder-specific
 // stage-context keys the host merges onto the base context.
 #BuilderCollectReply: {
 	context?: {...} @go(Context,type=map[string]any)
+	// package — the same package output the resolve leg declares, so the deploy-time compile knows it
+	// without rendering a stage (the apply mode's BuilderStep.Package).
+	package?: #BuilderPackage @go(Package,optional=nillable)
 }
 
 // #BuilderReverseInput is the OpReverse params: the candy + its resolved

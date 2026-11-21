@@ -145,10 +145,10 @@ package schema
 // `<definition><Field>` when it is not; the comment above it names its site.
 
 // #BuildFormat
-_buildFormat: {rpm: {}, deb: {}, pac: {}, aur: {}, apk: {}} @vocab(spec)
+_buildFormat: {rpm: {}, deb: {}, pac: {}, apk: {}} @vocab(spec)
 _buildFormatWord: [for w, _ in _buildFormat {w}]
 // #BuildType
-_buildType: {pixi: {}, npm: {}, cargo: {}, aur: {}} @vocab(spec)
+_buildType: {pixi: {}, npm: {}, cargo: {}, aur: {}, mise: {}} @vocab(spec)
 _buildTypeWord: [for w, _ in _buildType {w}]
 // #Box.user_policy
 _userPolicy: {auto: {}, adopt: {}, create: {}} @vocab(spec)

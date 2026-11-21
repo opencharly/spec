@@ -328,8 +328,6 @@ type AUR struct {
 	Package []PackageItem `yaml:"package,omitempty" json:"package,omitempty"`
 
 	Options []string `yaml:"option,omitempty" json:"option,omitempty"`
-
-	Replaces []string `yaml:"replace,omitempty" json:"replace,omitempty"`
 }
 
 // install_opts gates (deploy.go InstallOptsConfig) — shared by local + deploy.
@@ -1761,8 +1759,8 @@ type InstallContext struct {
 
 // #BuildStageContext — data a builder's multi-stage `stage_template` renders
 // against: builder/stage identity, scratch-stage + copy-src wiring, detected
-// manifest/lockfile/build-script, install command, cache mounts, and (for
-// config-detected builders like aur) packages/options.
+// manifest/lockfile/build-script, install command, cache mounts, and the builder's
+// manager packages declared for this image (with their options).
 type BuildStageContext struct {
 	BuilderRef string `yaml:"builder_ref,omitempty" json:"builder_ref,omitempty"`
 
@@ -1802,8 +1800,6 @@ type BuildStageContext struct {
 type Builder struct {
 	DetectFiles []string `yaml:"detect_file,omitempty" json:"detect_file,omitempty"`
 
-	DetectConfig string `yaml:"detect_config,omitempty" json:"detect_config,omitempty"`
-
 	RequiresSrcDir bool `yaml:"requires_src_dir,omitempty" json:"requires_src_dir,omitempty"`
 
 	Inline bool `yaml:"inline,omitempty" json:"inline,omitempty"`
@@ -1822,6 +1818,9 @@ type Builder struct {
 
 	InstallCommands map[string]string `yaml:"install_command,omitempty" json:"install_command,omitempty"`
 
+	// copy_artifact — the builder's PAYLOAD: what it built, and where in the target it lands. It is the
+	// ONE install contract every builder shares (opencharly/sdk#608): the image render copies these
+	// pairs out of the builder's stage, and the apply path copies the same pairs onto the venue.
 	CopyArtifacts []Copy `yaml:"copy_artifact,omitempty" json:"copy_artifact,omitempty"`
 
 	CopyBinary *Copy `yaml:"copy_binary,omitempty" json:"copy_binary,omitempty"`
@@ -1841,6 +1840,21 @@ type Copy struct {
 	Dst string `yaml:"dst,omitempty" json:"dst"`
 
 	Chown bool `yaml:"chown,omitempty" json:"chown,omitempty"`
+}
+
+// #BuilderPackage is what a builder declares it PRODUCED when its output is OS package files (aur
+// builds `pac` packages): their format, the directory one candy's packages are in, and their glob.
+// It is the builder PLUGIN's own knowledge, returned in its replies (#BuilderResolveReply,
+// #BuilderCollectReply) — never authored on the builder node, whose DESIGN shape is a manager map
+// (DESIGN.cue #BuilderAlt, D-IR-7; P3 derived not authored). A target whose distro serves that
+// format's `local_pkg` contract installs the packages through it; every other target receives the
+// builder's payload (opencharly/sdk#608).
+type BuilderPackage struct {
+	Format BuildFormat `yaml:"format,omitempty" json:"format"`
+
+	Dir string `yaml:"dir,omitempty" json:"dir"`
+
+	Glob string `yaml:"glob,omitempty" json:"glob"`
 }
 
 // #BuilderConfig is the `builder:` build-vocabulary container — the whole
@@ -2667,8 +2681,6 @@ type CandyModel struct {
 	// compiler reads it to emit a LocalPkgInstallStep (PackageName = packaging.name).
 	Packaging *Packaging `yaml:"packaging,omitempty" json:"packaging,omitempty"`
 
-	FormatSections map[string]PackageSection `yaml:"format_sections,omitempty" json:"format_sections,omitempty"`
-
 	TagSections map[string]TagPkgConfig `yaml:"tag_sections,omitempty" json:"tag_sections,omitempty"`
 
 	// --- env / vars / route / shell ---
@@ -2802,20 +2814,27 @@ type Packaging struct {
 	Systemd []*PackagingSystemdUnit `yaml:"systemd,omitempty" json:"systemd,omitempty"`
 }
 
+// #TagPkgConfig — a distro/version-specific package section (debian:13, ubuntu:24.04, fedora:43…).
+// Raw captures the full YAML so tag sections carry repos:/options:/keys:. Mirrors deploykit.TagPkgConfig.
+type TagPkgConfig struct {
+	Package []string `yaml:"package,omitempty" json:"package,omitempty"`
+
+	// managers — the build-time MANAGER packages declared under this distro tag (today authored as
+	// `distro.<tag>.aur:`), keyed by manager word. A manager declaration lives on the tag it was
+	// written under, exactly like the tag's OS packages, so an image honours it only when the image
+	// selects that tag — and a builder is required for every image that does (D-IR-7,
+	// opencharly/sdk#608). There is no image-independent merge of manager sections.
+	Managers map[string]PackageSection `yaml:"managers,omitempty" json:"managers,omitempty"`
+
+	Raw map[string]any `yaml:"raw,omitempty" json:"raw,omitempty"`
+}
+
 // #PackageSection — a generic format-specific package section (rpm/deb/pac/aur). Raw carries the
 // full YAML map for template rendering. Mirrors deploykit.PackageSection (which now aliases this).
 type PackageSection struct {
 	FormatName string `yaml:"format_name,omitempty" json:"format_name,omitempty"`
 
 	Packages []string `yaml:"packages,omitempty" json:"packages,omitempty"`
-
-	Raw map[string]any `yaml:"raw,omitempty" json:"raw,omitempty"`
-}
-
-// #TagPkgConfig — a distro/version-specific package section (debian:13, ubuntu:24.04, fedora:43…).
-// Raw captures the full YAML so tag sections carry repos:/options:/keys:. Mirrors deploykit.TagPkgConfig.
-type TagPkgConfig struct {
-	Package []string `yaml:"package,omitempty" json:"package,omitempty"`
 
 	Raw map[string]any `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
@@ -3162,6 +3181,11 @@ type BuilderResolveReply struct {
 	CopyBinary string `yaml:"copy_binary,omitempty" json:"copy_binary,omitempty"`
 
 	InlineFragment string `yaml:"inline_fragment,omitempty" json:"inline_fragment,omitempty"`
+
+	// package — the OS package files this stage produced for the candy (aur), declared by the
+	// builder plugin; the host installs them through the target distro's local_pkg contract when it
+	// serves the format, and copies copy_artifacts in otherwise (opencharly/sdk#608).
+	Package *BuilderPackage `yaml:"package,omitempty" json:"package,omitempty"`
 }
 
 // #BuilderResolveInput is the OpResolve params: the RENDER CONTEXT the host
@@ -3387,6 +3411,9 @@ type InstallStepView struct {
 
 	BuilderDef *BuilderDef `yaml:"builder_def,omitempty" json:"builder_def,omitempty"`
 
+	// builder_package — the package output the builder plugin declared for this candy (aur).
+	BuilderPackage *BuilderPackage `yaml:"builder_package,omitempty" json:"builder_package,omitempty"`
+
 	// local_pkg is shared by BuilderStep (aur) + LocalPkgInstallStep.
 	LocalPkg *LocalPkg `yaml:"local_pkg,omitempty" json:"local_pkg,omitempty"`
 
@@ -3555,13 +3582,23 @@ type BuilderCollectInput struct {
 
 	Packages []string `yaml:"packages,omitempty" json:"packages,omitempty"`
 
-	Replaces []string `yaml:"replaces,omitempty" json:"replaces,omitempty"`
+	// manifest / manifest_content — the candy's detected builder manifest (the first of the
+	// builder's detect_file the candy carries) and its text, read host-side. Each builder derives its
+	// teardown set from it (npm dependencies, cargo package, mise tools), so every builder declares
+	// its reverse (D-IR-2) instead of returning an empty one (opencharly/sdk#608).
+	Manifest string `yaml:"manifest,omitempty" json:"manifest,omitempty"`
+
+	ManifestContent string `yaml:"manifest_content,omitempty" json:"manifest_content,omitempty"`
 }
 
 // #BuilderCollectReply is the OpCollectContext reply: the builder-specific
 // stage-context keys the host merges onto the base context.
 type BuilderCollectReply struct {
 	Context map[string]any `yaml:"context,omitempty" json:"context,omitempty"`
+
+	// package — the same package output the resolve leg declares, so the deploy-time compile knows it
+	// without rendering a stage (the apply mode's BuilderStep.Package).
+	Package *BuilderPackage `yaml:"package,omitempty" json:"package,omitempty"`
 }
 
 // #BuilderReverseInput is the OpReverse params: the candy + its resolved
@@ -6523,8 +6560,6 @@ type Format struct {
 
 	Validate []FormatRule `yaml:"validate,omitempty" json:"validate,omitempty"`
 
-	Secondary bool `yaml:"secondary,omitempty" json:"secondary,omitempty"`
-
 	LocalPkg *LocalPkg `yaml:"local_pkg,omitempty" json:"local_pkg,omitempty"`
 }
 
@@ -8201,6 +8236,12 @@ type LoadedProject struct {
 	Discovered []DiscoveredManifest `yaml:"discovered,omitempty" json:"discovered,omitempty"`
 
 	Namespaces []*NamespaceMount `yaml:"namespaces,omitempty" json:"namespaces,omitempty"`
+
+	// embedded_defaults_digest — the content digest of the binary-embedded default vocabulary the
+	// materialize step merges (ApplyEmbeddedDefaults), stamped by the host walk. It is a materialize
+	// INPUT, so it rides the envelope the materialized-tree cache keys on: a binary whose embedded
+	// vocabulary changed re-keys instead of being served the previous vocabulary's tree.
+	EmbeddedDefaultsDigest string `yaml:"embedded_defaults_digest,omitempty" json:"embedded_defaults_digest,omitempty"`
 }
 
 // CUE schema for the `marketplace` KIND — the single harness/marketplace config entity per repo

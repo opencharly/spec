@@ -393,7 +393,6 @@ _ipcModeWord: [for w, _ in _ipcMode {w}]
 #AUR: {
 	package?: [...#PackageItem]
 	option?: [...(string & !="")] @go(Options)
-	replace?: [...(string & !="")] @go(Replaces)
 }
 
 // Free-form per-distro upstream-repo block: `name` is load-bearing (the only

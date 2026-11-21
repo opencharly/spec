@@ -33,21 +33,19 @@ func (d *ResolvedDistro) LocalPkgFormat(primaryFormat string) (string, *LocalPkg
 	return localPkgFormat(d.Format, primaryFormat)
 }
 
-// primaryFormat is the shared format-selection core: the deterministic first
-// non-secondary Format name (nil-safe on the map).
+// primaryFormat is the shared format-selection core: the deterministic first Format name
+// (nil-safe on the map). A distro's formats are its OS package formats only — a build-time
+// manager is a builder, never a distro format (opencharly/sdk#608).
 func primaryFormat(format map[string]*Format) string {
 	names := make([]string, 0, len(format))
 	for name := range format {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	for _, name := range names {
-		if fd := format[name]; fd != nil && fd.Secondary {
-			continue // secondary build format (declared in YAML), never primary
-		}
-		return name
+	if len(names) == 0 {
+		return ""
 	}
-	return ""
+	return names[0]
 }
 
 // localPkgFormat is the shared local-pkg selection core: the caller's primary

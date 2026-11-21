@@ -27,6 +27,12 @@ package schema
 // Raw captures the full YAML so tag sections carry repos:/options:/keys:. Mirrors deploykit.TagPkgConfig.
 #TagPkgConfig: {
 	package?: [...string] @go(Package)
+	// managers — the build-time MANAGER packages declared under this distro tag (today authored as
+	// `distro.<tag>.aur:`), keyed by manager word. A manager declaration lives on the tag it was
+	// written under, exactly like the tag's OS packages, so an image honours it only when the image
+	// selects that tag — and a builder is required for every image that does (D-IR-7,
+	// opencharly/sdk#608). There is no image-independent merge of manager sections.
+	managers?: {[#BuildType]: #PackageSection} @go(Managers)
 	raw?: {...} @go(Raw,type=map[string]any)
 }
 
@@ -99,7 +105,6 @@ package schema
 	// specCandyAdapter can implement CandyReader.Packaging() — the deploy-plan
 	// compiler reads it to emit a LocalPkgInstallStep (PackageName = packaging.name).
 	packaging?: #Packaging @go(Packaging,optional=nillable)
-	format_sections?: {[string]: #PackageSection} @go(FormatSections)
 	tag_sections?: {[string]: #TagPkgConfig} @go(TagSections)
 
 	// --- env / vars / route / shell ---

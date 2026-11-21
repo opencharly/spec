@@ -31,8 +31,8 @@ package schema
 
 // #BuildStageContext — data a builder's multi-stage `stage_template` renders
 // against: builder/stage identity, scratch-stage + copy-src wiring, detected
-// manifest/lockfile/build-script, install command, cache mounts, and (for
-// config-detected builders like aur) packages/options.
+// manifest/lockfile/build-script, install command, cache mounts, and the builder's
+// manager packages declared for this image (with their options).
 #BuildStageContext: {
 	builder_ref?:  string @go(BuilderRef)
 	stage_name?:   string @go(StageName)
@@ -47,8 +47,8 @@ package schema
 	install_cmd?:  string @go(InstallCmd)
 	manylinux_fix?: string @go(ManylinuxFix)
 	cache_mounts?: [...#CacheMount] @go(CacheMounts)
-	packages?: [...string] @go(Packages) // config-detected builders (aur)
-	options?: [...string] @go(Options)   // config-detected builders (aur)
+	packages?: [...string] @go(Packages) // the manager packages declared for this image
+	options?: [...string] @go(Options)   // their declared options
 	has_build_script?: bool  @go(HasBuildScript)
 	build_script?:     string @go(BuildScript)
 }

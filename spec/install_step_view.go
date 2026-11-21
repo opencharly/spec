@@ -65,6 +65,7 @@ func StepToView(step InstallStep) InstallStepView {
 		v.RawStageContext = s.RawStageContext
 		v.LocalPkg = s.LocalPkg
 		v.BuilderDef = s.BuilderDef
+		v.BuilderPackage = s.Package
 	case *OpStep:
 		v.Op = s.Op
 		v.CandyName = s.CandyName
@@ -177,6 +178,7 @@ func StepFromView(v InstallStepView) (InstallStep, error) {
 			RawStageContext: v.RawStageContext,
 			LocalPkg:        v.LocalPkg,
 			BuilderDef:      v.BuilderDef,
+			Package:         v.BuilderPackage,
 			// A BuilderStep's teardown ops are PRE-RESOLVED host-side (builder_preresolve.go, the
 			// externalized builder plugin's OpReverse), so — unlike every other kind, whose ReverseOps
 			// view field is advisory and ignored here — the reconstructed BuilderStep MUST restore them:

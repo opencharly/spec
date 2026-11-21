@@ -66,4 +66,9 @@ package schema
 	docs?: [...#LoadedDoc] @go(Docs)
 	discovered?: [...#DiscoveredManifest] @go(Discovered)
 	namespaces?: [...#NamespaceMount] @go(Namespaces)
+	// embedded_defaults_digest — the content digest of the binary-embedded default vocabulary the
+	// materialize step merges (ApplyEmbeddedDefaults), stamped by the host walk. It is a materialize
+	// INPUT, so it rides the envelope the materialized-tree cache keys on: a binary whose embedded
+	// vocabulary changed re-keys instead of being served the previous vocabulary's tree.
+	embedded_defaults_digest?: string @go(EmbeddedDefaultsDigest)
 }
