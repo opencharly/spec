@@ -14,8 +14,8 @@ import "sort"
 // ResolvedDistro are field-identical (Format map[string]*Format), so the format
 // selection logic lives once.
 
-// PrimaryFormat returns the distro's primary (non-secondary) build format —
-// the deterministic first non-secondary Format name.
+// PrimaryFormat returns the distro's primary build format — the deterministic first
+// Format name (every distro format is an OS package format; aur is a builder).
 func (d *ResolvedDistro) PrimaryFormat() string {
 	if d == nil {
 		return ""

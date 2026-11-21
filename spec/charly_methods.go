@@ -182,7 +182,9 @@ func (b *Builder) IsBootstrap() bool {
 // Distro (DistroDef — the build vocabulary distro)
 // ---------------------------------------------------------------------------
 
-// PrimaryFormat returns the distro's primary (non-secondary) package format.
+// PrimaryFormat returns the distro's primary package format: the deterministic first of its
+// formats, every one of which is an OS package format (a build-time manager such as aur is a
+// builder, never a distro format — opencharly/sdk#608).
 // Shares the selection core with the *ResolvedDistro twin (spec/distro_methods.go).
 func (d *Distro) PrimaryFormat() string {
 	if d == nil {
