@@ -260,6 +260,8 @@ type ProvidedCapability struct {
 	Interactive bool `protobuf:"varint,14,opt,name=interactive,proto3" json:"interactive,omitempty"`
 	// set ONLY for class="command": the PARENT command word this command NESTS under (e.g. "box" for `charly box generate`), or "" for a top-level command. Part of the capability's IDENTITY (the registry keys a nested command at `<class>:<word>:<parent>` and a top-level one at `<class>:<word>`) and DECLARED by the plugin in its manifest (`command:<word>:<parent>`) + its Describe, NOT inferred from plugin code — so an out-of-process plugin nests exactly like a compiled-in one.
 	CommandParent string `protobuf:"bytes,15,opt,name=command_parent,json=commandParent,proto3" json:"command_parent,omitempty"`
+	// set ONLY for class="kind": the kind serves OpContent — its nodes contribute content (files, OCI labels) to the boxes whose composed candies own them (M1, Content -> IR). The host publishes these words in the envelope's content_kinds so the build/deploy kit asks exactly these kinds, by word, never by a hard-coded name.
+	Contents      bool `protobuf:"varint,16,opt,name=contents,proto3" json:"contents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -397,6 +399,13 @@ func (x *ProvidedCapability) GetCommandParent() string {
 		return x.CommandParent
 	}
 	return ""
+}
+
+func (x *ProvidedCapability) GetContents() bool {
+	if x != nil {
+		return x.Contents
+	}
+	return false
 }
 
 // CLISubcommand — one DECLARED child of a class="command" capability's own CLI word (F-CLI-NEST).
@@ -2710,7 +2719,7 @@ const file_plugin_proto_rawDesc = "" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x16\n" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1a\n" +
 	"\boptional\x18\x04 \x01(\bR\boptional\x12%\n" +
-	"\x0ecommand_parent\x18\x05 \x01(\tR\rcommandParent\"\xbf\x04\n" +
+	"\x0ecommand_parent\x18\x05 \x01(\tR\rcommandParent\"\xdb\x04\n" +
 	"\x12ProvidedCapability\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x1b\n" +
@@ -2731,7 +2740,8 @@ const file_plugin_proto_rawDesc = "" +
 	"\vsubcommands\x18\f \x03(\v2\x1b.charlyplugin.CLISubcommandR\vsubcommands\x12,\n" +
 	"\x12command_model_json\x18\r \x01(\fR\x10commandModelJson\x12 \n" +
 	"\vinteractive\x18\x0e \x01(\bR\vinteractive\x12%\n" +
-	"\x0ecommand_parent\x18\x0f \x01(\tR\rcommandParent\"O\n" +
+	"\x0ecommand_parent\x18\x0f \x01(\tR\rcommandParent\x12\x1a\n" +
+	"\bcontents\x18\x10 \x01(\bR\bcontents\"O\n" +
 	"\rCLISubcommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04help\x18\x02 \x01(\tR\x04help\x12\x16\n" +

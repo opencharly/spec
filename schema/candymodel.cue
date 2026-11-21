@@ -123,18 +123,16 @@ package schema
 	hook?: bytes @go(Hook,type=RawBody)
 	// skills: the NAMES of the `skill:` nodes this candy OWNS — the build-time association
 	// `skill.cue`'s `owner:` records, projected onto the wire model so a consumer holding only
-	// the model can answer "which skills does this candy carry?" without reaching
-	// spec.Config.Skills (a separate map keyed by skill name with opaque bodies).
+	// the model can answer "which skills does this candy carry?" without reaching the authored
+	// nodes (Config.PluginKinds["skill"], opaque bodies keyed by node name).
 	//
-	// WHY IT BELONGS HERE. CollectSkills (sdk/deploykit) is the reader, and it projects the
-	// composed candies' owned skills into the `ai.opencharly.skill` OCI label so a built image
-	// is self-describing. It already takes `layers map[string]CandyModel` — but it reads the
-	// association from cfg.Skills and filters by `s.Owner`, so the wire model carried the
-	// candy's IDENTITY and not its skills. That asymmetry is the gap
-	// (opencharly/spec#254): the model exists so a plugin can read a candy's build contract
-	// WITHOUT holding the live *Candy, and "which images carry this skill" is decided by the
-	// build. Owner-qualified NAMES, not opaque bodies: the bodies travel through
-	// Config.Skills and the marketplace generator, and duplicating them here would create a
+	// WHY IT BELONGS HERE. The model exists so a plugin can read a candy's build contract WITHOUT
+	// holding the live *Candy (opencharly/spec#254). `charly box validate` reads it: a candy whose
+	// only content is the skill nodes it owns has install content, because kind:skill installs
+	// their bodies into every image that composes it (ops.OpContent, opencharly/sdk#598). Which
+	// IMAGES carry a skill is kind:skill's own per-box question, answered from the nodes, not from
+	// here. Owner-qualified NAMES, not opaque bodies: the bodies travel through
+	// Config.PluginKinds and the marketplace generator, and duplicating them here would create a
 	// second source for content this model does not resolve.
 	skills?: [...string] @go(Skills)
 

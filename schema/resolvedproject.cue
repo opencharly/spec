@@ -120,6 +120,13 @@ package schema
 	init_system?: string @go(InitSystem)
 	init_def?:    _      @go(InitDef,type=*ResolvedInit)
 	active_inits?: {[string]: _} @go(ActiveInits,type=map[string]*ResolvedInit)
+
+	// build-RENDER owned-content cache (M1, ops.OpContent). Host render-prep asks every kind in the
+	// envelope's content_kinds what its nodes contribute to this box (#OwnedContentReply) and keeps the
+	// files here; the deploykit render stages them and installs them under the image user's home
+	// WITHOUT the live graph. The labels of the same replies are merged into baked_metadata. Filled
+	// ONLY in the build-render projection; empty for the resolved-project / validate path.
+	owned_content?: [...#ContentFile] @go(OwnedContent)
 }
 
 // #AggregatedCandyCapsView — the box-level aggregated candy capability surface the build RENDER reads
@@ -256,6 +263,9 @@ package schema
 	//     builtin rejection behaviour without the registry.
 	provider_capabilities?: [...string] @go(ProviderCapabilities)
 	act_capable_verbs?: [...string] @go(ActCapableVerbs)
+	//   content_kinds — the kind WORDS whose capability declares `contents` (they serve ops.OpContent),
+	//     the exact set the build/deploy kit asks for owned content, by word.
+	content_kinds?: [...string] @go(ContentKinds)
 	// box_plans — the include-ready FLATTENED acceptance plan per box (the `include: box:<name>`
 	// arm of the plan-composition splicer). The host projector runs the SAME base-chain walk
 	// CollectDescriptions uses (candy-chain bakeable steps + the box-level bakeable plan) and

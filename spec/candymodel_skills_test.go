@@ -41,7 +41,7 @@ func TestCandyModelCarriesOwnedSkillNames(t *testing.T) {
 		t.Fatalf("spec.CandyModel.Skills json tag = %q, want the authored wire key `skills`", tag)
 	}
 
-	// Owner-qualified NAMES, not opaque bodies: the bodies travel through Config.Skills and
+	// Owner-qualified NAMES, not opaque bodies: the bodies travel through Config.PluginKinds and
 	// the marketplace generator, so this field must not become a second source for content
 	// the model does not resolve.
 	if got, want := sf.Type, reflect.TypeOf([]string{}); got != want {

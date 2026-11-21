@@ -409,7 +409,9 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 		Box:      images,
 		Local:    uf.Local(),
 		Sidecar:  uf.PluginKinds["sidecar"], // opaque bodies; candy/plugin-sidecar resolves them
-		Skills:   uf.PluginKinds["skill"],   // opaque bodies; CollectSkills + plugin-marketplace resolve them
+		// Every plugin kind's opaque bodies, by kind word — what a content kind is asked about
+		// (ops.OpContent). The kernel never reads them.
+		PluginKinds: uf.PluginKinds,
 	}
 	cache[uf] = c // cache BEFORE recursing (cycle break)
 	if len(uf.Namespaces) > 0 {

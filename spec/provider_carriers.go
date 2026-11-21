@@ -78,6 +78,14 @@ type ValidatingKindCarrier interface {
 	IsValidatingKind() bool
 }
 
+// ContentKindCarrier is implemented by a provider whose class:kind capability declares `contents`:
+// it serves ops.OpContent, so its nodes contribute owned content (files, OCI labels) to the boxes
+// whose composed candies own them (M1). The host publishes exactly these words as the envelope's
+// content_kinds — read off the capability, never a per-kind branch.
+type ContentKindCarrier interface {
+	IsContentKind() bool
+}
+
 // DeployTraitsCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider
 // compiled-in) that carries a SUBSTRATE class:kind capability's DECLARED DeployTraits (P9).
 // Non-nil → deployTraitsFor returns them so kit.StampDescent stamps node.Descent BY TRAIT; nil

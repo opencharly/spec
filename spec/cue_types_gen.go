@@ -1422,7 +1422,7 @@ type LabelSecretEntry struct {
 // composed candies' skills, readable directly via ExtractMetadata / `charly box labels` /
 // `charly deploy from-box`, with no external fetch). family+name+content required (an entry
 // without content is not a readable skill); the JSON label wire form of the authoring #Skill
-// (CollectSkills projects authoring → wire).
+// (kind:skill projects authoring → wire as owned content, ops.OpContent).
 type LabelSkillEntry struct {
 	Family string `yaml:"family,omitempty" json:"family"`
 
@@ -1680,7 +1680,10 @@ type BakedLabelSet struct {
 
 	PortRelay []int `yaml:"port_relay,omitempty" json:"port_relay,omitempty"`
 
-	Skills []LabelSkillEntry `yaml:"skills,omitempty" json:"skills,omitempty"`
+	// contributed — OCI labels a kind's owned content adds (#OwnedContentReply.labels, ops.OpContent):
+	// key -> JSON value, written by the JSON label writer. The ai.opencharly.skill label arrives here
+	// from kind:skill; the formatter does not know which kind wrote which key.
+	Contributed map[string]RawBody `yaml:"contributed,omitempty" json:"contributed,omitempty"`
 
 	Secret []LabelSecretEntry `yaml:"secret,omitempty" json:"secret,omitempty"`
 
@@ -1709,6 +1712,8 @@ type BakedLabelSet struct {
 	EnvCandy map[string]string `yaml:"env_candy,omitempty" json:"env_candy,omitempty"`
 
 	PathAppend []string `yaml:"path_append,omitempty" json:"path_append,omitempty"`
+
+	Skills []LabelSkillEntry `yaml:"skills,omitempty" json:"skills,omitempty"`
 
 	Status string `yaml:"status,omitempty" json:"status,omitempty"`
 
@@ -2228,6 +2233,11 @@ type ResolvedProject struct {
 
 	ActCapableVerbs []string `yaml:"act_capable_verbs,omitempty" json:"act_capable_verbs,omitempty"`
 
+	// content_kinds — the kind WORDS whose capability declares `contents` (they serve ops.OpContent),
+	//
+	//	the exact set the build/deploy kit asks for owned content, by word.
+	ContentKinds []string `yaml:"content_kinds,omitempty" json:"content_kinds,omitempty"`
+
 	// box_plans — the include-ready FLATTENED acceptance plan per box (the `include: box:<name>`
 	// arm of the plan-composition splicer). The host projector runs the SAME base-chain walk
 	// CollectDescriptions uses (candy-chain bakeable steps + the box-level bakeable plan) and
@@ -2417,6 +2427,13 @@ type ResolvedBoxView struct {
 	InitDef *ResolvedInit `yaml:"init_def,omitempty" json:"init_def,omitempty"`
 
 	ActiveInits map[string]*ResolvedInit `yaml:"active_inits,omitempty" json:"active_inits,omitempty"`
+
+	// build-RENDER owned-content cache (M1, ops.OpContent). Host render-prep asks every kind in the
+	// envelope's content_kinds what its nodes contribute to this box (#OwnedContentReply) and keeps the
+	// files here; the deploykit render stages them and installs them under the image user's home
+	// WITHOUT the live graph. The labels of the same replies are merged into baked_metadata. Filled
+	// ONLY in the build-render projection; empty for the resolved-project / validate path.
+	OwnedContent []ContentFile `yaml:"owned_content,omitempty" json:"owned_content,omitempty"`
 }
 
 // #ResolvedVolumeMount — one entry of the box-aggregate volume list (CollectBoxVolume): the
@@ -2439,6 +2456,19 @@ type AggregatedCandyCapsView struct {
 	NeedsRootAfterInit bool `yaml:"needs_root_after_init,omitempty" json:"needs_root_after_init,omitempty"`
 
 	OCILabels map[string]string `yaml:"oci_labels,omitempty" json:"oci_labels,omitempty"`
+}
+
+// #ContentFile — ONE file a kind contributes: where it is on the host, and where it lands relative to
+// the image user's home. A file is copied verbatim, so the image holds the authored bytes.
+type ContentFile struct {
+	// source is the absolute host path of the file.
+	Source string `yaml:"source,omitempty" json:"source"`
+
+	// path is the target relative to the image user's home: never absolute, never climbing out.
+	Path string `yaml:"path,omitempty" json:"path"`
+
+	// mode is the file's permission bits (0644 when absent).
+	Mode int `yaml:"mode,omitempty" json:"mode,omitempty"`
 }
 
 // #CandyView — the resolved candy GRAPH node a consumer reads: identity + dep-graph + provides +
@@ -2670,18 +2700,16 @@ type CandyModel struct {
 
 	// skills: the NAMES of the `skill:` nodes this candy OWNS — the build-time association
 	// `skill.cue`'s `owner:` records, projected onto the wire model so a consumer holding only
-	// the model can answer "which skills does this candy carry?" without reaching
-	// spec.Config.Skills (a separate map keyed by skill name with opaque bodies).
+	// the model can answer "which skills does this candy carry?" without reaching the authored
+	// nodes (Config.PluginKinds["skill"], opaque bodies keyed by node name).
 	//
-	// WHY IT BELONGS HERE. CollectSkills (sdk/deploykit) is the reader, and it projects the
-	// composed candies' owned skills into the `ai.opencharly.skill` OCI label so a built image
-	// is self-describing. It already takes `layers map[string]CandyModel` — but it reads the
-	// association from cfg.Skills and filters by `s.Owner`, so the wire model carried the
-	// candy's IDENTITY and not its skills. That asymmetry is the gap
-	// (opencharly/spec#254): the model exists so a plugin can read a candy's build contract
-	// WITHOUT holding the live *Candy, and "which images carry this skill" is decided by the
-	// build. Owner-qualified NAMES, not opaque bodies: the bodies travel through
-	// Config.Skills and the marketplace generator, and duplicating them here would create a
+	// WHY IT BELONGS HERE. The model exists so a plugin can read a candy's build contract WITHOUT
+	// holding the live *Candy (opencharly/spec#254). `charly box validate` reads it: a candy whose
+	// only content is the skill nodes it owns has install content, because kind:skill installs
+	// their bodies into every image that composes it (ops.OpContent, opencharly/sdk#598). Which
+	// IMAGES carry a skill is kind:skill's own per-box question, answered from the nodes, not from
+	// here. Owner-qualified NAMES, not opaque bodies: the bodies travel through
+	// Config.PluginKinds and the marketplace generator, and duplicating them here would create a
 	// second source for content this model does not resolve.
 	Skills []string `yaml:"skills,omitempty" json:"skills,omitempty"`
 
@@ -8596,6 +8624,55 @@ type Os struct {
 	Installer OsInstaller `yaml:"installer,omitempty" json:"installer,omitempty"`
 }
 
+// #OwnedContentRequest — what ONE box offers a kind: the image user, the composed candies (in chain
+// order, each with the root of the repository that authors it, where a node's derived body lives),
+// and the kind's authored nodes in the box's OWNING scope (an imported namespace's own document for a
+// namespaced box). Ownership is the kind's to decide from `nodes` against `candies`.
+type OwnedContentRequest struct {
+	// box — the box whose composed candies are asked about (a build or a deploy). ABSENT means
+	// PROJECT scope: `candies` is every candy of the project, and the reply's `diagnostics` are what
+	// `charly box validate` reports — the kind checks what its nodes would contribute anywhere.
+	Box string `yaml:"box,omitempty" json:"box,omitempty"`
+
+	// The image user the files install for — required exactly when a box is named (an install
+	// needs a home; project-scope validation installs nothing).
+	Home string `yaml:"home,omitempty" json:"home,omitempty"`
+
+	UID int `yaml:"uid,omitempty" json:"uid,omitempty"`
+
+	GID int `yaml:"gid,omitempty" json:"gid,omitempty"`
+
+	Candies []OwnedContentCandy `yaml:"candies,omitempty" json:"candies,omitempty"`
+
+	// images — the names that are IMAGES (a `candy:` node with `base:`/`from:`) in this scope. An
+	// image has no source directory, so a node it owns has no derivable body: the kind diagnoses it.
+	Images []string `yaml:"images,omitempty" json:"images,omitempty"`
+
+	Nodes map[string]RawBody `yaml:"nodes,omitempty" json:"nodes,omitempty"`
+}
+
+// #OwnedContentCandy — one composed candy, by name, with the absolute root of the repository that
+// authors it. A candy whose repository root cannot be derived carries no repo_root.
+type OwnedContentCandy struct {
+	Name string `yaml:"name,omitempty" json:"name"`
+
+	RepoRoot string `yaml:"repo_root,omitempty" json:"repo_root,omitempty"`
+}
+
+// #OwnedContentReply — what the kind's nodes contribute to that box: files and OCI labels. Both may
+// be empty; a kind whose nodes the box does not compose contributes nothing.
+type OwnedContentReply struct {
+	Files []ContentFile `yaml:"files,omitempty" json:"files,omitempty"`
+
+	// labels — OCI label key -> its JSON value, written into the image's baked labels by the JSON
+	// label writer (a structured value, never a Go-quoted string).
+	Labels map[string]RawBody `yaml:"labels,omitempty" json:"labels,omitempty"`
+
+	// diagnostics — what is wrong with the kind's nodes in this scope (an owner that is an image, a
+	// body that does not exist where it is derived). Non-empty fails a build and `charly box validate`.
+	Diagnostics []string `yaml:"diagnostics,omitempty" json:"diagnostics,omitempty"`
+}
+
 // #PodSidecar mirrors Go SidecarConfig: a single-key wrapper around a map of
 // named sidecar templates. CLOSED (the struct has exactly one field).
 type PodSidecar struct {
@@ -10957,12 +11034,15 @@ type ResolvedSidecarVolume struct {
 //
 // The marketplace generator (candy/plugin-marketplace, command:marketplace) synthesizes
 // <family>/skills/<name>/SKILL.md + references/*.md — or <family>/agents/<name>.md for an
-// `agent`-type node, from the same file shapes; CollectSkills (sdk/deploykit) projects the
-// composed candies' skills into the `ai.opencharly.skill` OCI label so a built image is
-// self-describing (readable via `charly box labels` / `charly deploy from-box`, no external fetch).
+// `agent`-type node, from the same file shapes; kind:skill's owned content (ops.OpContent,
+// opencharly/plugin-harness-kind) installs the composed candies' skills at the image user's
+// ~/.agents/skills/<name>/ and carries them in the `ai.opencharly.skill` OCI label so a built
+// image is self-describing (readable via `charly box labels` / `charly deploy from-box`, no
+// external fetch).
 //
 // owner is the candy/concept-candy entity name that owns this skill — the build-time association
-// that decides which images carry it (CollectSkills filters by owner ∈ composed candy chain).
+// that decides which images carry it (kind:skill's owned content filters by owner ∈ composed
+// candy chain).
 // family is the marketplace family (the corpus directory name) the generator groups by.
 //
 // type: "agent" marks a sub-agent definition (the former <family>/agents/*.md) — one
@@ -11618,6 +11698,10 @@ type ValidateWordSetsReply struct {
 	ProviderCapabilities []string `yaml:"provider_capabilities,omitempty" json:"provider_capabilities,omitempty"`
 
 	ActCapableVerbs []string `yaml:"act_capable_verbs,omitempty" json:"act_capable_verbs,omitempty"`
+
+	// content_kinds — the kind words that declare `contents` (serve ops.OpContent), folded onto the
+	// envelope's content_kinds for the build/deploy kit.
+	ContentKinds []string `yaml:"content_kinds,omitempty" json:"content_kinds,omitempty"`
 }
 
 // #VmBackendName — the CLOSED VM-backend PROVIDER vocabulary, with no

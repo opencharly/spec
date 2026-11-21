@@ -43,11 +43,12 @@ type Config struct {
 	// PluginKinds["sidecar"] map). The kernel never reads their fields — candy/plugin-sidecar's
 	// OpResolve owns all sidecar business logic.
 	Sidecar map[string]json.RawMessage `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
-	// Skills carries the project's skill-kind library as OPAQUE bodies (the raw
-	// PluginKinds["skill"] map). The kernel never reads their fields — CollectSkills
-	// (deploykit) projects the composed candies' skills into the ai.opencharly.skill label
-	// and candy/plugin-marketplace regenerates the plugins/ corpus from the same source.
-	Skills map[string]json.RawMessage `yaml:"skills,omitempty" json:"skills,omitempty"`
+	// PluginKinds carries every plugin kind's authored nodes as OPAQUE bodies, keyed by kind word
+	// then node name (the UnifiedFile's PluginKinds). The kernel never reads their fields: a kind
+	// that declares `contents` is handed its own nodes in an OwnedContentRequest (ops.OpContent),
+	// and decides what they contribute. (Local and Sidecar are older kind-specific copies of two of
+	// these entries.)
+	PluginKinds map[string]map[string]json.RawMessage `yaml:"-" json:"-"`
 	// Namespaces carries child namespaces mounted by namespaced `import:` entries (alias →
 	// projected sub-Config). Qualified refs like `cachyos.cachyos` resolve through here.
 	// Populated from UnifiedFile.Namespaces by ProjectConfig().
