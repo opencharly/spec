@@ -290,7 +290,6 @@ package schema
 	route?: [...#LabelRouteEntry] @go(Route)
 	env_candy?: {[string]: string} @go(EnvCandy)
 	path_append?: [...string] @go(PathAppend)
-	skills?:      [...#LabelSkillEntry] @go(Skills,type=[]LabelSkillEntry)
 	status?:      string @go(Status)
 	check_level?: string @go(CheckLevel)
 	info?:        string @go(Info)

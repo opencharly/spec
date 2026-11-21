@@ -1713,8 +1713,6 @@ type BakedLabelSet struct {
 
 	PathAppend []string `yaml:"path_append,omitempty" json:"path_append,omitempty"`
 
-	Skills []LabelSkillEntry `yaml:"skills,omitempty" json:"skills,omitempty"`
-
 	Status string `yaml:"status,omitempty" json:"status,omitempty"`
 
 	CheckLevel string `yaml:"check_level,omitempty" json:"check_level,omitempty"`
