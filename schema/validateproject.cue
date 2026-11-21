@@ -56,4 +56,7 @@ package schema
 #ValidateWordSetsReply: {
 	provider_capabilities?: [...string] @go(ProviderCapabilities)
 	act_capable_verbs?: [...string] @go(ActCapableVerbs)
+	// content_kinds — the kind words that declare `contents` (serve ops.OpContent), folded onto the
+	// envelope's content_kinds for the build/deploy kit.
+	content_kinds?: [...string] @go(ContentKinds)
 }

@@ -43,6 +43,7 @@ func TestOpSelectorsStable(t *testing.T) {
 		OpEmit:               "emit",
 		OpExecute:            "execute",
 		OpResolve:            "resolve",
+		OpContent:            "content",
 		OpBuild:              "build",
 		OpCompile:            "compile",
 		OpCollectContext:     "collect-context",
@@ -86,7 +87,7 @@ func TestOpSelectorsStable(t *testing.T) {
 
 func TestOpSelectorsDistinct(t *testing.T) {
 	all := []string{
-		OpRun, OpLoad, OpValidate, OpEmit, OpExecute, OpResolve, OpBuild, OpCompile,
+		OpRun, OpLoad, OpValidate, OpEmit, OpExecute, OpResolve, OpBuild, OpCompile, OpContent,
 		OpCollectContext, OpReverse, OpPrepareVenue, OpArtifactKey, OpPostApply,
 		OpTeardownExecutor, OpPostTeardown, OpStart, OpStop, OpStatus, OpLogs, OpShell,
 		OpAttach, OpRebuild, OpConfigWrite, OpConfigSetup, OpConfigRemove,

@@ -191,6 +191,12 @@ protocol: {
 					"number": 15
 					"doc":    "set ONLY for class=\"command\": the PARENT command word this command NESTS under (e.g. \"box\" for `charly box generate`), or \"\" for a top-level command. Part of the capability's IDENTITY (the registry keys a nested command at `<class>:<word>:<parent>` and a top-level one at `<class>:<word>`) and DECLARED by the plugin in its manifest (`command:<word>:<parent>`) + its Describe, NOT inferred from plugin code — so an out-of-process plugin nests exactly like a compiled-in one."
 				},
+				{
+					"name":   "contents"
+					"type":   "bool"
+					"number": 16
+					"doc":    "set ONLY for class=\"kind\": the kind serves OpContent — its nodes contribute content (files, OCI labels) to the boxes whose composed candies own them (M1, Content -> IR). The host publishes these words in the envelope's content_kinds so the build/deploy kit asks exactly these kinds, by word, never by a hard-coded name."
+				},
 			]
 		},
 		{

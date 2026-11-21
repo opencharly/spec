@@ -24,4 +24,5 @@ type BuildResolvedBox struct {
 	BakedMetadata    *BakedLabelSet           `json:"-"`
 	RenderCandyOrder []string                 `json:"-"`
 	ActiveInits      map[string]*ResolvedInit `json:"-"`
+	OwnedContent     []ContentFile            `json:"-"`
 }

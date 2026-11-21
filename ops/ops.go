@@ -41,6 +41,13 @@ const (
 	// re-materializes. A generic action selector (never a provider word — F11).
 	OpCompile = "compile"
 
+	// OpContent is a KIND's owned-content selector (M1, Content -> IR): the build/deploy kit sends
+	// a spec.OwnedContentRequest naming one box's composed candies, the image user and the kind's
+	// authored nodes in that box's scope; the kind replies with the files its nodes contribute
+	// (staged into the image, or applied as FileSteps on a machine venue) and any OCI labels they
+	// add. Dispatched only to a kind whose capability declares `contents`.
+	OpContent = "content"
+
 	// OpCollectContext + OpReverse are the DEPLOY-TIME builder-IR legs of an externalized
 	// detection-builder plugin (cargo/npm/pixi/aur). A builder's build-time multi-stage is
 	// resolved by its OpResolve leg (C10); these two carry the per-builder deploy-time IR

@@ -65,6 +65,10 @@ type ProvidedCapability struct {
 	// (returns spec.Diagnostics) the host dispatches at load, BEYOND the static CUE input-def
 	// gate. false → only the static gate runs (every other class/kind).
 	Validates bool
+	// Contents is set ONLY for Class=="kind": the kind serves ops.OpContent — its nodes contribute
+	// owned content (files, OCI labels) to the boxes whose composed candies own them (M1). The host
+	// publishes these words as the envelope's content_kinds. false → the kind is never asked.
+	Contents bool
 	// Phase is the plugin lifecycle PHASE (F9): one of the sdk.Phase* constants. "" → the kernel
 	// treats it as PhaseRuntime (the default). PhaseBootstrap runs BEFORE config validation —
 	// declare it for a capability that must load/run early (migrate, egress). The kernel loads +

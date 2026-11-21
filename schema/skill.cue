@@ -25,12 +25,15 @@ package schema
 //
 // The marketplace generator (candy/plugin-marketplace, command:marketplace) synthesizes
 // <family>/skills/<name>/SKILL.md + references/*.md — or <family>/agents/<name>.md for an
-// `agent`-type node, from the same file shapes; CollectSkills (sdk/deploykit) projects the
-// composed candies' skills into the `ai.opencharly.skill` OCI label so a built image is
-// self-describing (readable via `charly box labels` / `charly deploy from-box`, no external fetch).
+// `agent`-type node, from the same file shapes; kind:skill's owned content (ops.OpContent,
+// opencharly/plugin-harness-kind) installs the composed candies' skills at the image user's
+// ~/.agents/skills/<name>/ and carries them in the `ai.opencharly.skill` OCI label so a built
+// image is self-describing (readable via `charly box labels` / `charly deploy from-box`, no
+// external fetch).
 //
 // owner is the candy/concept-candy entity name that owns this skill — the build-time association
-// that decides which images carry it (CollectSkills filters by owner ∈ composed candy chain).
+// that decides which images carry it (kind:skill's owned content filters by owner ∈ composed
+// candy chain).
 // family is the marketplace family (the corpus directory name) the generator groups by.
 //
 // type: "agent" marks a sub-agent definition (the former <family>/agents/*.md) — one

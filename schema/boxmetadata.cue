@@ -140,7 +140,7 @@ package schema
 // composed candies' skills, readable directly via ExtractMetadata / `charly box labels` /
 // `charly deploy from-box`, with no external fetch). family+name+content required (an entry
 // without content is not a readable skill); the JSON label wire form of the authoring #Skill
-// (CollectSkills projects authoring → wire).
+// (kind:skill projects authoring → wire as owned content, ops.OpContent).
 #LabelSkillEntry: {
 	family!:      string @go(Family)
 	name!:        string @go(Name)
@@ -272,7 +272,10 @@ package schema
 	service_names?: [...string] @go(ServiceNames)
 	service?: [...#CapabilityService] @go(Service)
 	port_relay?: [...int] @go(PortRelay,type=[]int)
-	skills?: [...#LabelSkillEntry] @go(Skills,type=[]LabelSkillEntry)
+	// contributed — OCI labels a kind's owned content adds (#OwnedContentReply.labels, ops.OpContent):
+	// key -> JSON value, written by the JSON label writer. The ai.opencharly.skill label arrives here
+	// from kind:skill; the formatter does not know which kind wrote which key.
+	contributed?: {[string]: _} @go(Contributed,type=map[string]RawBody)
 	secret?: [...#LabelSecretEntry] @go(Secret)
 	env_provide?: {[string]: string} @go(EnvProvide)
 	env_require?: [...#EnvDependency] @go(EnvRequire)
@@ -287,7 +290,6 @@ package schema
 	route?: [...#LabelRouteEntry] @go(Route)
 	env_candy?: {[string]: string} @go(EnvCandy)
 	path_append?: [...string] @go(PathAppend)
-	skills?:      [...#LabelSkillEntry] @go(Skills,type=[]LabelSkillEntry)
 	status?:      string @go(Status)
 	check_level?: string @go(CheckLevel)
 	info?:        string @go(Info)
