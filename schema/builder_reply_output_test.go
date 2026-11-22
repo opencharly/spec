@@ -16,7 +16,10 @@ import (
 // that predates it cannot produce a valid reply at all (opencharly/sdk#615: the pre-unification
 // plugin shipped a payload and no package, and nothing failed).
 //
-// Every case fails on the pre-change schema.
+// Four of the five fail on the pre-change schema. The fifth (an unknown discriminator) guards
+// the CLOSED vocabulary the change introduces: before it, `output` was not a field at all, so
+// that document was already an error — for a different reason — and the case cannot show the
+// vocabulary by itself.
 
 // The discriminator is required: the exact reply an old builder plugin sends — a stage and payload
 // copies, no output — is invalid, and the host rejects it naming `output`.
