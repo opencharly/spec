@@ -775,6 +775,8 @@ package schema
 	artifacts?: [...#ArtifactView] @go(Artifacts)
 	raw_stage_context?: {...} @go(RawStageContext,type=map[string]any)
 	builder_def?: #Builder @go(BuilderDef,type=*BuilderDef)
+	// builder_package — the package output the builder plugin declared for this candy (aur).
+	builder_package?: #BuilderPackage @go(BuilderPackage,optional=nillable)
 	// local_pkg is shared by BuilderStep (aur) + LocalPkgInstallStep.
 	local_pkg?: #LocalPkg @go(LocalPkg,optional=nillable)
 

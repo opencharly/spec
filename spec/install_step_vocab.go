@@ -138,24 +138,28 @@ type ArtifactRef struct {
 // On the host target this emits a `podman run <builder>` with HOME-remap
 // and appropriate bind-mounts.
 type BuilderStep struct {
-	Builder      string        // "pixi" | "npm" | "cargo" | "aur"
+	Builder      string        // the builder word (pixi, npm, cargo, aur, mise)
 	BuilderImage string        // resolved image ref (e.g. "fedora-builder:2026.04")
 	CandyName    string        // layer that triggered this builder (for ledger)
 	CandyDir     string        // absolute layer source path (bind-mounted as /work)
 	Phase        Phase         // typically PhaseInstall
-	Artifacts    []ArtifactRef // outputs to extract (empty for user-scope pixi/npm/cargo; populated for aur)
+	Artifacts    []ArtifactRef // the builder's package files, pulled out of the builder container on a host venue
 
 	// Builder-specific template context — the compiler populates this from
 	// the candy's manifest files + the embedded builder definition (charly/charly.yml).
 	RawStageContext map[string]any
 
-	// LocalPkg is the package format's localpkg contract, populated by the
-	// compiler for the `aur` builder only. The aur builder produces package
-	// files (.pkg.tar.zst) that the host/VM deploy targets install onto the
-	// venue via the SAME config-driven transfer+install leg the localpkg step
-	// uses (R3) — so the install command + package glob come from
-	// the embedded `pac.local_pkg` vocabulary, never a hardcoded literal. Nil for
-	// pixi/npm/cargo (home-artifact builders, no package-file install).
+	// Package is the package output the builder PLUGIN declared for this candy (its collect leg's
+	// #BuilderCollectReply.package — aur's pac packages), carried by the IR so the install rule and
+	// Scope() read data, never the builder's word (opencharly/sdk#608). Nil for a builder whose
+	// output is a payload of files.
+	Package *BuilderPackage
+
+	// LocalPkg is the venue's local-package contract for the builder's package format, set by the
+	// compiler when the builder declared a package output AND the venue's distro serves it — the
+	// payload's package files are then installed through the SAME config-driven transfer+install leg
+	// the localpkg step uses (R3), so the venue's package manager resolves their dependencies. Nil
+	// otherwise: the payload's files are copied in (opencharly/sdk#608).
 	LocalPkg *LocalPkg
 
 	// BuilderDef is the resolved builder definition from the embedded build vocabulary (charly/charly.yml) for this builder
@@ -179,8 +183,9 @@ type BuilderStep struct {
 func (s *BuilderStep) Kind() StepKind { return StepKindBuilder }
 
 func (s *BuilderStep) Scope() Scope {
-	// aur produces system packages; others are user-scope.
-	if s.Builder == "aur" {
+	// A builder that produces OS packages installs system files; every other builder's payload
+	// lands in the user's home. Read from the builder's DATA, never from its word.
+	if s.Package != nil {
 		return ScopeSystem
 	}
 	return ScopeUser

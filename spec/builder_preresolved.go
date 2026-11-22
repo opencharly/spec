@@ -16,4 +16,8 @@ package spec
 type BuilderPreresolved struct {
 	Context map[string]any
 	Reverse []ReverseOp
+	// Package is the package output the builder plugin's collect leg declared for this candy
+	// (#BuilderCollectReply.package — aur's pac packages), which the compiler carries onto the
+	// BuilderStep (opencharly/sdk#608). Nil for a builder whose output is a payload of files.
+	Package *BuilderPackage
 }

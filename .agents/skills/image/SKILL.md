@@ -216,7 +216,7 @@ Every setting resolves through: **image -> defaults -> hardcoded fallback** (fir
 | `tag` | `"auto"` | Image tag. `"auto"` for CalVer |
 | `registry` | `""` | Container registry prefix |
 | `distro` | `[]` | Distro identity tags in priority order: `["fedora:43", fedora]`. For packages: first matching section wins (override). For plan steps: additive. Inherited from base image |
-| `build` | `["rpm"]` | Package formats tied to builder definitions: `[rpm]` or `[pac, aur]`. ALL formats installed in order. Valid: rpm, deb, pac, aur, apk. Inherited from base image |
+| `build` | `["rpm"]` | OS package formats: `[rpm]`, `[pac]`. ALL formats installed in order. Valid: rpm, deb, pac, apk (a build-time manager such as aur is a builder, routed by `builder:`, never a format). Inherited from base image |
 | `candy` | `[]` | Candy composition list (image-specific, not inherited) |
 | `user` | `"user"` | Username for non-root operations. See `user_policy:` — may be overridden at resolve time when adopt mode fires |
 | `uid` | `1000` | User ID (may be overridden by `base_user:` under adopt) |
@@ -242,9 +242,9 @@ VM-related fields (`vm`, `libvirt`) are not valid on `candy:` image entries — 
 
 Builder images provide build tools (pixi, npm, cargo, yay) for multi-stage builds without bloating final images. Three fields control this:
 
-- **`builder:`** on images — map of build type → builder image name. Inherited: image → base image → defaults → `{}`. The keys (`pixi`, `npm`, `cargo`, `aur`) match entries in the embedded `builder:` vocabulary — intentionally the same word, because both maps key on the same slot.
+- **`builder:`** on images — map of build type → builder image name. Inherited: image → base image → defaults → `{}`. The keys (`pixi`, `npm`, `cargo`, `aur`, `mise`) match entries in the embedded `builder:` vocabulary — intentionally the same word, because both maps key on the same slot.
 - **`produce:`** on builder images — list declaring what the builder can build. Not inherited.
-- **`build:`** — package formats tied to builder definitions (`rpm`, `deb`, `pac`, `aur`). ALL formats installed in order. Inherited from base image. Default: `[rpm]`.
+- **`build:`** — OS package formats (`rpm`, `deb`, `pac`, `apk`). ALL formats installed in order. Inherited from base image. Default: `[rpm]`. A build-time manager (aur, npm, pixi, cargo, mise) is never a format: it runs when a candy needs it on the image, routed by `builder:`.
 - **`distro:`** — distro identity tags in priority order (`["fedora:43", fedora]`). First matching section overrides packages. Inherited from base image.
 
 ```yaml
@@ -274,14 +274,13 @@ arch:
 arch-builder:
   candy:
     base: arch              # inherits build: [pac] AND builder: from arch
-    produce: [pixi, npm, cargo, aur]
+    produce: [pixi, npm, cargo, aur, mise]
     candy: [pixi, nodejs, build-toolchain, yay]
 
 arch-test:
   candy:
-    base: arch              # inherits builder: from arch
-    build: [pac, aur]       # override to add aur format
-    candy: [arch-pac-test, arch-aur-test]
+    base: arch              # inherits build: [pac] AND the aur route from arch
+    candy: [arch-pac-test, arch-aur-test]   # arch-aur-test's distro.arch.aur runs the aur builder
 ```
 
 Each build type resolves its builder independently: **`box.builder[type]` → `base_box.builder[type]` → `defaults.builder[type]` → `""`**. This means you can use `fedora-builder` for pixi but `arch-builder` for npm on the same image.

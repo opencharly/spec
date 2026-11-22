@@ -22,7 +22,6 @@ type CandyReader interface {
 	Service() []CandyService
 	Shell() *Shell
 	TopPackages() []string
-	FormatSection(name string) *PackageSection
 	// Packaging returns the candy's `packaging:` section (the single source of
 	// truth for distro package metadata + variants). Nil when the candy declares
 	// none — the deploy-plan compiler then emits no LocalPkgInstallStep for it.
@@ -143,7 +142,7 @@ type CandyReader interface {
 	// W9 pipeline-retype fill: identity-view scalars multiple OCI-label-collector consumers
 	// (render_baked_metadata.go's candyStatus/worst-of-status + info-parts walk) need directly —
 	// widely-needed enough to earn a real interface method, unlike the FULL identity view
-	// (Description/Info/IsPlugin's sibling fields + the FormatSections/TagSections/RunOps maps)
+	// (Description/Info/IsPlugin's sibling fields + the TagSections/RunOps maps)
 	// resolved_project_host.go alone needs via the RawCandy() escape hatch.
 	GetStatus() string
 	GetDescription() string

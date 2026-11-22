@@ -43,7 +43,6 @@ package schema
 	present_template?: string    @go(PresentTemplate)
 	phase?:              #PhaseSet @go(Phases,optional=nillable)
 	validate?: [...#FormatRule]
-	secondary?: bool
 	local_pkg?: #LocalPkg @go(LocalPkg,optional=nillable)
 }
 

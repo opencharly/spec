@@ -43,7 +43,7 @@ All the builtin concrete step kinds (plus the open `external:<word>` family — 
 **`Venue`** — where commands physically execute:
 - `VenueHostNative` — host shell (plain or sudo-wrapped) or a plain `RUN` in Containerfile.
 - `VenueContainerBuilder` — inside a builder container: `FROM <builder> AS stage` in Containerfile; `podman run <builder>` on host target.
-- `VenueSkip` — recorded with reason but not executed (container-runtime-only fields on host target; `aur:` on non-Arch hosts).
+- `VenueSkip` — recorded with reason but not executed (container-runtime-only fields on host target). A builder whose declared package output a host venue cannot install through `local_pkg` is an error, not a skip (opencharly/sdk#608).
 
 **`Phase`** — three-phase template execution:
 - `PhasePrepare` — repo config, key import, copr enable.
@@ -78,7 +78,7 @@ separate, check-time concern handled by `candy/plugin-check/preflight_images.go`
 | Kind | What it carries | Venue default | Scope derivation |
 |---|---|---|---|
 | `SystemPackagesStep` | Format (rpm/deb/pac), Phase, Packages, Repos, Options, Copr, Modules, Exclude, Keys, CacheMounts | HostNative | Always system |
-| `BuilderStep` | Builder (pixi/npm/cargo/aur), BuilderImage, CandyDir, Phase, Artifacts, RawStageContext | ContainerBuilder | aur→system, others→user |
+| `BuilderStep` | Builder (pixi/npm/cargo/aur/mise), BuilderImage, CandyDir, Phase, Artifacts, RawStageContext | ContainerBuilder | a builder-declared package output (aur's pac packages, `BuilderStep.Package`) →system, others→user |
 | `OpStep` | Op (raw), CandyName, CandyDir, CtxPath, ResolvedUser | HostNative | From ResolvedUser (root or 0 → system; else user) |
 | `FileStep` | Source, Dest, Mode, Owner, CandyName | HostNative | `pathIsSystemScoped(Dest)` |
 | `ServicePackagedStep` | Unit, TargetScope, Enable, OverridesText, OverridesPath, CandyName, PriorEnabled | HostNative | TargetScope field |
