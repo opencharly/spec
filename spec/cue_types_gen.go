@@ -1818,13 +1818,10 @@ type Builder struct {
 
 	InstallCommands map[string]string `yaml:"install_command,omitempty" json:"install_command,omitempty"`
 
-	// copy_artifact — the builder's PAYLOAD: what it built, and where in the target it lands. It is the
-	// ONE install contract every builder shares (opencharly/sdk#608): the image render copies these
-	// pairs out of the builder's stage, and the apply path copies the same pairs onto the venue.
-	CopyArtifacts []Copy `yaml:"copy_artifact,omitempty" json:"copy_artifact,omitempty"`
-
-	CopyBinary *Copy `yaml:"copy_binary,omitempty" json:"copy_binary,omitempty"`
-
+	// There is no copy_artifact or copy_binary: what a builder copies into the target (its payload,
+	// its tool binary) is the builder PLUGIN's own knowledge, returned in its #BuilderResolveReply,
+	// never an authored field of this node (DESIGN.cue #BuilderAlt under D-PLUG-2; P3 derived, not
+	// authored; opencharly/sdk#608).
 	PathContributions []string `yaml:"path_contribution,omitempty" json:"path_contribution,omitempty"`
 
 	Kind string `yaml:"kind,omitempty" json:"kind"`
@@ -1834,19 +1831,11 @@ type Builder struct {
 	OutputArtifact string `yaml:"output_artifact,omitempty" json:"output_artifact,omitempty"`
 }
 
-type Copy struct {
-	Src string `yaml:"src,omitempty" json:"src"`
-
-	Dst string `yaml:"dst,omitempty" json:"dst"`
-
-	Chown bool `yaml:"chown,omitempty" json:"chown,omitempty"`
-}
-
 // #BuilderPackage is what a builder declares it PRODUCED when its output is OS package files (aur
 // builds `pac` packages): their format, the directory one candy's packages are in, and their glob.
 // It is the builder PLUGIN's own knowledge, returned in its replies (#BuilderResolveReply,
 // #BuilderCollectReply) — never authored on the builder node, whose DESIGN shape is a manager map
-// (DESIGN.cue #BuilderAlt, D-IR-7; P3 derived not authored). A target whose distro serves that
+// (DESIGN.cue #BuilderAlt under D-PLUG-2; P3 derived not authored). A target whose distro serves that
 // format's `local_pkg` contract installs the packages through it; every other target receives the
 // builder's payload (opencharly/sdk#608).
 type BuilderPackage struct {
