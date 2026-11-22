@@ -532,7 +532,7 @@ Packages are declared ONLY under the candy body's `distro:` map, plus an optiona
 `package:` base list beside it. There is NO `rpm:` / `deb:` / `pac:` package-format
 key and NO top-level `debian:13:` / `debian,ubuntu:` tag key — those legacy forms
 are removed (a stray one is a hard load error pointing at `charly migrate`). The
-arch `aur:` sub-block is the one exception that stays a build format — see AUR below.
+arch `aur:` sub-block is a build-time MANAGER declaration on that tag, not a format — see AUR below.
 
 ```yaml
 my-app:
@@ -605,20 +605,26 @@ the bare-distro tag section. See `/charly-build:build` and `/charly-internals:in
 
 ### AUR (`distro.arch.aur:`)
 
-AUR packages are compiled by `yay` in a multi-stage build, then the resulting
-`.pkg.tar.zst` artifacts are `pacman -U`-installed into the final image. Two
-conditions must BOTH hold for the AUR stage to be emitted:
+AUR packages are compiled by `yay` in the aur builder's stage, in the builder box
+the image routes `aur` to. aur is a builder like npm, never a build format: a box's
+`build:` lists OS package formats only, and there is no opt-in (opencharly/sdk#608).
 
-1. The consuming **image declares `aur` in its `build:` list** (e.g.
-   `build: [pac, aur]`). The `arch` AND `cachyos` bases both declare only
-   `build: [pac]`, so a consumer that needs AUR MUST add `aur` itself (the
-   `arch-test` and `selkies-desktop` precedents). Without it the AUR section is
-   silently skipped — by design, so a multi-distro candy can carry `aur:` for
-   Arch consumers without forcing every Fedora consumer to invoke a builder.
-2. **`builder.aur` is configured** — `arch-builder` for BOTH the `arch` and
-   `cachyos` bases. CachyOS is Arch-derived and routes all four
-   pixi/npm/cargo/aur formats to `arch-builder`, so an `aur:` layer builds
-   **identically on arch and cachyos** — there is no cachyos-specific AUR path.
+1. **The declaration is scoped like the tag's OS packages.** A `distro.arch.aur:`
+   block reaches an image whose tag chain carries `arch` (arch and cachyos images),
+   and no other. A multi-distro candy can carry it for Arch consumers, and a Fedora
+   consumer never invokes the builder for it. A candy that wants AUR packages on
+   another distro declares them under that distro's tag (`distro.fedora.aur:`).
+2. **The image routes the builder** (`builder: aur: arch-builder`; the `arch` and
+   `cachyos` bases both do). A needed builder that cannot run, because there is no
+   definition, no plugin or no route, fails the build naming the candy and the
+   builder, never ships the image without the package.
+
+How the packages install is the builder's own declaration (the aur builder declares
+pac packages in the candy's own directory). On a distro that serves `pac` through
+`local_pkg` (arch, cachyos), pacman installs them and resolves their dependencies.
+On any other distro the packages' extracted files are copied in, like npm's payload;
+their runtime libraries then come from that distro's own packages, declared under its
+tag.
 
 **Canonical form — nested under `distro.arch`** (how the repo's candies author it:
 `chrome`, `vscode`, `wl-tools`). The `aur:` block sits beside the regular
@@ -633,19 +639,11 @@ chrome:
       arch:
         package:               # Arch repo (core/extra) packages
           - vulkan-icd-loader
-        aur:                   # AUR packages — need build: [pac, aur] on the image
+        aur:                   # AUR packages — built by the aur builder the image routes
           package:
             - google-chrome
           option:
             - --nocheck
-          # `replace:` lists distro-repo packages whose file paths conflict
-          # with the AUR build artifact. Each entry is removed via
-          # `pacman -Rs --noconfirm <pkg>` BEFORE the AUR `pacman -U` install.
-          # Idempotent — entries that aren't installed are silently skipped.
-          # Required when the AUR build owns paths also owned by an Arch repo
-          # package (e.g. `visual-studio-code-bin` and `code` both own /usr/bin/code).
-          replace:
-            - code
       fedora:
         package:
           - vulkan-loader
