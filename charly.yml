@@ -186,6 +186,13 @@ spec-skill-shelf:
         context:
           - build
         command: "true"
+xdg-skill:
+  skill:
+    name: xdg
+    family: internals
+    owner: spec-skill-shelf
+    triggers:
+      - "Resolving host storage paths through storeroot, selecting an XDG root, or handling Charly root overrides and search lists"
 disposable-skill:
   skill:
     name: disposable
