@@ -19,12 +19,10 @@ package schema
 	install_command?: {
 		[string]: string
 	} @go(InstallCommands)
-	// copy_artifact — the builder's PAYLOAD: what it built, and where in the target it lands. It is the
-	// ONE install contract every builder shares (opencharly/sdk#608): the image render copies these
-	// pairs out of the builder's stage, and the apply path copies the same pairs onto the venue.
-	copy_artifact?: [...#Copy] @go(CopyArtifacts)
-
-	copy_binary?: #Copy @go(CopyBinary,optional=nillable)
+	// There is no copy_artifact or copy_binary: what a builder copies into the target (its payload,
+	// its tool binary) is the builder PLUGIN's own knowledge, returned in its #BuilderResolveReply,
+	// never an authored field of this node (DESIGN.cue #BuilderAlt under D-PLUG-2; P3 derived, not
+	// authored; opencharly/sdk#608).
 	path_contribution?: [...(string & !="")] @go(PathContributions)
 	kind:             *"layer" | "bootstrap"
 	privileged:       *false | true
@@ -38,19 +36,13 @@ package schema
 // builds `pac` packages): their format, the directory one candy's packages are in, and their glob.
 // It is the builder PLUGIN's own knowledge, returned in its replies (#BuilderResolveReply,
 // #BuilderCollectReply) — never authored on the builder node, whose DESIGN shape is a manager map
-// (DESIGN.cue #BuilderAlt, D-IR-7; P3 derived not authored). A target whose distro serves that
+// (DESIGN.cue #BuilderAlt under D-PLUG-2; P3 derived not authored). A target whose distro serves that
 // format's `local_pkg` contract installs the packages through it; every other target receives the
 // builder's payload (opencharly/sdk#608).
 #BuilderPackage: {
 	format!: #BuildFormat
 	dir!:    string & !=""
 	glob!:   string & !=""
-}
-
-#Copy: {
-	src:    string & !=""
-	dst:    string & !=""
-	chown?: bool
 }
 
 // #BuilderConfig is the `builder:` build-vocabulary container — the whole

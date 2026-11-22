@@ -73,7 +73,7 @@ func TestAurDeclarationHasNoReplace(t *testing.T) {
 }
 
 // The package output is the builder PLUGIN's own declaration, returned in its replies — never an
-// authored field of the builder node, whose DESIGN shape is a manager map (#BuilderAlt, D-IR-7). The
+// authored field of the builder node, whose DESIGN shape is a manager map (#BuilderAlt under D-PLUG-2). The
 // format is a real OS package format; detect_config is gone (a manager declaration is keyed by
 // builder word on its tag section).
 func TestBuilderPackageOutputIsDeclaredByThePlugin(t *testing.T) {
@@ -91,6 +91,16 @@ func TestBuilderPackageOutputIsDeclaredByThePlugin(t *testing.T) {
 	}
 	if err := unify(t, "#Builder", `{detect_config: "aur"}`); err == nil {
 		t.Fatal("#Builder still accepts detect_config: a builder could again be triggered by a config section outside the tag-scoped managers")
+	}
+	// What a builder copies into the target is the plugin's reply, never authored: an authored copy
+	// would load and then be ignored, because nothing reads it (opencharly/sdk#608).
+	for _, authored := range []string{
+		`{copy_artifact: [{src: "/home/u", dst: "/home/u"}]}`,
+		`{copy_binary: {src: "/usr/local/bin/pixi", dst: "/usr/local/bin/pixi"}}`,
+	} {
+		if err := unify(t, "#Builder", authored); err == nil {
+			t.Errorf("#Builder accepts %s: an authored copy is loaded and then ignored; the payload is the builder plugin's reply", authored)
+		}
 	}
 }
 
