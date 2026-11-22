@@ -62,7 +62,17 @@ package schema
 
 // #BuilderResolveReply is what a builder plugin returns from an OpResolve
 // Invoke at image-generation time — the build-time BUILDER leg.
+//
+// The `output` discriminator is REQUIRED: a package-producing builder says `output: "package"`
+// and carries its `package`, a file-copying one says `"files"` and carries `copy_artifacts`, an
+// inline one says `"inline"` and carries `inline_fragment`. The host enforces that correspondence
+// (sdk's reply validation) so the pair cannot disagree. That is how DESIGN §4.4 keeps "there is no version negotiation": a plugin
+// built against a contract that predates this field cannot produce a valid reply, so the host
+// answers `invalid`, naming `output`, at the FIRST message (D-PROTO-6) — never coerced, never
+// upgraded, never silently accepted (opencharly/sdk#615).
 #BuilderResolveReply: {
+	output!: "package" | "files" | "inline" @go(Output)
+
 	stage?:           string   @go(Stage)
 	copy_artifacts?: [...string] @go(CopyArtifacts)
 	copy_binary?:     string   @go(CopyBinary)
@@ -71,6 +81,7 @@ package schema
 	// builder plugin; the host installs them through the target distro's local_pkg contract when it
 	// serves the format, and copies copy_artifacts in otherwise (opencharly/sdk#608).
 	package?: #BuilderPackage @go(Package,optional=nillable)
+
 }
 
 // #BuilderResolveInput is the OpResolve params: the RENDER CONTEXT the host

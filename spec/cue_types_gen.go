@@ -3162,7 +3162,17 @@ type StepEmitRequest struct {
 
 // #BuilderResolveReply is what a builder plugin returns from an OpResolve
 // Invoke at image-generation time — the build-time BUILDER leg.
+//
+// The `output` discriminator is REQUIRED: a package-producing builder says `output: "package"`
+// and carries its `package`, a file-copying one says `"files"` and carries `copy_artifacts`, an
+// inline one says `"inline"` and carries `inline_fragment`. The host enforces that correspondence
+// (sdk's reply validation) so the pair cannot disagree. That is how DESIGN §4.4 keeps "there is no version negotiation": a plugin
+// built against a contract that predates this field cannot produce a valid reply, so the host
+// answers `invalid`, naming `output`, at the FIRST message (D-PROTO-6) — never coerced, never
+// upgraded, never silently accepted (opencharly/sdk#615).
 type BuilderResolveReply struct {
+	Output string `yaml:"output,omitempty" json:"output"`
+
 	Stage string `yaml:"stage,omitempty" json:"stage,omitempty"`
 
 	CopyArtifacts []string `yaml:"copy_artifacts,omitempty" json:"copy_artifacts,omitempty"`
