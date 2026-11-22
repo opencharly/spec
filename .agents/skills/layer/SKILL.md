@@ -151,7 +151,7 @@ Every state-change step is an entry in the candy's ordered `plan:` list carrying
 | `link:` | symlink path (where the link lives) | `target:` | `run_as`, `comment` | `ln -sf <target> <link>` (coalesces with adjacent) |
 | `download:` | URL | — (`to:` unless `extract: sh`) | `run_as`, `extract`, `to`, `extract_include`, `strip_components`, `mode`, `env`, `comment` | `curl` + optional extract (`tar.gz`/`tar.xz`/`tar.zst`/`zip`/`none`/`sh`). **The destination is created before extraction** — `mkdir -p <to>` for tar/zip, `mkdir -p $(dirname <to>)` for `extract: none` — so a candy may download straight into a directory that does not exist yet, exactly like `copy:` (which auto-creates parents). `strip_components: N` emits `tar --strip-components=N` for tar.* — drops leading path segments so tarballs that nest under a top-level arch/version dir (Go, Rust, Node binary releases) land files directly at `to:`. See `/charly-coder:uv` for the canonical uv-x86_64-unknown-linux-gnu/uv → /usr/local/bin/uv example. |
 | `setcap:` | file path | — | `run_as` (implicit root), `caps`, `comment` | File capabilities (`setcap -r` strip if `caps` empty) |
-| `build:` | `"all"` | — | `run_as` (default `${USER}`), `comment` | Run auto-detected builders (pixi/npm/cargo/aur) at this point (instead of end-of-candy) |
+| `build:` | `"all"` | — | `run_as` (default `${USER}`), `comment` | Run every builder the candy needs (pixi/npm/cargo/aur/mise) at this point (instead of end-of-candy) |
 
 ### Shared modifiers
 

@@ -242,7 +242,7 @@ VM-related fields (`vm`, `libvirt`) are not valid on `candy:` image entries — 
 
 Builder images provide build tools (pixi, npm, cargo, yay) for multi-stage builds without bloating final images. Three fields control this:
 
-- **`builder:`** on images — map of build type → builder image name. Inherited: image → base image → defaults → `{}`. The keys (`pixi`, `npm`, `cargo`, `aur`) match entries in the embedded `builder:` vocabulary — intentionally the same word, because both maps key on the same slot.
+- **`builder:`** on images — map of build type → builder image name. Inherited: image → base image → defaults → `{}`. The keys (`pixi`, `npm`, `cargo`, `aur`, `mise`) match entries in the embedded `builder:` vocabulary — intentionally the same word, because both maps key on the same slot.
 - **`produce:`** on builder images — list declaring what the builder can build. Not inherited.
 - **`build:`** — OS package formats (`rpm`, `deb`, `pac`, `apk`). ALL formats installed in order. Inherited from base image. Default: `[rpm]`. A build-time manager (aur, npm, pixi, cargo, mise) is never a format: it runs when a candy needs it on the image, routed by `builder:`.
 - **`distro:`** — distro identity tags in priority order (`["fedora:43", fedora]`). First matching section overrides packages. Inherited from base image.
@@ -274,7 +274,7 @@ arch:
 arch-builder:
   candy:
     base: arch              # inherits build: [pac] AND builder: from arch
-    produce: [pixi, npm, cargo, aur]
+    produce: [pixi, npm, cargo, aur, mise]
     candy: [pixi, nodejs, build-toolchain, yay]
 
 arch-test:

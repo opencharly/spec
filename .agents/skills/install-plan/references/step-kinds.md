@@ -78,7 +78,7 @@ separate, check-time concern handled by `candy/plugin-check/preflight_images.go`
 | Kind | What it carries | Venue default | Scope derivation |
 |---|---|---|---|
 | `SystemPackagesStep` | Format (rpm/deb/pac), Phase, Packages, Repos, Options, Copr, Modules, Exclude, Keys, CacheMounts | HostNative | Always system |
-| `BuilderStep` | Builder (pixi/npm/cargo/aur), BuilderImage, CandyDir, Phase, Artifacts, RawStageContext | ContainerBuilder | a builder-declared package output (aur's pac packages, `BuilderStep.Package`) →system, others→user |
+| `BuilderStep` | Builder (pixi/npm/cargo/aur/mise), BuilderImage, CandyDir, Phase, Artifacts, RawStageContext | ContainerBuilder | a builder-declared package output (aur's pac packages, `BuilderStep.Package`) →system, others→user |
 | `OpStep` | Op (raw), CandyName, CandyDir, CtxPath, ResolvedUser | HostNative | From ResolvedUser (root or 0 → system; else user) |
 | `FileStep` | Source, Dest, Mode, Owner, CandyName | HostNative | `pathIsSystemScoped(Dest)` |
 | `ServicePackagedStep` | Unit, TargetScope, Enable, OverridesText, OverridesPath, CandyName, PriorEnabled | HostNative | TargetScope field |
