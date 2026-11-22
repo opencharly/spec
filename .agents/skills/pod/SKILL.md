@@ -36,7 +36,7 @@ A pod that injects a CDI device (`devices:`) **cannot** run with `--userns=keep-
 with `mount_setattr … EPERM`. The workload runs as **container root under `userns=host`**, which in a
 rootless pod IS the invoking host user, and it needs no capability at all; `plugin-deploy-pod` DERIVES
 that decision from the resolved deploy, so a pod does not declare it. The mechanism, the measured matrix
-and the two legal shapes are `/charly-cdi:cdi`; the deploy-time consequences (the posture is captured at
+and the two legal shapes are `/charly-distros:cdi`; the deploy-time consequences (the posture is captured at
 `deploy add`, so an entity edit does not move a running unit; `cap_drop` is not yet expressible,
 `spec#398`) are `/charly-core:deploy`.
 
