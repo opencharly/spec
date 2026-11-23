@@ -9688,6 +9688,15 @@ type CheckRunRequest struct {
 	Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
 
 	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty"`
+
+	// bed_actions: a "live" run that EXECUTES the deployment's own `run:` steps -- a bed's
+	// actions (a resize, a window mapped, input sent) -- in authored order between its
+	// checks, instead of skipping them as verify-only. Set only by `charly check run`'s live
+	// stage on a `disposable: true` bed (D-DEP-3 authorizes apply-and-reverse there):
+	// D-VERB-1 makes a `run:` step the one step that changes state, so a bed's actions are
+	// `run:` steps and must execute. Candy and box `run:` steps (the install timeline, which
+	// ran at build) stay skipped, and a plain `charly check live` stays verify-only.
+	BedActions bool `yaml:"bed_actions,omitempty" json:"bed_actions,omitempty"`
 }
 
 // #CheckVenueResolveRequest asks plugin-check to CLASSIFY a check target's venue — the kind-decode

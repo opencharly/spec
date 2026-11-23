@@ -611,6 +611,15 @@ package schema
 	keep_venue?:  bool @go(KeepVenue)
 	variant?:     string @go(Variant)
 	vars?:        {[=~"^[^.]+$"]: string} @go(Vars,type=map[string]string)
+
+	// bed_actions: a "live" run that EXECUTES the deployment's own `run:` steps -- a bed's
+	// actions (a resize, a window mapped, input sent) -- in authored order between its
+	// checks, instead of skipping them as verify-only. Set only by `charly check run`'s live
+	// stage on a `disposable: true` bed (D-DEP-3 authorizes apply-and-reverse there):
+	// D-VERB-1 makes a `run:` step the one step that changes state, so a bed's actions are
+	// `run:` steps and must execute. Candy and box `run:` steps (the install timeline, which
+	// ran at build) stay skipped, and a plain `charly check live` stays verify-only.
+	bed_actions?: bool @go(BedActions)
 }
 
 // #CheckRunResults / #StepScore / #ScoreSummary — the AI-harness SCORING result model
