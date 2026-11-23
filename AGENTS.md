@@ -16,8 +16,11 @@ Canonical files:
 - `spec/cue_types_gen.go`, `spec/vocab_gen.go` — GENERATED Go (never hand-edit).
 - `protocol/schema/*.cue` + `proto/plugin.proto` + `proto/*.pb.go` — the CUE
   protocol model and its GENERATED gRPC stubs.
-- `schemagen`, `internal/wiregen` — the generation pipelines (not
-  importable).
+- `schemagen` — the CUE code generator, a module-root COMMAND (`package main`)
+  so a consumer repo runs it by ref for its own schema
+  (`go run github.com/opencharly/spec/schemagen@<tag> -mode=params -schema=<dir>
+  -pkg=<pkg> -out=<file>`); one generator, no copied script.
+- `internal/wiregen` — the protobuf/wire generation pipeline (internal).
 - `.agents/skills/<name>/SKILL.md` — the prose for this module's own six
   schema-authoring skills (`image`, `layer`, `pod`, `vms-catalog`, `vm-spec`,
   `local-spec`) plus `install-plan`, `disposable` and `xdg`; the `skill:` routing nodes
