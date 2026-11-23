@@ -7,7 +7,7 @@
 // (`schemaparams`): normalize the struct tags, doubling every json tag with a yaml
 // tag of the same name and giving a bare yaml key `,omitempty`.
 //
-// That step used to live only inside `internal/schemagen`, which no other module
+// That step used to live only inside `schemagen`, which no other module
 // may import (Go's internal rule) — which is why a charly-native regeneration
 // verb could not reuse it, and why the recipe had to be published as
 // checkout-relative shell. It lives here now: `schemaparams` calls THIS, and the

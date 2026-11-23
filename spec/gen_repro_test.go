@@ -2,7 +2,7 @@ package spec
 
 // Reproducibility gate: the committed cue_types_gen.go and vocab_gen.go MUST
 // equal a fresh `charly task cue-gen`. This re-runs the SAME tools the task runs (the
-// internal/schemagen concat + the in-process schemaparams generator + the
+// schemagen concat + the in-process schemaparams generator + the
 // schemagen vocab emitter) into a temp dir and compares the result BYTE FOR BYTE
 // against the committed files. Nothing here needs the `cue` CLI — generation is
 // in-process — so the gate never skips, and it catches any drift between
@@ -25,7 +25,7 @@ import (
 func freshTypesGen(t *testing.T) []byte {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "cue_types_gen.go")
-	runIn(t, "..", "go", "run", "./internal/schemagen", "-mode=params", "-schema=schema", "-pkg=spec", "-out="+out)
+	runIn(t, "..", "go", "run", "./schemagen", "-mode=params", "-schema=schema", "-pkg=spec", "-out="+out)
 	raw, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatalf("read fresh types: %v", err)
@@ -37,7 +37,7 @@ func freshTypesGen(t *testing.T) []byte {
 func freshVocabGen(t *testing.T) []byte {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "vocab_gen.go")
-	runIn(t, "..", "go", "run", "./internal/schemagen", "-mode=vocab", "-schema=schema", "-out="+out)
+	runIn(t, "..", "go", "run", "./schemagen", "-mode=vocab", "-schema=schema", "-out="+out)
 	raw, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatalf("read fresh vocab: %v", err)

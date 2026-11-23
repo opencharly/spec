@@ -29,7 +29,7 @@ are the single source of truth for these consumers:
 > `00_` sorts first, keeping the concatenation's order — and so the generated
 > Go — byte-identical.) The `package spec` clause + the file-level `@go(spec)`
 > attribute that the generator reads are injected by the gen pipeline
-> (`internal/schemagen -mode=params` → `schemaparams`), NEVER written into the source.
+> (`schemagen -mode=params` → `schemaparams`), NEVER written into the source.
 
 ## The package form
 
@@ -108,7 +108,7 @@ charly task cue-gen
 The task is `cue-gen` in this repo's `charly.yml` (the `kind: task` surface). It
 depends on `wire-gen` (which in turn depends on `bootstrap-protoc`):
 
-1. **Concatenates** `schema/*.cue` via `internal/schemagen -mode=params`
+1. **Concatenates** `schema/*.cue` via `schemagen -mode=params`
    (the SAME `schemaconcat.ConcatSchema` contract as the runtime
    `sharedCueSchema` — one concatenation contract; the per-file `package
    schema` clause is stripped), headed `package spec` + `@go(spec)`.
@@ -117,7 +117,7 @@ depends on `wire-gen` (which in turn depends on `bootstrap-protoc`):
    resolution a plugin's served schema uses), and the Go param structs are
    generated from the CUE Go API → `spec/cue_types_gen.go`. No `cue` CLI is
    provisioned or executed.
-3. **`internal/schemagen -mode=vocab`** → `spec/vocab_gen.go`
+3. **`schemagen -mode=vocab`** → `spec/vocab_gen.go`
    (`KindWords`, `DocDirectives`, `StepKeywords`, `ContextWords`, `OpFields`,
    `OpVerbs`, `AuthoringVerbs`, … — all read straight from the compiled schema
    via the cue API).
