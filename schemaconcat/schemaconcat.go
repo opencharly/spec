@@ -1,7 +1,7 @@
 // THE single schema-concatenation contract (R3).
 //
 // Both the runtime (charly core (cue_schema.go) `sharedCueSchema`) and the dev-time
-// code generator (internal/schemagen) need to concatenate every schema/*.cue
+// code generator (schemagen) need to concatenate every schema/*.cue
 // file into ONE package-less compilation unit. They used to carry two
 // byte-identical-by-comment copies of the same loop; this is the ONE copy they
 // both call, so the compiled schema (what the runtime validates against) and

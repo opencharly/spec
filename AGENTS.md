@@ -16,7 +16,7 @@ Canonical files:
 - `spec/cue_types_gen.go`, `spec/vocab_gen.go` — GENERATED Go (never hand-edit).
 - `protocol/schema/*.cue` + `proto/plugin.proto` + `proto/*.pb.go` — the CUE
   protocol model and its GENERATED gRPC stubs.
-- `internal/schemagen`, `internal/wiregen` — the generation pipelines (not
+- `schemagen`, `internal/wiregen` — the generation pipelines (not
   importable).
 - `.agents/skills/<name>/SKILL.md` — the prose for this module's own six
   schema-authoring skills (`image`, `layer`, `pod`, `vms-catalog`, `vm-spec`,

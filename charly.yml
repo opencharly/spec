@@ -117,7 +117,7 @@ proto-gen:
 #
 #   spec/cue_types_gen.go  (schemaparams — the Go param structs, generated in-process
 #                           from the CUE Go API; no `cue` CLI in the loop)
-#   spec/vocab_gen.go      (internal/schemagen — the vocab lists)
+#   spec/vocab_gen.go      (schemagen — the vocab lists)
 #
 # Reproducible: two consecutive runs produce no diff (TestGenReproducible).
 # No bootstrap-cue dependency: the params generator is in-process, so the pinned
@@ -138,9 +138,9 @@ cue-gen:
           #    normalize the struct tags. No step of it is re-implemented here or in
           #    schemagen, the charly-side verb calls the same function, and no `cue`
           #    CLI is provisioned: composition and generation share ONE resolution path.
-          GOWORK=off go run ./internal/schemagen -mode=params -schema=schema -pkg=spec -out=spec/cue_types_gen.go
+          GOWORK=off go run ./schemagen -mode=params -schema=schema -pkg=spec -out=spec/cue_types_gen.go
           # 2) Companion generator -> the vocab lists.
-          GOWORK=off go run ./internal/schemagen -mode=vocab -schema=schema -out=spec/vocab_gen.go
+          GOWORK=off go run ./schemagen -mode=vocab -schema=schema -out=spec/vocab_gen.go
           # 4) gofmt the committed generated files.
           gofmt -w spec/cue_types_gen.go spec/vocab_gen.go
           echo "cue-gen: regenerated spec/{cue_types_gen.go,vocab_gen.go}"
