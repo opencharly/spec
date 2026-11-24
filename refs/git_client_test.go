@@ -283,15 +283,21 @@ func TestGitClientCacheSurface(t *testing.T) {
 		t.Fatalf("bypass: disabled flag not set")
 	}
 
-	// ClearCache: entries drop + the persisted file is removed.
+	// ClearCache: entries drop, and the persisted FILE SURVIVES. That file is the per-host
+	// deploy config, not a cache-only file — removing it wiped every deploy entry on a real
+	// host (2026-11-24); see git_client_clear_test.go.
 	if err := g.ClearCache(); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
 	if _, n := g.CacheStatus(); n != 0 {
 		t.Fatalf("after clear: %d entries, want 0", n)
 	}
-	if _, err := os.Stat(file); !os.IsNotExist(err) {
-		t.Fatalf("after clear: cache file still present (%v)", err)
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("after clear: the config file must still exist: %v", err)
+	}
+	if strings.Contains(string(data), "opencharly/example") {
+		t.Fatalf("after clear: the cache section still holds entries:\n%s", data)
 	}
 }
 
