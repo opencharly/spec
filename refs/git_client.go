@@ -218,8 +218,14 @@ func (g *GitClient) SetBypass(on bool) error {
 	g.bypass = on
 	g.bypassOwned = true
 	g.mu.Unlock()
-	g.save()
-	return nil
+	err := g.persistCache()
+	// Ownership ends with the write that persists it: from here the FILE carries the value, and
+	// later saves read it back — a long-lived client must not re-assert a stale flag over a
+	// later operator clear.
+	g.mu.Lock()
+	g.bypassOwned = false
+	g.mu.Unlock()
+	return err
 }
 
 // CacheStatus reports the cache file path and the number of cached git answers
@@ -252,9 +258,9 @@ func (g *GitClient) ClearCache() error {
 	// Clear the SECTION through the ONE per-host writer. The former implementation called
 	// os.Remove on this path, and that path is the per-host DEPLOY config: `charly cache
 	// refresh` deleted every deploy, provides, ledger and system entry (measured 2026-11-24).
-	return perhost.Update(g.cacheFile, func(root *yaml.Node) (bool, error) {
-		return perhost.Set(root, g.cacheNode(g.bypassToPersist(root)), "cache"), nil
-	})
+	// Deliberately NOT gated on suppressSave: a clear is an operator action, never one of the
+	// prefetch writes that flag coalesces.
+	return g.persistCache()
 }
 
 // bypassToPersist returns the persisted-bypass value this write should record: THIS client's when
@@ -305,15 +311,24 @@ func (g *GitClient) cacheNode(bypass bool) *yaml.Node {
 // writer takes the shared `<file>.lock`, re-reads the CURRENT file inside the lock, calls our
 // mutate on the root — we touch `cache` ONLY, so every deploy/provides/ledger/system key is
 // preserved — and replaces the file atomically. Best-effort, as before.
+// persistCache is the ONE write of the `cache:` section, shared by save() and ClearCache(): the
+// per-host write is identical, only the in-memory maps differ.
+//
+// warmUpSaveFn is called HERE, at the single place a write happens, so the seam counts WRITES
+// rather than calls (the prefetch-coalescing test depends on that) — and ClearCache's write is
+// counted too, which it was not when ClearCache carried its own copy.
+func (g *GitClient) persistCache() error {
+	warmUpSaveFn()
+	return perhost.Update(g.cacheFile, func(root *yaml.Node) (bool, error) {
+		return perhost.Set(root, g.cacheNode(g.bypassToPersist(root)), "cache"), nil
+	})
+}
+
 func (g *GitClient) save() {
 	if g.suppressSave.Load() {
 		return
 	}
-	// Counted only when the write actually happens, so the seam measures WRITES, not calls.
-	warmUpSaveFn()
-	_ = perhost.Update(g.cacheFile, func(root *yaml.Node) (bool, error) {
-		return perhost.Set(root, g.cacheNode(g.bypassToPersist(root)), "cache"), nil
-	})
+	_ = g.persistCache()
 }
 
 // entryMapNode builds a YAML mapping node from a cache-entry map.

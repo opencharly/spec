@@ -169,6 +169,8 @@ func Set(root *yaml.Node, value *yaml.Node, keys ...string) bool {
 			child.Tag = "!!map"
 			child.Value = ""
 			child.Content = nil
+			child.Style = 0
+			child.Anchor = ""
 		}
 		parent = child
 	}
