@@ -234,20 +234,25 @@ func (g *GitClient) CacheStatus() (string, int) {
 }
 
 // ClearCache drops every cached git answer (the in-memory entries and the persisted
-// file), so the next resolutions are fresh — the `charly cache clear/refresh` surface.
+// `cache:` section), so the next resolutions are fresh — the `charly cache clear/refresh`
+// surface.
+//
+// It clears the CACHE SECTION ONLY, through the SAME preserving writer save() uses. The
+// former implementation called os.Remove on cacheFile, and that file is the per-host
+// DEPLOY config (~/.config/charly/charly.yml): `charly cache refresh` therefore DELETED
+// every deploy, provides, ledger and system entry on the host, and the next resolution's
+// save() rebuilt the file holding nothing but `cache:` — measured on a real host,
+// 2026-11-24, where every deployed container's config entry vanished while the
+// containers themselves kept running. The file is a SHARED document; clearing one
+// section may never remove it.
 func (g *GitClient) ClearCache() error {
 	g.mu.Lock()
 	g.latestTags = map[string]gitCacheEntry{}
 	g.persistedTags = map[string]gitCacheEntry{}
 	g.defaultBranches = map[string]gitCacheEntry{}
 	g.downloads = map[string]string{}
-	file := g.cacheFile
 	g.mu.Unlock()
-	if file != "" {
-		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
+	g.save()
 	return nil
 }
 
