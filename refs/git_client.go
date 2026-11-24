@@ -46,14 +46,13 @@ package refs
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/opencharly/spec/lock"
+	"github.com/opencharly/spec/perhost"
 	"github.com/opencharly/spec/spec"
 	"gopkg.in/yaml.v3"
 )
@@ -82,6 +81,13 @@ type GitClient struct {
 	cacheFile string // the per-host charly.yml path holding the `cache:` section
 	disabled  bool   // BypassCache()/SetBypass — every lookup misses, so the next resolution is fresh
 	bypass    bool   // the PERSISTED bypass flag (SetBypass) — honored by a fresh client at construction
+	// bypassOwned marks that THIS client is the one that changed the persisted bypass flag.
+	// Every other client writes the flag it READ from the file instead of its own copy: a
+	// resolution that started before `charly cache bypass --off` would otherwise resurrect the
+	// stale `true` on its next save, and the operator's clear would silently undo itself
+	// (measured on a real host, 2026-11-24: the CLI reported "bypass cleared" and the flag was
+	// `true` again seconds later).
+	bypassOwned bool
 
 	mu sync.Mutex
 	// suppressSave coalesces the prefetch's writes: WarmUp's worker pool calls LatestTag and
@@ -155,43 +161,33 @@ func NewGitClient(cacheFile string) *GitClient {
 	return g
 }
 
-// cacheLockPath is the advisory lock path guarding the cache's read-modify-write.
-// A separate .lock file keeps the lock from clobbering the config's own bytes.
-func (g *GitClient) cacheLockPath() string {
-	return g.cacheFile + ".lock"
-}
-
 // load reads the `cache:` section of the per-host charly.yml (best-effort; a
 // corrupt/absent file starts empty).
 func (g *GitClient) load() {
-	data, err := os.ReadFile(g.cacheFile)
-	if err != nil {
+	doc, err := perhost.Read(g.cacheFile)
+	if err != nil || doc == nil {
 		return
 	}
-	var doc struct {
-		Cache *struct {
-			Git *struct {
-				Bypass          bool                     `yaml:"bypass"`
-				LatestTags      map[string]gitCacheEntry `yaml:"latest_tags"`
-				DefaultBranches map[string]gitCacheEntry `yaml:"default_branches"`
-			} `yaml:"git"`
-		} `yaml:"cache"`
+	// The persisted latest_tags entries are the OFFLINE FALLBACK (never fresh data) — they load
+	// into persistedTags, never into the in-process fresh cache.
+	var body struct {
+		Git *struct {
+			Bypass          bool                     `yaml:"bypass"`
+			LatestTags      map[string]gitCacheEntry `yaml:"latest_tags"`
+			DefaultBranches map[string]gitCacheEntry `yaml:"default_branches"`
+		} `yaml:"git"`
 	}
-	if yaml.Unmarshal(data, &doc) != nil {
+	cacheNode := perhost.Get(doc.Content[0], "cache")
+	if cacheNode == nil || cacheNode.Decode(&body) != nil || body.Git == nil {
 		return
 	}
-	if doc.Cache == nil || doc.Cache.Git == nil {
-		return
+	if body.Git.LatestTags != nil {
+		g.persistedTags = body.Git.LatestTags
 	}
-	// The persisted latest_tags entries are the OFFLINE FALLBACK (never fresh
-	// data) — they load into persistedTags, never into the in-process fresh cache.
-	if doc.Cache.Git.LatestTags != nil {
-		g.persistedTags = doc.Cache.Git.LatestTags
+	if body.Git.DefaultBranches != nil {
+		g.defaultBranches = body.Git.DefaultBranches
 	}
-	if doc.Cache.Git.DefaultBranches != nil {
-		g.defaultBranches = doc.Cache.Git.DefaultBranches
-	}
-	if doc.Cache.Git.Bypass {
+	if body.Git.Bypass {
 		g.disabled = true
 		g.bypass = true
 	}
@@ -220,9 +216,16 @@ func (g *GitClient) SetBypass(on bool) error {
 	g.mu.Lock()
 	g.disabled = on
 	g.bypass = on
+	g.bypassOwned = true
 	g.mu.Unlock()
-	g.save()
-	return nil
+	err := g.persistCache()
+	// Ownership ends with the write that persists it: from here the FILE carries the value, and
+	// later saves read it back — a long-lived client must not re-assert a stale flag over a
+	// later operator clear.
+	g.mu.Lock()
+	g.bypassOwned = false
+	g.mu.Unlock()
+	return err
 }
 
 // CacheStatus reports the cache file path and the number of cached git answers
@@ -252,101 +255,80 @@ func (g *GitClient) ClearCache() error {
 	g.defaultBranches = map[string]gitCacheEntry{}
 	g.downloads = map[string]string{}
 	g.mu.Unlock()
-	g.save()
-	return nil
+	// Clear the SECTION through the ONE per-host writer. The former implementation called
+	// os.Remove on this path, and that path is the per-host DEPLOY config: `charly cache
+	// refresh` deleted every deploy, provides, ledger and system entry (measured 2026-11-24).
+	// Deliberately NOT gated on suppressSave: a clear is an operator action, never one of the
+	// prefetch writes that flag coalesces.
+	return g.persistCache()
+}
+
+// bypassToPersist returns the persisted-bypass value this write should record: THIS client's when
+// it is the one that changed the flag (SetBypass), the FILE's own otherwise. A resolution that
+// loaded `bypass: true` before the operator cleared it must not write the stale `true` back on its
+// next save (measured on a real host, 2026-11-24: the CLI reported "bypass cleared" and the flag
+// was `true` again seconds later).
+//
+// LOCK-FREE on purpose: save() is called by paths that ALREADY hold g.mu (LatestTag,
+// DefaultBranch, and the cache tests), so any lock taken here self-deadlocks — the rule the
+// mu comment states and a 120 s test panic re-measured the first time this helper locked mu.
+func (g *GitClient) bypassToPersist(root *yaml.Node) bool {
+	owned, own := g.bypassOwned, g.bypass
+	if owned {
+		return own
+	}
+	if b := perhost.Get(root, "cache", "git", "bypass"); b != nil && b.Kind == yaml.ScalarNode {
+		if v, err := strconv.ParseBool(b.Value); err == nil {
+			return v
+		}
+	}
+	return own
+}
+
+// cacheNode builds the `cache:` section body. The former resolved_refs/downloads keys are GONE:
+// a resolved ref's durable record is the export's own v2 provenance sidecar, not a path beside a
+// timestamp (see the `downloads` field's doc).
+//
+// LOCK-FREE: see bypassToPersist.
+func (g *GitClient) cacheNode(bypass bool) *yaml.Node {
+	latest := g.mergedLatestTags()
+	branches := g.defaultBranches
+	gitVal := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "bypass"},
+		{Kind: yaml.ScalarNode, Value: strconv.FormatBool(bypass)},
+		{Kind: yaml.ScalarNode, Value: "latest_tags"},
+		entryMapNode(latest),
+		{Kind: yaml.ScalarNode, Value: "default_branches"},
+		entryMapNode(branches),
+	}}
+	return &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "git"},
+		gitVal,
+	}}
+}
+
+// save persists the `cache:` section through the ONE per-host writer (perhost.Update): that
+// writer takes the shared `<file>.lock`, re-reads the CURRENT file inside the lock, calls our
+// mutate on the root — we touch `cache` ONLY, so every deploy/provides/ledger/system key is
+// preserved — and replaces the file atomically. Best-effort, as before.
+// persistCache is the ONE write of the `cache:` section, shared by save() and ClearCache(): the
+// per-host write is identical, only the in-memory maps differ.
+//
+// warmUpSaveFn is called HERE, at the single place a write happens, so the seam counts WRITES
+// rather than calls (the prefetch-coalescing test depends on that) — and ClearCache's write is
+// counted too, which it was not when ClearCache carried its own copy.
+func (g *GitClient) persistCache() error {
+	warmUpSaveFn()
+	return perhost.Update(g.cacheFile, func(root *yaml.Node) (bool, error) {
+		return perhost.Set(root, g.cacheNode(g.bypassToPersist(root)), "cache"), nil
+	})
 }
 
 func (g *GitClient) save() {
 	if g.suppressSave.Load() {
 		return
 	}
-	// Counted only when the write actually happens, so the seam measures WRITES, not calls.
-	warmUpSaveFn()
-	unlock, err := lock.AcquireFileLock(g.cacheLockPath(), true)
-	if err != nil {
-		return
-	}
-	defer func() { _ = unlock() }()
-
-	// Read the current file (may not exist yet — a fresh host starts empty).
-	data, err := os.ReadFile(g.cacheFile)
-	var doc yaml.Node
-	if err == nil {
-		if yaml.Unmarshal(data, &doc) != nil {
-			return // corrupt file — never clobber it
-		}
-	}
-	if doc.Kind == 0 {
-		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{
-			{Kind: yaml.MappingNode, Tag: "!!map"},
-		}}
-	}
-	root := doc.Content[0]
-	if root.Kind != yaml.MappingNode {
-		return
-	}
-
-	// Find or create the `cache` key.
-	var cacheVal *yaml.Node
-	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value == "cache" {
-			cacheVal = root.Content[i+1]
-			break
-		}
-	}
-	if cacheVal == nil {
-		root.Content = append(root.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Value: "cache"},
-			&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"},
-		)
-		cacheVal = root.Content[len(root.Content)-1]
-	}
-
-	// Build the cache: git: {bypass, latest_tags, default_branches}. The former
-	// resolved_refs/downloads keys are GONE: a resolved ref's durable record is the
-	// export's own v2 provenance sidecar, not a path beside a timestamp (see the
-	// `downloads` field's doc).
-	gitVal := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
-		{Kind: yaml.ScalarNode, Value: "bypass"},
-		{Kind: yaml.ScalarNode, Value: strconv.FormatBool(g.bypass)},
-		{Kind: yaml.ScalarNode, Value: "latest_tags"},
-		entryMapNode(g.mergedLatestTags()),
-		{Kind: yaml.ScalarNode, Value: "default_branches"},
-		entryMapNode(g.defaultBranches),
-	}}
-	cacheVal.Kind = yaml.MappingNode
-	cacheVal.Tag = "!!map"
-	cacheVal.Content = []*yaml.Node{
-		{Kind: yaml.ScalarNode, Value: "git"},
-		gitVal,
-	}
-
-	out, err := yaml.Marshal(&doc)
-	if err != nil {
-		return
-	}
-	// Atomic write: tempfile in the same dir + rename.
-	dir := filepath.Dir(g.cacheFile)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return
-	}
-	tmp, err := os.CreateTemp(dir, ".charly-cache-*")
-	if err != nil {
-		return
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(out); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return
-	}
-	if err := os.Rename(tmpName, g.cacheFile); err != nil {
-		_ = os.Remove(tmpName)
-	}
+	_ = g.persistCache()
 }
 
 // entryMapNode builds a YAML mapping node from a cache-entry map.
