@@ -161,12 +161,6 @@ func NewGitClient(cacheFile string) *GitClient {
 	return g
 }
 
-// cacheLockPath is the advisory lock path guarding the cache's read-modify-write.
-// A separate .lock file keeps the lock from clobbering the config's own bytes.
-func (g *GitClient) cacheLockPath() string {
-	return g.cacheFile + ".lock"
-}
-
 // load reads the `cache:` section of the per-host charly.yml (best-effort; a
 // corrupt/absent file starts empty).
 func (g *GitClient) load() {

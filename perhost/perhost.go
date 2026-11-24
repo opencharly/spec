@@ -153,12 +153,22 @@ func Set(root *yaml.Node, value *yaml.Node, keys ...string) bool {
 	parent := root
 	for _, k := range keys[:len(keys)-1] {
 		child := Get(parent, k)
-		if child == nil || child.Kind != yaml.MappingNode {
+		if child == nil {
 			if value == nil || parent == nil {
 				return false // nothing to remove along a path that does not exist
 			}
 			child = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 			parent.Content = append(parent.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: k}, child)
+		} else if child.Kind != yaml.MappingNode {
+			// The key EXISTS but is not a mapping: REPLACE it in place. Appending here would
+			// emit a SECOND `k:` — a duplicate YAML key, which parsers resolve differently.
+			if value == nil {
+				return false // removing a leaf along a non-mapping path is a no-op
+			}
+			child.Kind = yaml.MappingNode
+			child.Tag = "!!map"
+			child.Value = ""
+			child.Content = nil
 		}
 		parent = child
 	}

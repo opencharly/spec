@@ -119,3 +119,51 @@ func TestConcurrentUpdatesPreserveEachOthersKeys(t *testing.T) {
 		}
 	}
 }
+
+// A key that exists but is NOT a mapping must be REPLACED in place when a nested set walks
+// through it: appending would emit a second key of the same name, which parsers resolve
+// differently depending on which one wins. The reviewer of the shared-writer PR flagged this as
+// a latent path while the package is being installed as THE writer for every config section.
+func TestSetReplacesANonMappingIntermediateInsteadOfDuplicatingTheKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "charly.yml")
+	if err := os.WriteFile(path, []byte("cache: not-a-mapping\n"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := Update(path, func(root *yaml.Node) (bool, error) {
+		return Set(root, scalar("true"), "cache", "git", "bypass"), nil
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if n := strings.Count(string(data), "cache:"); n != 1 {
+		t.Fatalf("Set emitted %d `cache:` keys, want 1 — a duplicate key is the bug:\n%s", n, data)
+	}
+	var doc map[string]any
+	if uerr := yaml.Unmarshal(data, &doc); uerr != nil {
+		t.Fatalf("the file must parse: %v\n%s", uerr, data)
+	}
+	cache, ok := doc["cache"].(map[string]any)
+	if !ok {
+		t.Fatalf("cache must now be a mapping, got %T:\n%s", doc["cache"], data)
+	}
+	git, ok := cache["git"].(map[string]any)
+	if !ok {
+		t.Fatalf("the nested mapping was not written:\n%s", data)
+	}
+	// The scalar node is written verbatim, so YAML decodes an unquoted `true` as a bool.
+	switch v := git["bypass"].(type) {
+	case bool:
+		if !v {
+			t.Fatalf("bypass must be true, got false:\n%s", data)
+		}
+	case string:
+		if v != "true" {
+			t.Fatalf("bypass must be true, got %q:\n%s", v, data)
+		}
+	default:
+		t.Fatalf("bypass has an unexpected type %T:\n%s", git["bypass"], data)
+	}
+}
