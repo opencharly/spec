@@ -50,9 +50,22 @@ func Read(path string) (*yaml.Node, error) {
 	return &doc, nil
 }
 
+// Lock acquires the advisory lock that serializes every writer and every wider read-modify-write
+// cycle over the per-host config (<path>.lock), waiting at most LockWait. It is THE definition of
+// that lock: the path and the bound live here, so a caller whose critical section is WIDER than one
+// document update — deploykit's typed overlay cycle, or a save-versus-remove decision — takes THIS
+// lock and then calls Apply, instead of re-deriving the path and re-inventing the bound.
+func Lock(path string) (release func() error, err error) {
+	r, err := lock.AcquireFileLockWithin(path+".lock", true, LockWait)
+	if err != nil {
+		return nil, fmt.Errorf("per-host config %s: %w", path, err)
+	}
+	return r, nil
+}
+
 // Update runs ONE locked read-modify-write cycle over the per-host config:
 //
-//  1. take <path>.lock (bounded: LockWait);
+//  1. take <path>.lock (Lock, bounded: LockWait);
 //  2. Read the CURRENT on-disk document — never a caller's snapshot, which is how a concurrent
 //     writer's change gets lost;
 //  3. call mutate on the document's root mapping; mutate touches ONLY the keys it owns and
@@ -65,12 +78,26 @@ func Update(path string, mutate func(root *yaml.Node) (changed bool, err error))
 	if mutate == nil {
 		return fmt.Errorf("perhost.Update: mutate is nil")
 	}
-	release, err := lock.AcquireFileLockWithin(path+".lock", true, LockWait)
+	release, err := Lock(path)
 	if err != nil {
-		return fmt.Errorf("per-host config %s: %w", path, err)
+		return err
 	}
 	defer func() { _ = release() }()
+	return Apply(path, mutate)
+}
 
+// Apply runs the document mechanics of one read-modify-write WITHOUT taking the lock — steps 2-4 of
+// Update: read the CURRENT file, mutate its root, marshal, replace atomically.
+//
+// THE CALLER MUST ALREADY HOLD Lock(path). Apply exists so that a wider cycle which holds the lock
+// across a typed read-modify-write (deploykit.MutateDeployConfig) writes through the SAME mechanics
+// rather than a second copy of read/marshal/tempfile/rename. Acquiring the lock here as well would
+// self-deadlock: flock is per-open-file-description, so a second acquire inside the same process
+// waits for the first and fails at LockWait.
+func Apply(path string, mutate func(root *yaml.Node) (changed bool, err error)) error {
+	if mutate == nil {
+		return fmt.Errorf("perhost.Apply: mutate is nil")
+	}
 	doc, err := Read(path)
 	if err != nil {
 		return err
