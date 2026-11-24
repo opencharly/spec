@@ -17,6 +17,27 @@ Exercise changed callers with temporary roots and assert the actual artifact pat
 
 ## Inside a pod
 
-The roots resolve the same way in a container, from `HOME`: `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME` and `XDG_STATE_HOME` are HOME-derived by specification, and `storeroot` derives from them. A deploy that runs as **container root** — the CDI GPU device plus a host-owned volume shape, where rootless `userns=host` maps container root onto the invoking user and every other uid into the subordinate range — has `HOME=/root` by default while its volumes are mounted under the image user's home. A process that resolves `HOME` then looks in `/root` and misses the mounted data, and every XDG base directory moves with it. A deploy in that shape must set `HOME` to the image home in its env; measured without it, `python`, `node` and `huggingface_hub` resolve under `/root`.
+A charly pod runs as its image user — under `--userns=keep-id` when it has a bind mount — and no
+charly pod runs as container root (D-HW-10), so `HOME` is the image's own home and every XDG base directory resolves from it exactly as
+it does on the host: `storeroot` sees the same `~/.config/charly`, `~/.local/share/charly`,
+`~/.local/state/charly` and `~/.cache/charly` the image user owns, and a volume mounted under that
+home is the same tree. Nothing has to be set. Measured inside the image at keep-id as the image
+user:
 
-Do not set `XDG_*` in a deploy to compensate: they are derived from `HOME`, and an explicit value overrides an operator's choice and any image that sets its own. Measured in that shape with `HOME=/home/user`: every `XDG_*` variable is correctly unset, and `python` `expanduser("~")` and `node`'s `os.homedir()` both report `/home/user`. A deploy with only named volumes keeps the image user, where `HOME` is already the image home.
+```
+$ podman run --rm --userns=keep-id:uid=1000,gid=1000 --user 1000 --entrypoint /bin/sh <image> \
+    -c 'echo HOME=$HOME; id -un; id -u; echo XDG=[$XDG_CONFIG_HOME][$XDG_DATA_HOME][$XDG_CACHE_HOME][$XDG_STATE_HOME]; python3 -c "import os;print(os.path.expanduser(chr(126)))"; node -p "require(chr(111)+chr(115)).homedir()"'
+HOME=/home/user
+user
+1000
+XDG=[][][][]
+/home/user
+/home/user
+```
+
+Do not set `XDG_*` in a deploy: they are derived from `HOME`, and an explicit value overrides an
+operator's choice and any image that sets its own. And do not set `HOME` to compensate for a user
+that resolves the wrong one — a workload whose home is not the image home is running as the wrong
+user, which is the defect to fix (D-HW-10), not a variable to paper over. A process started by
+supervisord or a service wrapper inherits the image's `HOME`; a wrapper that falls back to
+`${HOME:-/home/user}` is agreeing with the image, not overriding it.
