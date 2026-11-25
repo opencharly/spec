@@ -10095,15 +10095,25 @@ type PodLifecycleRequest struct {
 	Payload RawBody `yaml:"payload,omitempty" json:"payload,omitempty"`
 }
 
-// #PodLifecycleReply is the "pod-lifecycle" host-builder reply. exit_code is populated only for
+// #PodLifecycleReply is the "pod-lifecycle" host-builder reply. exit_code is populated for
 // op="cmd" — the container command's own exit code, so `charly cmd`'s process exit propagates it
-// (the plugin reconstructs an *sdk.ExitCodeError from it) — it cannot ride the HostBuild ERROR
-// return, which stringifies the typed error; it must ride a reply FIELD, exactly as the former
-// __cmd/CliReply.ExitCode path did. Every other op's reply is empty; op-specific progress prints
-// host-side (the compiled-in plugin's HostBuild runs in charly's own process) and failure signals
-// via the error return.
+// (the plugin reconstructs an *sdk.ExitCodeError from it) — and for op="service", whose caller
+// must judge the result against the image's declared services instead of blindly propagating the
+// init tool's aggregate exit code. It cannot ride the HostBuild ERROR return, which stringifies
+// the typed error; it must ride a reply FIELD, exactly as the former __cmd/CliReply.ExitCode path
+// did.
+//
+// output carries the captured stdout of op="service" so the CALLER can read what the init tool
+// printed: `supervisorctl status` exits 3 when ANY process is not RUNNING, which is the healthy
+// state of a deployment that declares a run-to-completion (one-shot) service, and only the caller
+// knows which services those are (the declaration is image metadata it reads). The host therefore
+// captures instead of printing, and the plugin prints once. Every other op's reply is empty and
+// op-specific progress prints host-side (the compiled-in plugin's HostBuild runs in charly's own
+// process), with failure signals on the error return.
 type PodLifecycleReply struct {
 	ExitCode int `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
+
+	Output string `yaml:"output,omitempty" json:"output,omitempty"`
 }
 
 // #PodStartPayload — see #PodLifecycleRequest's header; op="start". The former StartCmd's
