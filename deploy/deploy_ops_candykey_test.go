@@ -15,16 +15,20 @@ import (
 
 type fakeCandy struct {
 	spec.CandyReader
-	name   string
-	remote bool
-	repo   string
-	prefix string
+	name      string
+	remote    bool
+	repo      string
+	prefix    string
+	version   string
+	sourceDir string
 }
 
 func (f fakeCandy) GetName() string          { return f.name }
 func (f fakeCandy) GetRemote() bool          { return f.remote }
 func (f fakeCandy) GetRepoPath() string      { return f.repo }
 func (f fakeCandy) GetSubPathPrefix() string { return f.prefix }
+func (f fakeCandy) GetVersion() string       { return f.version }
+func (f fakeCandy) GetSourceDir() string     { return f.sourceDir }
 
 func TestCandyMapKey_RootLevelRemote(t *testing.T) {
 	got := CandyMapKey(fakeCandy{name: "layer-ripgrep", remote: true, repo: "github.com/opencharly/layer-ripgrep"})
