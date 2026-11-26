@@ -67,3 +67,36 @@ func TestCandyStageDirName_FallsBackToVersion(t *testing.T) {
 		t.Fatalf("no version: got %q, want demo", got)
 	}
 }
+
+// TestCandyStageDirName_UmaskInsensitive: git applies the process umask to permission bits, so two
+// checkouts of identical content can differ there (0644 vs 0664, 0755 vs 0775). Only the executable
+// bit is content; a plain permission difference must not change the address, and flipping the
+// executable bit must.
+func TestCandyStageDirName_UmaskInsensitive(t *testing.T) {
+	files := map[string]string{"run.sh": "echo hi\n", "sub/pixi.toml": "x\n"}
+	dirA := writeCandy(t, files)
+	dirB := writeCandy(t, files)
+	if err := os.Chmod(filepath.Join(dirA, "run.sh"), 0o664); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(dirB, "run.sh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(dirA, "sub"), 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(dirB, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := CandyStageDirName(fakeCandy{name: "demo", version: "v1", sourceDir: dirA})
+	b := CandyStageDirName(fakeCandy{name: "demo", version: "v2", sourceDir: dirB})
+	if a != b {
+		t.Fatalf("a umask-only permission difference changed the address: %q vs %q", a, b)
+	}
+	if err := os.Chmod(filepath.Join(dirB, "run.sh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if c := CandyStageDirName(fakeCandy{name: "demo", version: "v3", sourceDir: dirB}); c == a {
+		t.Fatalf("the executable bit did not affect the address: %q", c)
+	}
+}

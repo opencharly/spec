@@ -10,8 +10,8 @@ import (
 )
 
 // dirContentHash returns a deterministic content address for a candy's source tree: a sha256 over
-// the sorted relative paths, each entry's mode, and each regular file's bytes (symlinks contribute
-// their target). It is used to name the build staging directory by CONTENT rather than by ref, so
+// the sorted relative paths, each regular file's executable bit and bytes (symlinks contribute their
+// target). It is used to name the build staging directory by CONTENT rather than by ref, so
 // the same candy content at two refs produces one COPY source and the BuildKit layer key stays
 // stable across a ref-only change.
 //
@@ -54,7 +54,18 @@ func dirContentHash(root string) (string, error) {
 		}
 		io.WriteString(h, rel)
 		io.WriteString(h, "\x00")
-		io.WriteString(h, info.Mode().String())
+		// Only the EXECUTABLE BIT is content. Git applies the process umask to the other
+		// permission bits, so two checkouts of identical content can differ there (0644 vs 0664,
+		// 0755 vs 0775) and would hash differently — the exact layer-invalidating outcome this
+		// exists to prevent. A directory's mode is irrelevant to the staged content (COPY creates
+		// the directory), so it contributes nothing.
+		if info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			if info.Mode()&0o111 != 0 {
+				io.WriteString(h, "x")
+			} else {
+				io.WriteString(h, "-")
+			}
+		}
 		io.WriteString(h, "\x00")
 		switch {
 		case info.Mode()&os.ModeSymlink != 0:
