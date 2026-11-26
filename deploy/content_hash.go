@@ -46,46 +46,60 @@ func dirContentHash(root string) (string, error) {
 	sort.Strings(files)
 
 	h := sha256.New()
+	// write hashes one part, turning the (always-succeeding in practice) hash write into a
+	// checked one so a real error surfaces instead of being ignored.
+	write := func(s string) error {
+		_, err := io.WriteString(h, s)
+		return err
+	}
 	for _, rel := range files {
 		p := filepath.Join(root, rel)
 		info, err := os.Lstat(p)
 		if err != nil {
 			return "", err
 		}
-		io.WriteString(h, rel)
-		io.WriteString(h, "\x00")
 		// Only the EXECUTABLE BIT is content. Git applies the process umask to the other
 		// permission bits, so two checkouts of identical content can differ there (0644 vs 0664,
 		// 0755 vs 0775) and would hash differently — the exact layer-invalidating outcome this
 		// exists to prevent. A directory's mode is irrelevant to the staged content (COPY creates
 		// the directory), so it contributes nothing.
+		executable := "-"
 		if info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 			if info.Mode()&0o111 != 0 {
-				io.WriteString(h, "x")
-			} else {
-				io.WriteString(h, "-")
+				executable = "x"
 			}
 		}
-		io.WriteString(h, "\x00")
+		for _, part := range []string{rel, "\x00", executable, "\x00"} {
+			if err := write(part); err != nil {
+				return "", err
+			}
+		}
 		switch {
 		case info.Mode()&os.ModeSymlink != 0:
 			target, err := os.Readlink(p)
 			if err != nil {
 				return "", err
 			}
-			io.WriteString(h, target)
+			if err := write(target); err != nil {
+				return "", err
+			}
 		case info.Mode().IsRegular():
 			f, err := os.Open(p)
 			if err != nil {
 				return "", err
 			}
-			if _, err := io.Copy(h, f); err != nil {
-				f.Close()
-				return "", err
+			_, cerr := io.Copy(h, f)
+			closeErr := f.Close()
+			if cerr != nil {
+				return "", cerr
 			}
-			f.Close()
+			if closeErr != nil {
+				return "", closeErr
+			}
 		}
-		io.WriteString(h, "\x00")
+		if err := write("\x00"); err != nil {
+			return "", err
+		}
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
