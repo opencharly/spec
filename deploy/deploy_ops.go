@@ -285,11 +285,20 @@ func CandyMapKey(layer spec.CandyReader) string {
 	return layer.GetName()
 }
 
-// CandyStageDirName returns the content-addressed staging dir name for a remote candy's copied
-// tree (name.version).
+// CandyStageDirName returns the CONTENT-ADDRESSED staging dir name for a remote candy's copied
+// tree: "<name>.<content hash>". Identical content at two refs yields ONE directory, so a ref-only
+// change keeps the BuildKit COPY source (and therefore its layer key) stable; different content
+// yields a different directory, so two versions never clobber each other — the stager installs
+// atomically (kit.InstallDirAtomic). Falls back to "<name>.<version>" when the layer carries no
+// source dir or the walk fails, so a caller never stages under an address it could not derive.
 func CandyStageDirName(layer spec.CandyReader) string {
 	if layer.GetVersion() == "" {
 		return layer.GetName() // defensive; remote candies are mandatorily versioned
+	}
+	if src := layer.GetSourceDir(); src != "" {
+		if h, err := dirContentHash(src); err == nil {
+			return layer.GetName() + "." + h[:16]
+		}
 	}
 	return layer.GetName() + "." + layer.GetVersion()
 }
