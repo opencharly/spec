@@ -41,3 +41,50 @@ that resolves the wrong one — a workload whose home is not the image home is r
 user, which is the defect to fix (D-HW-10), not a variable to paper over. A process started by
 supervisord or a service wrapper inherits the image's `HOME`; a wrapper that falls back to
 `${HOME:-/home/user}` is agreeing with the image, not overriding it.
+
+## Application model caches
+
+A model cache is a cache root, so it belongs at `$XDG_CACHE_HOME/<app>` and must survive a
+container re-create. The two halves are separate: the PATH convention is the application's, and
+the PERSISTENCE is a charly `volume:` in the candy.
+
+Measured in the `openwebui` image (`huggingface_hub` 1.33.0, `sentence-transformers` 5.5.1),
+whose hub cache is the concrete instance:
+
+```
+$ XDG_CACHE_HOME=/x/y python3 -c 'import huggingface_hub.constants as c; print(c.HF_HOME)'
+/x/y/huggingface
+$ HF_HOME=/x/z python3 -c 'import huggingface_hub.constants as c; print(c.HF_HOME)'
+/x/z
+```
+
+So `huggingface_hub` resolves `HF_HOME` first and otherwise `$XDG_CACHE_HOME/huggingface`, with
+`XDG_CACHE_HOME` defaulting to `~/.cache` (`constants.py:160-167`). The widely repeated claim that
+HuggingFace ignores `XDG_CACHE_HOME` is wrong for this version — the variable does move the cache.
+Inside a pod `XDG_*` are unset and `HOME` is the image home (measured `HOME=/home/user`), so the
+cache lands at `~/.cache/huggingface`, i.e. in the container's writable layer.
+
+To keep it warm, declare a volume over the cache home the app already uses rather than pinning
+`XDG_CACHE_HOME`/`HF_HOME` in the deploy:
+
+```yaml
+volume:
+  - name: cache
+    path: "${HOME}/.cache"     # the resolver expands ${HOME} from the image home
+```
+
+`kit.ExpandPath` (`spec/spec/env_path.go`) expands `~`, `${HOME}` and `$HOME` for a candy volume
+path, so the mount and the app's own `expanduser("~")` agree without a variable. `pod-openwebui`
+declares it beside its `data` volume, and `opencharly/pod-openwebui#36` is the measured failure it
+fixes: with only `/opt/data` persisted, a re-created container re-fetched the 30-file embedding
+model (889 MB, 254 s to the first `200`).
+
+An application that does NOT follow XDG gets its own documented root instead, never an invented
+`${HOME}/.cache/<app>` path it will not read: `ollama` writes `~/.ollama` (`OLLAMA_MODELS`), and
+`immich` keeps its ML models on a volume at `~/.immich/models` (named through `HF_HOME`, or
+`TRANSFORMERS_CACHE` in releases that predate the rename — the volume is what persists either
+way). A `torch`-based trainer may read only `HF_HOME`/`TORCH_HOME`, so check the installed source
+before choosing. Whichever root is used, the witness is a runtime check that the cache directory
+is a MOUNT POINT (`grep " $cache " /proc/self/mountinfo`), and that the app's own resolver names a
+path under it; requiring the directory to be non-empty is only valid once the app has run, because
+a bed that never re-creates a container cannot otherwise detect the regression.
