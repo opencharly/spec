@@ -129,6 +129,11 @@ package schema
 	merge?: #BoxMerge @go(Merge,optional=nillable)
 	alias?: [...#BoxAlias]
 
+	// buildkit — the buildkitd DAEMON settings this PROJECT authors (read from
+	// `defaults.buildkit`; one daemon serves every box, so a box-level value is ignored).
+	// Rendered into buildkitd.toml by the build drive.
+	buildkit?: #Buildkit @go(Buildkit,optional=nillable)
+
 	plan?: [...#Step]
 	check_level?: *"noagent" | or(_checkLevelWord) @go(CheckLevel)
 
