@@ -112,3 +112,34 @@ func TestMergePluginKindsMap_NameKeyedOverride(t *testing.T) {
 		t.Errorf("redis gap-fill missing/wrong: got %q", got)
 	}
 }
+
+// TestMergeUnified_CarriesDefaultsBuildkit — `defaults.buildkit` must survive the
+// walk→materialize merge (opencharly/charly#1306).
+//
+// The merge is per-field "dst wins if set", and `Buildkit` was NOT in the field list: an
+// authored block validated, then vanished before the build drive read it, so the drive
+// always saw the sdk defaults. This test FAILS on the unmodified merge (dst stays nil).
+func TestMergeUnified_CarriesDefaultsBuildkit(t *testing.T) {
+	src := &spec.UnifiedFile{}
+	src.Defaults.Buildkit = &spec.Buildkit{
+		MaxParallelism: 2,
+		ReservedSpace:  "50GB",
+		MinFreeSpace:   "7GB",
+	}
+	dst := &spec.UnifiedFile{}
+	MergeUnified(dst, src, "/proj")
+	if dst.Defaults.Buildkit == nil {
+		t.Fatal("the authored defaults.buildkit was dropped by the merge")
+	}
+	if got := dst.Defaults.Buildkit; got.MaxParallelism != 2 || got.ReservedSpace != "50GB" || got.MinFreeSpace != "7GB" {
+		t.Fatalf("the merged buildkit does not carry the authored values: %+v", got)
+	}
+
+	// Root-wins: a dst that already states the block keeps it.
+	own := &spec.UnifiedFile{}
+	own.Defaults.Buildkit = &spec.Buildkit{MaxParallelism: 9}
+	MergeUnified(own, src, "/proj")
+	if own.Defaults.Buildkit == nil || own.Defaults.Buildkit.MaxParallelism != 9 {
+		t.Fatalf("the root document's buildkit must win: %+v", own.Defaults.Buildkit)
+	}
+}
