@@ -70,17 +70,24 @@ To keep it warm, declare a volume over the cache home the app already uses rathe
 ```yaml
 volume:
   - name: cache
-    path: "${HOME}/.cache"     # the resolver expands ${HOME} from the image home
+    path: "~/.cache"           # `~/`, `~` or `$HOME`; NOT the braced `${HOME}`
 ```
 
-`kit.ExpandPath` (`spec/spec/env_path.go`) expands `~`, `${HOME}` and `$HOME` for a candy volume
-path, so the mount and the app's own `expanduser("~")` agree without a variable. `pod-openwebui`
-declares it beside its `data` volume, and `opencharly/pod-openwebui#36` is the measured failure it
-fixes: with only `/opt/data` persisted, a re-created container re-fetched the 30-file embedding
-model (889 MB, 254 s to the first `200`).
+A candy volume path is expanded by `sdk/deploykit.expandVolumeHome`
+(`deploykit/volume_collect.go:51`), which resolves `~/`, `~` and `$HOME` from the image home and
+leaves the **braced `${HOME}`** form untouched — so a `${HOME}/…` path reaches podman literally and
+is rejected as non-absolute. MEASURED (opencharly/sdk#647): the witness bed's
+`hf-cache-on-the-volume` step FAILED on the `${HOME}/.cache` spelling and passed once it was
+written `~/.cache`. Do not cite `kit.ExpandPath` / `spec.ExpandPath`
+(`spec/spec/env_path.go`) here: that helper DOES expand `${HOME}`, but it is not the one a candy
+`volume.path` goes through, and reading it is what produced the wrong spelling.
+
+`pod-openwebui` declares `~/.cache` beside its `data` volume, and `opencharly/pod-openwebui#36` is
+the measured failure it fixes: with only `/opt/data` persisted, a re-created container re-fetched
+the 30-file embedding model (889 MB, 254 s to the first `200`).
 
 An application that does NOT follow XDG gets its own documented root instead, never an invented
-`${HOME}/.cache/<app>` path it will not read: `ollama` writes `~/.ollama` (`OLLAMA_MODELS`), and
+`~/.cache/<app>` path it will not read: `ollama` writes `~/.ollama` (`OLLAMA_MODELS`), and
 `immich` keeps its ML models on a volume at `~/.immich/models` (named through `HF_HOME`, or
 `TRANSFORMERS_CACHE` in releases that predate the rename — the volume is what persists either
 way). A `torch`-based trainer may read only `HF_HOME`/`TORCH_HOME`, so check the installed source
