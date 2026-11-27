@@ -170,4 +170,11 @@ func mergeBoxConfig(dst, src *spec.BoxConfig) {
 	if dst.KeepCheckRuns == nil {
 		dst.KeepCheckRuns = src.KeepCheckRuns
 	}
+	// defaults.buildkit — the project's buildkitd daemon settings. MISSING from this list
+	// until now, so a project that authored the block had it silently dropped by the
+	// walk→materialize merge and the build drive saw `Defaults.Buildkit == nil`
+	// (opencharly/charly#1306): the surface validated and then did nothing.
+	if dst.Buildkit == nil {
+		dst.Buildkit = src.Buildkit
+	}
 }
