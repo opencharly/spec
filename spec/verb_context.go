@@ -138,8 +138,6 @@ var VerbCatalog = map[string]VerbSpec{
 	// `libvirt` (candy/plugin-vm) — the host pre-resolves any VM display endpoint host-side.
 	// `kube` (candy/plugin-kube) — the host pre-resolves any --cluster profile to a
 	//   kubeconfig context first.
-	// `adb` (candy/plugin-adb) — the registered external provider resolves at dispatch.
-	// `appium` (candy/plugin-appium) — the registered external provider resolves at dispatch.
 	// `spice` (candy/plugin-spice) — the host pre-resolves the VM's live SPICE endpoint to a
 	//   dialable address first.
 

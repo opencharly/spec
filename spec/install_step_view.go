@@ -117,10 +117,6 @@ func StepToView(step InstallStep) InstallStepView {
 		v.Content = s.Content
 		v.Checksum = s.Checksum
 		v.CandyName = s.CandyName
-	case *ApkInstallStep:
-		v.ApkPackages = s.Packages
-		v.CandyName = s.CandyName
-		v.CandyDir = s.CandyDir
 	case *LocalPkgInstallStep:
 		v.PackageName = s.PackageName
 		v.CandyName = s.CandyName
@@ -251,12 +247,6 @@ func StepFromView(v InstallStepView) (InstallStep, error) {
 			Content:   v.Content,
 			Checksum:  v.Checksum,
 			CandyName: v.CandyName,
-		}, nil
-	case StepKindApkInstall:
-		return &ApkInstallStep{
-			Packages:  v.ApkPackages,
-			CandyName: v.CandyName,
-			CandyDir:  v.CandyDir,
 		}, nil
 	case StepKindLocalPkgInstall:
 		return &LocalPkgInstallStep{

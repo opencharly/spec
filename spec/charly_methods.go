@@ -94,8 +94,8 @@ func (c *Op) VerbsSet() []string {
 	// sugar key, consumed by the parse-time desugar; Op.Command is the internal
 	// rehydration target the command plugin's install-emit fills, so it never
 	// contributes a verb here.
-	// The 11 live-container verbs (cdp/wl/dbus/vnc/mcp/record/spice/libvirt/kube/
-	// adb/appium) left #Op in the schema-compaction cutover: each is authored as
+	// The live-container verbs (cdp/wl/dbus/vnc/mcp/record/spice/libvirt/kube)
+	// left #Op in the schema-compaction cutover: each is authored as
 	// the generic `<word>: <input>` sugar and desugars to Plugin/PluginInput, so
 	// only the generic plugin verb below classifies them. The summarize/kill
 	// harness verbs were deleted with their never-authored aggregation surface.
@@ -268,47 +268,6 @@ func (e *CandyService) EffectiveScope() string {
 // IsPackaged reports whether the service is the packaged (use_packaged) form.
 func (e *CandyService) IsPackaged() bool {
 	return e != nil && e.UsePackaged != ""
-}
-
-// ---------------------------------------------------------------------------
-// Android (AndroidSpec)
-// ---------------------------------------------------------------------------
-
-// IsEndpoint reports whether the device targets a remote adb endpoint.
-// Shares the endpoint core with the *ResolvedAndroid twin
-// (spec/substrate_template_methods.go).
-func (a *Android) IsEndpoint() bool {
-	return a != nil && isAndroidEndpoint(a.Adb)
-}
-
-// EffectiveSerial returns the device serial, defaulting to the emulator serial.
-// Shares the serial core with the *ResolvedAndroid twin
-// (spec/substrate_template_methods.go).
-func (a *Android) EffectiveSerial() string {
-	if a == nil {
-		return "emulator-5554"
-	}
-	return effectiveAndroidSerial(a.Serial)
-}
-
-// ---------------------------------------------------------------------------
-// ApkPackageSpec
-// ---------------------------------------------------------------------------
-
-// EffectiveSource returns the APK source store, defaulting to apk-pure.
-func (s ApkPackageSpec) EffectiveSource() string {
-	if s.Source != "" {
-		return s.Source
-	}
-	return "apk-pure"
-}
-
-// EffectiveArch returns the APK ABI, defaulting to x86_64.
-func (s ApkPackageSpec) EffectiveArch() string {
-	if s.Arch != "" {
-		return s.Arch
-	}
-	return "x86_64"
 }
 
 // ---------------------------------------------------------------------------

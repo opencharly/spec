@@ -24,7 +24,7 @@ type StepContract struct {
 	// Emits is the F-STEP-EMIT flag: the step produces a build-context Containerfile FRAGMENT
 	// (the serving plugin answers Invoke(OpEmit) → EmitReply.Fragment). The pod-overlay
 	// deploykit.OCITarget consults it via the open external-step arm — Emits=true → bake the
-	// fragment; Emits=false → skip (a deploy-only external step, like apk on an image build).
+	// fragment; Emits=false → skip (a deploy-only external step).
 	// Advisory for the DEPLOY leg (executeExternalStep ignores it); load-bearing for the BUILD
 	// leg (ociEmitStep).
 	Emits bool

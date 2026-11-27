@@ -9,7 +9,7 @@ import (
 
 // memberTreeFixture builds a bed node carrying both member positions: an
 // in-substrate local member (zulu), a deploy-level local member (alpha), and an
-// in-substrate android member (skipped by the live-ref gather).
+// in-substrate parent-venue member (skipped by the live-ref gather).
 func memberTreeFixture() *spec.DeployNode {
 	hostRooted := &spec.DescentDescriptor{Transport: "none", HostRooted: true}
 	return &spec.DeployNode{
@@ -17,7 +17,7 @@ func memberTreeFixture() *spec.DeployNode {
 		Member: []spec.Member{
 			{Name: "zulu", Position: spec.PositionInSubstrate, Node: &spec.DeployNode{Descent: hostRooted}},
 			{Name: "alpha", Position: spec.PositionDeployLevel, Node: &spec.DeployNode{Descent: hostRooted}},
-			{Name: "android-child", Position: spec.PositionInSubstrate, Node: &spec.DeployNode{Descent: &spec.DescentDescriptor{Transport: "none", Venue: "parent"}}},
+			{Name: "parent-child", Position: spec.PositionInSubstrate, Node: &spec.DeployNode{Descent: &spec.DescentDescriptor{Transport: "none", Venue: "parent"}}},
 		},
 	}
 }
@@ -61,7 +61,7 @@ func TestDeployNestedLocalChildrenPosition(t *testing.T) {
 }
 
 // TestBedCheckLiveRefsUniform pins the check-live gather over the member tree:
-// in-substrate members in authored order, android (parent venue) skipped.
+// in-substrate members in authored order, parent-venue members skipped.
 func TestBedCheckLiveRefsUniform(t *testing.T) {
 	refs := BedCheckLiveRefs("bed", memberTreeFixture())
 	want := []string{"bed", "bed.zulu"}

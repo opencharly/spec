@@ -483,7 +483,7 @@ func (x *CLISubcommand) GetHidden() bool {
 // the SINGLE plugin-declared source for "how does this substrate behave in the deploy chain",
 // so the kernel consults it BY TRAIT (off node.Descent) — never by switching on the kind word.
 // Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; zero value =
 // external-in-place. Empty/absent for every non-kind (or non-substrate kind) capability.
 type DeployTraits struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -501,7 +501,7 @@ type DeployTraits struct {
 	LeafOnly bool `protobuf:"varint,6,opt,name=leaf_only,json=leafOnly,proto3" json:"leaf_only,omitempty"`
 	// the substrate's Start/Stop accept direct-mode CLI opts AND need the Q1 resource-arbiter claim bracketed around the dispatch (pod); a substrate that manages its own venue lifecycle + resource claim (vm) leaves this false
 	BracketedLifecycle bool `protobuf:"varint,7,opt,name=bracketed_lifecycle,json=bracketedLifecycle,proto3" json:"bracketed_lifecycle,omitempty"`
-	// the substrate is a valid kind:check bed target (pod/vm/local/android); kubernetes and unknown words are not
+	// the substrate is a valid kind:check bed target (pod/vm/local); kubernetes and unknown words are not
 	BedTarget bool `protobuf:"varint,8,opt,name=bed_target,json=bedTarget,proto3" json:"bed_target,omitempty"`
 	// the substrate's Add/Del path wires the ephemeral register/teardown seam (TTL timer + charly.yml persistence) — vm only today
 	SupportsEphemeral bool `protobuf:"varint,9,opt,name=supports_ephemeral,json=supportsEphemeral,proto3" json:"supports_ephemeral,omitempty"`
@@ -625,7 +625,7 @@ type StepContract struct {
 	Venue int32 `protobuf:"varint,2,opt,name=venue,proto3" json:"venue,omitempty"`
 	// "" | "allow-repo-changes" | "allow-root-tasks" | "with-services"
 	Gate string `protobuf:"bytes,3,opt,name=gate,proto3" json:"gate,omitempty"`
-	// F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false => deploy-only step (no build fragment; OCITarget skips it, like apk on an image build)
+	// F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false => deploy-only step (no build fragment; OCITarget skips it)
 	Emits bool `protobuf:"varint,4,opt,name=emits,proto3" json:"emits,omitempty"`
 	// STEP-PLUGIN-PATHS (opencharly/charly#1131): the host hands this step the CONNECTED PLUGIN SET it resolved, as PATHS, in the step input under spec.ConnectedPluginsInputKey. Opt-IN because the input is validated against the plugin's own (usually closed) schema, so the key must be declared there too. false => the payload is the authored input, untouched.
 	PluginPaths   bool `protobuf:"varint,5,opt,name=plugin_paths,json=pluginPaths,proto3" json:"plugin_paths,omitempty"`

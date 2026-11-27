@@ -322,12 +322,11 @@ package schema
 // command:deploy now performs the SAVE plugin-side via deploykit.SaveDeployConfig with its own
 // loader-backed reader + loader-threaded Primaries, so no host seam remains for it.)
 
-// (#AndroidEntityResolution — the kind="android" one-off wrapper the former
-// #DeployEntityResolveReply.entity field carried — was DELETED in W0, ahead of the whole
-// "deploy-entity-resolve" seam's own deletion in K-wave W3a A3-phase-2: it was the last per-kind
-// asymmetry forcing a Go branch in the host handler. The google-play-credential thread that once
-// justified it moved to a direct peer InvokeProvider(verb:credential) call (deploy-cone cutover 1)
-// before the seam itself died.)
+// (The per-kind entity-resolution wrapper the former #DeployEntityResolveReply.entity field
+// carried — was DELETED in W0, ahead of the whole "deploy-entity-resolve" seam's own deletion in
+// K-wave W3a A3-phase-2: it was the last per-kind asymmetry forcing a Go branch in the host
+// handler. The credential thread that once justified it moved to a direct peer
+// InvokeProvider(verb:credential) call (deploy-cone cutover 1) before the seam itself died.)
 
 // #EphemeralRegisterRequest/#EphemeralRegisterReply — the host→command:deploy OpEphemeralRegister
 // leg (FINAL/K5 unit 6a): ephemeral_lifecycle.go's cross-substrate ephemeral-instance registration
@@ -347,12 +346,12 @@ package schema
 // #DeployEntityResolveRequest/#DeployEntityResolveReply DELETED (K-wave W3a A3-phase-2): the
 // "deploy-entity-resolve" HostBuild seam died — every kind:<word> caller self-loads the project
 // plugin-side now (sdk/loaderkit.LoadUnifiedViaExecutor, unblocked by W1, plus the new
-// Resolve{Kubernetes,Vm,Android}EntityViaExecutor helpers), and every deploy-tree node lookup collapsed
+// Resolve{Kubernetes,Vm}EntityViaExecutor helpers), and every deploy-tree node lookup collapsed
 // to a direct in-memory map lookup on the SAME tree the caller already resolves via
 // loaderkit.ResolveMergedTreeViaExecutor (the request's own tree_json field was already
 // documented dead weight — "the tree already threaded via req.TreeJSON, could inline at all
 // callers with zero host coupling"). See charly/host_build_deploy_entity_resolve.go's deletion
-// and candy/{plugin-adb,plugin-fleet,plugin-deploy-vm,plugin-kube,plugin-vm} for the per-caller
+// and candy/{plugin-fleet,plugin-deploy-vm,plugin-kube,plugin-vm} for the per-caller
 // migration.
 
 // #EphemeralTeardownRequest/#EphemeralTeardownReply — the OpEphemeralTeardown leg any
@@ -1413,7 +1412,7 @@ package schema
 // ResolveTarget proxy (unified_targets.go) constructs this per call from data alone — it never
 // holds a *grpcProvider or any core-private registry object, so the type is free to live
 // entirely on the wire. `word` is the resolved deploy-substrate provider word (e.g. "pod"/"vm"/
-// "local"/"kubernetes"/"android") the plugin dispatches the ACTUAL substrate leg to, via its own
+// "local"/"kubernetes") the plugin dispatches the ACTUAL substrate leg to, via its own
 // sdk.Executor.InvokeProvider — core never talks to the substrate provider directly once this
 // lands. `has_lifecycle` is the ONE piece of substrate metadata core must resolve itself (the
 // registered-provider's own `lifecycle` flag lives on the core-private *grpcProvider) — it gates
@@ -1456,7 +1455,7 @@ package schema
 	tty?:             bool        @go(TTY)
 	// venue_json is the ALREADY-MATERIALIZED spec.VenueDescriptor for this deploy. Two distinct
 	// producers set it: (a) core, when this dispatch is a NESTED non-lifecycle child (a
-	// `local:`/`android:`/`kubernetes:` deploy under a vm/pod, tree position) — Add flattens the
+	// `local:`/`kubernetes:` deploy under a vm/pod, tree position) — Add flattens the
 	// live ancestor executor (EmitOpts.ParentExec) into this field via kit.DescriptorFromExecutor
 	// BEFORE the very first "add" dispatch, since that live value cannot itself cross the wire
 	// (FIX ROUND, S3b follow-up — its absence on "add" was the R10 bed regression: every nested
@@ -1617,7 +1616,7 @@ package schema
 // spec.LoadedProject marshalled directly (no reply envelope needed). Every OTHER loader leg
 // carries an existing type verbatim over the []byte wire: loader-bootstrap ([]byte→[]byte),
 // loader-threaded (∅→spec.Threaded), loader-materialize (spec.LoadedProject→loaderkit.UnifiedFile).
-// The former loader-android-validate / loader-preempt-validate legs dissolved — a plugin-side loader
+// The former loader-preempt-validate leg dissolved — a plugin-side loader
 // now self-serves those validators over InvokeProvider(kind, OpResolve).
 #LoaderWalkRequest: {
 	dir!:       string @go(Dir)

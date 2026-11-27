@@ -77,11 +77,10 @@ package schema
 // candyIsImage + buildCandy (core, unchanged) and folds plugin-candy's echo into uf.Box/uf.Candy.
 #Image:      #Box & ({base: string & !=""} | {from: string & !=""})
 #CandyValue: (*#Candy | #Image) @go(-)
-#AndroidValue: (#Android | #DeployValue) @go(-)
 // EVERY authoring kind is externalized to a plugin unit — the build-vocabulary kinds
 // (`distro:`/`builder:`/`init:`/`resource:`), the AI-CLI grader `agent:`, the sidecar
 // `sidecar:`, the substrate kinds
-// `pod:`/`vm:`/`kubernetes:`/`local:`/`android:`/`kindcluster:`/`kubevirt:` (C2-substrate), AND the box⊻layer
+// `pod:`/`vm:`/`kubernetes:`/`local:`/`kindcluster:`/`kubevirt:` (C2-substrate), AND the box⊻layer
 // factory `candy:` (C2-candy) — so NONE has a #Node arm; such a node passes #NodeDoc as a
 // registered non-core discriminator (the OPEN #Node struct). The former targetless deploy kind
 // `group:` (C2-group) is REMOVED (the member-tree cutover — the dual representation is forbidden
@@ -89,11 +88,11 @@ package schema
 // onto that primary, remaining members stay deploy-level siblings — the `charly migrate` rewrite
 // (the charly wave) converts authored configs. A plugin with a self-contained served
 // #*Input schema (distro/builder/…) is validated by that schema (runPluginKind →
-// validateAuthoredPluginInput); the substrates AND candy, whose value is rich + core-referencing
-// (#Vm/#Deploy/#LibvirtDomain/#Candy/#Box/…) and so cannot be a self-contained plugin schema, are
-// validated HOST-SIDE against the KEPT #<Kind>Value / #CandyValue defs above (runPluginKind →
+// validateAuthoredPluginInput); candy, whose value is rich + core-referencing
+// (#Vm/#Deploy/#LibvirtDomain/#Candy/#Box/…) and so cannot be a self-contained plugin schema, is
+// validated HOST-SIDE against the KEPT #CandyValue def above (runPluginKind →
 // validateKindValueCUE). The core #Distro / #Builder / #Init / #Resource / #Agent /
-// #Sidecar / #Vm / #Android / #Deploy / #Candy / #Box defs
+// #Sidecar / #Vm / #Deploy / #Candy / #Box defs
 // (schema/*.cue) are KEPT — they still generate spec.Distro / spec.Vm / spec.Candy / spec.Box /
 // … (the canonical types the plugins' Invoke and the host decode into); `#Pod` and `#Local` are
 // the six that have moved (`pod`, `local`, `kubernetes`, `kindcluster`, `kubevirt`, `firecracker` — to plugin-substrate's
@@ -218,7 +217,6 @@ _resourceKind: {
 	vm: {}
 	kubernetes: {}
 	local: {}
-	android: {}
 	kindcluster: {}
 	kubevirt: {}
 	firecracker: {}

@@ -621,46 +621,6 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 }
 
 // ---------------------------------------------------------------------------
-// ApkInstallStep — `apk:` package format (Android app install onto a device).
-// ---------------------------------------------------------------------------
-
-// ApkInstallStep installs Android apps onto a `kind: android` device. It is
-// the IR form of a candy's `apk:` package section — the apk "package format"
-// (parallel to SystemPackagesStep for rpm/deb/pac, and BuilderStep for aur).
-//
-// Unlike every other step, an apk install lands on a RUNNING Android device,
-// not the build/host filesystem. `target: android` is an EXTERNAL deploy
-// substrate (F1): NO in-proc EmitTarget executes this step — the host-side
-// android deploy preresolver (collectAndroidInstalls, android_deploy_preresolve.go)
-// READS it to collect the apk install specs and ships them to the deploy:android
-// plugin (candy/plugin-adb: apkeep + adb), which drives the device. Every
-// EmitTarget SKIPS it — OCITarget emits nothing (no device at image-build time),
-// and Local/Vm/Pod targets record a skip (a host/VM/pod is not an Android device).
-// This is the same "wrong venue → skip" shape `aur:` uses off-Arch, expressed as a
-// clean recorded skip rather than an error (an image legitimately builds without
-// installing apps).
-type ApkInstallStep struct {
-	Packages  []ApkPackageSpec
-	CandyName string
-	CandyDir  string // candy source dir — anchors relative committed-APK paths
-}
-
-func (s *ApkInstallStep) Kind() StepKind { return StepKindApkInstall }
-
-// Scope is system — installing an app mutates device-global package state.
-func (s *ApkInstallStep) Scope() Scope { return ScopeSystem }
-
-// Venue is host-native — the android deploy preresolver reads this step from the
-// host (the install itself runs in the deploy:android plugin over the wire).
-func (s *ApkInstallStep) Venue() Venue       { return VenueHostNative }
-func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
-
-// Reverse returns no STATIC ledger ops — Android teardown ops are DYNAMIC, recorded
-// from the deploy:android plugin's OpExecute reply (the uninstall reverse ops) at
-// deploy time, replayed at `charly deploy del` like any external deploy substrate.
-func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
-
-// ---------------------------------------------------------------------------
 // LocalPkgInstallStep — install the published charly package from the distro
 // repo onto a deploy target (the download leg).
 // ---------------------------------------------------------------------------
@@ -679,7 +639,7 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 // source-build cutover: the `charly generate-packages` plugin builds the
 // package now, so the deploy-time path only INSTALLS the published package.)
 //
-// Like ApkInstallStep, the step is compiled REGARDLESS of target and each
+// Like RebootStep, the step is compiled REGARDLESS of target and each
 // EmitTarget decides whether to execute or skip:
 //   - the external local deploy (Arch/CachyOS host) and external vm deploy (Arch/CachyOS
 //     guest) EXECUTE it via the RunHostStep host-engine leg (download → transfer →
@@ -699,7 +659,7 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 //     siblings (system-packages/builder/op) on the same seam.
 //     A distro with no localpkg-capable format (LocalPkg==nil) renders nothing; the
 //     candy's own COPY/curl `cmd:` task is the fallback there.
-//   - the android / kubernetes substrates (external) SKIP it (no Arch package surface).
+//   - the kubernetes substrate (external) SKIPS it (no Arch package surface).
 type LocalPkgInstallStep struct {
 	// PackageName is the published package name (e.g. "charly") the deploy-time
 	// executor downloads from the distro repo.
@@ -739,7 +699,7 @@ func (s *LocalPkgInstallStep) RequiresGate() Gate { return GateNone }
 
 // Reverse returns no ledger ops — the package is the deploy substrate's own
 // pacman-tracked package, removed (if ever) via `pacman -R charly` by
-// the operator, not by deploy teardown. Mirrors ApkInstallStep's empty Reverse.
+// the operator, not by deploy teardown. Mirrors RebootStep's empty Reverse.
 func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 
 // RebootStep requests a reboot of the deploy target after this candy's steps.
@@ -752,7 +712,7 @@ func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 // substrate sets) and waits for the boot_id to change. OCITarget / PodDeployTarget have
 // no machine to reboot at build time and skip it (the external kubernetes substrate does not
 // consume the IR at all); the external local deploy refuses to reboot the host venue
-// unattended (skip + note). Mirrors the ApkInstallStep "only one target executes" pattern.
+// unattended (skip + note). Mirrors the "only one target executes" pattern.
 type RebootStep struct {
 	CandyName string
 }
@@ -916,7 +876,7 @@ func IsExternalStepKind(k StepKind) bool { return strings.HasPrefix(string(k), E
 var AllStepKinds = []StepKind{
 	StepKindSystemPackages, StepKindBuilder, StepKindOp, StepKindFile,
 	StepKindServicePackaged, StepKindServiceCustom, StepKindShellHook,
-	StepKindShellSnippet, StepKindRepoChange, StepKindApkInstall,
+	StepKindShellSnippet, StepKindRepoChange,
 	StepKindLocalPkgInstall, StepKindReboot, StepKindExternalPlugin,
 	StepKindExtract,
 }
@@ -925,7 +885,7 @@ var AllStepKinds = []StepKind{
 // word that serves its pod-overlay OpEmit (candy/plugin-installstep). These kinds have NO in-proc
 // StepProvider — the OCI dispatch routes them here, serializing the step VIEW as the OpEmit payload.
 // Their DEPLOY leg is unchanged (sdk/kit.WalkPlans renders them from the same view; reboot's is the
-// host-side guest reboot over RunHostStep). apk-install's and reboot's plugin declares Emits=false
+// host-side guest reboot over RunHostStep). reboot's plugin declares Emits=false
 // (no build fragment); every other word Emits=true.
 //
 // Shared cross-boundary (R3): BOTH the host (charly/provider_step.go's checkStepProviderBijection)
@@ -938,7 +898,6 @@ var PluginEmitStepWords = map[StepKind]string{
 	StepKindServicePackaged: "service-packaged",
 	StepKindServiceCustom:   "service-custom",
 	StepKindRepoChange:      "repo-change",
-	StepKindApkInstall:      "apk-install",
 	StepKindReboot:          "reboot",
 	StepKindSystemPackages:  "system-packages",
 	StepKindBuilder:         "builder",

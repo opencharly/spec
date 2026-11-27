@@ -188,24 +188,25 @@ e.g. from a flaky CDN, is never reused). No author action needed; prefer
 
 For a `command:` step that downloads/builds via its own tool (an SDK installer, a
 source build) and so can't use `download:`, declare a `cache:` mount and route
-the tool's downloads into it. Canonical worked example — caching the Android SDK
-so an upstream base cache-miss doesn't re-download ~1.5GB from Google's CDN:
+the tool's downloads into it. Canonical worked example — caching a large language
+toolchain so an upstream base cache-miss doesn't re-download ~1.5GB from the
+vendor's CDN:
 
 ```yaml
 plan:
-  - run: cache and install the android sdk
-    id: android-sdk-cache
+  - run: cache and install the language toolchain
+    id: toolchain-cache
     command: |
-      SDK_CACHE=/var/cache/charly-android-sdk
-      if [ ! -f "${SDK_CACHE}/.charly-sdk-complete" ]; then
+      SDK_CACHE=/var/cache/charly-toolchain
+      if [ ! -f "${SDK_CACHE}/.charly-toolchain-complete" ]; then
         rm -rf "${SDK_CACHE}"; mkdir -p "${SDK_CACHE}"
-        sdkmanager --sdk_root="${SDK_CACHE}" "platform-tools" "emulator" "system-images;…"
-        touch "${SDK_CACHE}/.charly-sdk-complete"   # sentinel: only after full success
+        install-toolchain --root="${SDK_CACHE}" "core" "extras"
+        touch "${SDK_CACHE}/.charly-toolchain-complete"   # sentinel: only after full success
       fi
-      cp -a "${SDK_CACHE}/." /opt/android-sdk/   # materialize into the image
+      cp -a "${SDK_CACHE}/." /opt/toolchain/   # materialize into the image
     run_as: user
     cache:
-      - /var/cache/charly-android-sdk               # owned (uid) because run_as: user
+      - /var/cache/charly-toolchain               # owned (uid) because run_as: user
 ```
 
 The sentinel (`.charly-sdk-complete`, written only after a fully-successful install)
@@ -225,7 +226,7 @@ what arrived is what you pinned. Two different properties, and only the second i
 So when the artifact IS the supply chain — a released engine, a CLI tarball, an installer — use the
 shape `layer-k3s`, `layer-kind`, `layer-nerdctl`, `layer-vscode` and the Strata layer already use:
 
-1. ONE `run:` step that fetches into a `cache:` mount, exactly as the Android example above routes its
+1. ONE `run:` step that fetches into a `cache:` mount, exactly as the toolchain example above routes its
    downloads;
 2. verify `sha256sum -c` against a digest PINNED IN THE CANDY'S `var:` BLOCK — an auditable value in
    the diff, not a re-fetched `SHA256SUMS.txt`;
@@ -506,7 +507,6 @@ plan:
 | `port` | `[]int \| []PortSpec` | The candy's **container** ports (1-65535) — the SINGLE source of truth for published ports. Every box composing this candy inherits them (`CollectBoxPorts`); boxes declare no `port:`. Host mappings are auto-allocated on `127.0.0.1` at deploy. Protocol-annotated form: `tcp:5900`, `https+insecure:3000`, etc. (the backend scheme rides into `ai.opencharly.port_proto`). |
 | `route` | `{host, port}` | Traefik reverse proxy route. |
 | `package` / `distro` | list / map | The package surface: top-level `package:` base + per-distro/version `distro:` map (bare / versioned / compound keys). Resolved via the most-specific-first cascade (see Package Surface). |
-| `apk` | `[]ApkPackageSpec` | **Android app-install package format** — apps installed onto a `kind: android` device by a `target: android` deploy (NOT into the image). Each entry is `package:` (apkeep download by id, with `source`/`arch`/`version`) XOR `apk:` (committed local APK). Device-scoped (top-level, not under `distro:`); compiles to an `ApkInstallStep` that ONLY `target: android` executes (skipped at image-build + on every other target). See `/charly-check:android`. |
 | `localpkg` | — | **REMOVED** (nFPM cutover). The candy-body `localpkg:` map (format→source-dir) is gone — a candy carrying it is a hard schema violation (`charly migrate` deletes it). The OS-tracked package install is now driven entirely by the embedded build vocabulary's `format.<fmt>.local_pkg:` block (`install_template`/`probe`/`download_template`), which the sdk's localpkg machinery (`sdk/deploykit/localpkg.go`) uses to install the charly package: a PRODUCTION deploy/image DOWNLOADS the published package from the per-distro repo (`download_template`), while the DEV path (`--dev-local-pkg`) builds it via the `charly generate-packages` plugin (nFPM) from the in-development binary. The `charly` layer installs the binary via a `copy: bin/charly` run step. |
 | `volume` | `[]{name, path}` | Persistent named volumes. |
 | `alias` | `[]{name, command}` | Host command aliases. |

@@ -27,7 +27,6 @@ type (
 	// (opencharly/spec#304 unit 8), so the surviving spec type is the resolve envelope.
 	VmSpec      = ResolvedVm
 	DeployNode  = Deploy
-	AndroidSpec = Android
 	SidecarDef  = Sidecar
 	ResourceDef = Resource
 	DistroDef   = Distro

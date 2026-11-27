@@ -50,8 +50,8 @@ type DeployContext struct {
 	BuilderCfg *BuilderConfig
 }
 
-// UnifiedDeployTarget is the unified contract all five deploy methods
-// (local, vm, pod, kubernetes, android) implement uniformly. Each method corresponds
+// UnifiedDeployTarget is the unified contract all four deploy methods
+// (local, vm, pod, kubernetes) implement uniformly. Each method corresponds
 // to an `charly deploy …` subcommand, so the dispatcher in ResolveTarget
 // (charly/unified_targets.go) can route purely on target.Kind() without
 // per-cmd switches. Every method dispatches through the ONE generic

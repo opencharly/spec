@@ -805,48 +805,6 @@ type TerminalExit struct {
 	Time string `yaml:"time,omitempty" json:"time"`
 }
 
-// CUE schema for the `android` kind. #Android validates ONE kind:android entity
-// (a device). A device is EITHER an in-pod emulator hosted by a kind:box (box)
-// XOR a remote/physical adb endpoint (adb) — never both, never neither. Shared
-// #Step from 00_common.cue.
-//
-// CLOSED: the base struct (no trailing `...`) models every authored key, so an
-// unknown key is still a typo. The box⊻adb exactly-one mutual-exclusion is
-// enforced in GO (loaderkit.ValidateAndroidDevices, the load-time sibling of
-// validateCheckBeds) — NOT by a trailing `& ({box:_} | {adb:_})` disjunction:
-// `cue exp gengotypes` collapses an entity-level top-level disjunction to an
-// EMPTY `struct{}`, which would make spec.Android useless as a drop-in for
-// AndroidSpec. The plain closed struct below generates the full field set, and
-// the Go rule restores the exactly-one-of-box/adb XOR.
-type Android struct {
-	Serial string `yaml:"serial,omitempty" json:"serial,omitempty"`
-
-	Device string `yaml:"device,omitempty" json:"device,omitempty"`
-
-	ApiLevel int `yaml:"api_level,omitempty" json:"api_level,omitempty"`
-
-	GoogleAccount *GoogleAccount `yaml:"google_account,omitempty" json:"google_account,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-
-	// Device source — exactly one of box/adb (enforced in Go, see header).
-	Box string `yaml:"box,omitempty" json:"box,omitempty"`
-
-	Adb *AdbEndpoint `yaml:"adb,omitempty" json:"adb,omitempty"`
-}
-
-type GoogleAccount struct {
-	EmailSecret string `yaml:"email_secret,omitempty" json:"email_secret,omitempty"`
-
-	TokenSecret string `yaml:"token_secret,omitempty" json:"token_secret,omitempty"`
-}
-
-// adb endpoint host is "host:port" but MAY carry a ${HOST_PORT:N} var-ref
-// (resolved at deploy time), so only non-emptiness is enforced.
-type AdbEndpoint struct {
-	Host string `yaml:"host,omitempty" json:"host"`
-}
-
 // #HolderAddr is the self-contained address of a deployment (holder or claimant) — enough for the
 // host seams to probe/stop/start it WITHOUT re-reading config, so a lease loaded after a crash can
 // act on it. Carries BOTH yaml (the persisted ledger) and json (the Invoke/reverse-channel
@@ -2209,7 +2167,7 @@ type ResolvedProject struct {
 
 	Init map[string]*ResolvedInit `yaml:"init,omitempty" json:"init,omitempty"`
 
-	// kind templates (validate localtemplates + check-include pod/vm arms + status kubernetes/adb enumeration).
+	// kind templates (validate localtemplates + check-include pod/vm arms + status kubernetes enumeration).
 	Templates *ProjectTemplates `yaml:"templates,omitempty" json:"templates,omitempty"`
 
 	// kind:agent catalog (the harness AI-CLI pick — plugin-check reads it off this envelope; charly feature list-agent).
@@ -2641,7 +2599,7 @@ type CandyModel struct {
 
 	RunOps []Op `yaml:"run_ops,omitempty" json:"run_ops,omitempty"`
 
-	// --- services / extract / data / apk ---
+	// --- services / extract / data ---
 	// service — the candy's service declarations as OPAQUE BYTES, on the hook/extract/data pattern:
 	// the authored #CandyService stays in spec (it is #Candy's own field), and the IR carries the
 	// JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
@@ -2658,8 +2616,6 @@ type CandyModel struct {
 	// pattern: the authored #CandyData stays in spec (it is #Candy's own field), and the IR carries
 	// the JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
 	Data RawBody `yaml:"data,omitempty" json:"data,omitempty"`
-
-	Apk []ApkPackageSpec `yaml:"apk,omitempty" json:"apk,omitempty"`
 
 	// --- package surface (resolved) ---
 	TopPackages []string `yaml:"top_packages,omitempty" json:"top_packages,omitempty"`
@@ -3054,11 +3010,11 @@ type CandySecret struct {
 	Env string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 
-// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/android:/kindcluster:/kubevirt:/firecracker: template maps
-// carried as OPAQUE payloads (the uf.Pod/VM/Local/Kubernetes/Android/Kindcluster/KubeVirt/Firecracker raw bytes, verbatim). The host projector stays KIND-BLIND — it
+// #ProjectTemplates — the bare pod:/vm:/local:/kubernetes:/kindcluster:/kubevirt:/firecracker: template maps
+// carried as OPAQUE payloads (the uf.Pod/VM/Local/Kubernetes/Kindcluster/KubeVirt/Firecracker raw bytes, verbatim). The host projector stays KIND-BLIND — it
 // copies the raw template bytes with NO concrete-kind decode (a kernel that read spec.Local/#Vm/…
 // would violate the boundary law + trip TestNoConcreteKindInKernel). The CONSUMING PLUGINS
-// (validate localtemplates, check-include pod/vm arms, status kubernetes/adb) decode a RawBody into the
+// (validate localtemplates, check-include pod/vm arms, status kubernetes) decode a RawBody into the
 // concrete spec kind type themselves — a plugin MAY know kinds, the kernel may not.
 type ProjectTemplates struct {
 	Local map[string]RawBody `yaml:"local,omitempty" json:"local,omitempty"`
@@ -3074,8 +3030,6 @@ type ProjectTemplates struct {
 	Pod map[string]RawBody `yaml:"pod,omitempty" json:"pod,omitempty"`
 
 	VM map[string]RawBody `yaml:"vm,omitempty" json:"vm,omitempty"`
-
-	Android map[string]RawBody `yaml:"android,omitempty" json:"android,omitempty"`
 }
 
 // #BuildTarget — a build-order entry (charly box list targets): the box/intermediate name + whether
@@ -3488,9 +3442,6 @@ type InstallStepView struct {
 
 	Checksum string `yaml:"checksum,omitempty" json:"checksum,omitempty"`
 
-	// ApkInstallStep.
-	ApkPackages []ApkPackageSpec `yaml:"apk_packages,omitempty" json:"apk_packages,omitempty"`
-
 	// LocalPkgInstallStep — the deploy-time executor downloads the published
 	// package from the distro repo (the download leg) instead of building from
 	// source, so the IR carries the package reference (name + version) rather
@@ -3851,8 +3802,6 @@ type Candy struct {
 	Package []PackageItem `yaml:"package,omitempty" json:"package,omitempty"`
 
 	Distro map[string]*DistroPackages `yaml:"distro,omitempty" json:"distro,omitempty"`
-
-	Apk []ApkPackageSpec `yaml:"apk,omitempty" json:"apk,omitempty"`
 
 	// packaging — the native-package metadata for this candy: the SINGLE source
 	// of truth the `charly generate-packages` plugin (sdk/packagekit) reads to
@@ -4852,7 +4801,7 @@ type CheckResult struct {
 // Every field is optional (a caller fills only what it has — an in-proc/live snapshot has a live
 // Runner to read from; a box-mode run has no ContainerName/Venue; a detached construction may
 // lack DialTimeoutNs). container_name/venue are HOST-COMPUTED-ONLY fields (never authored,
-// carried for the out-of-process appium/vm-target verbs that need charly's naming convention
+// carried for the out-of-process vm-target verbs that need charly's naming convention
 // without re-deriving it) — present on the wire regardless of which of the three marshal sites
 // populates them, since all three now share this one shape.
 type CheckEnv struct {
@@ -4876,10 +4825,9 @@ type CheckEnv struct {
 	MCPProvide []CandyMCPProvide `yaml:"mcp_provide,omitempty" json:"mcp_provide,omitempty"`
 
 	// candy_dirs: the host threads the candy name → resolved source-dir map (from
-	// the check-run's candy source scan) so the host-side committed-APK anchor
-	// (checkhost.ResolveCommittedApk via resolveCheckApk) can resolve a relative
-	// `apk:` path against the AUTHORING candy's source tree for in-venue steps of a
-	// baked live plan — the out-of-process verb has no CandyDirs of its own.
+	// the check-run's candy source scan) so an out-of-process check verb can anchor
+	// a fixture path against the AUTHORING candy's source tree for in-venue steps of
+	// a baked live plan — the out-of-process verb has no CandyDirs of its own.
 	CandyDirs map[string]string `yaml:"candy_dirs,omitempty" json:"candy_dirs,omitempty"`
 
 	DialTimeoutNs int64 `yaml:"dial_timeout_ns,omitempty" json:"dial_timeout_ns,omitempty"`
@@ -5278,7 +5226,7 @@ type CLIModel struct {
 // node.Descent BY TRAIT — never by switching on the substrate kind word (the boundary law).
 // Canonical table: pod=container+image_backed+image_context+selectors[engine];
 // vm=ssh+machine_venue+exclusive_venue+selectors[backend]; local=shell+machine_venue;
-// kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+// kubernetes=shell+image_context+leaf_only; zero value =
 // external-in-place. Not authored — charly-written state stamped at load.
 type DeployTraits struct {
 	// venue: how commands physically execute in this substrate's venue:
@@ -5286,7 +5234,7 @@ type DeployTraits struct {
 	//	container — podman/docker exec into the container by name (pod).
 	//	ssh       — an ssh hop into the host machine guest (vm).
 	//	shell     — the substrate's own root executor runs on the host (local; kubernetes host-side).
-	//	parent    — reached via the parent's venue, no own executor (android).
+	//	parent    — reached via the parent's venue, no own executor.
 	//	kubevirt  — an ssh hop into a guest whose machine is a CLUSTER-managed CR (a KubeVirt
 	//	            VirtualMachine), whose lifecycle an out-of-process plugin owns (NOT `charly vm`);
 	//	            distinct from `ssh` so a venue test names the host-libvirt vm unambiguously.
@@ -5315,7 +5263,7 @@ type DeployTraits struct {
 	// lifecycle + resource claim (vm, via `charly vm start`/`stop`) leaves this false.
 	BracketedLifecycle bool `yaml:"bracketed_lifecycle,omitempty" json:"bracketed_lifecycle,omitempty"`
 
-	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local/android run a
+	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local run a
 	// disposable check bed; kubernetes (leaf_only) does not. validateCheckBeds reads this instead of
 	// switching on the substrate word (the boundary-law incomplete-seam gate).
 	BedTarget bool `yaml:"bed_target,omitempty" json:"bed_target,omitempty"`
@@ -5352,7 +5300,7 @@ type DescentDescriptor struct {
 	// transport: how the deploy chain descends INTO this node's substrate (DERIVED from the
 	// declared venue + leaf_only by kit.DescentFromTraits):
 	//
-	//	none           — shares the parent venue; no hop (local, android).
+	//	none           — shares the parent venue; no hop (local).
 	//	container-exec — enter the container by name (pod; podman/docker per engine).
 	//	ssh            — an ssh hop into the guest (vm; kubevirt shares this transport).
 	//	reject         — unreachable via the deploy chain (kubernetes → use kubectl).
@@ -5367,7 +5315,7 @@ type DescentDescriptor struct {
 	//	container — podman/docker exec into the container by name (pod).
 	//	ssh       — an ssh hop into the host machine guest (vm).
 	//	shell     — the substrate's own root executor runs on the host (local; kubernetes host-side).
-	//	parent    — reached via the parent's venue, no own executor (android).
+	//	parent    — reached via the parent's venue, no own executor.
 	//	kubevirt  — an ssh hop into a guest whose machine is a CLUSTER-managed CR (a KubeVirt
 	//	            VirtualMachine), whose lifecycle an out-of-process plugin owns (NOT `charly vm`);
 	//	            distinct from `ssh` so a venue test names the host-libvirt vm unambiguously.
@@ -5396,7 +5344,7 @@ type DescentDescriptor struct {
 	// lifecycle + resource claim (vm, via `charly vm start`/`stop`) leaves this false.
 	BracketedLifecycle bool `yaml:"bracketed_lifecycle,omitempty" json:"bracketed_lifecycle,omitempty"`
 
-	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local/android run a
+	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local run a
 	// disposable check bed; kubernetes (leaf_only) does not. validateCheckBeds reads this instead of
 	// switching on the substrate word (the boundary-law incomplete-seam gate).
 	BedTarget bool `yaml:"bed_target,omitempty" json:"bed_target,omitempty"`
@@ -5453,16 +5401,16 @@ type Deploy struct {
 	Descent *DescentDescriptor `yaml:"descent,omitempty" json:"descent,omitempty"`
 
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
-	// kubernetes:/local:/android: — the former targetless group: kind is REMOVED, the member-tree
+	// kubernetes:/local: — the former targetless group: kind is REMOVED, the member-tree
 	// cutover), so the deploy carries only NON-kind cross-refs:
 	//
-	//	from  — inherit a SAME-kind template by name (vm/kubernetes/local/android deploys).
+	//	from  — inherit a SAME-kind template by name (vm/kubernetes/local deploys).
 	//	       A VM deploy may carry the unified NAME:TAG spelling `from: vm-name:snapshot`
 	//	       (tag = snapshot name): the loader splits the last `:` into from + from_snapshot,
 	//	       so `from: base:golden` == `from: base` + `from_snapshot: golden`. A VM entity
 	//	       name may not contain `:` — the split is unambiguous. Pod/kubernetes/image
 	//	       refs (ImageBacked) are NOT split (image tags legitimately contain `:`).
-	//	image — the box/OCI artifact a pod/kubernetes/android RUNS (the former `box:`).
+	//	image — the box/OCI artifact a pod/kubernetes RUNS (the former `box:`).
 	//
 	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
 	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
@@ -5929,8 +5877,8 @@ type Member struct {
 // #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same DeployNode
 // Go struct), so it is a plain reference (R3 — no field duplication; stays CLOSED
 // because #Deploy is closed). The bed-mode invariants the former `& (A|B|C)`
-// disjunction expressed — disposable required + bed-legal target ∈ {pod,vm,local,
-// android} for the deterministic/ephemeral modes, the iterate AI-benchmark mode,
+// disjunction expressed — disposable required + bed-legal target ∈ {pod,vm,local}
+// for the deterministic/ephemeral modes, the iterate AI-benchmark mode,
 // and the ephemeral⇒disposable promotion — are enforced in GO at load time
 // (loaderkit.ValidateCheckBeds + the ephemeral validator beside it), which is the
 // SINGLE source of truth for the actual deploy-form beds (a node-form check bed
@@ -6024,33 +5972,6 @@ type StandaloneLoad struct {
 	Shape string `yaml:"shape,omitempty" json:"shape"`
 
 	Body RawBody `yaml:"body,omitempty" json:"body,omitempty"`
-}
-
-// #AndroidDeployVenue is the preresolved deploy:android substrate payload the
-// host's android deploy preresolver produces (in DeployVenue.Substrate) and
-// the candy/plugin-adb deploy:android provider decodes.
-type AndroidDeployVenue struct {
-	AdbAddr string `yaml:"adb_addr,omitempty" json:"adb_addr"`
-
-	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
-
-	Container string `yaml:"container,omitempty" json:"container,omitempty"`
-
-	Serial string `yaml:"serial,omitempty" json:"serial,omitempty"`
-
-	GoogleEmail string `yaml:"google_email,omitempty" json:"google_email,omitempty"`
-
-	GoogleToken string `yaml:"google_token,omitempty" json:"google_token,omitempty"`
-
-	Installs []ApkPackageSpec `yaml:"installs,omitempty" json:"installs,omitempty"`
-
-	// boot_timeout / install_deadline / install_interval are the readiness +
-	// install-retry windows the host ships (no magic numbers in the plugin).
-	BootTimeout string `yaml:"boot_timeout,omitempty" json:"boot_timeout,omitempty"`
-
-	InstallDeadline string `yaml:"install_deadline,omitempty" json:"install_deadline,omitempty"`
-
-	InstallInterval string `yaml:"install_interval,omitempty" json:"install_interval,omitempty"`
 }
 
 // #KubernetesDeployVenue is the preresolved deploy:kubernetes substrate payload the host's
@@ -10513,7 +10434,7 @@ type DeployTargetRebuildOpts struct {
 // ResolveTarget proxy (unified_targets.go) constructs this per call from data alone — it never
 // holds a *grpcProvider or any core-private registry object, so the type is free to live
 // entirely on the wire. `word` is the resolved deploy-substrate provider word (e.g. "pod"/"vm"/
-// "local"/"kubernetes"/"android") the plugin dispatches the ACTUAL substrate leg to, via its own
+// "local"/"kubernetes") the plugin dispatches the ACTUAL substrate leg to, via its own
 // sdk.Executor.InvokeProvider — core never talks to the substrate provider directly once this
 // lands. `has_lifecycle` is the ONE piece of substrate metadata core must resolve itself (the
 // registered-provider's own `lifecycle` flag lives on the core-private *grpcProvider) — it gates
@@ -10571,7 +10492,7 @@ type DeployTargetDispatchRequest struct {
 
 	// venue_json is the ALREADY-MATERIALIZED spec.VenueDescriptor for this deploy. Two distinct
 	// producers set it: (a) core, when this dispatch is a NESTED non-lifecycle child (a
-	// `local:`/`android:`/`kubernetes:` deploy under a vm/pod, tree position) — Add flattens the
+	// `local:`/`kubernetes:` deploy under a vm/pod, tree position) — Add flattens the
 	// live ancestor executor (EmitOpts.ParentExec) into this field via kit.DescriptorFromExecutor
 	// BEFORE the very first "add" dispatch, since that live value cannot itself cross the wire
 	// (FIX ROUND, S3b follow-up — its absence on "add" was the R10 bed regression: every nested
@@ -10952,7 +10873,7 @@ type CliReply struct {
 // spec.LoadedProject marshalled directly (no reply envelope needed). Every OTHER loader leg
 // carries an existing type verbatim over the []byte wire: loader-bootstrap ([]byte→[]byte),
 // loader-threaded (∅→spec.Threaded), loader-materialize (spec.LoadedProject→loaderkit.UnifiedFile).
-// The former loader-android-validate / loader-preempt-validate legs dissolved — a plugin-side loader
+// The former loader-preempt-validate leg dissolved — a plugin-side loader
 // now self-serves those validators over InvokeProvider(kind, OpResolve).
 type LoaderWalkRequest struct {
 	Dir string `yaml:"dir,omitempty" json:"dir"`
@@ -11322,10 +11243,10 @@ type ToolStatus struct {
 }
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
-// deployment substrate (pod / vm / kubernetes / local / android / kindcluster /
+// deployment substrate (pod / vm / kubernetes / local / kindcluster /
 // kubevirt / firecracker). kind discriminates the
 // substrate; nested carries multi-hop children (RECURSIVE self-reference, populated
-// by the nested overlay); source records provenance (libvirt|ledger|adb|tree|podman).
+// by the nested overlay); source records provenance (libvirt|ledger|tree|podman).
 type DeploymentStatus struct {
 	Kind SubstrateKind `yaml:"kind,omitempty" json:"kind"`
 
@@ -11414,11 +11335,11 @@ type StatusSubstrateReply struct {
 // #SubstrateStatusRequest — the per-substrate COLLECTOR request the host sends to the substrate
 // plugin's OpStatusCollect (P14a: the cleanly-movable collectors — pod live + local + the probes —
 // relocated into candy/plugin-substrate, served on the kind provider's Invoke by word
-// pod/vm/kubernetes/local/android/kindcluster). The host passes the scalar inputs a sdk-only candy cannot derive:
+// pod/vm/kubernetes/local/kindcluster). The host passes the scalar inputs a sdk-only candy cannot derive:
 // the engine binary name (engine_bin), the run mode, the quadlet dir (pod's quadlet-description
 // enrichment + enabled-but-not-running append), include_all (--all), and — on the single path —
 // box+instance. NO deploy-cone (DeployConfig/UnifiedFile) crosses this seam: the deploy
-// enrichment stays host-side until K5, applied to the live rows this reply returns. vm/kubernetes/android
+// enrichment stays host-side until K5, applied to the live rows this reply returns. vm/kubernetes
 // are deferred to K5 (their collectors are deploy-cone-coupled); the plugin returns no rows for
 // those words until then.
 type SubstrateStatusRequest struct {
@@ -11464,26 +11385,6 @@ type ResolvedLocal struct {
 
 	// raw is the opaque authored body (the kernel passes it back unread where
 	// a verbatim template is needed).
-	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
-}
-
-// #ResolvedAndroid is the resolve-to-envelope form of an `android:` device
-// template.
-type ResolvedAndroid struct {
-	Serial string `yaml:"serial,omitempty" json:"serial,omitempty"`
-
-	Device string `yaml:"device,omitempty" json:"device,omitempty"`
-
-	ApiLevel int `yaml:"api_level,omitempty" json:"api_level,omitempty"`
-
-	GoogleAccount *GoogleAccount `yaml:"google_account,omitempty" json:"google_account,omitempty"`
-
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-
-	Box string `yaml:"box,omitempty" json:"box,omitempty"`
-
-	Adb *AdbEndpoint `yaml:"adb,omitempty" json:"adb,omitempty"`
-
 	Raw RawBody `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
 
@@ -11609,31 +11510,20 @@ type FirecrackerResolveReply struct {
 	Resolved *ResolvedFirecracker `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
-// #LocalResolveInput / #AndroidResolveInput carry one opaque template body to
-// project.
+// #LocalResolveInput carries one opaque template body to project.
 type LocalResolveInput struct {
 	Local RawBody `yaml:"local,omitempty" json:"local"`
 }
 
-type AndroidResolveInput struct {
-	Android RawBody `yaml:"android,omitempty" json:"android"`
-}
-
-// #LocalResolveReply / #AndroidResolveReply wrap the resolved template.
+// #LocalResolveReply wraps the resolved template.
 type LocalResolveReply struct {
 	Resolved *ResolvedLocal `yaml:"resolved,omitempty" json:"resolved,omitempty"`
 }
 
-type AndroidResolveReply struct {
-	Resolved *ResolvedAndroid `yaml:"resolved,omitempty" json:"resolved,omitempty"`
-}
-
 // #SubstrateTemplateResolveRequest is the discriminated OpResolve request for
-// the substrate-template de-type: exactly one of Local / Android / Pod is set.
+// the substrate-template de-type: exactly one substrate arm is set.
 type SubstrateTemplateResolveRequest struct {
 	Local *LocalResolveInput `yaml:"local,omitempty" json:"local,omitempty"`
-
-	Android *AndroidResolveInput `yaml:"android,omitempty" json:"android,omitempty"`
 
 	Pod *PodResolveInput `yaml:"pod,omitempty" json:"pod,omitempty"`
 

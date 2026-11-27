@@ -11,7 +11,7 @@ package schema
 // The four package/env/route sub-shapes (#PackageSection/#TagPkgConfig/#EnvConfig/#RouteConfig) were
 // hand structs in sdk/deploykit (layer_model.go) + sdk/kit (env.go); they are CUE-sourced here and
 // those homes alias onto spec (SDD: wire types are CUE-sourced). Composed sub-defs #Step/#Op/
-// #CandyService/#CandyExtract/#CandyData/#CandyVolume/#CandyAlias/#Shell/#EnvDependency/#CandyApk
+// #CandyService/#CandyExtract/#CandyData/#CandyVolume/#CandyAlias/#Shell/#EnvDependency
 // come from 00_common.cue / candy.cue. `package schema`; concatenated into the spec compilation unit.
 // S-CM spike PROVEN live (scratchpad/k5-scm-spike-verdict.md + k5a-buildvocab-spike-verdict.md).
 
@@ -81,7 +81,7 @@ package schema
 	plan?: [...#Step] @go(Plan)
 	run_ops?: [...#Op] @go(RunOps)
 
-	// --- services / extract / data / apk ---
+	// --- services / extract / data ---
 	// service — the candy's service declarations as OPAQUE BYTES, on the hook/extract/data pattern:
 	// the authored #CandyService stays in spec (it is #Candy's own field), and the IR carries the
 	// JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
@@ -96,7 +96,6 @@ package schema
 	// pattern: the authored #CandyData stays in spec (it is #Candy's own field), and the IR carries
 	// the JSON bytes rather than importing it, so the def can move to the plugin that owns the body.
 	data?: bytes @go(Data,type=RawBody)
-	apk?: [...#CandyApk] @go(Apk,type=[]ApkPackageSpec)
 
 	// --- package surface (resolved) ---
 	top_packages?: [...string] @go(TopPackages)

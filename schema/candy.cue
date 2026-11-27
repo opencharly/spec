@@ -9,7 +9,7 @@ package schema
 // #DistroPackages) come from 00_common.cue. Source of truth: charly/layers.go
 // CandyYAML + its sub-types (PortSpec, VolumeYAML, AliasYAML, ExtractYAML,
 // DataYAML, RouteYAML, EnvDependency, MCPServerYAML, SecretYAML, HooksConfig,
-// CandyArtifact, CandyCapabilities, ApkPackageSpec, LocalPkgMap, ServiceEntry).
+// CandyArtifact, CandyCapabilities, LocalPkgMap, ServiceEntry).
 
 #Candy: {
 	// --- identity (required: ADE mandates name+description+plan) ---
@@ -118,7 +118,6 @@ package schema
 	// --- package surface (Calamares-aligned) ---
 	package?: [...#PackageItem]
 	distro?: {[string]: #DistroPackages} @go(Distro,type=map[string]*DistroPackages)
-	apk?: [...#CandyApk] @go(Apk,type=[]ApkPackageSpec)
 	// packaging — the native-package metadata for this candy: the SINGLE source
 	// of truth the `charly generate-packages` plugin (sdk/packagekit) reads to
 	// build distro packages (deb/rpm/apk/archlinux/ipk/msix). Any candy may
@@ -515,17 +514,6 @@ package schema
 	oci_label?: {[string]: string} @go(OCILabels)
 }
 
-// ApkPackageSpec — one Android app install. package (apkeep by id) XOR apk
-// (committed local APK path) — exactly one.
-#CandyApk: {
-									package?:     string & !=""
-									apk?:         string & !=""
-									source?:      *"apk-pure" | or(_sourceWord)
-									arch?:        string & !=""
-									app_version?: string & !=""
-									// exactly one of package/apk (disjunction keeps it CLOSED; matchN would open it).
-} & ({package!: _, apk?: _|_} | {apk!: _, package?: _|_}) @go(-) // gengotypes: hand ApkPackageSpec (spec/union_types.go)
-
 // RouteYAML — generic service-route metadata (traefik / tunnel).
 #CandyRoute: {
 	host: string & !=""
@@ -721,14 +709,6 @@ _candyServiceType: {
 	idle: {}
 } @vocab(spec)
 _candyServiceTypeWord: [for w, _ in _candyServiceType {w}]
-// #CandyApk.source
-_source: {
-	"apk-pure": {}
-	"google-play": {}
-	"f-droid": {}
-	"huawei-app-gallery": {}
-} @vocab(spec)
-_sourceWord: [for w, _ in _source {w}]
 
 // -----------------------------------------------------------------------------
 // #Resolved* — the RESOLVED twins of the authored candy sub-shapes.

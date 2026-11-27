@@ -105,11 +105,6 @@ func TestStepView_RoundTrip(t *testing.T) {
 			Checksum:  "deadbeef",
 			CandyName: "rpmfusion",
 		}},
-		{"ApkInstall", &ApkInstallStep{
-			Packages:  []ApkPackageSpec{{Package: "com.example.app", Source: "google-play", Arch: "arm64-v8a", AppVersion: "1.2.3"}},
-			CandyName: "myapp",
-			CandyDir:  "/proj/candy/myapp",
-		}},
 		{"LocalPkgInstall", &LocalPkgInstallStep{
 			PackageName: "charly",
 			CandyName:   "charly",

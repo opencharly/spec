@@ -41,8 +41,7 @@ func TestExtractMetadata_CheckLevel(t *testing.T) {
 // as a JSON OBJECT from the image's spec.Box.Env map — parses back into
 // meta.Env's []string KEY=VALUE form (sorted, via EnvMapToPairs). Decoding the
 // object straight into []string was the writer/reader mismatch that failed every
-// image with a box-level env: map (check box android-emulator: "cannot
-// unmarshal object into []string").
+// image with a box-level env: map ("cannot unmarshal object into []string").
 func TestExtractMetadata_EnvObjectLabel(t *testing.T) {
 	orig := InspectLabels
 	defer func() { InspectLabels = orig }()

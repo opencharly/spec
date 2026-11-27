@@ -96,7 +96,6 @@ const (
 	StepKindShellHook       StepKind = "ShellHook"
 	StepKindShellSnippet    StepKind = "ShellSnippet"
 	StepKindRepoChange      StepKind = "RepoChange"
-	StepKindApkInstall      StepKind = "ApkInstall"
 	StepKindLocalPkgInstall StepKind = "LocalPkgInstall"
 	StepKindReboot          StepKind = "Reboot"
 	StepKindExternalPlugin  StepKind = "ExternalPlugin"

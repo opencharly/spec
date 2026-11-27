@@ -10,7 +10,7 @@ import (
 func ptr[T any](v T) *T { return &v }
 
 // TestMergeRawTemplateMap verifies the root-wins merge semantics for opaque
-// substrate-template maps (local/android after Cutover I). Relocated with
+// substrate-template maps (local after Cutover I). Relocated with
 // MergeUnified from sdk/loaderkit/merge.go (#55 C3b), using raw JSON bodies so
 // the test carries no charly-core type dependency.
 func TestMergeRawTemplateMap(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 
 // TestLocalPkgInstallStepIR exercises the IR contract for LocalPkgInstallStep
 // (relocated from charly/localpkg_test.go, K3 cone2 test closure): kind, scope
-// (system), venue (host-native), gate (none), reverse (no ledger ops — like
-// apk) — a pure spec.LocalPkgInstallStep test with zero charly-core
+// (system), venue (host-native), gate (none), reverse (no ledger ops) — a pure
+// spec.LocalPkgInstallStep test with zero charly-core
 // dependency, and no prior duplicate found anywhere in the tree.
 func TestLocalPkgInstallStepIR(t *testing.T) {
 	s := &LocalPkgInstallStep{PackageName: "charly", CandyName: "charly"}
