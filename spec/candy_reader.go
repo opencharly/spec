@@ -17,7 +17,6 @@ type CandyReader interface {
 	Vars() map[string]string
 	PlanSteps() []Step
 	Reboot() bool
-	Apk() []ApkPackageSpec
 	EnvConfig() (*EnvConfig, error)
 	Service() []CandyService
 	Shell() *Shell
@@ -90,7 +89,7 @@ type CandyReader interface {
 	// field itself was removed from the schema in the SAME cutover [candy.cue /
 	// candymodel.cue, migrated by candy/plugin-migrate's stripCandyLibvirtField] — so
 	// these two accessors are gone too, not merely deprecated.)
-	// Consumer-set audited: HasAnyInit/HasAnyPackages/HasApk/HasService/HasTagPackages
+	// Consumer-set audited: HasAnyInit/HasAnyPackages/HasService/HasTagPackages
 	// were considered and DROPPED — zero external caller outside layers.go itself (they
 	// back OTHER *Candy-internal composition, e.g. HasContent/HasInstallFiles, which
 	// stays a host-precomputed field per the #67 predicate-carrying pattern above).

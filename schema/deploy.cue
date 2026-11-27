@@ -14,14 +14,14 @@ package schema
 // node.Descent BY TRAIT — never by switching on the substrate kind word (the boundary law).
 // Canonical table: pod=container+image_backed+image_context+selectors[engine];
 // vm=ssh+machine_venue+exclusive_venue+selectors[backend]; local=shell+machine_venue;
-// kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+// kubernetes=shell+image_context+leaf_only; zero value =
 // external-in-place. Not authored — charly-written state stamped at load.
 #DeployTraits: {
 	// venue: how commands physically execute in this substrate's venue:
 	//   container — podman/docker exec into the container by name (pod).
 	//   ssh       — an ssh hop into the host machine guest (vm).
 	//   shell     — the substrate's own root executor runs on the host (local; kubernetes host-side).
-	//   parent    — reached via the parent's venue, no own executor (android).
+	//   parent    — reached via the parent's venue, no own executor.
 	//   kubevirt  — an ssh hop into a guest whose machine is a CLUSTER-managed CR (a KubeVirt
 	//               VirtualMachine), whose lifecycle an out-of-process plugin owns (NOT `charly vm`);
 	//               distinct from `ssh` so a venue test names the host-libvirt vm unambiguously.
@@ -43,7 +43,7 @@ package schema
 	// claim bracketed around the dispatch (pod). A substrate that manages its own venue
 	// lifecycle + resource claim (vm, via `charly vm start`/`stop`) leaves this false.
 	bracketed_lifecycle?: bool @go(BracketedLifecycle)
-	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local/android run a
+	// bed_target: the substrate is a valid `kind:check` bed target — pod/vm/local run a
 	// disposable check bed; kubernetes (leaf_only) does not. validateCheckBeds reads this instead of
 	// switching on the substrate word (the boundary-law incomplete-seam gate).
 	bed_target?: bool @go(BedTarget)
@@ -74,7 +74,7 @@ package schema
 #DescentDescriptor: {
 	// transport: how the deploy chain descends INTO this node's substrate (DERIVED from the
 	// declared venue + leaf_only by kit.DescentFromTraits):
-	//   none           — shares the parent venue; no hop (local, android).
+	//   none           — shares the parent venue; no hop (local).
 	//   container-exec — enter the container by name (pod; podman/docker per engine).
 	//   ssh            — an ssh hop into the guest (vm; kubevirt shares this transport).
 	//   reject         — unreachable via the deploy chain (kubernetes → use kubectl).
@@ -117,15 +117,15 @@ package schema
 	descent?: #DescentDescriptor @go(Descent,optional=nillable)
 
 	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
-	// kubernetes:/local:/android: — the former targetless group: kind is REMOVED, the member-tree
+	// kubernetes:/local: — the former targetless group: kind is REMOVED, the member-tree
 	// cutover), so the deploy carries only NON-kind cross-refs:
-	//   from  — inherit a SAME-kind template by name (vm/kubernetes/local/android deploys).
+	//   from  — inherit a SAME-kind template by name (vm/kubernetes/local deploys).
 	//          A VM deploy may carry the unified NAME:TAG spelling `from: vm-name:snapshot`
 	//          (tag = snapshot name): the loader splits the last `:` into from + from_snapshot,
 	//          so `from: base:golden` == `from: base` + `from_snapshot: golden`. A VM entity
 	//          name may not contain `:` — the split is unambiguous. Pod/kubernetes/image
 	//          refs (ImageBacked) are NOT split (image tags legitimately contain `:`).
-	//   image — the box/OCI artifact a pod/kubernetes/android RUNS (the former `box:`).
+	//   image — the box/OCI artifact a pod/kubernetes RUNS (the former `box:`).
 	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
 	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
 	// (source:) OR a deploy (from:) under ONE arm — the disjunction #Vm|#Deploy.
@@ -360,8 +360,8 @@ package schema
 // #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same DeployNode
 // Go struct), so it is a plain reference (R3 — no field duplication; stays CLOSED
 // because #Deploy is closed). The bed-mode invariants the former `& (A|B|C)`
-// disjunction expressed — disposable required + bed-legal target ∈ {pod,vm,local,
-// android} for the deterministic/ephemeral modes, the iterate AI-benchmark mode,
+// disjunction expressed — disposable required + bed-legal target ∈ {pod,vm,local}
+// for the deterministic/ephemeral modes, the iterate AI-benchmark mode,
 // and the ephemeral⇒disposable promotion — are enforced in GO at load time
 // (loaderkit.ValidateCheckBeds + the ephemeral validator beside it), which is the
 // SINGLE source of truth for the actual deploy-form beds (a node-form check bed
@@ -751,7 +751,7 @@ package schema
 
 	// Shared identity / provenance.
 	candy_name?: string @go(CandyName) // every kind
-	candy_dir?:  string @go(CandyDir)  // Builder / Op / ApkInstall / LocalPkgInstall
+	candy_dir?:  string @go(CandyDir)  // Builder / Op / LocalPkgInstall
 
 	// SystemPackagesStep + RepoChangeStep + LocalPkgInstallStep.
 	format?: string @go(Format)
@@ -824,9 +824,6 @@ package schema
 	file?:     string @go(File)
 	content?:  string @go(Content)
 	checksum?: string @go(Checksum)
-
-	// ApkInstallStep.
-	apk_packages?: [...#CandyApk] @go(ApkPackages,type=[]ApkPackageSpec)
 
 	// LocalPkgInstallStep — the deploy-time executor downloads the published
 	// package from the distro repo (the download leg) instead of building from
@@ -905,24 +902,6 @@ package schema
 #StandaloneLoad: {
 	shape!: string @go(Shape) // "deploy" | "template" | "candy-image" | "candy-layer"
 	body?:  bytes  @go(Body,type=RawBody)
-}
-
-// #AndroidDeployVenue is the preresolved deploy:android substrate payload the
-// host's android deploy preresolver produces (in DeployVenue.Substrate) and
-// the candy/plugin-adb deploy:android provider decodes.
-#AndroidDeployVenue: {
-	adb_addr!: string @go(AdbAddr)
-	engine?:    string @go(Engine)
-	container?: string @go(Container)
-	serial?:    string @go(Serial)
-	google_email?: string @go(GoogleEmail)
-	google_token?: string @go(GoogleToken)
-	installs?: [...#CandyApk] @go(Installs,type=[]ApkPackageSpec)
-	// boot_timeout / install_deadline / install_interval are the readiness +
-	// install-retry windows the host ships (no magic numbers in the plugin).
-	boot_timeout?:     string @go(BootTimeout)
-	install_deadline?: string @go(InstallDeadline)
-	install_interval?: string @go(InstallInterval)
 }
 
 // #KubernetesDeployVenue is the preresolved deploy:kubernetes substrate payload the host's
@@ -1098,7 +1077,6 @@ _target: {
 	vm: {}
 	kubernetes: {}
 	local: {}
-	android: {}
 	kindcluster: {}
 	kubevirt: {}
 	firecracker: {}

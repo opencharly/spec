@@ -84,7 +84,7 @@ func PathLeaf(path string) string {
 }
 
 // ClassifyNodeTarget picks the target discriminator for a node. Uses node.Target when non-empty
-// (canonical pod|vm|kubernetes|local|android|kindcluster, set from the node-form kind by the
+// (canonical pod|vm|kubernetes|local|kindcluster, set from the node-form kind by the
 // loader's deployTargetForDisc). For ref-based deploys with no charly.yml entry, the deploy name itself is
 // the hint: a literal `host`/`local` LEAF → local target; anything else → pod. A pure function of
 // node+path with no LoadUnified/executor dependency.
@@ -159,7 +159,7 @@ func IsContainerVenue(node *spec.DeployNode) bool {
 // ExternalInPlaceVenue reports whether node's stamped venue is an EXTERNAL deploy substrate that
 // applies its workload IN PLACE — local-like: no container image to build, no `charly
 // config`/`charly start`, teardown via `charly deploy del` (replay the recorded reverse ops).
-// local/android/kubernetes/exampledeploy are in-place (parent/none venues); pod is the one externalized
+// local/kubernetes/exampledeploy are in-place (parent/none venues); pod is the one externalized
 // substrate that is NOT in-place (excluded by requiring venue != container implicitly, since
 // parent/none never equals container). Mirrors HostRooted's shape (#55 W3 B2-full) — the
 // plugin-reachable equivalent of the former core-private bedExternalInPlace(target string), which
@@ -206,8 +206,8 @@ func DeployNestedLocalChildren(parent string, node *spec.DeployNode, apply func(
 
 // BedCheckLiveRefs returns the ordered `charly check live` targets for a bed: the substrate
 // itself first, then each IN-SUBSTRATE member as a dotted path in authored order. A
-// `target: android` member shares the parent pod's venue (Descent.Venue == "parent") and has no
-// own image — its app-presence checks are baked into the parent ref, so it is skipped. Pure +
+// parent-venue member shares the parent pod's venue (Descent.Venue == "parent") and has no
+// own image — its checks are baked into the parent ref, so it is skipped. Pure +
 // unit-tested.
 func BedCheckLiveRefs(name string, node *spec.DeployNode) []string {
 	if node == nil {
@@ -215,7 +215,7 @@ func BedCheckLiveRefs(name string, node *spec.DeployNode) []string {
 	}
 	refs := []string{name}
 	for _, m := range node.InSubstrateMembers() {
-		if m.Node != nil && nodeDescentVenue(m.Node) == "parent" { // android (parent venue)
+		if m.Node != nil && nodeDescentVenue(m.Node) == "parent" { // parent venue
 			continue
 		}
 		refs = append(refs, name+"."+m.Name)

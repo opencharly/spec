@@ -60,7 +60,7 @@ package schema
 // Every field is optional (a caller fills only what it has — an in-proc/live snapshot has a live
 // Runner to read from; a box-mode run has no ContainerName/Venue; a detached construction may
 // lack DialTimeoutNs). container_name/venue are HOST-COMPUTED-ONLY fields (never authored,
-// carried for the out-of-process appium/vm-target verbs that need charly's naming convention
+// carried for the out-of-process vm-target verbs that need charly's naming convention
 // without re-deriving it) — present on the wire regardless of which of the three marshal sites
 // populates them, since all three now share this one shape.
 #CheckEnv: {
@@ -76,10 +76,9 @@ package schema
 	// for VM/host venues (no OCI label).
 	mcp_provide?:     [...#CandyMCPProvide] @go(MCPProvide)
 	// candy_dirs: the host threads the candy name → resolved source-dir map (from
-	// the check-run's candy source scan) so the host-side committed-APK anchor
-	// (checkhost.ResolveCommittedApk via resolveCheckApk) can resolve a relative
-	// `apk:` path against the AUTHORING candy's source tree for in-venue steps of a
-	// baked live plan — the out-of-process verb has no CandyDirs of its own.
+	// the check-run's candy source scan) so an out-of-process check verb can anchor
+	// a fixture path against the AUTHORING candy's source tree for in-venue steps of
+	// a baked live plan — the out-of-process verb has no CandyDirs of its own.
 	candy_dirs?:      {[string]: string} @go(CandyDirs)
 	dial_timeout_ns?: int      @go(DialTimeoutNs, type=int64)
 }

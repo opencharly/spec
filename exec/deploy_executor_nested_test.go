@@ -390,7 +390,7 @@ func (r *recordingParentExecutor) GetFile(_ context.Context, path string, _ bool
 // it. The original bug baked the redirect INSIDE wrapWithJump, so the stage was
 // written in the leaf container while Parent.GetFile read the parent's separate
 // filesystem → "no such file" on every container→host (or VM→host) pull (first
-// hit green by the wl-screenshot PNG in check-android-emulator-pod). This test
+// hit green by the wl-screenshot PNG in a desktop check bed). This test
 // FAILS against the pre-fix code (the stage path appears inside the leaf
 // heredoc body and `} > ` is absent) and PASSES with the fix, and confirms
 // binary content round-trips verbatim.

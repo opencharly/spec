@@ -103,7 +103,7 @@ message CLISubcommand {
 // the SINGLE plugin-declared source for "how does this substrate behave in the deploy chain",
 // so the kernel consults it BY TRAIT (off node.Descent) — never by switching on the kind word.
 // Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+// local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; zero value =
 // external-in-place. Empty/absent for every non-kind (or non-substrate kind) capability.
 message DeployTraits {
   // "container" | "ssh" | "shell" | "parent" | "none": how commands physically execute in this substrate's venue
@@ -120,7 +120,7 @@ message DeployTraits {
   bool leaf_only = 6;
   // the substrate's Start/Stop accept direct-mode CLI opts AND need the Q1 resource-arbiter claim bracketed around the dispatch (pod); a substrate that manages its own venue lifecycle + resource claim (vm) leaves this false
   bool bracketed_lifecycle = 7;
-  // the substrate is a valid kind:check bed target (pod/vm/local/android); kubernetes and unknown words are not
+  // the substrate is a valid kind:check bed target (pod/vm/local); kubernetes and unknown words are not
   bool bed_target = 8;
   // the substrate's Add/Del path wires the ephemeral register/teardown seam (TTL timer + charly.yml persistence) — vm only today
   bool supports_ephemeral = 9;
@@ -141,7 +141,7 @@ message StepContract {
   int32 venue = 2;
   // "" | "allow-repo-changes" | "allow-root-tasks" | "with-services"
   string gate = 3;
-  // F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false => deploy-only step (no build fragment; OCITarget skips it, like apk on an image build)
+  // F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false => deploy-only step (no build fragment; OCITarget skips it)
   bool emits = 4;
   // STEP-PLUGIN-PATHS (opencharly/charly#1131): the host hands this step the CONNECTED PLUGIN SET it resolved, as PATHS, in the step input under spec.ConnectedPluginsInputKey. Opt-IN because the input is validated against the plugin's own (usually closed) schema, so the key must be declared there too. false => the payload is the authored input, untouched.
   bool plugin_paths = 5;

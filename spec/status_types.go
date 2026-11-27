@@ -30,8 +30,8 @@ func StatusFromState(state string) string {
 }
 
 // SubstrateKind identifies which deployment substrate a DeploymentStatus row came
-// from — the discriminator that lets `charly status` present pod, VM, kubernetes, local,
-// and android deployments side-by-side from one unified table. The command:status
+// from — the discriminator that lets `charly status` present pod, VM, kubernetes, and
+// local deployments side-by-side from one unified table. The command:status
 // plugin (fan-out + render) and every substrate plugin's status-collect Op share
 // this type; #DeploymentStatus.kind references it via @go(Kind,type=SubstrateKind).
 //
@@ -46,7 +46,6 @@ const (
 	SubstrateVM          SubstrateKind = "vm"
 	SubstrateKubernetes  SubstrateKind = "kubernetes"
 	SubstrateLocal       SubstrateKind = "local"
-	SubstrateAndroid     SubstrateKind = "android"
 	SubstrateKindcluster SubstrateKind = "kindcluster"
 	SubstrateKubevirt    SubstrateKind = "kubevirt"
 	SubstrateFirecracker SubstrateKind = "firecracker"

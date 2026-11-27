@@ -313,17 +313,6 @@ type VmSsh struct {
 }
 
 // ---------------------------------------------------------------------------
-// ApkPackageSpec — #CandyApk (android_spec.go). package XOR apk.
-// ---------------------------------------------------------------------------
-type ApkPackageSpec struct {
-	Package    string `yaml:"package,omitempty" json:"package,omitempty"`
-	Apk        string `yaml:"apk,omitempty" json:"apk,omitempty"`
-	Source     string `yaml:"source,omitempty" json:"source,omitempty"`
-	Arch       string `yaml:"arch,omitempty" json:"arch,omitempty"`
-	AppVersion string `yaml:"app_version,omitempty" json:"app_version,omitempty"`
-}
-
-// ---------------------------------------------------------------------------
 // LibvirtHostdev — #LibvirtHostdev (libvirt_yaml.go). The `if type=="pci"`
 // source-redefine degrades the generated def to `any`.
 // ---------------------------------------------------------------------------

@@ -49,8 +49,8 @@ func MergeUnified(dst, src *spec.UnifiedFile, srcDir string) {
 	mergeRawTemplateMap(&dst.Candy, src.Candy)
 	// PluginKinds carries every plugin-extracted kind — the build vocabulary
 	// (distro/builder/init/resource), the Calamares target, sidecar/agent/module/
-	// package-group, AND (K1 unit-1 follow-up) the 5 standalone-substrate-TEMPLATE kinds
-	// vm/pod/kubernetes/local/android (formerly 5 separate mergeRawTemplateMap calls into dedicated
+	// package-group, AND (K1 unit-1 follow-up) the 4 standalone-substrate-TEMPLATE kinds
+	// vm/pod/kubernetes/local (formerly 4 separate mergeRawTemplateMap calls into dedicated
 	// fields — now subsumed here too, since they fold into PluginKinds[disc][name] like every
 	// other templated kind) — merged once here (root-wins, name-keyed override). The former
 	// mergeDistroMap/mergeBuilderMap/mergeInitMap/mergeResourceMap/mergeTargetMap calls
@@ -64,9 +64,9 @@ func MergeUnified(dst, src *spec.UnifiedFile, srcDir string) {
 	mergeBoxConfig(&dst.Defaults, &src.Defaults)
 }
 
-// mergeRawTemplateMap root-wins merges an OPAQUE substrate-template map (local /
-// android after the Cutover I de-type): copy a name only when ABSENT in dst. One
-// generic helper for both (R3) — the former typed mergeLocalMap/mergeAndroidMap.
+// mergeRawTemplateMap root-wins merges an OPAQUE substrate-template map (local
+// after the Cutover I de-type): copy a name only when ABSENT in dst. One
+// generic helper (R3) — the former typed mergeLocalMap.
 func mergeRawTemplateMap(dst *map[string]json.RawMessage, src map[string]json.RawMessage) {
 	if len(src) == 0 {
 		return

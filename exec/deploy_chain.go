@@ -144,11 +144,10 @@ func AppendHopForFlatPath(chain spec.DeployExecutor, node *spec.DeployNode, flat
 	}
 	switch node.Descent.Transport {
 	case "none":
-		// local + android nodes share the parent venue: a local node's
-		// venue IS the chain root (a ShellExecutor for host:local, or an
-		// SSHExecutor for host:<remote> — selected by RootExecutorForDeployNode
-		// and passed in as `root`), and an android device is reached via adb
-		// over the parent pod's published port. No new hop.
+		// a "none"-transport node shares the parent venue (local is the
+		// built-in case): a local node's venue IS the chain root (a
+		// ShellExecutor for host:local, or an SSHExecutor for host:<remote> —
+		// selected by RootExecutorForDeployNode and passed in as `root`). No new hop.
 		return chain, nil
 
 	case "container-exec":

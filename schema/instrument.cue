@@ -3,8 +3,8 @@ package schema
 // Run-scoped observation instruments + the machine-written evidence envelope
 // (Cutover A of the nested-capture architecture). `instrument:` entries sit on
 // any deployable substrate-node body (deploy.cue, beside disposable:/lifecycle:)
-// and carry a capture verb from the catalog (spice/record/wl/vnc/libvirt/cdp/
-// adb/appium — ANY plugin word), a run-phase bracket, and an optional post-run
+// and carry a capture verb from the catalog (spice/record/wl/vnc/libvirt/cdp —
+// ANY plugin word), a run-phase bracket, and an optional post-run
 // pipeline. The bed runner owns instruments across run phases; evidence rows
 // land in ONE manifest (evidence.yml) and pipelines are blind word dispatches —
 // core and the runner never branch on capture kind. Shared defs REFERENCED, not

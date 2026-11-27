@@ -14,12 +14,12 @@ import (
 // ever reaches a live `status --json` golden.
 func TestDeploymentStatusJSONParity(t *testing.T) {
 	child := &DeploymentStatus{
-		Kind: SubstrateAndroid, Image: "device", Status: "online",
-		Container: "emulator-5554", RunMode: "quadlet", Source: "adb",
+		Kind: SubstrateVM, Image: "fedora", Status: "running",
+		Container: "arch-vm", RunMode: "quadlet", Source: "libvirt",
 	}
 	s := DeploymentStatus{
-		Kind: SubstratePod, Image: "android-emulator", Status: "running",
-		Container: "charly-android-emulator", RunMode: "quadlet", Source: "podman",
+		Kind: SubstratePod, Image: "sway-browser-vnc", Status: "running",
+		Container: "charly-sway-browser-vnc", RunMode: "quadlet", Source: "podman",
 		Ports:  []PortMapping{{HostIP: "127.0.0.1", HostPort: 9240, CtrPort: 9222, Proto: "tcp"}},
 		Tools:  []ToolStatus{{Name: "cdp", Status: "ok", Port: 9240, Detail: "3 tabs"}},
 		Nested: []*DeploymentStatus{child},
@@ -33,9 +33,9 @@ func TestDeploymentStatusJSONParity(t *testing.T) {
 	const want = `[
   {
     "kind": "pod",
-    "image": "android-emulator",
+    "image": "sway-browser-vnc",
     "status": "running",
-    "container": "charly-android-emulator",
+    "container": "charly-sway-browser-vnc",
     "ports": [
       {
         "host_ip": "127.0.0.1",
@@ -55,12 +55,12 @@ func TestDeploymentStatusJSONParity(t *testing.T) {
     "run_mode": "quadlet",
     "nested": [
       {
-        "kind": "android",
-        "image": "device",
-        "status": "online",
-        "container": "emulator-5554",
+        "kind": "vm",
+        "image": "fedora",
+        "status": "running",
+        "container": "arch-vm",
         "run_mode": "quadlet",
-        "source": "adb"
+        "source": "libvirt"
       }
     ],
     "source": "podman"

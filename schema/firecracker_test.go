@@ -49,7 +49,6 @@ func TestSubstrateKind_GoConstsMatchTheCueEnum(t *testing.T) {
 		spec.SubstrateVM,
 		spec.SubstrateKubernetes,
 		spec.SubstrateLocal,
-		spec.SubstrateAndroid,
 		spec.SubstrateKindcluster,
 		spec.SubstrateKubevirt,
 		spec.SubstrateFirecracker,

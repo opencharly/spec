@@ -39,10 +39,10 @@ package schema
 #SubstrateKind: or(_substrateKindWord) @go(-)
 
 // #DeploymentStatus — the rendered shape for the table + JSON outputs across every
-// deployment substrate (pod / vm / kubernetes / local / android / kindcluster /
+// deployment substrate (pod / vm / kubernetes / local / kindcluster /
 // kubevirt / firecracker). kind discriminates the
 // substrate; nested carries multi-hop children (RECURSIVE self-reference, populated
-// by the nested overlay); source records provenance (libvirt|ledger|adb|tree|podman).
+// by the nested overlay); source records provenance (libvirt|ledger|tree|podman).
 #DeploymentStatus: {
 	kind:       #SubstrateKind @go(Kind,type=SubstrateKind)
 	image:      string @go(Image)
@@ -105,11 +105,11 @@ package schema
 // #SubstrateStatusRequest — the per-substrate COLLECTOR request the host sends to the substrate
 // plugin's OpStatusCollect (P14a: the cleanly-movable collectors — pod live + local + the probes —
 // relocated into candy/plugin-substrate, served on the kind provider's Invoke by word
-// pod/vm/kubernetes/local/android/kindcluster). The host passes the scalar inputs a sdk-only candy cannot derive:
+// pod/vm/kubernetes/local/kindcluster). The host passes the scalar inputs a sdk-only candy cannot derive:
 // the engine binary name (engine_bin), the run mode, the quadlet dir (pod's quadlet-description
 // enrichment + enabled-but-not-running append), include_all (--all), and — on the single path —
 // box+instance. NO deploy-cone (DeployConfig/UnifiedFile) crosses this seam: the deploy
-// enrichment stays host-side until K5, applied to the live rows this reply returns. vm/kubernetes/android
+// enrichment stays host-side until K5, applied to the live rows this reply returns. vm/kubernetes
 // are deferred to K5 (their collectors are deploy-cone-coupled); the plugin returns no rows for
 // those words until then.
 #SubstrateStatusRequest: {
@@ -146,7 +146,6 @@ _substrateKind: {
 	vm: {}
 	kubernetes: {}
 	local: {}
-	android: {}
 	kindcluster: {}
 	kubevirt: {}
 	firecracker: {}

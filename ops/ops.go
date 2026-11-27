@@ -138,13 +138,13 @@ const (
 	// (kit.ExtractMetadata/kit.ResolveBoxName/deploykit.QuadletDir/deploykit.
 	// ResolveBoxEngineForDeploy — all sdk-portable), and the sort. Distinct from
 	// OpStatusCollect (the single-word per-substrate collector op the SAME provider ALSO
-	// serves on kind:pod/vm/kubernetes/local/android).
+	// serves on kind:pod/vm/kubernetes/local).
 	OpStatusCollectAll = "status-collect-all"
 
 	// OpPreresolve is the generalized host-side deploy preresolver (F6): a substrate plugin
 	// declares a preresolve step the host runs BEFORE apply, returning the opaque JSON the host
-	// ships in DeployVenue.Substrate (the wire-backed generalization of the in-core kubernetes/android
-	// preresolvers).
+	// ships in DeployVenue.Substrate (the wire-backed generalization of the in-core kubernetes
+	// preresolver).
 	OpPreresolve = "preresolve"
 
 	// OpBootstrap is the BOOTSTRAP-PHASE hook (F9): the kernel invokes a Phase=="bootstrap"
@@ -184,7 +184,7 @@ const (
 	// F11), mirroring OpCompile's shape but carrying TEN former methods through ONE wire pair
 	// instead of ten (R3 — the project rulebook's "generic over ad-hoc"). Core's thin
 	// ResolveTarget proxy (charly/unified_targets.go) Invokes this; candy/plugin-fleet's handler
-	// switches on Op and reaches the ACTUAL deploy-substrate provider (pod/vm/local/kubernetes/android)
+	// switches on Op and reaches the ACTUAL deploy-substrate provider (pod/vm/local/kubernetes)
 	// via its OWN sdk.Executor.InvokeProvider (S1) — core never talks to the substrate directly
 	// once this lands.
 	OpDeployDispatch = "deploy-dispatch"

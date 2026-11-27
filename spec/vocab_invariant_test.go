@@ -34,7 +34,7 @@ func TestNoKindWordAsStepVerb(t *testing.T) {
 
 // TestNoKindWordAsOpModifier extends the invariant to the step Op's MODIFIER
 // fields: a modifier key must not be spelled like a reserved KIND word either.
-// The sole documented exemption is `target` — the adb/appium/wl app/element
+// The sole documented exemption is `target` — the wl app/element
 // target modifier, a homonym of the niche Calamares `target` kind (an installer
 // sub-kind, never a deploy substrate). The two never co-occur in one document and
 // the collision predates EDGE-INHERIT; it is tracked, not silently ignored. Any

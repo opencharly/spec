@@ -239,7 +239,7 @@ protocol: {
 				the SINGLE plugin-declared source for "how does this substrate behave in the deploy chain",
 				so the kernel consults it BY TRAIT (off node.Descent) — never by switching on the kind word.
 				Canonical table: pod=container+image_backed+image_context; vm=ssh+machine_venue+exclusive_venue;
-				local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; android=parent; zero value =
+				local=shell+machine_venue; kubernetes=shell+image_context+leaf_only; zero value =
 				external-in-place. Empty/absent for every non-kind (or non-substrate kind) capability.
 				"""
 			"fields": [
@@ -289,7 +289,7 @@ protocol: {
 					"name":   "bed_target"
 					"type":   "bool"
 					"number": 8
-					"doc":    "the substrate is a valid kind:check bed target (pod/vm/local/android); kubernetes and unknown words are not"
+					"doc":    "the substrate is a valid kind:check bed target (pod/vm/local); kubernetes and unknown words are not"
 				},
 				{
 					"name":   "supports_ephemeral"
@@ -338,7 +338,7 @@ protocol: {
 					"name":   "emits"
 					"type":   "bool"
 					"number": 4
-					"doc":    "F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false =\u003e deploy-only step (no build fragment; OCITarget skips it, like apk on an image build)"
+					"doc":    "F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false =\u003e deploy-only step (no build fragment; OCITarget skips it)"
 				},
 				{
 					"name":   "plugin_paths"

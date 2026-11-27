@@ -137,7 +137,7 @@ func (uf *UnifiedFile) SetCandy(name string, il *InlineCandy) {
 	uf.Candy = SetCandyInto(uf.Candy, name, il)
 }
 
-// VM/Pod/Kubernetes/Local/Android are DERIVED accessors over uf.PluginKinds[disc] — the 5
+// VM/Pod/Kubernetes/Local are DERIVED accessors over uf.PluginKinds[disc] — the 4
 // standalone-substrate-TEMPLATE kinds fold into PluginKinds generically (no per-kind-word
 // switch). Each returns the opaque name→body map for its kind (nil when none configured); the
 // kernel never decodes the bodies itself — consuming PLUGINS decode a body into the concrete
@@ -147,7 +147,6 @@ func (uf *UnifiedFile) Pod() map[string]json.RawMessage         { return uf.Plug
 func (uf *UnifiedFile) Kubernetes() map[string]json.RawMessage  { return uf.PluginKinds["kubernetes"] }
 func (uf *UnifiedFile) Kindcluster() map[string]json.RawMessage { return uf.PluginKinds["kindcluster"] }
 func (uf *UnifiedFile) Local() map[string]json.RawMessage       { return uf.PluginKinds["local"] }
-func (uf *UnifiedFile) Android() map[string]json.RawMessage     { return uf.PluginKinds["android"] }
 
 // Beds returns every disposable R10 bed in the fold, keyed by QUALIFIED name. In
 // the unified node-form model a bed IS a `disposable: true` deploy, so the bed set
@@ -423,7 +422,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 	return c
 }
 
-// ProjectTemplates decodes the uf.Local/Kubernetes/Pod/VM/Android raw template maps (map[string]json.RawMessage)
+// ProjectTemplates decodes the uf.Local/Kubernetes/Pod/VM raw template maps (map[string]json.RawMessage)
 // into the resolved kind-template maps validate/check-include/status read. Returns nil when no template
 // kind is present. Recurses into uf.Namespaces with the accumulated prefix, so a
 // namespace-qualified template ref (`local: <ns>.<tmpl>`, `kind:kubernetes` entity `<ns>.<name>`, …) is visible in
@@ -435,7 +434,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 func (uf *UnifiedFile) ProjectTemplates() *ProjectTemplates {
 	t := &ProjectTemplates{}
 	fillNamespacedTemplates(uf, "", t, map[*UnifiedFile]bool{})
-	if t.Local == nil && t.Kubernetes == nil && t.Kindcluster == nil && t.Pod == nil && t.VM == nil && t.Android == nil {
+	if t.Local == nil && t.Kubernetes == nil && t.Kindcluster == nil && t.Pod == nil && t.VM == nil {
 		return nil
 	}
 	return t
@@ -461,8 +460,6 @@ func (t *ProjectTemplates) ByKind(kind string) map[string]RawBody {
 		return t.Pod
 	case "vm":
 		return t.VM
-	case "android":
-		return t.Android
 	default:
 		return nil
 	}
@@ -505,7 +502,6 @@ func fillNamespacedTemplates(uf *UnifiedFile, prefix string, t *ProjectTemplates
 	cp(uf.Kindcluster(), &t.Kindcluster)
 	cp(uf.Pod(), &t.Pod)
 	cp(uf.VM(), &t.VM)
-	cp(uf.Android(), &t.Android)
 	for ns, sub := range uf.Namespaces {
 		child := ns
 		if prefix != "" {
@@ -518,7 +514,7 @@ func fillNamespacedTemplates(uf *UnifiedFile, prefix string, t *ProjectTemplates
 // ResolvePluginKindViaPlugin projects uf.PluginKinds[kind] (opaque bodies) into *T value
 // envelopes via resolve, a per-body plugin OpResolve leg — the ONE shared loop every "resolve a
 // plugin-kind catalog through its OpResolve leg" accessor uses (charly-core's Distros/Builders/
-// resolveResources/resolveAndroids/resolveInits each supply their own registry-coupled resolve
+// resolveResources/resolveInits each supply their own registry-coupled resolve
 // callback; this loop itself touches no registry). A bad entry is skipped rather than poisoning
 // the whole vocabulary.
 func ResolvePluginKindViaPlugin[T any](uf *UnifiedFile, kind string, resolve func(json.RawMessage) (*T, error)) map[string]*T {

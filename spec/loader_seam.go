@@ -83,7 +83,7 @@ type Threaded struct {
 	// DeployDeclaredFields is the DEPLOY-SUBSTRATE word → its declared body FIELD NAMES set
 	// (the substrate-side channel for the in-substrate member scan, the #Deploy-schema twin of
 	// StructuralDeclaredFields above): the host fills it from the substrate's REGISTERED schema
-	// (the capability's InputDef — for pod/vm/local/android/kubernetes that is the #Deploy
+	// (the capability's InputDef — for pod/vm/local/kubernetes that is the #Deploy
 	// family) — never a hand-maintained word list. The parse consults it to keep a substrate
 	// body's DECLARED fields as data even when the field's VALUE SHAPE would classify as an
 	// in-substrate member (pod body's `iterate:` carrying an `agent:` kind-word key — the
@@ -152,12 +152,12 @@ type ProjectWalker interface {
 // (Box/Candy/Deploy/PluginKinds); the host copies them in before a Materializer call and back out
 // after (cheap map-header copies — maps are reference types, so this is NOT a deep copy).
 //
-// The 5 standalone-substrate-TEMPLATE kinds (vm/pod/kubernetes/local/android) do NOT get their own
+// The 4 standalone-substrate-TEMPLATE kinds (vm/pod/kubernetes/local) do NOT get their own
 // dedicated fields here — they fold into PluginKinds[disc][name] like every other templated kind
 // (distro/builder/init/sidecar/resource/agent already do), so foldStandaloneTemplateReply
 // (charly/node_normalize.go) needs NO per-kind-word switch to pick a destination field: the
 // generic write `acc.PluginKinds[disc][name] = replyJSON` IS the fold, for any disc. charly-core's
-// UnifiedFile.VM()/.Pod()/.Kubernetes()/.Local()/.Android() are now DERIVED accessor methods reading
+// UnifiedFile.VM()/.Pod()/.Kubernetes()/.Local() are now DERIVED accessor methods reading
 // PluginKinds, mirroring the established Distros()/Builders()/Inits() pattern — not stored fields
 // — so there is nothing left to copy for them either.
 //
@@ -292,9 +292,6 @@ type LoaderExecutor interface {
 	// MaterializeLoadedProject replays the host's per-document/per-namespace MATERIALIZE + root-wins
 	// MERGE over the walk envelope (registry kind-decode via the registered Materializer).
 	MaterializeLoadedProject(lp *LoadedProject, merged *UnifiedFile, byID map[int64]*UnifiedFile) error
-	// ValidateAndroidDevices enforces the kind:android box⊻adb XOR — resolves android templates via
-	// the provider registry (host-coupled), so a leg, not a pure loaderkit move.
-	ValidateAndroidDevices(uf *UnifiedFile) error
 	// ValidatePreemptible validates preemptible / requires_exclusive / requires_shared across the
 	// deploy map, including the resource-vocabulary cross-check (resolves the resource plugin kind +
 	// vm/resource entities via the registry) — host-coupled, so a leg.
@@ -381,9 +378,6 @@ type ProjectLoader interface {
 	// loader-materialize HostBuild seam returns to a plugin-side loader (it captures the nested
 	// plugin-kind maps loaderkit-internally, so the host reaches it through this seam).
 	MarshalMaterialized(uf *UnifiedFile) ([]byte, error)
-	// ValidateAndroidDevices enforces the kind:android box⊻adb XOR; the host supplies the
-	// registry-resolve callback (the validation LOGIC stays in loaderkit).
-	ValidateAndroidDevices(uf *UnifiedFile, resolveAndroid func(json.RawMessage) (*ResolvedAndroid, error)) error
 	// ValidatePreemptible validates preemptible / requires_exclusive / requires_shared across the
 	// deploy map; the host supplies the registry-resolve callbacks (the validation LOGIC stays in
 	// loaderkit).
