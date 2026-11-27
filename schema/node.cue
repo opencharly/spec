@@ -131,7 +131,12 @@ package schema
 	repo?:     string & !=""
 	import?:   _
 	discover?: _
-	defaults?: _
+	// defaults — the project's document-level defaults (decoded into BoxConfig on the
+	// Go side). The `buildkit:` block is TYPED here — #Buildkit is CLOSED, so an
+	// authored daemon setting is validated by this load-time gate and a mistyped knob
+	// is an error instead of a value the build drive silently ignores. Every other
+	// defaults key stays open (they are decoded, not shape-checked, by the loader).
+	defaults?: {buildkit?: #Buildkit}
 	provides?: _
 	// cache — the per-host LOCAL cache status (git metadata cache: latest tags,
 	// default branches, resolved refs, downloads). Lives in the per-host charly.yml
