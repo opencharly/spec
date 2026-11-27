@@ -101,6 +101,13 @@ func mergeDeployMaps(dst *map[string]spec.DeployNode, src map[string]spec.Deploy
 
 // mergeBoxConfig preserves dst's already-set fields and fills only the
 // zero-valued ones from src. Used for merging Defaults blocks from includes.
+// mergeBoxConfig merges the `defaults:` block field by field, dst-wins.
+//
+// ⚑ This is a HAND-MAINTAINED field list: a new BoxConfig field must be added here or the
+// merge silently DROPS it, which is exactly opencharly/charly#1306 — `defaults.buildkit`
+// validated, then vanished before the build drive read it, because only this list decides
+// what survives the walk→materialize merge. Add the field AND an arm to
+// TestMergeUnified_Carries<Field> with every new BoxConfig field.
 func mergeBoxConfig(dst, src *spec.BoxConfig) {
 	if src == nil || dst == nil {
 		return
