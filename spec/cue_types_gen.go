@@ -1197,11 +1197,87 @@ type Box struct {
 
 	Alias []BoxAlias `yaml:"alias,omitempty" json:"alias,omitempty"`
 
+	// buildkit — the buildkitd DAEMON settings this PROJECT authors (read from
+	// `defaults.buildkit`; one daemon serves every box, so a box-level value is ignored).
+	// Rendered into buildkitd.toml by the build drive.
+	Buildkit *Buildkit `yaml:"buildkit,omitempty" json:"buildkit,omitempty"`
+
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
 	CheckLevel string `yaml:"check_level,omitempty" json:"check_level,omitempty"`
 
 	Shell *Shell `yaml:"shell,omitempty" json:"shell,omitempty"`
+}
+
+// #Buildkit — the buildkitd daemon settings a project authors under `defaults.buildkit:`.
+//
+// The daemon is PROJECT-wide: one buildkitd serves every box a build composes, so the
+// drive reads this from `defaults.buildkit` (a box-level value is documented as ignored
+// rather than silently merged).
+//
+// Every field is optional. An empty value selects the daemon's own default, EXCEPT the GC
+// budget: the drive always writes an explicit budget (100 GB by default), because
+// buildkitd's compiled default GC policy keeps a 373 GB free-space target and, on a host
+// with less free space, prunes reclaimable cache down to its ~10 GB reserve floor on every
+// pass — which makes a repeated build of an unchanged tree re-execute its layers
+// (opencharly/charly#1292). Values accept buildkitd's own spellings ("100GB", "30%",
+// a byte count) verbatim.
+type Buildkit struct {
+	// process_mode is the OCI worker's process mode ("sandbox" by default).
+	ProcessMode string `yaml:"process_mode,omitempty" json:"process_mode,omitempty"`
+
+	// max_parallelism bounds the stages of ONE build that run concurrently
+	// (`[worker.oci] max-parallelism`). 0/absent = the daemon's own default; the
+	// drive resolves `defaults.stage_parallelism` in when this is absent.
+	MaxParallelism int64 `yaml:"max_parallelism,omitempty" json:"max_parallelism,omitempty"`
+
+	// snapshotter pins the worker's snapshotter ("overlayfs" or "native"); empty =
+	// the daemon's own "auto" resolution.
+	Snapshotter string `yaml:"snapshotter,omitempty" json:"snapshotter,omitempty"`
+
+	// no_process_sandbox runs subprocesses in the main pid namespace (needed when
+	// buildkitd itself runs inside a container).
+	NoProcessSandbox bool `yaml:"no_process_sandbox,omitempty" json:"no_process_sandbox,omitempty"`
+
+	// gc enables the worker's garbage collector. Absent = enabled with the budget.
+	GC *bool `yaml:"gc,omitempty" json:"gc,omitempty"`
+
+	// reserved_space is the cache floor the GC never reclaims below.
+	ReservedSpace string `yaml:"reserved_space,omitempty" json:"reserved_space,omitempty"`
+
+	// max_used_space is the cache ceiling the GC reclaims above.
+	MaxUsedSpace string `yaml:"max_used_space,omitempty" json:"max_used_space,omitempty"`
+
+	// min_free_space is the free-space target the GC tries to leave. Keep it SMALL:
+	// a large target is what prunes the cache on a host that cannot meet it.
+	MinFreeSpace string `yaml:"min_free_space,omitempty" json:"min_free_space,omitempty"`
+
+	// gcpolicy renders `[[worker.oci.gcpolicy]]` entries (advanced per-record policies).
+	GCPolicy []BuildkitGCPolicy `yaml:"gcpolicy,omitempty" json:"gcpolicy,omitempty"`
+
+	// registry_mirror is the local charly OCI registry the daemon mirrors ghcr.io to.
+	// Absent = the drive's env fallback (CHARLY_BUILD_REGISTRY_MIRROR).
+	RegistryMirror string `yaml:"registry_mirror,omitempty" json:"registry_mirror,omitempty"`
+
+	// extra is raw buildkitd.toml appended verbatim after the managed sections — the
+	// escape hatch for a daemon setting charly does not model.
+	Extra string `yaml:"extra,omitempty" json:"extra,omitempty"`
+}
+
+// #BuildkitGCPolicy — one `[[worker.oci.gcpolicy]]` entry: a per-record override of the
+// worker's cache budget. Empty fields are omitted; `all` applies it to every record.
+type BuildkitGCPolicy struct {
+	ReservedSpace string `yaml:"reserved_space,omitempty" json:"reserved_space,omitempty"`
+
+	MaxUsedSpace string `yaml:"max_used_space,omitempty" json:"max_used_space,omitempty"`
+
+	MinFreeSpace string `yaml:"min_free_space,omitempty" json:"min_free_space,omitempty"`
+
+	KeepDuration string `yaml:"keep_duration,omitempty" json:"keep_duration,omitempty"`
+
+	All bool `yaml:"all,omitempty" json:"all,omitempty"`
+
+	Filters []string `yaml:"filters,omitempty" json:"filters,omitempty"`
 }
 
 // #VolumeMount — a resolved named-volume mount (charly-<deploy>-<name> → container path).
@@ -2120,6 +2196,10 @@ type BuildResolveReply struct {
 	Cache string `yaml:"cache,omitempty" json:"cache,omitempty"`
 
 	KeepImages int64 `yaml:"keep_images,omitempty" json:"keep_images,omitempty"`
+
+	// buildkit carries the project's authored daemon settings (defaults.buildkit) so
+	// the drive renders them into buildkitd.toml. See schema/buildkit.cue.
+	Buildkit *Buildkit `yaml:"buildkit,omitempty" json:"buildkit,omitempty"`
 
 	Written []string `yaml:"written,omitempty" json:"written,omitempty"`
 

@@ -103,6 +103,10 @@ package schema
 	stage_parallelism?: int @go(StageParallelism)
 	cache?:             string @go(Cache)
 	keep_images?: int @go(KeepImages)
+	// buildkit carries the project's authored daemon settings (defaults.buildkit) so
+	// the drive renders them into buildkitd.toml. See schema/buildkit.cue.
+	buildkit?: #Buildkit @go(Buildkit,optional=nillable)
+
 	written?: [...string] @go(Written)
 	// resolved_project — the full resolved-project envelope with build-render
 	// caches (BakedMetadata/RenderCandyOrder/InitSystem/InitDef/ActiveInits/Caps
