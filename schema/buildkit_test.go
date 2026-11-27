@@ -95,6 +95,22 @@ defaults: buildkit: {
 		t.Fatalf("an empty defaults.buildkit was rejected: %v", err)
 	}
 
+	// The block is typed WITHOUT closing the rest of defaults: a realistic project
+	// document — the other defaults keys alongside buildkit — must still load.
+	if _, err := buildkitDoc(t, `
+defaults: {
+	platform: ["linux/amd64", "linux/arm64"]
+	registry: "ghcr.io/opencharly"
+	build: ["pac"]
+	keep_images: 3
+	context_ignore: [".git"]
+	stage_parallelism: 4
+	buildkit: {max_parallelism: 4}
+}
+`); err != nil {
+		t.Fatalf("typing defaults.buildkit must not close the rest of defaults: %v", err)
+	}
+
 	// The wire half: the resolve reply carries the same shape to the drive.
 	reply := `
 {engine: "podman", buildkit: {max_parallelism: 2, reserved_space: "40GB"}}
