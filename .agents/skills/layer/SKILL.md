@@ -1055,7 +1055,7 @@ my-app:
         dest: ""               # optional subdirectory within volume
 ```
 
-**Data candies** are candies with only `data:` + `volume:` — no packages, no services, no plan steps. Valid standalone. **Data images** (`data_image: true` in charly.yml) are scratch-based — consumed via `charly config --data-from <image>`. See `/charly-jupyter:notebook-templates` for a worked example.
+**Data candies** are candies with only `data:` + `volume:` — no packages, no services, no plan steps. Valid standalone. **Data images** (`data_image: true` in charly.yml) are scratch-based — consumed via `charly config --data-from <image>`. See the `data:`/`volume:` example above.
 
 ---
 
@@ -1305,7 +1305,6 @@ by the single idempotent `charly migrate` — see `/charly-build:migrate`.
 - `/charly-infrastructure:supervisord` — Event listener pattern triggered by resource caps.
 - `/charly-tools:charly` — The charly-binary candy (composed by every charly-driving box). Paired with `/charly-coder:charly-mcp` which turns any box into an MCP server exposing the full charly CLI.
 - `/charly-coder:charly-mcp` — Reference implementation of a meta-layer composition (`candy: [charly, supervisord]` — no install of its own, just wiring) with bind-mounted project directory and `CHARLY_PROJECT_DIR` env-var plumbing.
-- `/charly-jupyter:notebook-templates` — Data-candy example.
 - `/charly-internals:generate-source` — Internal architecture of the plan-step emission pipeline (Go side).
 
 ---
