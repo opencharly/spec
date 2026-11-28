@@ -946,10 +946,32 @@ func ResolveShellImageRef(registry, name, tag string) string {
 		}
 		return name
 	}
+	// A NAME may already carry its own tag or digest (a deploy entry records a full ref:
+	// `image: ghcr.io/opencharly/whisper:2026.325.2318`). Appending blindly composed
+	// `…:2026.325.2318:2026.332.0936`, which the engine refuses as an invalid reference,
+	// so a fully-qualified deploy could never be moved to a freshly built image by its
+	// tag (opencharly/spec#453). The requested tag REPLACES the one the name carries.
+	name = refWithoutTag(name)
 	if registry != "" {
 		return fmt.Sprintf("%s/%s:%s", registry, name, tag)
 	}
 	return fmt.Sprintf("%s:%s", name, tag)
+}
+
+// refWithoutTag drops a ref's digest and its tag, leaving `[registry/]repository`. The
+// tag separator is the LAST ':' only when it follows the last '/', so a registry port
+// (`localhost:5000/repo`) survives. ONE implementation for every caller of
+// ResolveShellImageRef (opencharly/spec#453).
+func refWithoutTag(ref string) string {
+	if i := strings.IndexByte(ref, '@'); i >= 0 {
+		ref = ref[:i]
+	}
+	if i := strings.LastIndexByte(ref, ':'); i >= 0 {
+		if j := strings.LastIndexByte(ref, '/'); i > j {
+			ref = ref[:i]
+		}
+	}
+	return ref
 }
 
 // shortNameMatchesRef reports whether a short name like "jupyter" matches a
